@@ -83,3 +83,9 @@ about three times slower than the hosted judge (whose run of the 693 root took 3
 - **The big prizes are unchanged** from the previous notes: dropping the per-step tag store
   (about 157 cycles) needs the security potential re-derived with a level-split second-preimage
   charge; wide chain states (about 70) need a full redesign.
+
+
+## Expanded key-generation budget
+
+Revalidation under the `2^20` key-generation limit. Only the key-generation
+admissibility bound changes; the construction and verification score are unchanged.

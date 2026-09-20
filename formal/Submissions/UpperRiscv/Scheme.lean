@@ -48,7 +48,7 @@ def forestScheme : GScheme where
     rw [Finset.sum_const_nat fun n hn => (fixedCut_isCut i).values n hn, fixedCut_card i]
     norm_num
   keygen_le := by
-    show graph.keygenCost ≤ 1024
+    show graph.keygenCost ≤ 2 ^ 20
     rw [graph_keygenCost]
     norm_num
 
