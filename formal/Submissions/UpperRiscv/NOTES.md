@@ -1,3 +1,71 @@
+# upper-riscv: 438 cycles — the same scheme, seven cycles of layout
+
+## Idea
+
+The 445-cycle image is the bare-chain scheme; nothing in the scheme graph or the security
+argument moves here except one constant. The seven cycles come from the machine layout and the
+availability threshold.
+
+- **Target 215 instead of 216 (−1).** The sum of the 28 fields is the number of chain hash
+  steps, and the availability bound is what fixes it. `compW wid 28 215 ≥ 712 · 2^105` indices
+  are accepted, so a fresh index misses with probability at most `1 − 712/2^23`, and the block
+  bound `miss^8192 ≤ 0.4995` gives `miss^(2^20) ≤ 0.882 · 2^-128` — with `δ ≤ 2^-135` this is
+  still under the `2^-128` failure allowance. (The bound is tight in the sense that 214 fails:
+  `compW wid 28 214` is about `657 · 2^105` and the true failure probability is near `2^-118`.)
+  The check `numValid_le_half`/`two_numValid_le` is the only place the count enters the security
+  side; `paperRowHyp` takes the availability count as a hypothesis, so the potential files are
+  untouched.
+- **Hash the index query in place (−3).** The loader places the message at `0x400010` and the
+  signature, whose first 128 bits are the nonce, right after it at `0x400030`, so the 384 bits
+  `message ‖ nonce` are already contiguous. The scheme's index query is
+  `H(swapHalves (m ‖ η))` where `swapHalves` moves the message to the low half; it is a
+  bijection with explicit inverse (`swapBack`), which is all `SignIdx`/`Reconstruct` need. The
+  prefix is now seven instructions — no copy of the nonce and message to the data area — and
+  `x10` keeps pointing at the message through the index phase.
+- **Lanes below the signature, addressed from the message pointer (−0, but frees `x29`).** The
+  eight lane words are stored at `0x3FFFF8 + 8j` with `SD` relative to `x10 = 0x400010`; the
+  chain prologue then loads its jump halfword relative to its own answer buffer
+  `x12 = slot − 8` (`LHU x28, x12, lane − out`), so no register has to hold the data base and
+  the `ADDI x29` of the old setup is gone (−1).
+- **Chain 0 starts from the message pointer (−1).** After the index phase `x10 = 0x400010`; the
+  slot of chain 0 is `0x400040`, so chain 0's prologue is `ADDI x10, x10, 48` and the old
+  `ADDI x10, x9, −24` of the setup disappears. The prologue immediates are `48` for chain 0 and
+  `24` otherwise (`prevInput k`).
+- **The root answer goes where chain 27 left `x12` (−1).** The root only needs `x10` (region)
+  and `x11` (5440); `x12` still points eight bytes below the last slot, which is a valid, aligned
+  output range that overlaps only the region already read. The decision reads the answer from
+  there. `rootLin` is two instructions.
+- **Cost.** `63 (index) + Σ_k (4 + field_k + 1) + 20 (root) = 63 + 112 + 243 + 20 = 438`.
+  Image length 898.
+
+## Proof changes
+
+`Valid.lean` (target 215, `numValid_avail : 712 · 2^105 ≤ numValid`), `Availability.lean`
+(the sharper Bernoulli block bound and the `0.882 · 2^-128 + 2^-135 ≤ 2^-128` arithmetic),
+`GScheme.lean`/`SignIdx.lean`/`Reconstruct.lean`/`Correctness.lean` (`swapHalves`, its inverse
+and injectivity, the index query in the new order), `Program.lean`, `IndexLanes.lean` (lane
+stores relative to `x10`), `IndexPhase.lean` (in-place index hash: `prefix_memBits` reads
+`swapHalves (m ++ nonce)` straight from the loader's layout; one-instruction setup; the frame
+now excludes the 64 lane bytes below the signature), `ChainContext.lean` (`Ctx` without the data
+register; `prevInput`), `ChainPrologue.lean` (`prologue_step0` for the two immediates,
+`lane_offset` relative to the answer buffer), `ChainBlock.lean` (`ChainsInv.out` carries the
+last answer buffer to the root), `RootPhase.lean` (`rootOut = slotAddr 27 − 8`), `Verifier.lean`
+(`cycleBound = 438`).
+
+## What is left
+
+- Prologue 4 × 28 = 112: both pointer moves are needed (the hash reads `x10` and writes `x12`,
+  and the two must differ by eight), the `LHU` and the `JALR` are the dispatch. A layout where the
+  same `x12` serves two chains would need the answer of chain `k` to be chain `k+1`'s input
+  buffer, which the payload order forbids.
+- Lanes 39: eight words × (shift, mask, add, sub, store) minus one; the `SUB` from the broadcast
+  jump base is what makes the halfword a `JALR` target, so it cannot be merged into the mask.
+- Root 11 blocks and 7 decision cycles are fixed by the 5440-bit root and the two-word compare.
+- Target 215 is the floor for this index distribution; a differently shaped index (non-uniform
+  field widths) changes `compW` and might allow 214 with the same 5504-bit signature.
+
+---
+
 # upper-riscv: 445 cycles — bare chains
 
 ## Idea

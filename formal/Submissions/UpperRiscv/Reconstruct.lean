@@ -426,7 +426,7 @@ end Dag.Graph
 /-- The index query records its answer in the cache. -/
 theorem index_support (m : Message) (η : Nonce) (c : Cache) :
     ∀ p ∈ support (run (packIndex m η) c),
-      Cache.Sub c p.2 ∧ ∃ w, p.2 ⟨msgBits + nonceBits, m ++ η⟩ = some w ∧
+      Cache.Sub c p.2 ∧ ∃ w, p.2 ⟨msgBits + nonceBits, swapHalves (m ++ η)⟩ = some w ∧
         p.1 = pack w := by
   intro p hp
   unfold packIndex at hp
@@ -442,7 +442,7 @@ theorem verify_support (S : GScheme) (pk : PublicKey) (m : Message)
     (σ : Signature) (c : Cache) :
     ∀ p ∈ support (run (S.verify pk m σ) c),
       Cache.Sub c p.2 ∧ (p.1 = true →
-        ∃ w, p.2 ⟨msgBits + nonceBits, m ++ σ.1⟩ = some w ∧
+        ∃ w, p.2 ⟨msgBits + nonceBits, swapHalves (m ++ σ.1)⟩ = some w ∧
           ∃ hi : pack w ∈ validSet,
             σ.2.length = S.graph.revealBits (S.sets ⟨_, hi⟩) ∧
             ∃ y : S.graph.Assignment,

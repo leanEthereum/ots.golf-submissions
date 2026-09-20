@@ -56,7 +56,7 @@ theorem sign_result (S : GScheme) (x : S.graph.Assignment) (m : Message)
     (h : (some σ, d) ∈ support (run (S.sign x m) c)) :
     ∃ i : Idx, ∃ w : BitVec hashBits,
       σ.2 = S.graph.encode (S.sets i) x ∧
-      d ⟨msgBits + nonceBits, m ++ σ.1⟩ = some w ∧
+      d ⟨msgBits + nonceBits, swapHalves (m ++ σ.1)⟩ = some w ∧
       idxOf w = i.val := by
   rw [sign_eq_map, run_map, support_map, Set.mem_image] at h
   obtain ⟨⟨r, d'⟩, hr, he⟩ := h
@@ -75,7 +75,7 @@ theorem verify_accepts (S : GScheme) (x : S.graph.Assignment) (m : Message)
     (σ : Signature) (c : Cache) (hc : S.graph.CacheConsistent x c)
     (i : Idx) (w : BitVec hashBits)
     (hσ : σ.2 = S.graph.encode (S.sets i) x)
-    (hw : c ⟨msgBits + nonceBits, m ++ σ.1⟩ = some w)
+    (hw : c ⟨msgBits + nonceBits, swapHalves (m ++ σ.1)⟩ = some w)
     (hi : idxOf w = i.val) :
     ∀ p ∈ support (run (S.verify (S.publicKey x) m σ) c), p.1 = true := by
   intro p hp

@@ -115,7 +115,7 @@ abbrev EncInput := BitVec (msgBits + nonceBits)
 
 /-- The encoding query at input `u`: the query of length `msgBits + nonceBits` with bits `u`. The
 oracle has no labels, so an encoding query is told apart from every other query by its length. -/
-def encQuery (u : EncInput) : Query := ⟨msgBits + nonceBits, u⟩
+def encQuery (u : EncInput) : Query := ⟨msgBits + nonceBits, swapHalves u⟩
 
 /-- The index read from an oracle answer. -/
 def idxOf (w : BitVec hashBits) : ℕ := pack w
@@ -145,7 +145,7 @@ def signIdx (m : Message) : OracleComp Spec (Option (Nonce × Idx)) :=
 
 theorem encQuery_inj {u u' : EncInput} (h : encQuery u = encQuery u') : u = u' := by
   simp only [encQuery, Sigma.mk.inj_iff, heq_eq_eq, true_and] at h
-  exact h
+  exact swapHalves_injective h
 
 /-- A query of another length is not an encoding query. -/
 theorem ne_encQuery_of_length_ne {q : Query} (hq : q.1 ≠ msgBits + nonceBits)
@@ -159,7 +159,7 @@ theorem exists_eq_encQuery_of_length_eq {q : Query} (hq : q.1 = msgBits + nonceB
   obtain ⟨k, v⟩ := q
   change k = msgBits + nonceBits at hq
   subst hq
-  exact ⟨v, rfl⟩
+  exact ⟨swapBack v, by rw [encQuery, swapHalves_swapBack]⟩
 
 theorem append_nonce_inj (m : Message) {η η' : Nonce} (h : m ++ η = m ++ η') : η = η' := by
   have := congrArg (fun u : EncInput => u.setWidth nonceBits) h

@@ -41,9 +41,84 @@ structure GScheme where
   /-- Key generation costs at most `keygenBudget`. -/
   keygen_le : graph.keygenCost ≤ keygenBudget
 
-/-- The disclosure index selected by message `m` and nonce `η`: the packed digits of the answer.
-The index query shares the one oracle with the graph's hash nodes. -/
-def packIndex (m : Message) (η : Nonce) : OracleComp Spec ℕ := (fun y => pack y) <$> hash (m ++ η)
+/-! ### Exchanging the halves of an encoding input -/
+
+theorem setWidth_append_lo {a b : ℕ} (x : BitVec a) (y : BitVec b) : (x ++ y).setWidth b = y := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp [BitVec.getLsbD_setWidth, BitVec.getLsbD_append, hi]
+
+theorem extract_append_hi {a b : ℕ} (x : BitVec a) (y : BitVec b) :
+    (x ++ y).extractLsb' b a = x := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [BitVec.getLsbD_extractLsb', hi, decide_true, Bool.true_and, BitVec.getLsbD_append,
+    show ¬ (b + i < b) by omega, if_false, Nat.add_sub_cancel_left]
+
+theorem append_extract_setWidth {a b : ℕ} (v : BitVec (a + b)) :
+    v.extractLsb' b a ++ v.setWidth b = v := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  rw [BitVec.getLsbD_append]
+  split_ifs with h
+  · simp [BitVec.getLsbD_setWidth, h]
+  · rw [BitVec.getLsbD_extractLsb']
+    have : i - b < a := by omega
+    simp [this, show b + (i - b) = i by omega]
+
+theorem getLsbD_cast' {n m : ℕ} (h : n = m) (x : BitVec n) (i : ℕ) :
+    (x.cast h).getLsbD i = x.getLsbD i := by
+  subst h; rfl
+
+theorem setWidth_cast' {n m k : ℕ} (h : n = m) (x : BitVec n) :
+    (x.cast h).setWidth k = x.setWidth k := by
+  subst h; rfl
+
+theorem extractLsb'_cast' {n m s l : ℕ} (h : n = m) (x : BitVec n) :
+    (x.cast h).extractLsb' s l = x.extractLsb' s l := by
+  subst h; rfl
+
+/-- The two halves of an encoding input exchanged: the nonce above the message, as the machine
+finds them in memory. -/
+def swapHalves (u : BitVec (msgBits + nonceBits)) : BitVec (msgBits + nonceBits) :=
+  (u.setWidth nonceBits ++ u.extractLsb' nonceBits msgBits).cast (Nat.add_comm _ _)
+
+/-- The inverse exchange. -/
+def swapBack (v : BitVec (msgBits + nonceBits)) : BitVec (msgBits + nonceBits) :=
+  v.setWidth msgBits ++ v.extractLsb' msgBits nonceBits
+
+theorem swapHalves_append (m : Message) (η : Nonce) :
+    swapHalves (m ++ η) = (η ++ m).cast (Nat.add_comm _ _) := by
+  unfold swapHalves
+  rw [setWidth_append_lo, extract_append_hi]
+
+theorem swapBack_swapHalves (u : BitVec (msgBits + nonceBits)) : swapBack (swapHalves u) = u := by
+  unfold swapBack swapHalves
+  rw [setWidth_cast', extractLsb'_cast', setWidth_append_lo, extract_append_hi,
+    append_extract_setWidth]
+
+theorem swapHalves_swapBack (v : BitVec (msgBits + nonceBits)) : swapHalves (swapBack v) = v := by
+  unfold swapBack
+  rw [swapHalves_append]
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  rw [getLsbD_cast', BitVec.getLsbD_append]
+  by_cases h1 : i < msgBits
+  · rw [if_pos h1]
+    simp [BitVec.getLsbD_setWidth, h1]
+  · rw [if_neg h1]
+    rw [BitVec.getLsbD_extractLsb']
+    have : i - msgBits < nonceBits := by omega
+    simp [this, show msgBits + (i - msgBits) = i by omega]
+
+theorem swapHalves_injective : Function.Injective swapHalves := by
+  intro u v h
+  rw [← swapBack_swapHalves u, ← swapBack_swapHalves v, h]
+
+/-- The disclosure index selected by message `m` and nonce `η`: the packed digits of the answer
+to the query `η ‖ m`. The index query shares the one oracle with the graph's hash nodes. -/
+def packIndex (m : Message) (η : Nonce) : OracleComp Spec ℕ :=
+  (fun y => pack y) <$> hash (swapHalves (m ++ η))
 
 namespace GScheme
 

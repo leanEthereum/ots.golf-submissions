@@ -8,7 +8,7 @@ import Submissions.UpperRiscv.Deterministic
 # The verified forest under the generic algorithm interface
 
 The forest satisfies the generic challenge: perfect correctness, signing failure at most
-`2⁻¹²⁸`, 127-bit strong security, and verification within 256 compressions on every path.
+`2⁻¹²⁸`, 127-bit strong security, and verification within 255 compressions on every path.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -32,11 +32,11 @@ theorem secure : scheme.Secure :=
   (AlgorithmAdapter.secure_iff Forest.forestScheme).2 Forest.forestScheme_secure
 
 /-- This bound covers all public keys, messages and signatures, including rejecting inputs. -/
-theorem cost : scheme.VerifyCostAtMost 256 := by
-  apply AlgorithmAdapter.verifyCost Forest.forestScheme (v := 255) (by decide)
+theorem cost : scheme.VerifyCostAtMost 255 := by
+  apply AlgorithmAdapter.verifyCost Forest.forestScheme (v := 254) (by decide)
   intro i
   have h := Forest.forestScheme_verifyCost i
-  change 1 + Forest.forestScheme.graph.reconstructCost (Forest.forestScheme.sets i) = 256 at h
+  change 1 + Forest.forestScheme.graph.reconstructCost (Forest.forestScheme.sets i) = 255 at h
   omega
 
 theorem keygen_cost : scheme.KeygenCostAtMost keygenBudget :=
@@ -69,10 +69,10 @@ theorem admissible : scheme.Admissible (1 / 2 ^ 128) where
   keygenCost := keygen_cost
   signCost := sign_cost
 
-/-- A complete admissible, strongly secure, 256-compression construction. -/
+/-- A complete admissible, strongly secure, 255-compression construction. -/
 theorem certificate :
     scheme.Admissible (1 / 2 ^ 128) ∧
-    scheme.Secure ∧ scheme.VerifyCostAtMost 256 :=
+    scheme.Secure ∧ scheme.VerifyCostAtMost 255 :=
   ⟨admissible, secure, cost⟩
 
 /--

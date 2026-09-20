@@ -31,15 +31,15 @@ theorem submission_implements : submission.Implements := by
     some <$> Wire.scheme.verify pk m bits
   rw [(Riscv2Program.image_refines pk m bits).1, ForestVerifier.directVerify_eq]
 
-/-- Every run, accepting or rejecting, executes at most 445 cycles: one per executed
+/-- Every run, accepting or rejecting, executes at most 438 cycles: one per executed
 instruction and eleven for the 5440-bit root hash, with the chain steps charged by the path
 taken. -/
-theorem submission_cycles : submission.CyclesAtMost 445 := by
+theorem submission_cycles : submission.CyclesAtMost 438 := by
   intro pk m bits b cycles completed
   exact (Riscv2Program.image_refines pk m bits).2 b cycles completed
 
-/-- Every requirement of a scored RISC-V submission, at 445 cycles. -/
-theorem machineCertificate : submission.Certificate 445 :=
+/-- Every requirement of a scored RISC-V submission, at 438 cycles. -/
+theorem machineCertificate : submission.Certificate 438 :=
   ⟨submission_admissible, submission_secure, submission_implements, submission_cycles⟩
 
 /--

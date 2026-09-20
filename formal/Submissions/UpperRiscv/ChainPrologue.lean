@@ -15,7 +15,8 @@ open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleCom
 
 /-- The three straight-line instructions of the prologue. -/
 def prologueLinear (k : ℕ) : Code :=
-  [.ADDI .x10 .x10 24, .ADDI .x12 .x10 (imm12 (-8)), .LHU .x28 .x29 (BitVec.ofNat 12 (laneHalf k))]
+  [.ADDI .x10 .x10 (if k = 0 then 48 else 24), .ADDI .x12 .x10 (imm12 (-8)),
+   .LHU .x28 .x12 (imm12 ((laneBase + laneHalf k : ℤ) - outAddr k))]
 
 theorem chainPrologue_parts (k : ℕ) :
     chainPrologue k = prologueLinear k ++
@@ -37,9 +38,35 @@ theorem laneHalf_lt (k : ℕ) (hk : k < 28) : laneHalf k < 2048 := by
   unfold laneHalf laneOff; omega
 
 theorem lane_offset (k : ℕ) (hk : k < 28) :
-    W dataAddr + signExtend12 (BitVec.ofNat 12 (laneHalf k)) = W (laneAddr k) := by
-  rw [signExtend12_nat _ (laneHalf_lt k hk), W_add]
-  rfl
+    W (slotAddr k - 8) + signExtend12 (imm12 ((laneBase + laneHalf k : ℤ) - outAddr k)) =
+      W (laneAddr k) := by
+  have hs := slot_bounds k hk
+  rw [W_add_imm _ _ (by simp only [laneBase, laneHalf, laneOff, outAddr]; omega)
+    (by simp only [laneBase, laneHalf, laneOff, outAddr]; omega)
+    (by simp only [laneBase, laneHalf, laneOff, outAddr, slotAddr, payloadAddr]; omega)
+    (by unfold slotAddr payloadAddr; omega)]
+  congr 1
+  simp only [laneBase, laneHalf, laneOff, outAddr, slotAddr, payloadAddr, laneAddr]
+  omega
+
+/-- The first prologue instruction moves the input pointer onto the slot. -/
+theorem prologue_step0 (a : MachineState) (k : ℕ) (hk : k < 28)
+    (slot : a.getReg .x10 = W (prevInput k)) :
+    a.getReg .x10 + signExtend12 (if k = 0 then (48 : BitVec 12) else 24) = slotW k := by
+  have hs := slot_bounds k hk
+  rw [slot]
+  unfold prevInput
+  by_cases hk0 : k = 0
+  · rw [if_pos hk0, if_pos hk0, show (48 : BitVec 12) = BitVec.ofNat 12 48 from rfl,
+      signExtend12_nat _ (by norm_num), W_add]
+    subst hk0
+    rfl
+  · rw [if_neg hk0, if_neg hk0, show (24 : BitVec 12) = BitVec.ofNat 12 24 from rfl,
+      signExtend12_nat _ (by norm_num), W_add]
+    show W _ = W _
+    congr 1
+    unfold slotAddr payloadAddr at hs ⊢
+    omega
 
 /-- The effect of the straight-line prologue. -/
 structure PrologueEffect (a b : MachineState) (k : ℕ) : Prop where
@@ -52,33 +79,27 @@ structure PrologueEffect (a b : MachineState) (k : ℕ) : Prop where
   code : b.code = a.code
 
 theorem prologueLinear_effect (a : MachineState) (k : ℕ) (hk : k < 28)
-    (slot : a.getReg .x10 = W (slotAddr k - 24)) (data : a.getReg .x29 = W dataAddr) :
+    (slot : a.getReg .x10 = W (prevInput k)) :
     PrologueEffect a ((prologueLinear k).foldl execInstrBr a) k := by
   have hs := slot_bounds k hk
-  have step0 : a.getReg .x10 + signExtend12 (BitVec.ofNat 12 24) = slotW k := by
-    rw [slot, signExtend12_nat _ (by norm_num), W_add]
-    congr 1
-    unfold slotAddr payloadAddr at hs ⊢
-    omega
+  have step0 := prologue_step0 a k hk slot
   have s8 : slotW k + signExtend12 (imm12 (-8)) = W (slotAddr k - 8) :=
     W_sub8 _ (by unfold slotAddr payloadAddr; omega) (by unfold slotAddr payloadAddr; omega)
   have lane := lane_offset k hk
-  have l24 : (24 : BitVec 12) = BitVec.ofNat 12 24 := rfl
   simp only [prologueLinear, List.foldl_cons, List.foldl_nil]
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
     simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, false_and,
-      if_false, show ¬ (Reg.x10 = Reg.x28) by decide, show ¬ (Reg.x10 = Reg.x12) by decide, l24,
+      if_false, show ¬ (Reg.x10 = Reg.x28) by decide, show ¬ (Reg.x10 = Reg.x12) by decide,
       step0]
   · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
     simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, false_and,
-      if_false, show ¬ (Reg.x12 = Reg.x28) by decide, show ¬ (Reg.x12 = Reg.x10) by decide, l24,
+      if_false, show ¬ (Reg.x12 = Reg.x28) by decide, show ¬ (Reg.x12 = Reg.x10) by decide,
       step0, s8]
   · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite, MachineState.getMem_setPC,
       MachineState.getMem_setReg]
     simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, false_and,
-      if_false, show ¬ (Reg.x29 = Reg.x12) by decide, show ¬ (Reg.x29 = Reg.x10) by decide, data,
-      lane]
+      if_false, show ¬ (Reg.x12 = Reg.x10) by decide, step0, s8, lane]
     rfl
   · intro r h10 h12 h28
     simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
@@ -90,14 +111,18 @@ theorem prologueLinear_effect (a : MachineState) (k : ℕ) (hk : k < 28)
   · simp [execInstrBr]
 
 theorem prologueLinear_ready (a : MachineState) (k : ℕ) (hk : k < 28)
-    (data : a.getReg .x29 = W dataAddr) : Riscv.LinearReady a (prologueLinear k) := by
+    (slot : a.getReg .x10 = W (prevInput k)) : Riscv.LinearReady a (prologueLinear k) := by
   have hl := laneAddr_bounds k hk
+  have hs := slot_bounds k hk
+  have step0 := prologue_step0 a k hk slot
+  have s8 : slotW k + signExtend12 (imm12 (-8)) = W (slotAddr k - 8) :=
+    W_sub8 _ (by unfold slotAddr payloadAddr; omega) (by unfold slotAddr payloadAddr; omega)
   refine ⟨rfl, trivial, rfl, trivial, rfl, ?_, trivial⟩
   show isValidHalfwordAccess (_ + _) = true
   simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
-  simp only [show ¬ (Reg.x29 = Reg.x12) by decide, show ¬ (Reg.x29 = Reg.x10) by decide,
-    false_and, if_false, data, lane_offset k hk]
-  exact half_ok _ (by unfold dataAddr at hl; omega) (by unfold dataAddr at hl; omega) hl.2.2
+  simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, false_and,
+    if_false, show ¬ (Reg.x12 = Reg.x10) by decide, step0, s8, lane_offset k hk]
+  exact half_ok _ (by unfold laneBase at hl; omega) (by unfold laneBase at hl; omega) hl.2.2
 
 /-! ## The jump -/
 
@@ -158,6 +183,6 @@ theorem jalr_transition (s : MachineState) (i : BitVec 12)
   rfl
 
 theorem notCtx_of_prologue (r : Reg) (h : CtxReg r) : r ≠ .x10 ∧ r ≠ .x12 ∧ r ≠ .x28 := by
-  rcases h with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> (refine ⟨?_, ?_, ?_⟩ <;> decide)
+  rcases h with rfl | rfl | rfl | rfl | rfl | rfl <;> (refine ⟨?_, ?_, ?_⟩ <;> decide)
 
 end OptimalOTS.Riscv2Program

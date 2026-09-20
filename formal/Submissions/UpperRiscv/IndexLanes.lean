@@ -14,15 +14,29 @@ open OptimalOTS.Dag
 open RiscvZkvm.Rv64
 
 /-- The address of lane word `j = 2 w + i`. -/
-def laneWordAddr (j : ℕ) : ℕ := dataAddr + 80 + 8 * j
+def laneWordAddr (j : ℕ) : ℕ := laneBase + 8 * j
 
-theorem laneOff_eq (w i : ℕ) : dataAddr + laneOff w i = laneWordAddr (2 * w + i) := by
+theorem laneOff_eq (w i : ℕ) : laneBase + laneOff w i = laneWordAddr (2 * w + i) := by
   unfold laneOff laneWordAddr; omega
 
-theorem srcReg_ne (w : ℕ) : srcReg w ≠ .x26 ∧ srcReg w ≠ .x27 ∧ srcReg w ≠ .x12 := by
+/-- The store offset of lane word `(w, i)` from the message pointer. -/
+theorem laneStore_addr (w i : ℕ) (hw : w < 4) (hi : i < 2) :
+    W messageAddr + signExtend12 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr)) =
+      W (laneWordAddr (2 * w + i)) := by
+  have e : BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr) =
+      imm12 ((laneBase + laneOff w i : ℤ) - messageAddr) := rfl
+  rw [e, W_add_imm _ _ (by simp only [laneBase, laneOff, messageAddr]; omega)
+    (by simp only [laneBase, laneOff, messageAddr]; omega)
+    (by simp only [laneBase, laneOff, messageAddr]; omega)
+    (by simp only [messageAddr]; omega)]
+  congr 1
+  simp only [laneBase, laneOff, messageAddr, laneWordAddr]
+  omega
+
+theorem srcReg_ne (w : ℕ) : srcReg w ≠ .x26 ∧ srcReg w ≠ .x27 ∧ srcReg w ≠ .x10 := by
   unfold srcReg; split <;> decide
 
-theorem maskReg_ne (w : ℕ) : maskReg w ≠ .x26 ∧ maskReg w ≠ .x27 ∧ maskReg w ≠ .x12 := by
+theorem maskReg_ne (w : ℕ) : maskReg w ≠ .x26 ∧ maskReg w ≠ .x27 ∧ maskReg w ≠ .x10 := by
   unfold maskReg; split_ifs <;> decide
 
 structure LaneEffect (a b : MachineState) (w i : ℕ) : Prop where
@@ -40,7 +54,8 @@ def lanePre (w i : ℕ) : Code :=
   [.SUB .x26 .x3 dst]
 
 theorem laneWord_parts (w i : ℕ) :
-    laneWord w i = lanePre w i ++ [.SD .x12 .x26 (BitVec.ofNat 12 (laneOff w i))] := by
+    laneWord w i = lanePre w i ++
+      [.SD .x10 .x26 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr))] := by
   simp [laneWord, lanePre]
 
 theorem lanePre_ready (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2) :
@@ -61,15 +76,16 @@ theorem lanePre_regs (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2) :
     (try constructor) <;> (try intro r h26 h27) <;> simp_all
 
 theorem laneWord_effect (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2)
-    (h12 : a.getReg .x12 = W dataAddr) :
+    (h10 : a.getReg .x10 = W messageAddr) :
     LaneEffect a ((laneWord w i).foldl execInstrBr a) w i := by
   obtain ⟨r27, r26, rr, rm⟩ := lanePre_regs a w i hw hi
   rw [laneWord_parts, List.foldl_append]
   generalize hb : (lanePre w i).foldl execInstrBr a = b at r27 r26 rr rm
-  have b12 : b.getReg .x12 = W dataAddr := by rw [rr .x12 (by decide) (by decide), h12]
-  have st : b.getReg .x12 + signExtend12 (BitVec.ofNat 12 (laneOff w i)) =
+  have b10 : b.getReg .x10 = W messageAddr := by rw [rr .x10 (by decide) (by decide), h10]
+  have st : b.getReg .x10 +
+      signExtend12 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr)) =
       W (laneWordAddr (2 * w + i)) := by
-    rw [b12, signExtend12_nat _ (by unfold laneOff; omega), W_add, laneOff_eq]
+    rw [b10, laneStore_addr w i hw hi]
   refine ⟨?_, ?_, ?_⟩
   · simp only [List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_store]
@@ -83,16 +99,15 @@ theorem laneWord_effect (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2)
       getMem_setMem_ite, st, r26, rm]
 
 theorem laneWord_ready (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2)
-    (h12 : a.getReg .x12 = W dataAddr) :
+    (h10 : a.getReg .x10 = W messageAddr) :
     Riscv.LinearReady a (laneWord w i) := by
   obtain ⟨-, -, rr, -⟩ := lanePre_regs a w i hw hi
   rw [laneWord_parts]
   refine (lanePre_ready a w i hw hi).append ⟨rfl, ?_, trivial⟩
   show isValidDwordAccess (_ + _) = true
-  rw [rr .x12 (by decide) (by decide), h12, signExtend12_nat _ (by unfold laneOff; omega), W_add,
-    laneOff_eq]
-  exact dword_ok _ (by unfold laneWordAddr dataAddr; omega) (by unfold laneWordAddr dataAddr; omega)
-    (by unfold laneWordAddr dataAddr; omega)
+  rw [rr .x10 (by decide) (by decide), h10, laneStore_addr w i hw hi]
+  exact dword_ok _ (by unfold laneWordAddr laneBase; omega) (by unfold laneWordAddr laneBase; omega)
+    (by unfold laneWordAddr laneBase; omega)
 
 /-! ## All eight lane words -/
 
@@ -122,10 +137,10 @@ structure LanesEffect (a b : MachineState) (n : ℕ) : Prop where
 
 theorem laneWordAddr_ne (i j : ℕ) (hi : i < 8) (hj : j < 8) (h : i ≠ j) :
     W (laneWordAddr i) ≠ W (laneWordAddr j) :=
-  W_ne (by unfold laneWordAddr dataAddr; omega) (by unfold laneWordAddr dataAddr; omega)
+  W_ne (by unfold laneWordAddr laneBase; omega) (by unfold laneWordAddr laneBase; omega)
     (by unfold laneWordAddr; omega)
 
-theorem lanesUpTo_effect (a : MachineState) (h12 : a.getReg .x12 = W dataAddr) :
+theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W messageAddr) :
     ∀ n, n ≤ 8 → Riscv.LinearReady a (lanesUpTo n) ∧
       LanesEffect a ((lanesUpTo n).foldl execInstrBr a) n := by
   intro n
@@ -139,11 +154,11 @@ theorem lanesUpTo_effect (a : MachineState) (h12 : a.getReg .x12 = W dataAddr) :
     intro hn
     obtain ⟨ready, eff⟩ := ih (by omega)
     set b := (lanesUpTo n).foldl execInstrBr a with hb
-    have b12 : b.getReg .x12 = W dataAddr := by rw [eff.regs .x12 (by decide) (by decide), h12]
+    have b10 : b.getReg .x10 = W messageAddr := by rw [eff.regs .x10 (by decide) (by decide), h10]
     have hw : n / 2 < 4 := by omega
     have hi : n % 2 < 2 := Nat.mod_lt _ (by norm_num)
-    have e := laneWord_effect b (n / 2) (n % 2) hw hi b12
-    have ready' := laneWord_ready b (n / 2) (n % 2) hw hi b12
+    have e := laneWord_effect b (n / 2) (n % 2) hw hi b10
+    have ready' := laneWord_ready b (n / 2) (n % 2) hw hi b10
     have hj : 2 * (n / 2) + n % 2 = n := by omega
     have wordEq : b.getReg (srcReg (n / 2)) = a.getReg (srcReg (n / 2)) :=
       eff.regs _ (srcReg_ne _).1 (srcReg_ne _).2.1

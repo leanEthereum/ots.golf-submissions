@@ -7,8 +7,8 @@ import Submissions.UpperRiscv.Digits
 
 The index is the 128-bit number packing the 28 chain digits: five-bit digits for the first
 sixteen chains (bits `5 k, …, 5 k + 4`), four-bit digits for the other twelve (bits
-`80 + 4 (k - 16), …`). An index is accepted when its digits sum to `target = 216`. The accepted
-indices are counted exactly by `compW wid 28 216`; there are more than `729 * 2 ^ 105` of them,
+`80 + 4 (k - 16), …`). An index is accepted when its digits sum to `target = 215`. The accepted
+indices are counted exactly by `compW wid 28 215`; there are more than `712 * 2 ^ 105` of them,
 the exact threshold at which the signing loop still fails with probability at most `2 ^ -128`.
 
 The machine reads digit `k` from byte `k` of the 256-bit index answer; `pack` is that reading.
@@ -19,7 +19,7 @@ namespace OptimalOTS
 open OptimalOTS.Dag
 
 /-- The digit sum of every accepted index. -/
-def target : ℕ := 216
+def target : ℕ := 215
 
 /-- Digit widths: five bits for the first sixteen chains, four for the next twelve, none beyond. -/
 def wid (k : ℕ) : ℕ := if k < 16 then 5 else if k < 28 then 4 else 0
@@ -155,11 +155,11 @@ theorem card_validSet : (validSet).card = Forest.compW wid 28 target := by
     rw [digit_indexOf]
 
 /-- The availability threshold: a fresh index is accepted with probability at least
-`729 / 2 ^ 23`, which is what the `2 ^ 20` signing trials need. -/
-theorem numValid_avail : 729 * 2 ^ 105 ≤ numValid := by
+`712 / 2 ^ 23`, which is what the `2 ^ 20` signing trials need. -/
+theorem numValid_avail : 712 * 2 ^ 105 ≤ numValid := by
   rw [numValid, card_validSet]
-  show 729 * 2 ^ 105 ≤ Forest.compW wid 28 216
-  rw [← Forest.compTableW_getD wid 216 28 216 le_rfl]
+  show 712 * 2 ^ 105 ≤ Forest.compW wid 28 215
+  rw [← Forest.compTableW_getD wid 215 28 215 le_rfl]
   decide +kernel
 
 /-! ## The machine's reading of the digits -/

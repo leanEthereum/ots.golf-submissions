@@ -126,7 +126,8 @@ bits of their tops form the prefix of the root input, and the full top of chain 
 lies below its slot. -/
 structure ChainsInv (s : MachineState) (x : graph.Assignment) (k : ℕ) : Prop where
   ctx : Ctx s index pk
-  input : s.getReg .x10 = W (slotAddr k - 24)
+  input : s.getReg .x10 = W (prevInput k)
+  out : 1 ≤ k → s.getReg .x12 = W (slotAddr (k - 1) - 8)
   pc : s.pc = W (blockStart k)
   payload : PayloadFrom s payload k
   done : 2 ≤ k → MemBits s (W regionAddr) (lowCat (topFun (tops x)) (k - 2))
@@ -280,8 +281,8 @@ theorem prologue_refines (k : Fin 28) (rest : Code) (s : MachineState)
     Riscv.Refines (4 + fuel) s q (4 + c) := by
   have hs := slot_bounds k k.isLt
   rw [chainPrologue_parts, List.append_assoc] at located
-  have ready := prologueLinear_ready s k k.isLt inv.ctx.dataReg
-  have E := prologueLinear_effect s k k.isLt inv.input inv.ctx.dataReg
+  have ready := prologueLinear_ready s k k.isLt inv.input
+  have E := prologueLinear_effect s k k.isLt inv.input
   set b := (prologueLinear k).foldl execInstrBr s with hb
   have bLocated : Riscv.CodeAt b b.pc
       ([Instr.JALR .x0 .x28 (imm12 ((tableEnd k : ℤ) - 4 - jumpBase))] ++ rest) := by
@@ -401,10 +402,15 @@ theorem chain_refines (k : Fin 28) (tail : Code)
     locatedV hleft
   intro w z invW topW locatedW left' hleft'
   apply continuation w z ?_ locatedW left' hleft'
-  refine ⟨invW.ctx, ?_, ?_, invW.payload, ?_, ?_⟩
+  refine ⟨invW.ctx, ?_, ?_, ?_, invW.payload, ?_, ?_⟩
   · rw [invW.input]
+    unfold prevInput
+    rw [if_neg (by omega)]
+    show W _ = W _
     congr 1
     try (unfold slotAddr; omega)
+  · intro _
+    rw [invW.out, show k.val + 1 - 1 = k.val by omega]
   · rw [invW.pc, Nat.sub_self, Nat.mul_zero, Nat.sub_zero, tableEnd_eq]
   · intro h2
     rw [show k.val + 1 - 2 = k.val - 1 by omega]

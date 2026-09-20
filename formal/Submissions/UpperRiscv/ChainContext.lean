@@ -35,11 +35,18 @@ theorem blockStart_zero : blockStart 0 = 4096 + 4 * indexLength := by
 def tops (x : graph.Assignment) (k : Fin 28) : BitVec 256 := (x (cv k 31).fin).cast (lenF_fin _)
 
 /-- The address of the dispatch halfword of chain `k`. -/
-def laneAddr (k : ℕ) : ℕ := dataAddr + laneHalf k
+def laneAddr (k : ℕ) : ℕ := laneBase + laneHalf k
 
 theorem laneAddr_bounds (k : ℕ) (hk : k < 28) :
-    dataAddr + 80 ≤ laneAddr k ∧ laneAddr k + 2 ≤ dataAddr + 144 ∧ laneAddr k % 2 = 0 := by
-  unfold laneAddr laneHalf laneOff dataAddr; omega
+    laneBase ≤ laneAddr k ∧ laneAddr k + 2 ≤ laneBase + 64 ∧ laneAddr k % 2 = 0 := by
+  unfold laneAddr laneHalf laneOff laneBase; omega
+
+theorem outAddr_eq (k : ℕ) : outAddr k = slotAddr k - 8 := by
+  unfold outAddr slotAddr payloadAddr; omega
+
+/-- The input pointer before chain `k`: the message pointer before chain `0`, then 24 bytes below
+the slot. -/
+def prevInput (k : ℕ) : ℕ := if k = 0 then messageAddr else slotAddr k - 24
 
 theorem slotAddr_toNat (k : ℕ) (hk : k < 28) : (slotW k).toNat = slotAddr k :=
   W_toNat _ (by unfold slotAddr payloadAddr; omega)
@@ -55,7 +62,6 @@ structure Ctx (s : MachineState) (index : Idx) (pk : PublicKey) : Prop where
   pk1 : s.getReg .x31 = pk.extractLsb' 64 64
   call : s.getReg .x5 = Riscv.hashCall
   length : s.getReg .x11 = 192
-  dataReg : s.getReg .x29 = W dataAddr
   lanes : ∀ k : Fin 28,
     (s.getHalfword (W (laneAddr k))).toNat =
       jumpBase - 4 * (31 - RiscvUpperForest.ForestVerifier.pos index k)
@@ -64,7 +70,7 @@ structure Ctx (s : MachineState) (index : Idx) (pk : PublicKey) : Prop where
 
 /-- The registers of the context. -/
 def CtxReg (r : Reg) : Prop :=
-  r = .x9 ∨ r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x11 ∨ r = .x29 ∨ r = .x13
+  r = .x9 ∨ r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x11 ∨ r = .x13
 
 /-- A memory frame outside the answer region of chain `k`, `[slotAddr k - 8, slotAddr k + 24)`. -/
 def SlotFrame (s t : MachineState) (k : ℕ) : Prop :=
@@ -76,26 +82,25 @@ theorem Ctx.frame {s t : MachineState} {index : Idx} {pk : PublicKey}
     (regs : ∀ r, CtxReg r → t.getReg r = s.getReg r) (mem : SlotFrame s t k) :
     Ctx t index pk := by
   have hslot := slot_bounds k hk
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · rw [regs .x9 (Or.inl rfl)]; exact ctx.payloadReg
   · rw [regs .x30 (Or.inr (Or.inl rfl))]; exact ctx.pk0
   · rw [regs .x31 (Or.inr (Or.inr (Or.inl rfl)))]; exact ctx.pk1
   · rw [regs .x5 (Or.inr (Or.inr (Or.inr (Or.inl rfl))))]; exact ctx.call
   · rw [regs .x11 (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl rfl)))))]; exact ctx.length
-  · rw [regs .x29 (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl rfl))))))]; exact ctx.dataReg
   · intro j
     obtain ⟨l1, l2, l3⟩ := laneAddr_bounds j j.isLt
     have e : t.getHalfword (W (laneAddr j)) = s.getHalfword (W (laneAddr j)) := by
       simp only [MachineState.getHalfword]
       rw [mem]
       left
-      rw [alignToDword_toNat, W_toNat _ (by unfold dataAddr at l2; omega)]
-      unfold dataAddr at l1 l2
+      rw [alignToDword_toNat, W_toNat _ (by unfold laneBase at l2; omega)]
+      unfold laneBase at l1 l2
       unfold slotAddr payloadAddr at hslot ⊢
       omega
     rw [e]
     exact ctx.lanes j
-  · rw [regs .x13 (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr rfl))))))]; exact ctx.sigLen
+  · rw [regs .x13 (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr rfl)))))]; exact ctx.sigLen
 
 /-- The values of chains `k` and later are still their disclosed values. -/
 def PayloadFrom (s : MachineState) (payload : List Bool) (k : ℕ) : Prop :=

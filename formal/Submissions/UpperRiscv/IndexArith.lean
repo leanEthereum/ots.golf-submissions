@@ -162,7 +162,7 @@ theorem top_laneSum_answer (a : MachineState) (hm : MasksLoaded a) (answer : Bit
 
 /-- The accepted indices are those with field sum `216`. -/
 theorem accepted_iff (answer : BitVec hashBits) :
-    Accepted (pack answer) ↔ ∑ k ∈ Finset.range 28, byteDigit answer k = 216 := by
+    Accepted (pack answer) ↔ ∑ k ∈ Finset.range 28, byteDigit answer k = 215 := by
   unfold Accepted
   rw [Finset.sum_congr rfl fun k hk => digit_pack answer (Finset.mem_range.mp hk)]
   rfl
