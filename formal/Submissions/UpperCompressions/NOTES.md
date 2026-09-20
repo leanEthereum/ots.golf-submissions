@@ -155,3 +155,9 @@ permit some nearby cut pairs, or can a construction obtain comparable class
 capacity with stronger authentication? A raw capacity count alone cannot
 answer that question. The92-compression construction remains the proved
 candidate described above.
+
+
+## Expanded key-generation budget
+
+Revalidation under the `2^20` key-generation limit. Only the key-generation
+admissibility bound changes; the construction and verification score are unchanged.
