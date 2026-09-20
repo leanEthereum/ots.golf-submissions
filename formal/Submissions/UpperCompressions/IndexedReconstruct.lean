@@ -1,5 +1,6 @@
 import Submissions.UpperCompressions.IndexedScheme
 import Submissions.UpperCompressions.Reconstruct
+import Submissions.UpperCompressions.IndexedCorrectness
 
 open OracleSpec OracleComp ENNReal
 noncomputable section
@@ -25,7 +26,7 @@ theorem verify_support (S : IndexedDag.Scheme M) (pk : PublicKey) (m : Message)
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
   obtain ⟨⟨i, c₁⟩, hi₁, hp⟩ := hp
-  obtain ⟨hsub₁, w, hw, rfl⟩ := index_support m σ.1 c ⟨i, c₁⟩ hi₁
+  obtain ⟨hsub₁, w, hw, rfl⟩ := Correctness.index_support127 m σ.1 c ⟨i, c₁⟩ hi₁
   dsimp only at hp hw
   by_cases hi : (w.setWidth idxBits).toNat < M
   · rw [dif_pos hi] at hp

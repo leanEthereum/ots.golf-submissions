@@ -2,7 +2,7 @@ import Submissions.UpperCompressions.ShallowScheme
 import Submissions.UpperCompressions.ShallowResample
 import Submissions.UpperCompressions.ShallowEvents
 import Submissions.UpperCompressions.IndexedCharges
-import Submissions.UpperCompressions.IndexedPotential
+import Submissions.UpperCompressions.TightPotential
 import Submissions.UpperCompressions.Keygen
 import Submissions.UpperCompressions.Reconstruct
 
@@ -71,7 +71,7 @@ def g (p : Bool × Cache) : ℝ≥0∞ := if p.1 = true then 1 else 0
 theorem g_le_one (p : Bool × Cache) : g p ≤ 1 := by
   unfold g; split_ifs <;> simp
 
-attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits OptimalOTS.IndexedAnalysis.numCuts trials
+attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits OptimalOTS.IndexedAnalysis.idxBits OptimalOTS.IndexedAnalysis.numCuts trials
 
 /-- `probTrue` as an expectation over the lazy-oracle run from the empty cache. -/
 theorem probTrue_eq_E_run (oa : OracleComp Spec Bool) :
@@ -82,7 +82,7 @@ theorem probTrue_eq_E_run (oa : OracleComp Spec Bool) :
   rcases x with ⟨b, c⟩
   cases b <;> simp
 
-attribute [local semireducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits OptimalOTS.IndexedAnalysis.numCuts trials
+attribute [local semireducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits OptimalOTS.IndexedAnalysis.idxBits OptimalOTS.IndexedAnalysis.numCuts trials
 
 theorem probTrue_eq : probTrue (IndexedDag.experiment forestScheme A) = E (run (IndexedDag.experiment forestScheme A) ∅) g := by
   generalize IndexedDag.experiment forestScheme A = oa
@@ -127,10 +127,8 @@ def ind (p : Prop) : ℝ≥0∞ := if p then 1 else 0
 /-- The invariant: encoding entries plus remaining budget never exceed `2 ^ 127`. -/
 def Inv (c : Cache) (b : ℕ) : Prop := encCount c + b ≤ 2 ^ 127
 
-/-- The encoding part of the first-stage potential: `θ psi`, the row potential of
-`RowPotential`. -/
-def encTerm (c : Cache) : ℝ≥0∞ :=
-  ENNReal.ofReal (Row.θ * psi c)
+/-- The encoding part of the first-stage potential, including signing reserve slack. -/
+def encTerm (c : Cache) : ℝ≥0∞ := Tight.rho c
 
 /-- The first-stage potential for the public key `pk`. -/
 def ΦA (pk : BitVec 128) (c : Cache) : ℝ≥0∞ :=
@@ -171,18 +169,22 @@ theorem encCount_le_of_inv {c : Cache} {b : ℕ} (h : Inv c b) :
     encCount c ≤ 2 ^ 127 :=
   le_trans (Nat.le_add_right _ _) h
 
-/-- The paper parameters satisfy the hypotheses of the row potential. -/
-theorem paperRowHyp : RowHyp := candidateRowHyp
+/-- The empty cache has only the constant encoding potential. -/
+theorem ΦA_empty (pk : BitVec 128) :
+    ΦA pk ∅ = sumW (fiberA pk) * encTerm ∅ := by
+  simp [ΦA, ind, Cache.not_hits_empty, not_spr_empty]
 
-theorem two_encCount_le {c : Cache} {b : ℕ} (h : Inv c b) :
-    2 * encCount c ≤ 2 ^ idxBits := by
-  have := encCount_le_of_inv h
-  show 2 * encCount c ≤ 2 ^ 128
+/-- The tight row hazard applies throughout the global cache invariant. -/
+theorem encTerm_dom {d : Cache} {b : ℕ} (hI : Inv d b) (m : Message) (c : ℕ)
+    (h1 : (rowFresh d m).card ≤ c + trials) (h2 : c ≤ (rowFresh d m).card) :
+    ((rowBad d m).card : ℝ≥0∞) + c * (((V d).card : ℝ≥0∞) /
+      2 ^ OptimalOTS.IndexedAnalysis.idxBits) ≤
+      encTerm d * ((rowAcc d m).card + c * ((numCuts : ℝ≥0∞) /
+        2 ^ OptimalOTS.IndexedAnalysis.idxBits)) := by
+  apply Tight.rho_dom d _ m c h1 h2
+  have hd := encCount_le_of_inv hI
+  norm_num [trials, signBudget, idxCost, blockCost, msgBits, nonceBits, blockBits] at *
   omega
-
-theorem ΦA_empty (pk : BitVec 128) : ΦA pk ∅ = 0 := by
-  unfold ΦA encTerm
-  simp [psi_empty, ind, Cache.not_hits_empty, not_spr_empty]
 
 /-! ### Indicators and averages -/
 
@@ -194,6 +196,22 @@ theorem κ_mul_eq (X : ℝ≥0∞) : κ * X = ε * X + ε * X := by
 
 theorem ε_le_κ : ε ≤ κ := by
   rw [κ_eq_add]; exact le_self_add
+
+theorem κ_eq_index_charge : κ = ((2 : ℝ≥0∞) ^ OptimalOTS.IndexedAnalysis.idxBits)⁻¹ := by
+  unfold κ ε OptimalOTS.IndexedAnalysis.idxBits
+  rw [show (2 : ℝ≥0∞) ^ 128 = 2 * 2 ^ 127 by rw [← pow_succ']]
+  rw [ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), ← mul_assoc,
+    ENNReal.mul_inv_cancel (by simp) (by simp), one_mul]
+
+/-- The initial encoding potential fits inside the reserved signing cost. -/
+theorem encTerm_empty_le : encTerm ∅ ≤ κ * trials := by
+  rw [encTerm, Tight.rho_empty, κ_eq_index_charge,
+    mul_comm (((2 : ℝ≥0∞) ^ OptimalOTS.IndexedAnalysis.idxBits)⁻¹) (trials : ℝ≥0∞),
+    ← div_eq_mul_inv, Tight.natCast_div_two_pow]
+  apply ENNReal.ofReal_le_ofReal
+  norm_num [Tight.L, Tight.I, Tight.M, OptimalOTS.IndexedAnalysis.idxBits,
+    OptimalOTS.IndexedAnalysis.numCuts, trials, signBudget, idxCost, blockCost,
+    msgBits, nonceBits, blockBits]
 
 theorem sumW_mono {T T' : Finset Rec} (h : T ⊆ T') : sumW T ≤ sumW T' :=
   Finset.sum_le_sum_of_subset h
@@ -236,6 +254,16 @@ theorem sum_w_mul_le_add (T : Finset Rec) (a b : Rec → ℝ≥0∞) (h : ∀ ξ
   rw [Finset.mul_sum, ← Finset.sum_add_distrib]
   refine Finset.sum_le_sum fun ξ hξ => ?_
   rw [mul_comm ε w, ← mul_add]
+  exact mul_le_mul_right (h ξ hξ) w
+
+/-- Summing a general per-record charge with the weights. -/
+theorem sum_w_mul_le_add_charge (δ : ℝ≥0∞) (T : Finset Rec)
+    (a b : Rec → ℝ≥0∞) (h : ∀ ξ ∈ T, a ξ ≤ b ξ + δ) :
+    ∑ ξ ∈ T, w * a ξ ≤ ∑ ξ ∈ T, w * b ξ + δ * sumW T := by
+  unfold sumW
+  rw [Finset.mul_sum, ← Finset.sum_add_distrib]
+  refine Finset.sum_le_sum fun ξ hξ => ?_
+  rw [mul_comm δ w, ← mul_add]
   exact mul_le_mul_right (h ξ hξ) w
 
 /-- A fresh answer can only create a hit at the queried point. -/
@@ -289,9 +317,12 @@ theorem idxPost_avg_le (T : Finset Rec) (d' c : Cache) (u₀ : EncInput)
     (hq : c (encQuery u₀) = none) (i : ℕ) :
     ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         ∑ _ξ ∈ T, w * ind (IdxPost d' (c.cacheQuery (encQuery u₀) u) i) ≤
-      ∑ _ξ ∈ T, w * ind (IdxPost d' c i) + ε * sumW T := by
+      ∑ _ξ ∈ T, w * ind (IdxPost d' c i) + κ * sumW T := by
   rw [avg_sum_comm]
-  exact sum_w_mul_le_add T _ _ fun _ _ => idxPost_charge (by decide) d' c u₀ hq i
+  apply sum_w_mul_le_add_charge κ T _ _
+  intro ξ hξ
+  rw [κ_eq_index_charge]
+  exact idxPost_charge (by decide) d' c u₀ hq i
 
 theorem idxPost_avg_eq (T : Finset Rec) (d' c : Cache) {q : Query}
     (hq : ∀ u : EncInput, q ≠ encQuery u) (i : ℕ) :
@@ -328,15 +359,15 @@ theorem encTerm_cacheQuery_of_ne_enc (c : Cache) {q : Query}
     (hq : ∀ u : EncInput, q ≠ encQuery u) (u : BitVec hashBits) :
     encTerm (c.cacheQuery q u) = encTerm c := by
   unfold encTerm
-  rw [psi_of_ne hq]
+  exact Tight.rho_of_ne c hq u
 
 /-- A fresh encoding answer raises the encoding term by at most `κ = 2 ε` on average. -/
 theorem encTerm_avg_le (c : Cache) {b : ℕ} (hc : Inv c b)
     (u₀ : EncInput) (hq : c (encQuery u₀) = none) :
     ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         encTerm (c.cacheQuery (encQuery u₀) u) ≤ encTerm c + κ := by
-  obtain ⟨m₀, η₀, rfl⟩ := exists_append u₀
-  exact psi_charge paperRowHyp (two_encCount_le hc) hq
+  rw [κ_eq_index_charge]
+  exact Tight.rho_charge c u₀ hq
 
 /-! ### The charge bounds -/
 
@@ -397,7 +428,7 @@ theorem ΦB_charge_some {Ac : Finset Name} (hAc : IsCut Ac) (dt : Data) {T : Fin
     have h3 := idxPost_avg_le T d' c u₀ hq i
     refine le_trans (add_le_add_right h3 _) ?_
     rw [← add_assoc]
-    exact add_le_add_right (mul_le_mul' ε_le_κ (sumW_mono hT)) _
+    exact add_le_add_right (mul_le_mul' le_rfl (sumW_mono hT)) _
   · rw [idxPost_avg_eq T d' c (ne_encQuery_of_length_ne hk) i]
     have h1 := hits_avg_le T (fHid (some Ac)) c q
     have h2 := hits_charge_B' hAc dt hT q
@@ -434,3 +465,7 @@ end OptimalOTS
 #print axioms OptimalOTS.ShallowForest.ΦA_charge
 #print axioms OptimalOTS.ShallowForest.ΦB_charge_some
 #print axioms OptimalOTS.ShallowForest.ΦB_charge_none
+
+#print axioms OptimalOTS.ShallowForest.encTerm_dom
+#print axioms OptimalOTS.ShallowForest.encTerm_empty_le
+#print axioms OptimalOTS.ShallowForest.ΦA_empty

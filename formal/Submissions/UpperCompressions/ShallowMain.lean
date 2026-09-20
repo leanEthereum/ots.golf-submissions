@@ -5,7 +5,7 @@ import Submissions.UpperCompressions.ShallowAssembly
 
 `forestScheme_secure`: the 54-chain forest satisfies `Scheme.Secure`, the
 127-bit strong unforgeability requirement in the indexed scheme interface, and every signature verifies
-in `102` compressions (`forestScheme_verifyCost`).
+in `100` compressions (`forestScheme_verifyCost`).
 
 For a budget `B ≤ 2 ^ 127` the bound `probTrue ≤ 2 ε (B - 995) = (B - 995) / 2 ^ 127 < B / 2 ^ 127`
 of `ShallowForest.main_bound` applies; for larger budgets the requirement holds trivially since

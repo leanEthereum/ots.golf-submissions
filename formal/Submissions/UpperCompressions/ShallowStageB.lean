@@ -29,6 +29,12 @@ namespace ShallowForest
 open OptimalOTS.IndexedAnalysis
 
 local notation "numCuts" => OptimalOTS.IndexedAnalysis.numCuts
+local notation "SignExt" => OptimalOTS.IndexedAnalysis.SignExt
+local notation "idxOf" => OptimalOTS.IndexedAnalysis.idxOf
+local notation "encQuery" => OptimalOTS.IndexedAnalysis.encQuery
+local notation "EncInput" => OptimalOTS.IndexedAnalysis.EncInput
+local notation "IdxPre" => OptimalOTS.IndexedAnalysis.IdxPre
+local notation "IdxPost" => OptimalOTS.IndexedAnalysis.IdxPost
 
 open Name
 
@@ -144,8 +150,8 @@ theorem not_idxPost_extend_fExp (d' : Cache) (ξ : Rec) (A? : Option (Finset Nam
 
 theorem encCount_extend_of_enc_none (d f : Cache)
     (hf : ∀ u : EncInput, f (encQuery u) = none) :
-    encCount (Cache.extend d f) = encCount d := by
-  unfold encCount
+    OptimalOTS.IndexedAnalysis.encCount (Cache.extend d f) = OptimalOTS.IndexedAnalysis.encCount d := by
+  unfold OptimalOTS.IndexedAnalysis.encCount
   refine congrArg Finset.card (Finset.filter_congr fun u _ => ?_)
   rw [Cache.extend_apply, hf u, Option.or_none]
 
@@ -538,3 +544,5 @@ theorem stageB (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache) (T 
 end ShallowForest
 
 end OptimalOTS
+
+#print axioms OptimalOTS.ShallowForest.stageB

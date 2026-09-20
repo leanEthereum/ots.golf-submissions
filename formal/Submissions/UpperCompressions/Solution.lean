@@ -1,6 +1,6 @@
 import Submissions.UpperCompressions.ShallowWire
 
-/-! A fully admissible oracle algorithm with verification cost at most 102. -/
+/-! A fully admissible oracle algorithm with verification cost at most 100. -/
 
 namespace OptimalOTS.Challenge.UpperCompressions
 
@@ -14,7 +14,7 @@ theorem admissible : scheme.Admissible := ShallowUpperForest.Wire.admissible
 theorem secure : scheme.Secure := ShallowUpperForest.Wire.secure
 
 /-- A bound for every input and every oracle-answer path, including rejecting inputs. -/
-theorem cost : scheme.VerifyCostAtMost 102 := ShallowUpperForest.Wire.cost
+theorem cost : scheme.VerifyCostAtMost 100 := ShallowUpperForest.Wire.cost
 
 end OptimalOTS.Challenge.UpperCompressions
 

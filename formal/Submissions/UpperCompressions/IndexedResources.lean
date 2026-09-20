@@ -19,6 +19,11 @@ namespace OptimalOTS.IndexedDag
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits
   maxSignatureBits keygenBudget signBudget Dag.nonceBits Dag.idxBits Dag.numCuts Dag.trials
 
+/-- The submitted truncation changes no query input bits or paid cost. -/
+theorem costAtMost_submittedIndex (hidx : blockCost (msgBits + Dag.nonceBits) = 1)
+    (m : Message) (η : Dag.Nonce) : CostAtMost (SubmittedIndex.index m η) 1 :=
+  AlgorithmCosts.CostAtMost.map (AlgorithmCosts.costAtMost_hash _ hidx.le) _
+
 namespace Scheme
 
 open OptimalOTS.AlgorithmCosts
@@ -41,7 +46,7 @@ theorem costAtMost_signLoop (hidx : blockCost (msgBits + Dag.nonceBits) = 1)
       split_ifs
       · refine CostAtMost.bind_le (costAtMost_liftM_probComp _ 0)
           (b₂ := k + 1) (fun j => ?_) (by simp)
-        refine CostAtMost.bind_le (costAtMost_index hidx _ _)
+        refine CostAtMost.bind_le (costAtMost_submittedIndex hidx _ _)
           (b₂ := k) (fun i => ?_) (by omega)
         split_ifs with hi
         · exact costAtMost_pure _ _
@@ -56,7 +61,7 @@ theorem costAtMost_verify (hidx : blockCost (msgBits + Dag.nonceBits) = 1) {v : 
     (hv : ∀ i, S.graph.reconstructCost (S.sets i) ≤ v) (pk : PublicKey) (m : Message)
     (σ : Dag.Signature) : CostAtMost (S.verify pk m σ) (1 + v) := by
   unfold Scheme.verify
-  refine CostAtMost.bind_le (costAtMost_index hidx _ _) (b₂ := v) (fun i => ?_) le_rfl
+  refine CostAtMost.bind_le (costAtMost_submittedIndex hidx _ _) (b₂ := v) (fun i => ?_) le_rfl
   split_ifs with hi
   · dsimp only
     split_ifs
@@ -70,7 +75,7 @@ theorem costAtMost_verify (hidx : blockCost (msgBits + Dag.nonceBits) = 1) {v : 
 
 theorem deterministic_verify (pk : PublicKey) (m : Message) (σ : Dag.Signature) :
     Deterministic (S.verify pk m σ) := by
-  unfold Scheme.verify Dag.index
+  unfold Scheme.verify SubmittedIndex.index
   refine Deterministic.bind (Deterministic.map (Deterministic.hash _) _) fun i => ?_
   split_ifs
   · dsimp only

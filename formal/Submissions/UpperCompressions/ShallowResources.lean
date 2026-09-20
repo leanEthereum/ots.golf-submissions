@@ -4,11 +4,11 @@ import Submissions.UpperCompressions.IndexedCorrectness
 import Submissions.UpperCompressions.IndexedFreshness
 
 /-!
-# Admissibility and 102-compression cost of the shallow typed scheme
+# Admissibility and 100-compression cost of the shallow typed scheme
 
 The candidate is perfectly correct, deterministic in verification, within every
 honest-party size/cost budget, and meets the signing-failure target even for
-public-key-dependent messages. Verification costs at most 102 on every input.
+public-key-dependent messages. Verification costs at most 100 on every input.
 This module does not prove strong unforgeability or export a challenge solution.
 -/
 
@@ -36,9 +36,9 @@ attribute [local irreducible] IndexedDag.Scheme.sign IndexedDag.Scheme.signLoop
 def scheme : TypedScheme := ShallowForest.forestScheme.toAlgorithm
 
 /-- Every public key, message and typed signature, including rejecting inputs. -/
-theorem cost : scheme.VerifyCostAtMost 102 :=
+theorem cost : scheme.VerifyCostAtMost 100 :=
   IndexedDag.AlgorithmAdapter.verifyCostBound ShallowForest.forestScheme
-    (v := 101) (fun i => (ShallowForest.forestScheme_reconstructCost i).le)
+    (v := 99) (fun i => (ShallowForest.forestScheme_reconstructCost i).le)
 
 theorem keygen_cost : scheme.KeygenCostAtMost keygenBudget :=
   IndexedDag.AlgorithmAdapter.keygenCost ShallowForest.forestScheme

@@ -1,13 +1,14 @@
 import Submissions.UpperCompressions.ShallowTree
 import Submissions.UpperCompressions.ShallowCount
+import Submissions.UpperCompressions.ShallowCount100
 
 /-!
 # A single shallow-forest disclosure family
 
 Six of eighteen group digests are disclosed; each of the remaining 36 chains
-contributes one word. Chain reconstruction costs sum to 84, twelve group hashes
+contributes one word. Chain reconstruction costs sum to 82, twelve group hashes
 cost twelve, and the root costs five. This file connects the exact counted
-family to the protected graph and proves its 101-compression reconstruction cost.
+family to the protected graph and proves its 99-compression reconstruction cost.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -47,7 +48,7 @@ abbrev Choice := Finset (Fin 18) × (Fin 54 → Fin 19)
   ((Finset.powersetCard b (Finset.univ : Finset (Fin 18))).sigma fun G =>
     positions (active G) s).image fun x => (x.1, x.2)
 
-@[irreducible] def shapes : Finset Choice := shape 6 84
+@[irreducible] def shapes : Finset Choice := shape 6 82
 
 def cutOf (c : Choice) : Finset Name :=
   c.1.image gv ∪ (active c.1).image fun k => chainNode k (c.2 k)
@@ -68,7 +69,7 @@ theorem mem_shape_iff (b s : ℕ) (c : Choice) :
     exact ⟨⟨Finset.subset_univ _, h1⟩, h2⟩
 
 theorem mem_shapes_iff (c : Choice) :
-    c ∈ shapes ↔ c.1.card = 6 ∧ c.2 ∈ positions (active c.1) 84 := by
+    c ∈ shapes ↔ c.1.card = 6 ∧ c.2 ∈ positions (active c.1) 82 := by
   rw [shapes, mem_shape_iff]
 
 theorem groupOfChain_chainOf (j : Fin 18) (a : Fin 3) : groupOfChain (chainOf j a) = j := by
@@ -299,20 +300,20 @@ theorem cutOf_injective : Set.InjOn cutOf shapes := by
   exact Prod.ext hG ht
 
 /-- The graph cut family realizes the previously certified coefficient exactly. -/
-theorem card_family_eq : family.card = Nat.choose 18 6 * comp 36 84 := by
+theorem card_family_eq : family.card = Nat.choose 18 6 * comp 36 82 := by
   have hn : 3 * (18 - 6) = 36 := by norm_num
-  have he : comp (3 * (18 - 6)) 84 = comp 36 84 := congrArg (fun n => comp n 84) hn
+  have he : comp (3 * (18 - 6)) 82 = comp 36 82 := congrArg (fun n => comp n 82) hn
   calc
     family.card = shapes.card := by
       unfold family
       exact Finset.card_image_of_injOn cutOf_injective
-    _ = Nat.choose 18 6 * comp (3 * (18 - 6)) 84 := by
+    _ = Nat.choose 18 6 * comp (3 * (18 - 6)) 82 := by
       unfold shapes
-      exact card_shape 6 84
-    _ = Nat.choose 18 6 * comp 36 84 := congrArg (fun v => Nat.choose 18 6 * v) he
+      exact card_shape 6 82
+    _ = Nat.choose 18 6 * comp 36 82 := congrArg (fun v => Nat.choose 18 6 * v) he
 
-theorem card_family : 45 * 2 ^ 109 ≤ family.card :=
-  single_shape_102_ge.trans_eq card_family_eq.symm
+theorem card_family : 45 * 2 ^ 108 ≤ family.card :=
+  IndexTightResearch.fixed12_cost82_sufficient.trans_eq card_family_eq.symm
 
 theorem forall_above_of_child {A : Finset Name} {n p : Name} (hp : child n = some p)
     (he : Evaluated A p) : ∀ m, Above m n → m ∉ A := by
@@ -451,7 +452,7 @@ theorem sum_fin18_ge (v : ℕ) : ∑ t : Fin 18, (if v ≤ t.val then 1 else 0) 
   rw [this, Nat.card_Ico]
 
 theorem cost_cutOf {c : Choice} (hc : c ∈ shapes) :
-    ∑ n ∈ evaluatedSet (cutOf c), n.cost = 101 := by
+    ∑ n ∈ evaluatedSet (cutOf c), n.cost = 99 := by
   obtain ⟨hG, ht⟩ := (mem_shapes_iff c).mp hc
   have h_gh : ∑ j, (if Evaluated (cutOf c) (gh j) then 1 else 0) = 12 := by
     simp only [evaluated_gh_iff']
@@ -460,7 +461,7 @@ theorem cost_cutOf {c : Choice} (hc : c ∈ shapes) :
       ext j
       simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_compl]
     rw [this, Finset.card_compl, Fintype.card_fin, hG]
-  have h_ch : ∑ k, ∑ t, (if Evaluated (cutOf c) (ch k t) then 1 else 0) = 84 := by
+  have h_ch : ∑ k, ∑ t, (if Evaluated (cutOf c) (ch k t) then 1 else 0) = 82 := by
     simp only [evaluated_ch_iff']
     have hin : ∀ k, ∑ t : Fin 18, (if k ∈ active c.1 ∧ (c.2 k).val ≤ t.val then 1 else 0) =
         if k ∈ active c.1 then 18 - (c.2 k).val else 0 := by
@@ -477,7 +478,7 @@ theorem cost_cutOf {c : Choice} (hc : c ∈ shapes) :
   rw [if_pos (evaluated_rh' c), h_ch, h_gh]
 
 theorem reconstructCost_cutOf {c : Choice} (hc : c ∈ shapes) :
-    graph.reconstructCost (fins (cutOf c)) = 101 := by
+    graph.reconstructCost (fins (cutOf c)) = 99 := by
   rw [reconstructCost_eq, cost_cutOf hc]
 
 theorem isCut_of_mem_family {A : Finset Name} (h : A ∈ family) : IsCut A := by
@@ -491,7 +492,7 @@ theorem card_of_mem_family {A : Finset Name} (h : A ∈ family) : A.card = 42 :=
   exact card_cutOf hc
 
 theorem cost_of_mem_family {A : Finset Name} (h : A ∈ family) :
-    ∑ n ∈ evaluatedSet A, n.cost = 101 := by
+    ∑ n ∈ evaluatedSet A, n.cost = 99 := by
   rw [family, Finset.mem_image] at h
   obtain ⟨c, hc, rfl⟩ := h
   exact cost_cutOf hc

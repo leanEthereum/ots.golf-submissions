@@ -70,8 +70,8 @@ theorem admissible : scheme.Admissible :=
   WireAdapter.admissible ShallowUpperForest.scheme decode decode_encode canonical
     ShallowUpperForest.admissible
 
-theorem cost : scheme.VerifyCostAtMost 102 :=
-  WireAdapter.verifyCost ShallowUpperForest.scheme decode 102 ShallowUpperForest.cost
+theorem cost : scheme.VerifyCostAtMost 100 :=
+  WireAdapter.verifyCost ShallowUpperForest.scheme decode 100 ShallowUpperForest.cost
 
 end OptimalOTS.ShallowUpperForest.Wire
 

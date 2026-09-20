@@ -1,4 +1,6 @@
 import Submissions.UpperCompressions.ShallowStageB
+import Submissions.UpperCompressions.ReservedHazard
+import Submissions.UpperCompressions.MasterReserve
 
 /-!
 # The security bound of the concrete scheme
@@ -54,7 +56,7 @@ private theorem E_run_keygen_indexed
         g' ((S.publicKey (S.graph.evalRec ξ), S.graph.evalRec ξ), S.graph.keygenCache ξ) :=
   E_run_keygen (S.keygenProxy ⟨0, cutIndex_zero_lt⟩) T g'
 
-attribute [local irreducible] fiberA graph CostAtMost IndexedDag.experiment rest rest₂ signIdx IndexedDag.Scheme.keygen IndexedDag.Scheme.sign
+attribute [local irreducible] fiberA graph CostAtMost IndexedDag.experiment rest rest₂ IndexedAnalysis.signIdx IndexedDag.Scheme.keygen IndexedDag.Scheme.sign
 
 variable (A : Adversary)
 /-! ## Stage A -/
@@ -101,7 +103,7 @@ theorem sum_mul_E_asm {ι : Type} (s : Finset ι) (c : ι → ℝ≥0∞) {α : 
 /-- Signing followed by the second stage, through the signing loop. -/
 theorem rest₂_eq_signIdx (pk : BitVec 128) (ξ : Rec) (x : Message × A.State) :
     rest₂ A pk (graph.evalRec ξ) x =
-      signIdx x.1 >>= fun r => stB A pk x.1 x.2 (sigOf ξ r) := by
+      IndexedAnalysis.signIdx x.1 >>= fun r => stB A pk x.1 x.2 (sigOf ξ r) := by
   unfold rest₂
   rw [sign_eq, bind_map_left]
 
@@ -109,15 +111,15 @@ theorem rest₂_eq_signIdx (pk : BitVec 128) (ξ : Rec) (x : Message × A.State)
 theorem E_rest₂_extend_kc (pk : BitVec 128) (ξ : Rec) (x : Message × A.State)
     (d : Cache) :
     E (run (rest₂ A pk (graph.evalRec ξ) x) (Cache.extend d (kc ξ))) g =
-      E (run (signIdx x.1) d) (fun p =>
+      E (run (IndexedAnalysis.signIdx x.1) d) (fun p =>
         E (run (stB A pk x.1 x.2 (sigOf ξ p.1)) (Cache.extend p.2 (kc ξ))) g) := by
-  rw [rest₂_eq_signIdx, run_bind, run_signIdx_extend x.1 d (kc ξ) (fun u => kc_enc ξ u),
+  rw [rest₂_eq_signIdx, run_bind, IndexedAnalysis.run_signIdx_extend x.1 d (kc ξ) (fun u => kc_enc ξ u),
     bind_map_left, E_bind]
 
 /-- The continuation bound after the first stage. -/
-theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' : ℕ)
+theorem stageA_cont_budget (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' : ℕ)
     (hI : Inv d b') (hB : ∀ ξ ∈ fiberA pk, CostAtMost (rest₂ A pk (graph.evalRec ξ) x) b') :
-    FA A pk x d ≤ ΦA pk d + κ * sumW (fiberA pk) * b' := by
+    FA A pk x d ≤ ΦA pk d + κ * sumW (fiberA pk) * ((b' - trials : ℕ) : ℝ≥0∞) := by
   obtain ⟨T, hTdef⟩ : ∃ T : Finset Rec, T = (fiberA pk).filter (fun ξ => ¬ Cache.Hits d (kc ξ)) :=
     ⟨_, rfl⟩
   have hT : T ⊆ fiberA pk := by
@@ -128,7 +130,7 @@ theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' :
     exact hξ.2
   -- Step 1: split `FA` into the records hit by `d` and the others.
   have hsplit : FA A pk x d = ∑ ξ ∈ fiberA pk, w * ind (Cache.Hits d (kc ξ)) +
-      ∑ ξ ∈ T, w * E (run (signIdx x.1) d) (fun p =>
+      ∑ ξ ∈ T, w * E (run (IndexedAnalysis.signIdx x.1) d) (fun p =>
         E (run (stB A pk x.1 x.2 (sigOf ξ p.1)) (Cache.extend p.2 (kc ξ))) g) := by
     unfold FA
     rw [hTdef, Finset.sum_filter, ← Finset.sum_add_distrib]
@@ -139,27 +141,28 @@ theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' :
     · rw [if_neg h, if_neg h, if_pos h, mul_zero, zero_add, E_rest₂_extend_kc]
   -- Step 2: the signing bound on the records of `T`.
   have hne : Nonempty {ξ // ξ ∈ fiberA pk} := (fiberA_nonempty pk).to_subtype
-  have hΦ : EncInvariant (fun c => ∑ ξ ∈ T, w * ind (Spr c ξ)) := by
+  have hΦ : IndexedAnalysis.EncInvariant (fun c => ∑ ξ ∈ T, w * ind (Spr c ξ)) := by
     intro c u w'
     refine Finset.sum_congr rfl fun ξ _ => ?_
     rw [spr_cacheQuery_enc c ξ u w']
   have hB' : ∀ j : {ξ // ξ ∈ fiberA pk},
-      CostAtMost (signIdx x.1 >>= fun r => stB A pk x.1 x.2 (sigOf j.1 r)) b' := by
+      CostAtMost (IndexedAnalysis.signIdx x.1 >>= fun r => stB A pk x.1 x.2 (sigOf j.1 r)) b' := by
     intro j
     have h : CostAtMost (rest₂ A pk (graph.evalRec j.1) x) b' := hB j.1 j.2
     rw [rest₂_eq_signIdx] at h
     exact h
-  have hsig : E (run (signIdx x.1) d) (fun p => ∑ ξ ∈ T, w *
+  have hsig : E (run (IndexedAnalysis.signIdx x.1) d) (fun p => ∑ ξ ∈ T, w *
         E (run (stB A pk x.1 x.2 (sigOf ξ p.1)) (Cache.extend p.2 (kc ξ))) g) ≤
-      ∑ ξ ∈ T, w * ind (Spr d ξ) + sumW T * encTerm d + κ * sumW (fiberA pk) * b' := by
-    refine signRho_bound (by decide) (by decide) x.1 d
+      ∑ ξ ∈ T, w * ind (Spr d ξ) + sumW T * encTerm d + κ * sumW (fiberA pk) * ((b' - trials : ℕ) : ℝ≥0∞) := by
+    refine ReservedHazard.reserved_signRho_bound_of_cost (by decide) (by decide) x.1 d
       (β := Bool) (J := {ξ // ξ ∈ fiberA pk}) (fun j r => stB A pk x.1 x.2 (sigOf j.1 r))
       (fun r d' => ∑ ξ ∈ T, w * E (run (stB A pk x.1 x.2 (sigOf ξ r))
         (Cache.extend d' (kc ξ))) g)
       (fun c => ∑ ξ ∈ T, w * ind (Spr c ξ)) hΦ (κ * sumW (fiberA pk)) (sumW T) (encTerm d)
-      Inv Inv_fresh Inv_cached ?_
-      (fun c h1 h2 => psi_dom paperRowHyp (two_encCount_le hI) x.1 c h1 h2) hI hB'
-    intro r d' b'' hd' hI' hB''
+      (2 ^ 127) b' hI hB' ?_
+      (fun c h1 h2 => encTerm_dom hI x.1 c h1 h2)
+    intro r d' hd' hI' hB''
+    let b'' := b' - trials
     have hB''' : ∀ ξ ∈ T, CostAtMost (stB A pk x.1 x.2 (sigOf ξ r)) b'' := by
       intro ξ hξ
       exact hB'' ⟨ξ, hT hξ⟩
@@ -174,37 +177,66 @@ theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' :
     Finset.sum_le_sum_of_subset hT
   have h2 : sumW T ≤ sumW (fiberA pk) := Finset.sum_le_sum_of_subset hT
   calc ∑ ξ ∈ fiberA pk, w * ind (Cache.Hits d (kc ξ)) +
-        (∑ ξ ∈ T, w * ind (Spr d ξ) + sumW T * encTerm d + κ * sumW (fiberA pk) * b')
+        (∑ ξ ∈ T, w * ind (Spr d ξ) + sumW T * encTerm d + κ * sumW (fiberA pk) * ((b' - trials : ℕ) : ℝ≥0∞))
       ≤ ∑ ξ ∈ fiberA pk, w * ind (Cache.Hits d (kc ξ)) +
         (∑ ξ ∈ fiberA pk, w * ind (Spr d ξ) + sumW (fiberA pk) * encTerm d +
-          κ * sumW (fiberA pk) * b') := by
+          κ * sumW (fiberA pk) * ((b' - trials : ℕ) : ℝ≥0∞)) := by
         gcongr
     _ = _ := by
         simp only [mul_add, Finset.sum_add_distrib]
         ring
 
-/-- The first stage. -/
+/-- Adding the full signing reserve exposes the ordinary master-lemma shape. -/
+theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' : ℕ)
+    (hI : Inv d b') (hB : ∀ ξ ∈ fiberA pk, CostAtMost (rest₂ A pk (graph.evalRec ξ) x) b') :
+    FA A pk x d + κ * sumW (fiberA pk) * trials ≤ ΦA pk d + κ * sumW (fiberA pk) * b' := by
+  obtain ⟨ξ, hξ⟩ := fiberA_nonempty pk
+  have hcost := hB ξ hξ
+  rw [rest₂_eq_signIdx] at hcost
+  have hL := (SigningReserve.signIdx_reserve x.1
+    (fun r => stB A pk x.1 x.2 (sigOf ξ r)) hcost).1
+  have h := stageA_cont_budget A pk x d b' hI hB
+  have he : ((b' - trials : ℕ) : ℝ≥0∞) + trials = b' := by
+    rw [← Nat.cast_add, Nat.sub_add_cancel hL]
+  calc
+    _ ≤ (ΦA pk d + κ * sumW (fiberA pk) * ((b' - trials : ℕ) : ℝ≥0∞)) +
+        κ * sumW (fiberA pk) * trials := by gcongr
+    _ = _ := by rw [add_assoc, ← mul_add, he]
+
+/-- The first stage, retaining and then discharging its terminal reserve. -/
 theorem stageA_master (pk : BitVec 128) (b : ℕ) (hb : b ≤ 2 ^ 127)
     (hB : ∀ ξ ∈ fiberA pk, CostAtMost (A.choose pk >>= rest₂ A pk (graph.evalRec ξ)) b) :
     E (run (A.choose pk) ∅) (fun p => FA A pk p.1 p.2) ≤ κ * sumW (fiberA pk) * b := by
   have hne : Nonempty {ξ // ξ ∈ fiberA pk} := (fiberA_nonempty pk).to_subtype
   have hF : ∀ (x : Message × A.State) (d : Cache) (b' : ℕ), Inv d b' →
       (∀ j : {ξ // ξ ∈ fiberA pk}, CostAtMost (rest₂ A pk (graph.evalRec j.1) x) b') →
-      FA A pk x d ≤ ΦA pk d + κ * sumW (fiberA pk) * b' := by
+      FA A pk x d + κ * sumW (fiberA pk) * trials ≤ ΦA pk d + κ * sumW (fiberA pk) * b' := by
     intro x d b' hI hB'
     refine stageA_cont A pk x d b' hI fun ξ hξ => ?_
     exact hB' ⟨ξ, hξ⟩
   have hI0 : Inv ∅ b := by
-    show encCount ∅ + b ≤ 2 ^ 127
-    rw [encCount_empty, zero_add]; exact hb
+    show IndexedAnalysis.encCount ∅ + b ≤ 2 ^ 127
+    rw [IndexedAnalysis.encCount_empty, zero_add]; exact hb
   have hB0 : ∀ j : {ξ // ξ ∈ fiberA pk},
       CostAtMost (A.choose pk >>= rest₂ A pk (graph.evalRec j.1)) b :=
     fun j => hB j.1 j.2
-  have h := master_family (α := Message × A.State) (β := Bool)
-    (J := {ξ // ξ ∈ fiberA pk}) (κ * sumW (fiberA pk)) (ΦA pk) Inv Inv_fresh Inv_cached (ΦA_charge pk)
-    (A.choose pk) (fun j => rest₂ A pk (graph.evalRec j.1)) (fun x d => FA A pk x d) hF ∅ b hI0 hB0
-  rw [ΦA_empty, zero_add] at h
-  exact h
+  have h := master_family_reserve (α := Message × A.State) (β := Bool)
+    (J := {ξ // ξ ∈ fiberA pk}) (κ * sumW (fiberA pk)) (κ * sumW (fiberA pk) * trials)
+    (ΦA pk) Inv Inv_fresh Inv_cached (ΦA_charge pk)
+    (A.choose pk) (fun j => rest₂ A pk (graph.evalRec j.1)) (fun x d => FA A pk x d)
+    hF ∅ b hI0 hB0
+  rw [ΦA_empty] at h
+  have hzero : sumW (fiberA pk) * encTerm ∅ ≤ κ * sumW (fiberA pk) * trials := by
+    calc _ ≤ sumW (fiberA pk) * (κ * trials) := by gcongr; exact encTerm_empty_le
+         _ = _ := by ring
+  have h' : E (run (A.choose pk) ∅) (fun p => FA A pk p.1 p.2) +
+      κ * sumW (fiberA pk) * trials ≤ κ * sumW (fiberA pk) * trials + κ * sumW (fiberA pk) * b :=
+    h.trans (by gcongr)
+  have hfinite : κ * sumW (fiberA pk) * (trials : ℝ≥0∞) ≠ ⊤ := by
+    unfold κ ε sumW w
+    finiteness
+  rw [add_comm (κ * sumW (fiberA pk) * trials)] at h'
+  exact (ENNReal.add_le_add_iff_right hfinite).mp h'
 
 /-- The first stage, coupled to the run without the keygen cache. -/
 theorem stageA_iub (ξ : Rec) :

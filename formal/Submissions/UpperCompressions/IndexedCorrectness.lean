@@ -14,6 +14,19 @@ open OptimalOTS.GenericCorrectness (reconstruct_eq)
 
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
+/-- Cache witness for the submitted127-bit index program. -/
+theorem index_support127 (m : Message) (η : Nonce) (c : Cache) :
+    ∀ p ∈ support (run (SubmittedIndex.index m η) c),
+      Cache.Sub c p.2 ∧ ∃ w, p.2 ⟨msgBits + nonceBits, m ++ η⟩ = some w ∧
+        p.1 = (w.setWidth idxBits).toNat := by
+  intro p hp
+  unfold SubmittedIndex.index at hp
+  rw [run_map, support_map, Set.mem_image] at hp
+  obtain ⟨⟨w, c'⟩, hw, rfl⟩ := hp
+  obtain ⟨hsub, hc'⟩ := hash_support _ c _ hw
+  dsimp only at hsub hc' ⊢
+  exact ⟨hsub, w, hc', rfl⟩
+
 theorem keygen_cacheConsistent (S : IndexedDag.Scheme numCuts) (c : Cache) :
     ∀ p ∈ support (run S.keygen c),
       p.1.1 = S.publicKey p.1.2 ∧ S.graph.CacheConsistent p.1.2 p.2 := by
@@ -57,7 +70,7 @@ theorem verify_accepts (S : IndexedDag.Scheme numCuts) (x : S.graph.Assignment) 
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
   obtain ⟨⟨j, d⟩, hj, hp⟩ := hp
-  obtain ⟨hcd, w', hw', hj⟩ := index_support m σ.1 c ⟨j, d⟩ hj
+  obtain ⟨hcd, w', hw', hj⟩ := index_support127 m σ.1 c ⟨j, d⟩ hj
   have hww : w' = w := Option.some.inj (hw'.symm.trans (hcd _ _ hw))
   rw [hww] at hj
   have hji : j = i.val := hj.trans hi

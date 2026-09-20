@@ -452,7 +452,7 @@ theorem events_ne {A A' : Finset Name} (hA : IsCut A) (hA' : IsCut A')
   · left
     exact up hA' hy hacc hvE.2 (cost_of_hashOf hh) hvne
 
-attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits OptimalOTS.IndexedAnalysis.numCuts trials
+attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits OptimalOTS.IndexedAnalysis.idxBits OptimalOTS.IndexedAnalysis.numCuts trials
 
 /-- `encode` only reads the values on the set. -/
 theorem encode_congr (G : Graph) (A : Finset (Fin G.size))
@@ -462,7 +462,7 @@ theorem encode_congr (G : Graph) (A : Finset (Fin G.size))
   rw [List.mem_filter, decide_eq_true_iff] at hv
   rw [h v hv.2]
 
-attribute [local semireducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits OptimalOTS.IndexedAnalysis.numCuts trials
+attribute [local semireducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits OptimalOTS.IndexedAnalysis.idxBits OptimalOTS.IndexedAnalysis.numCuts trials
 
 /-- The forgery uses the signed disclosure set with different values. -/
 theorem events_same {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}

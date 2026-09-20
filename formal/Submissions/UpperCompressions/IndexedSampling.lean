@@ -29,7 +29,9 @@ namespace IndexedAnalysis
 
 /-- Accepted indices for the shallow numerical candidate. This leaves the
 protected DAG constant and the exported reference scheme unchanged. -/
-def numCuts : ℕ := 45 * 2 ^ 109
+abbrev index := SubmittedIndex.index
+
+def numCuts : ℕ := 45 * 2 ^ 108
 
 open OptimalOTS.Dag
 
@@ -196,7 +198,7 @@ theorem signIdxLoop_succ (m : Message) (k : ℕ) (tried : Finset Nonce)
         loopBody m k tried (nonceOf tried hc j) := by
   rw [signIdxLoop, dif_pos hc, liftM_uniformFin_eq]
   refine bind_congr fun j => ?_
-  simp only [loopBody, nonceOf, index, hash, map_eq_bind_pure_comp, bind_assoc, pure_bind,
+  simp only [loopBody, nonceOf, index, SubmittedIndex.index, hash, map_eq_bind_pure_comp, bind_assoc, pure_bind,
     Function.comp_def]
   rfl
 
@@ -608,7 +610,7 @@ theorem not_exists_none {d : Cache} {m : Message} :
 
 /-- The selected index has the custom range, not the protected DAG range. -/
 def checkedIndexType (m : Message) :
-    OracleComp Spec (Option (Nonce × Fin (45 * 2 ^ 109))) := by
+    OracleComp Spec (Option (Nonce × Fin (45 * 2 ^ 108))) := by
   simpa only [numCuts] using signIdx m
 
 #print axioms sign_eq_map

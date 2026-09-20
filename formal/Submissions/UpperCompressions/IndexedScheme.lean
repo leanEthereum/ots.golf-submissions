@@ -4,18 +4,33 @@ import Submissions.UpperCompressions.Adapter
 /-!
 # DAG schemes with an explicit accepted-index count
 
-The protected graph semantics, index hash, nonce format and trial budget are unchanged.
+The protected graph semantics, nonce format and trial budget are unchanged.
+The submitted index program keeps the same query and takes127 output bits.
 Only the scheme/program layer is generalized from `Dag.numCuts` to a parameter `M`.
 This permits a cut family whose cardinality is not a power of two. No admissibility
 or security of a particular new graph follows from this interface alone.
 
-Specialization to `M = Dag.numCuts` agrees with every protected DAG program. The
+Graph and key-generation specialization helpers remain available. The
 typed adapter preserves the full oracle experiment and its security statement.
 -/
 
 open OracleSpec OracleComp ENNReal
 noncomputable section
 open scoped Classical
+
+namespace OptimalOTS.IndexedAnalysis
+
+/-- Submitted index width; protected nonce and graph words remain128 bits. -/
+def idxBits : ℕ := 127
+
+end OptimalOTS.IndexedAnalysis
+
+namespace OptimalOTS.SubmittedIndex
+
+def index (m : Message) (η : Dag.Nonce) : OracleComp Spec ℕ :=
+  (fun y => (y.setWidth IndexedAnalysis.idxBits).toNat) <$> hash (m ++ η)
+
+end OptimalOTS.SubmittedIndex
 
 namespace OptimalOTS.IndexedDag
 
@@ -48,7 +63,7 @@ def signLoop (x : S.graph.Assignment) (m : Message) :
     if h : 0 < fresh.card then do
       let j ← (liftM ($[0..(fresh.card - 1)]) : OracleComp Spec (Fin (fresh.card - 1 + 1)))
       let η : Dag.Nonce := (fresh.equivFin.symm (Fin.cast (by omega) j)).1
-      let i ← Dag.index m η
+      let i ← SubmittedIndex.index m η
       if hi : i < M then
         return some (η, S.graph.encode (S.sets ⟨i, hi⟩) x)
       else
@@ -60,7 +75,7 @@ def sign (x : S.graph.Assignment) (m : Message) : OracleComp Spec (Option Dag.Si
   S.signLoop x m Dag.trials ∅
 
 def verify (pk : PublicKey) (m : Message) (σ : Dag.Signature) : OracleComp Spec Bool := do
-  let i ← Dag.index m σ.1
+  let i ← SubmittedIndex.index m σ.1
   if hi : i < M then
     let A := S.sets ⟨i, hi⟩
     if σ.2.length = S.graph.revealBits A then
@@ -116,28 +131,8 @@ abbrev toDag (S : Scheme Dag.numCuts) : Dag.Scheme where
 
 @[simp] theorem ofDag_keygen (S : Dag.Scheme) : (ofDag S).keygen = S.keygen := rfl
 
-theorem ofDag_signLoop (S : Dag.Scheme) (x : S.graph.Assignment) (m : Message)
-    (k : ℕ) (tried : Finset Dag.Nonce) :
-    (ofDag S).signLoop x m k tried = S.signLoop x m k tried := by
-  induction k generalizing tried with
-  | zero => rfl
-  | succ k ih =>
-    simp only [signLoop, Dag.Scheme.signLoop, ofDag]
-    split_ifs with h
-    · apply bind_congr
-      intro j
-      apply bind_congr
-      intro i
-      split_ifs with hi
-      · rfl
-      · exact ih _
-    · rfl
-
-@[simp] theorem ofDag_sign (S : Dag.Scheme) (x : S.graph.Assignment) (m : Message) :
-    (ofDag S).sign x m = S.sign x m := ofDag_signLoop S x m _ _
-
-@[simp] theorem ofDag_verify (S : Dag.Scheme) (pk : PublicKey) (m : Message)
-    (σ : Dag.Signature) : (ofDag S).verify pk m σ = S.verify pk m σ := rfl
+/- The protected128-bit index programs do not specialize to this127-bit
+prototype. Their sign/verify equalities are intentionally absent. -/
 
 @[simp] theorem ofDag_verifyCost (S : Dag.Scheme) (i : Fin Dag.numCuts) :
     (ofDag S).verifyCost i = S.verifyCost i := rfl
@@ -166,19 +161,6 @@ def experiment {M : ℕ} (S : Scheme M) (A : Dag.Adversary) : OracleComp Spec Bo
 def Scheme.Secure {M : ℕ} (S : Scheme M) : Prop :=
   ∀ (A : Dag.Adversary) (B : ℕ), CostAtMost (experiment S A) B →
     probTrue (experiment S A) < (B : ℝ≥0∞) / 2 ^ securityBits
-
-theorem ofDag_experiment (S : Dag.Scheme) (A : Dag.Adversary) :
-    experiment (Scheme.ofDag S) A = Dag.experiment S A := by
-  simp only [experiment, Dag.experiment, Scheme.ofDag_keygen]
-  apply bind_congr
-  intro keys
-  apply bind_congr
-  intro chosen
-  rw [Scheme.ofDag_sign]
-  rfl
-
-theorem ofDag_secure_iff (S : Dag.Scheme) : (Scheme.ofDag S).Secure ↔ S.Secure := by
-  simp only [Scheme.Secure, Dag.Scheme.Secure, ofDag_experiment]
 
 namespace AlgorithmAdapter
 

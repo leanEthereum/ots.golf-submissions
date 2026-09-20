@@ -4,9 +4,9 @@ import Submissions.UpperCompressions.IndexedSampling
 /-!
 # The shallow forest with the submitted index threshold
 
-An injective family of `45 * 2^109` cuts instantiates the indexed DAG interface.
-Every cut discloses 42 words and reconstructs the root in 101 compressions;
-the message-and-nonce query brings verification to 102 compressions.
+An injective family of `45 * 2^108` cuts instantiates the indexed DAG interface.
+Every cut discloses 42 words and reconstructs the root in 99 compressions;
+the message-and-nonce query brings verification to 100 compressions.
 Security and the generic raw-bit interface are separate obligations.
 -/
 
@@ -62,12 +62,12 @@ theorem card_setsName (i : Fin IndexedAnalysis.numCuts) : (setsName i).card = 42
   card_of_mem_family (setsName_mem i)
 
 theorem cost_setsName (i : Fin IndexedAnalysis.numCuts) :
-    ∑ n ∈ evaluatedSet (setsName i), n.cost = 101 :=
+    ∑ n ∈ evaluatedSet (setsName i), n.cost = 99 :=
   cost_of_mem_family (setsName_mem i)
 
 theorem forestScheme_reconstructCost (i : Fin IndexedAnalysis.numCuts) :
-    forestScheme.graph.reconstructCost (forestScheme.sets i) = 101 := by
-  change graph.reconstructCost (fins (setsName i)) = 101
+    forestScheme.graph.reconstructCost (forestScheme.sets i) = 99 := by
+  change graph.reconstructCost (fins (setsName i)) = 99
   rw [reconstructCost_eq, cost_setsName]
 
 theorem forestScheme_revealBits (i : Fin IndexedAnalysis.numCuts) :
@@ -80,7 +80,7 @@ theorem forestScheme_keygenCost : forestScheme.graph.keygenCost = 995 :=
   graph_keygenCost
 
 theorem forestScheme_verifyCost (i : Fin IndexedAnalysis.numCuts) :
-    forestScheme.verifyCost i = 102 := by
+    forestScheme.verifyCost i = 100 := by
   unfold IndexedDag.Scheme.verifyCost
   rw [forestScheme_reconstructCost]
   have hidx : Dag.idxCost = 1 := by decide

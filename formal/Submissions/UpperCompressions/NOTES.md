@@ -1,466 +1,305 @@
-# Upper-compressions research and 102-compression certificate
+# A tighter index proof gives 100 compressions
 
-This submission exports a complete 102-compression certificate;
-`README.md` describes the construction and proof map. Its bit-string admissibility,
-127-bit strong security and all-input cost theorems pass pinned Lean 4.33.1 with
-only the permitted axioms. Final local replay evidence is recorded below. The
-hosted verification verdict is still outstanding. The research chronology below
-records the local work that preceded this initial submission.
+The proposed improvement is a tighter security argument that permits a **127-bit index while retaining the 128-bit nonce**. This halves the required number of cut classes without changing the signing acceptance probability. On the existing graph, chain reconstruction cost 82 then gives **82 + 12 + 5 + 1 = 100 compressions**.
 
-## The technique
+**Status:** the complete exported 100-compression certificate compiles locally with pinned Lean 4.33.1, including admissibility, security, and the raw-signature cost bound. The frozen dependency rebuild, independent kernel replay, exact export-type and transitive-axiom audits, protected-source hashes, and submission policy all pass. Official hosted verification is pending. The prior [official 102 record](https://ots.golf/submissions/440fbe4103a5cfff1f213e25ac09bfd9) remains published in [PR #6](https://github.com/leanEthereum/ots.golf-submissions/pull/6).
 
-This submission lowers the upper-compressions claim from **104 to 102** with a complete certificate of admissibility and 127-bit strong unforgeability. The verification bound covers every input and oracle-answer path, including rejection.
+## Same graph and signature size
 
-The technique combines two changes: **remove the intermediate subtree layer, and choose the number of accepted indices to meet the signing-failure requirement.** The smaller family makes it possible to disclose cuts that take one fewer compression to reconstruct.
+The graph still has 54 independent 128-bit seeds, 18 hash steps per chain, 18 ternary group hashes, and one root hash. Its tagged input lengths are 144, 400, and 2,320 bits, costing one, one, and five compressions respectively. Key generation remains `54*18 + 18 + 5 = 995` compressions.
 
-### A shallower forest
+A signature reveals six group digests and 36 chain values from the other twelve groups. The chain positions now have total remaining cost 82. Thus the signature still contains 42 words plus its nonce: `42*128 + 128 = 5,504` bits. The message-plus-nonce index query remains 384 bits and costs one compression.
 
-Start with 54 independent 128-bit seeds. Extend each through 18 tagged hash steps, combine each triple of chain tips into a group digest, then hash all 18 group digests directly into the public key. Each digest retains the low 128 bits of the 256-bit oracle answer.
+The selected cut family has exact size
 
-```text
-54 independent seeds
-        │  18 hash steps per chain
-54 chain tips
-        │  3 tips per group
-18 group digests
-        │  one tagged root hash
-128-bit public key
-```
+    choose(18,6) * [x^82](1+x+...+x^18)^36
+      = 14696477531177027506903935123070536.
 
-Every hash input includes a 16-bit node tag. The chain, group, and root inputs are 144, 400, and 2,320 bits, so their actual compression costs are 1, 1, and 5. The tags are charged in the same shared random oracle as every other query.
+This exceeds the new accepted-class count
 
-A signature reveals six group digests and one value on each of the 36 chains in the remaining twelve groups. Choose those chain positions so their remaining hash costs sum to 84.
+    M = 45*2^108 = 14603334914629202705242020925931520.
 
-| Work or space | Exact accounting |
-|---|---:|
-| Key generation | `54 × 18 + 18 + 5 = 995` compressions |
-| Disclosures | `6 + 36 = 42` words, or 5,376 bits |
-| Full signature | `128 + 5,376 = 5,504` bits |
-| Reconstruction | `84 + 12 + 5 = 101` compressions |
-| Verification | `1` index query `+ 101 = 102` compressions |
+Let `I=2^127`, `N=2^128=2I`, and `L=2^20`. The fresh-trial acceptance rate is unchanged:
 
-### Enough indices, with a proof of availability
+    p = M/I = 45/524288,       pL = 90.
 
-The certified number of distinct cuts is
+Consequently the existing availability arithmetic still proves failure at most `2^-128`. The chain-cost-81 family is too small for this particular M; the count above is the first sufficient rank of this fixed shape.
 
-$$
-\binom{18}{6}\,[x^{84}](1+x+\cdots+x^{18})^{36}
-=29{,}487{,}481{,}484{,}631{,}239{,}862{,}222{,}768{,}351{,}166{,}608.
-$$
+## Reserve the signer's full trial budget
 
-This is smaller than the previous `2^115` index family. It is still large enough for **`M = 45 × 2^109` distinct indices**, which meets the required signing-failure bound.
+The protected `CostAtMost` predicate bounds every raw oracle-answer path, including paths that would not be consistent with a memoized random oracle. This makes the following resource argument possible.
 
-Signing samples nonces without replacement and hashes the message with each fresh 128-bit nonce, accepting when the resulting 128-bit index is below M. Each fresh trial succeeds with probability
+For any requested successful signer output, choose `L-1` distinct other nonces and force rejected answers, then choose the requested nonce and force its accepted answer. The returned signature and subsequent continuation are identical, while signing takes exactly L index queries. The failure output also has a length-L path. Therefore a pathwise budget for signing followed by an arbitrary adaptive continuation reserves L calls before bounding that continuation.
 
-$$p=M/2^{128}=45/524288.$$
+This uses `L<=N` and a nonempty rejected-index set. It does **not** use inconsistent answers in the probability analysis: actual success probabilities continue to use the protected single random oracle. It uses the stronger raw-path contract solely to establish the resource bound, including when post-sign behavior depends on the observed signature and subsequent oracle answers.
 
-The availability proof groups the `2^20` trials into 128 blocks of 8,192. The first four binomial terms prove `(1 + 45/524243)^8192 ≥ 2`. Since `1 + 45/524243 = 1/(1-p)`, each block fails with probability at most one half, hence
+## Count repeated entries, then bound the signing row
 
-$$(1-p)^{2^{20}}\le(1/2)^{128}=2^{-128}.$$
+Before signing, let q be the number of cached index inputs, A the number with accepted classes, and v the number of distinct accepted classes. There are `H=A-v` repeated accepted entries. In the selected message row, let a count accepted entries and b count entries whose class appears at another cached input.
 
-The proof establishes freshness for the actual signing computation, including messages chosen as a function of the public key: key generation uses input lengths 144, 400, and 2,320, while indexing uses 384 bits. Distinct signing nonces then give distinct fresh index queries.
+A class of multiplicity k>=2 contributes k bad entries and k-1 repeats, so
 
-For comparison, the same shallow forest with chain cost 85 supplies enough cuts for the old `2^115` threshold and gives 103 total compressions. Proving that the smaller threshold is sufficient is what makes chain cost 84—and **102 total**—available.
+    b <= a,       b <= 2(A-v).
 
-### Strong security is preserved
+The generic finite-fiber inequality and its cache instantiation are kernel-checked in `RepeatedFibers.lean`.
 
-The selected cuts are injectively indexed, satisfy the disclosure constraints, and all have reconstruction cost 101. The tree proof shows that distinct cuts in this family cannot be derived from one another. The security proof then combines hidden key-generation inputs, fresh-answer prefix events, and the index potential for the smaller family. The index-security argument is checked again at this M; its hypotheses do not require M to be a power of two.
+At a signing trial, at least `f>=2I-q-L` untried nonce slots are fresh. Its bad stopping mass is `b+fv/I`, and its accepting mass is `a+pf`. Set
 
-It covers a different cut, a different payload for the same cut, and signing failure, preserving strong unforgeability even for alternative signatures on the signed message. For any attainable whole-experiment budget `B ≤ 2^127`, the proof gives
+    T = max(A, p(q+L)/2).
 
-$$\Pr[\mathrm{forge}]\le\frac{B-995}{2^{127}}<\frac{B}{2^{127}}.$$
+If T>=M, bad mass is at most accepting mass. Otherwise T>=A>=v and
 
-Larger budgets follow from the probability bound of one. The transmitted bit-string interface also proves accepted-input canonicality, so alternative encodings do not create an unaccounted forgery.
+    Mb-Ta <= (M-T)b <= 2(M-T)(T-v) <= pf(T-v).
 
-The protected contract is unchanged. `IndexedScheme` is a submitted local interface parameterized by M; it reuses the protected graph and oracle semantics. `Shallow*` supplies the concrete construction and full proof. `README.md` maps the modules, and `NOTES.md` records the technique, experiments, unsuccessful alternatives, and next directions. The generic proof infrastructure is reused from the existing 104-compression certificate.
+Hence the bad/accepting ratio is at most T/M. The existing disjoint signing-loop argument turns this into a bound on the complete signing event. `TightRow.lean` proves the arithmetic; `TightPotential.rho_dom` connects it to the actual cache and the `signRho_bound` interface.
 
+## A potential with charge exactly 1/I
 
-## Research chronology
+Use the real potential
 
-The entries below retain the research chronology, including earlier statements
-that the candidate was incomplete or the exported claim was still 104. Those
-statements describe the stage at which they were written.
+    rho = (A + pL/2 + exp(pq/2-A))/M.
 
-# Historical baseline: 104 compressions
+It dominates T/M because `max(d,0)<=exp(d)`. A fresh index query increments q by one and increments A by a Bernoulli(p) indicator. Writing `d=pq/2-A`,
 
-## Idea
+    (1-p)exp(d+p/2) + p exp(d+p/2-1) <= exp(d).
 
-Use the prepared six-subtree forest with 54 chains of length 14. The cut family fits the disclosure budget and reconstructs within 103 compressions; the message-and-nonce index adds one.
+Thus the exponential term has nonpositive expected drift, and the accepted-count term contributes exactly `p/M=1/I`. Non-index queries leave this potential unchanged. The uniform-oracle charge and row domination are checked in `TightPotential.lean`.
 
-## Result
+The potential starts positive:
 
-This submission packages the existing 104-compressions certificate from
-`TomWambsgans/ots.golf-submissions` commit `fcb41a3a86ec552a7601394fdd8f6b4cf75acfae`.
-The Lean files and `claim.txt` are unchanged. See `README.md` for the construction and proof map.
-The hosted verification result is pending at submission time.
+    rho(empty) = L/(2I) + 1/M.
 
-## What did not work
+The reserved signing budget pays for it. Since pL=90>2,
 
-No new proof experiments were performed while preparing this submission, and the existing
-README does not record failed approaches. The local official verifier could not start because
-the verifier tools are not installed in this checkout; this is a setup limitation, not a proof verdict.
-
-## Next
-
-Investigate alternative cut families or forest shapes while retaining signing availability, strong security and the payload budget.
-
-## Local exploratory research (2026-09-19; not a verified improvement)
-
-The public notes journal still reports 104 as the verified compression record. A read-only
-GitHub discussion query returned no discussion threads in the submissions repository.
-No GitHub writes were made during this research.
-
-Exact integer enumeration of all disclosure shapes of the existing 6-by-3-by-3 forest,
-at chain length 14 and with at most 42 disclosed words, gives only about 2^114.657122
-cuts at exact reconstruction cost 102. Thus merely adding omitted shapes at that
-cost does not meet the existing 2^115 index-family threshold. This is not a lower
-bound for arbitrary cut families or arbitrary schemes.
-
-A structural screen of two-level regular forests used 1--24 root children and
-1--8 children at each of the next two levels. Chain lengths consumed the remaining
-1024-compression key-generation budget. Counts used exact integer polynomial
-coefficients, actual 16-bit-tweaked hash-input lengths, and a 42-word disclosure cap.
-The best screened candidate has total verification cost 103. It simplifies to a
-shallow forest with 18 ternary groups and 54 chains of length 18:
-
-- Key generation: 54*18 + 18 + 5 = 995 compressions.
-- Root input: 16 + 18*128 = 2320 bits, costing 5 compressions.
-- Reveal 6 group digests and one value from each of the other 36 chains: 42 words.
-- Chain reconstruction cost 85, plus 12 group hashes and 5 root compressions,
-  gives 102 reconstruction compressions; the index query adds one.
-- The single-shape count is C(18,6) times the coefficient of x^85 in
-  (1+x+...+x^18)^36, namely 41543031742324041932159566097104416.
-  This exceeds 2^115. Including other permitted exact-cost shapes gives
-  43855251196801926587622830049099996 cuts, independently reproduced by a
-  second enumeration of the simplified shallow forest.
-
-These are numerical construction checks, not a security certificate. No exported
-scheme, claim, security proof, or availability proof has been changed. The candidate
-still needs a complete DAG construction, proof transfer, and official verification.
-It is a useful baseline rather than the substantial breakthrough being sought.
-Next investigate irregular trees and constructions outside the regular forest family;
-also separate the sufficient 2^115 indexing threshold from the actual availability
-constraint when evaluating more ambitious candidates.
-
-## Structural follow-up and availability threshold (local, unverified)
-
-Two additional screens used 12 local worker processes, with scratch scripts and results
-in `/tmp/ots-research/` (these scratch files are not part of a proof submission):
-
-1. 105 trees: 42--84 leaves in steps of three, each with flat, binary, ternary,
-   mixed binary/ternary, mixed 2/3/7, deep ternary, or ragged branching. A bivariate
-   polynomial tracks disclosure count and exact reconstruction cost. For a hash node
-   with children F_i, its polynomial is y + x^h * product(F_i), with
-   h = ceil((16 + 128*arity)/512). A length-L chain has polynomial
-   y*(1+x+...+x^L). Coefficients above 42 disclosures or 104 reconstruction
-   compressions were discarded. Positive floating-point convolution screened the
-   trees; exact integer recomputation confirmed the best result, still 103 total.
-   The recurrence also matched independently implemented shape counting on small
-   forests and the 54-chain candidate. These sampled shapes are not exhaustive.
-2. 1,098 valid constructions moved chains onto internal edges above branching nodes.
-   Root arity ranged from 2 to 42; branch arity was 2, 3, 4, or 7; internal chain
-   length was 0, 1, 2, 4, 8, 16, or 32. Remaining key-generation budget went to
-   uniform leaf chains. A group polynomial is
-   y*(1+...+x^K) + x^(K+h(a))*[y*(1+...+x^L)]^a.
-   None beat 103 at the 2^115 family threshold. The best positive-internal-chain
-   candidate in this screen cost 105. Three leading results were recomputed exactly.
-
-The fixed 2^115 threshold is NOT necessary for an arbitrary oracle-program upper
-submission. It is hardcoded in the protected DAG interface, so exploiting a smaller
-family requires a custom submitted oracle construction and corresponding security proof;
-the protected model must remain unchanged.
-
-For 2^20 fresh independent index trials, failure <= 2^-128 requires an acceptance
-family of at least ceil(2^128 * (1 - 2^(-128/2^20))) indices, whose log2 is approximately
-114.4711725923. The same shallow forest has
-M = 31179843107214461927616603288863712 cuts at reconstruction cost 101,
-hence total verification cost 102. Its predicted failure is about 2^-138.62094.
-More robustly, Python exact integer arithmetic verified
-
-    2 * (2^128 - M)^8192 <= (2^128)^8192.
-
-Repeating that block bound 128 times establishes the required numerical availability
-inequality. This does not establish freshness, correctness, strong security, or the
-Lean certificate for a changed scheme. It upgrades the numerical target to 102,
-not the verified record. Cost 101 in this same candidate has only 2^114.08895 cuts,
-below the actual availability threshold.
-
-Local verification setup currently has Lean 4.32.2, while the contract pins 4.33.1;
-the filesystem had about 368 MB free when checked. No large dependency installation
-was attempted. Only research notes in the admitted root were changed; claim.txt and
-all existing Lean proofs remain unchanged. There were no GitHub writes.
-
-## Tree-wide envelope experiment (local, no improvement)
-
-The public journal was read again and still listed the 104 record. The next experiment
-maximized F_T(x,y), the cut generating polynomial evaluated at positive x,y, over
-all rooted trees of tagged 128-bit values with key-generation cost at most 1024.
-This allows arbitrary branching, arbitrary depth, and unary chains on any edge.
-The hash cost for a children is 1+floor(a/4). A max-product dynamic program tracks
-the child count modulo four, as well as total child cost plus floor(child count/4).
-For fixed x,y, maximizing a subtree's polynomial independently is valid because all
-coefficients are nonnegative. The calculation is a floating-point research tool,
-not a Lean theorem or a certified numerical lower bound.
-
-Exhaustive enumeration of all 3,317 trees with total cost at most four agreed with
-the recurrence at x=5/8, y=3/8, using exact rational values for the enumeration.
-Eight positive evaluation points were optimized for reconstruction budgets
-60, 70, 80, 85, 90, 95, 100, and 101. The maximizing 1024-cost trees were recovered
-and their full disclosure/cost spectra screened. None reached 2^115 cuts within
-104 reconstruction compressions. At cost 101 their counts ranged from about
-2^106.47 to 2^113.36, below the shallow forest's 2^114.586. Maximizing a polynomial
-evaluation does not maximize an individual coefficient, so this is not an
-optimality proof and does not exclude other trees.
-
-A simpler counting observation is stronger than this envelope at low budgets:
-encode a cut by a deterministic traversal, writing a zero for a disclosed word
-and a one for each compression of an expanded hash. For this tagged-word tree
-class, complete traversal strings are prefix-free. A prefix-free binary code
-using at most c ones and d zeros has at most C(c+d,d) words (the two first-bit
-branches give Pascal's recurrence, with boundary value one). The root is always
-expanded, so for nontrivial cuts one may remove its first one, giving
-C(c+41,42) with d=42. At reconstruction cost 89 this bound is below the actual
-availability threshold of the independent 128-bit index sampler; at 90 it is
-above. This is an informal restricted-family argument, not a new general lower
-certificate. The repository already has a 90 lower record for its whole-word
-framework, whose syntax differs from these 16-bit-tweaked trees.
-
-Nonce reuse ideas were also considered, without a valid construction. Permuting
-disclosed words to encode the nonce must still preserve the node-to-value
-assignment; counting the permutation space twice is invalid. Selecting a nonce
-from key-generation values leaves only a small set of distinct index trials.
-These observations reject the naive forms, not every possible nonce-sharing scheme.
-
-Concrete next question: can sharing hash outputs across branches produce a large
-family of mutually non-derivable disclosures at lower reconstruction cost? Counting
-raw DAG frontiers alone is insufficient: a revealed frontier may allow computation
-of additional nodes and conversion to another purported signature. A small-DAG
-experiment should calculate both reconstruction cost and this closure relation.
-No question was posted to GitHub, per the user's instruction.
-
-## Shared-DAG experiments and local proof tooling
-
-The next screen enumerated 54,004 frontiers across 252 small single-output DAGs.
-221 graphs had distinct equal-cost frontiers related by forward derivation. For
-example, with a=H(tag_a||s), b=H(tag_b||s), and r=H(tag_r||a||b), the frontiers
-{s,a} and {s,b} both reconstruct with two hashes but derive one another. Raw
-frontier counts therefore substantially overstate usable signature families.
-
-The filter requires a valid, relevant frontier A to be forward-closure independent:
-no a in A is computable from A minus {a}. After filtering, 6,349 frontiers remained,
-with no distinct equal-cost derivation in the sample. An independent exhaustive
-check covered all 32,767 topologically ordered DAGs on two through six vertices
-whose final vertex is a hash. It found 148,732 directed equal-cost derivation pairs
-before filtering. Among 56,073 valid, relevant, independent frontiers, all 29,566
-comparable distinct pairs strictly decreased reconstruction cost. Another check
-covered 3,052 small two-output DAGs with gate-based costs and reached the same
-conclusion for reduced frontiers.
-
-The structural proof sketch is: if B is derivable from independent A, reconstruction
-from B cannot evaluate an A disclosure, since that would derive it from the other
-A disclosures. Thus the evaluated gates for B are a subset of those for A. Distinct
-relevant frontiers force a proper inclusion, and positive gate costs force lower
-cost. This supports repeated disjoint motifs and private source chains. This is
-not yet a formal theorem or a random-oracle security reduction. Free aliases and
-mixed whole/half-output encodings need additional canonicalization.
-
-Repeated copies of the 247 distinct cleaned motif spectra, with source chains and
-a common root, were screened at 14 repetition counts from 4 to 42. None beat the
-existing 102 numerical target under the actual availability threshold. Exact
-integer recomputation of three finalists confirmed their first passing costs.
-The best non-tree motif used three sources a,b,c, u=H(a,b,c), v=H(a,c,u), with
-tags on both hashes. Eighteen copies and length-18 source chains cost 1013 to
-generate. At reconstruction cost 101 it has
-31272784319994052187198825598130233 cuts, slightly more than the shallow tree but
-still only a 102 total candidate; its preceding layer misses the threshold.
-
-Separately, 164 fork/merge architectures exploited both 128-bit halves of each
-256-bit answer. A fork's two branches could be disclosed separately or regenerated
-from their common seed. Best screened total cost was 104, worse than 102. The
-polynomial recurrence matched explicit enumeration on 11 small circuits and 366
-canonical cuts. This rejects the tested family, not every multi-output DAG.
-
-Scratch artifacts are in /tmp/ots-research/dag_frontiers.py, dag_motifs.py and their
-JSON results, /tmp/ots-dag-security/criterion.md and exhaustive checks, and
-/tmp/ots-alternative/REPORT.md and fork/merge scripts. The criterion report gives
-the proof sketch, composition argument, assumptions, and caveats in detail.
-
-The disk-space obstacle to local Lean checks has been resolved using an isolated
-host RAM filesystem at /dev/shm/ots-proof-env. Pinned Lean 4.33.1 and all 8,690
-Mathlib cache files were installed there, using approximately 11 GiB. The release
-archive's SHA-256 was checked against its release metadata. The original contract
-checkout and other tracks were not modified. The wrapper
-/tmp/ots-research/lean433.py enforces eight CPUs, a 20 GiB process RSS limit and a
-600-second timeout. It requires the host mount namespace (sandbox escalation).
-
-Official verification remains a separate limitation: the host exposes Landlock
-ABI 2, below the required ABI 3, and systemd 252 rejects PrivatePIDs=yes. No
-official verifier gates were bypassed. Local Lean checking is not an official
-submission verdict. No GitHub writes were made.
-
-## Lean-checked shallow-family counting helper
-
-`ShallowCount.lean` now proves the bounded-composition cardinality interpretation,
-its dynamic-programming recurrence, and both exact coefficients using kernel
-reduction (no native_decide):
-
-    comp 36 85 = 2237827609476623676586919095944
-    comp 36 84 = 1588422833690542979003596657572
-
-The first coefficient gives the previously described single-shape 103 candidate.
-More usefully, the second shows that the 102 candidate can ALSO use a single shape:
-reveal six of eighteen group digests and 36 chain values of total cost 84. Then
-5 root + 12 group + 84 chain = 101 reconstruction compressions. There are
-29487481484631239862222768351166608 choices, at least 45*2^109. Using that many
-accepted 128-bit indices gives success probability 45/524288 per fresh trial.
-This simpler family avoids needing the union of multiple shapes for 102.
-
-The helper passed pinned Lean 4.33.1 in 62.53 seconds, with observed peak process
-RSS about 10.13 GiB. Both single_shape_ge and single_shape_102_ge use exactly
-propext, Classical.choice and Quot.sound. The checked source SHA-256 is
-a6142df965081e7f00f85e4f7be8aaa1fb9d6aeba757e8f71ae2adec0788bfcc.
-The helper is not imported by Solution.lean and does not change the exported scheme.
-It proves counts of abstract choices, not their injective realization as graph cuts,
-nor admissibility or security of a new OTS.
-
-Inspection of the existing row-potential argument found its numerical assumptions
-compatible with M=45*2^109: nonceBits=idxBits, idxBits<=256, 2<=M,
-2*M<=2^128, and 24*trials<=2^128. Its current declarations still refer to the
-protected Dag.numCuts, so they cannot be applied unchanged to a custom M. A local
-submitted scheme/program layer can reuse protected Dag.Graph and the generic
-graph/cache/wire lemmas. The main concrete port is Names/Tree/Cuts, followed by
-Values.card_updHash_input_le, Resample's dependency and resampling-charge lemmas,
-and Events' strong-forgery case analysis. The shallow graph has 3,026 nodes,
-root input length 2,320 bits, and key-generation cost 995. The security assembly's
-key-generation slack would become B-995. This is a dependency analysis, not a
-checked security transfer. Details are in /tmp/ots-alternative/PROOF_TRANSFER.md.
-
-The most recent read-only discussion query found no discussion threads in either
-leanEthereum/ots.golf-submissions or leanEthereum/ots.golf-dev.
-
-`ShallowAvailability.lean` separately proves the numerical failure inequality
-
-    (1 - (45 : Real) / 524288)^(2^20) <= (2^128 : Real)^(-1).
-
-It uses the first four binomial terms to lower-bound
-(1 + 45/524243)^8192 by two, obtains an 8192-trial block failure bound of one half,
-and raises that bound to the 128th power. Huge powers are not directly expanded.
-Pinned Lean 4.33.1 checked the file in 3.84 seconds with about 3.87 GiB observed peak
-RSS. The block_bound and signing_failure_bound theorems use only propext,
-Classical.choice, and Quot.sound. This helper is also not imported by Solution.
-It proves numerical algebra; independence/freshness of actual signing trials,
-the construction's correctness, and strong security remain separate obligations.
-The submission claim remains 104. Source-policy checks pass for the expanded root.
-
-## Shallow forest proof transfer, 2026-09-20
-
-The concrete graph and cut family now pass pinned Lean, beyond the earlier
-abstract counting helper. `ShallowNames` builds the 3,026-node graph with exact
-key-generation cost 995. `ShallowTree` proves traversal, cut coverage and the
-same-cost cut nonderivability property. `ShallowCuts` proves the choice-to-cut map
-injective, the exact family cardinality above, and for every member: a valid cut,
-42 disclosed words (5376 bits), and exact reconstruction cost 101. Its complete
-check took 6.97 seconds with approximately 7.38 GiB observed peak RSS. Checked
-ShallowCuts source SHA-256:
-51af54b03f98578b7fb96bfd7a801240fc9ecad27d0e096c375446c81425f618.
-
-`IndexedScheme` defines a local scheme parameterized by the number of accepted
-indices, using the protected graph and oracle semantics. It supplies a typed
-adapter and experiment/security equivalence. `IndexedSampling` specializes the
-signing analysis to M=45*2^109. The protected Dag.numCuts remains unchanged.
-`IndexedAvailability` proves the actual fresh-cache signing-loop failure bound;
-`IndexedFreshness` lifts this to the full key-generation and signing experiment,
-including arbitrary public-key-dependent message choices, whenever the graph's
-hash inputs avoid the 384-bit indexing length. `IndexedCorrectness` proves
-perfect correctness, and `IndexedResources` proves the generic typed resource
-bounds and verification determinism. These are all checked modules.
-
-The smaller index space has also been carried through `IndexedCharges`,
-`IndexedRho`, `IndexedRows`, and `IndexedPotential`. The row-potential charge and
-domination lemmas and their concrete numerical hypotheses pass Lean. All reported
-axiom audits contain only propext, Classical.choice, and Quot.sound. The concrete
-Values/Resample/Events and final strong-security assembly are still being ported;
-these intermediate results do not yet certify a 102-compression OTS. Solution and
-claim.txt continue exporting the original 104 result.
-
-A separate mixed-cost-antichain experiment found that restricting to a single
-exact-cost layer can discard useful incomparable cuts. Strict improvements occurred
-in 87 of 252 cleaned sampled DAGs and 16 of 1,154 exhaustively generated small
-unordered trees of arity at most three and at most five hash nodes. One small tree
-has antichain width three but largest exact-cost layer two. Four copies of a tested
-DAG motif have maximum antichain 196 versus largest exact-cost layer 146, under a
-12-cost/12-word budget. However, none of 71 tested constructive product-rank
-families beat the 102 target at full scale. This is not an exhaustive rejection of
-mixed-cost constructions. Details and executable experiments are in
-/tmp/ots-antichains/REPORT.md. No GitHub writes were made.
-
-## Complete 102 certificate and final local validation
-
-The full shallow proof transfer is complete. `ShallowValues` and
-`ShallowResample` establish the concrete tagging, cache, dependency and hidden
-coordinate bounds. `ShallowEvents` covers signing failure, a different cut, and
-a different payload for the same cut. `ShallowStageB`, `ShallowAssembly` and
-`ShallowMain` prove strong security, using the bound (B-995)/2^127 for budgets
-B <= 2^127 and the probability bound of one for larger budgets. `ShallowResources`
-proves typed admissibility and all-input verification cost 102. `ShallowWire`
-transfers the complete certificate to the protected bit-string interface, including
-accepted-input canonicality. Solution.lean and claim.txt now export 102.
-
-A combined named Lake build of ShallowWire and Solution completed successfully
-in 107.28 seconds, with observed aggregate process RSS 14,581,244 KiB (about 13.91 GiB).
-The counting module rebuilt in 57 seconds during that run; other already-cached
-modules were reused. This is a warm local build measurement, not the official
-verifier's time or memory verdict. The raw admissible, secure and cost declarations
-use only propext, Classical.choice and Quot.sound. The compiled Solution source
-SHA-256 is 9617a41aa78c2898d3e5eea6c8376e25896f231306980915ca54dca857b87cea;
-ShallowWire is 51206e4e10ffc82b0ce69f05ee23960b943c374195f6f8a491063af8bd112cad.
-Logs and metadata: /tmp/ots-research/build-ShallowWire-Solution.log and .json.
-
-A separate source review compared the indexed interface with protected Dag and
-OracleAlgorithm. It found no weakened strong-forgery predicate, budget,
-nonce behavior, cut injectivity, or all-input cost. The keygenProxy is used only
-for definitionally identical key-generation lemmas. Review report:
-/tmp/ots-research/shallow-semantic-audit.md. An independent consistency review
-confirmed the README's counts, bit lengths and costs against the proofs.
-
-The official command was attempted on this 102 checkout and stopped before
-checking the proof: `verification tools missing; run verifier/setup_tools.sh`.
-Its result directory is /tmp/ots-verify-_y9o56uu. Independently established host
-limitations remain Landlock ABI 2 (required >= 3) and systemd 252 rejecting
-PrivatePIDs=yes. No verifier gates were bypassed and there is no hosted verdict.
-
-A fresh read-only registry query still found the upper-compressions record 104,
-source 64165c0c55807eae3d308615226d0f2a8696a5d8, from PR 4. Both repositories again
-had zero GitHub discussion threads. No issues, PRs, comments or pushes were made.
-At that checkpoint, the proposed PR body was only a local file at
-/tmp/ots-research/PR_BODY.md.
-
-Independent exact-declaration audits passed for both ShallowWire and the final
-Solution. They check that the scheme is a safe definition of the protected
-OracleAlgorithm.Scheme type, and that admissible, secure and cost are theorem
-declarations with exactly the protected predicates on that scheme, cost 102 and
-no universe parameters. Transitive axiom traversal accepts only the three
-permitted axioms. All 21 protected source hashes in the isolated project match the
-pinned manifest. Audit logs: /tmp/ots-dag-security/ContractAuditWire.log and
-/tmp/ots-dag-security/ContractAuditSolution.log.
-
-All 26 new proof modules and the changed Solution module also passed an independent
-replay with the unmodified Lean 4.33.1 `leanchecker`. Each module's declarations
-were replayed against its imported environment; this was not a fresh replay of
-all Mathlib/VCVio/contract declarations from an empty environment. Workspace source
-and compiled artifact hashes were checked before and after each replay. The final
-27 passing runs totaled 271.85 seconds, with maximum observed process RSS
-9,920,524 KiB (about 9.46 GiB). Source hashes still match the final workspace.
-Results, scope and per-module logs are in /tmp/ots-dag-security/kernel-replay/.
-
-The final source-policy check passes for claim 102, and git changes are confined
-to the admitted UpperCompressions root. The candidate is ready for PR review
-subject to the official hosted verification that this machine cannot perform.
-No GitHub writes were made.
-
-## Initial submission
-
-The user subsequently authorized publishing this checked 102 candidate. The PR
-contains the technique note above and requests the official hosted verification.
-The proof sources and their checked hashes are unchanged; the publication update
-only expands the explanation and makes the verification status explicit.
+    L/(2I) + 1/M < L/I.
+
+The strict surplus is `(22/45)*2^20` compression units divided by I. The completed assembly combines this index accounting with hidden-input and spurious-reconstruction bounds in the same simulation. Encoding queries have no authentication charge; other queries have no index charge. A terminal reserve passes through the master lemma, cancelling the positive initial potential.
+
+The essential change is therefore a **security-proof improvement that uses the whole-experiment budget**. The lower cut rank becomes available as a consequence; the graph, word width, nonce, signature size, and key-generation cost stay the same.
+
+## Proof map and validation
+
+The new modules are `RepeatedFibers`, `TightRow`, `TightDrift`, `TightPotential`,
+`SigningReserve`, `ReservedHazard` and `MasterReserve`. `ShallowAssembly` combines
+these with the existing hidden-value and spurious-reconstruction analysis.
+`ShallowCount100` certifies the rank-82 count. The final `Solution` exports the
+protected scheme, admissibility, strong security and all-input cost-100 bound;
+`ShallowWire` proves canonical raw encoding and rejects oversized signatures.
+
+Every submitted module in the `Solution` dependency closure was rebuilt from
+frozen sources, then independently replayed with the unmodified Lean 4.33.1
+`leanchecker`. All 49 modules passed; a separate admissibility audit also
+passed, for 50 modules total. The combined rebuild and replay took 526.41
+seconds locally. The largest observed checker process used 9.31 GiB. Each
+module was replayed against its imported environment; external library and
+contract environments were not freshly replayed from empty.
+
+Exact export checks confirm a safe scheme definition, the protected
+admissibility and strong-security predicates, and the cost predicate with
+literal claim 100. All four exports depend only on `propext`, `Quot.sound`
+and `Classical.choice`. All 21 protected source hashes match. Frozen source
+and artifact manifests and the original host artifacts remained unchanged.
+Submission policy, sibling imports, patch application and whitespace checks
+pass. A separate semantic review found no weakened experiment or interface.
+
+The official local command stopped before proof checking with
+`verification tools missing; run verifier/setup_tools.sh`. Official hosted verification is pending for this candidate. The local timings and replay results
+are development evidence, not an official resource or competition verdict.
+
+## What led to the tighter proof
+
+We modeled the index mechanism as an exact finite adaptive game. A state records
+accepted classes and rejected entries in each message row. The adversary can
+query existing or fresh rows, choose when and which message to sign, and use
+fresh queries or cached class matches after the signature. The private signer's
+sampling without replacement is integrated exactly. This isolates replay; it
+does not model attacks on the authentication graph.
+
+The search covered 542 parameter/budget cases, with up to six pre-sign queries,
+including closed forms evaluated at the full index size. Independent checks
+covered 160 explicit private-signer enumerations, 32 dense/sparse state-model
+comparisons and 192 posterior-probability calculations.
+
+At equal nonce and index sizes, a two-query adaptive strategy really can exceed
+`q/I` for pre-sign replay alone. For `I=8, M=4, N=L=8`, query one new row and,
+if accepted, query that row again; otherwise query a fresh row. Sign the row
+containing a repeated accepted class if there is one, and a fresh row otherwise.
+Its replay probability is
+
+    29089/114688 = 2/8 + 417/114688.
+
+This is not a whole-budget attack: the honest signing budget more than pays for
+the excess. The scalable two-query formula has leading excess
+`(2I/N-1)/I^2`; this cancels at `N=2I`. That observation motivated the repeated
+class count and the new potential. The finite search suggested the theorem;
+the Lean proof establishes it for arbitrary adaptive oracle programs.
+
+## Other experiments and their limits
+
+The following are scoped research results. They do not supply additional
+certified improvements beyond the 100-compression construction above.
+
+### Shared inputs and both halves of an oracle answer
+
+An initial screen considered 2,285 two-output motifs and roughly 1.88 million
+scaled scenarios. A subsequent search included reconvergent, multiple-goal
+DAGs: 510 completed circuits, 457,363 reduced frontiers, 1,556,071 scaled
+scenarios and 24,041 word/cost convolutions. Thirteen attempted circuits hit
+explicit time or state limits. Exact independent closure/cost audits passed
+for 12 small base circuits and 20 chain-expanded circuits.
+
+There are real local antichain gains: a shared three-group ring has width 12
+where the corresponding separated calls have width 9 at the same small
+budget. But sharing was too expensive in the relevant low-cost tail. The best
+scaled example used 18 two-output forks and 54 length-18 chains, with keygen
+cost 1013. At verification cost 101 it had
+
+    22133904102484421350863138744394944 cuts.
+
+Removing disclosures that reconstruct a shared fork leaves
+
+    22089998664193854885643322226165492 cuts.
+
+The shared cuts add only 0.198757%. A shared seed saves disclosure words but
+costs 19 calls to recover one branch or 37 to recover both. This experiment
+used the older uniform-class target `45*2^109`; its first passing cost was
+102. It is not a universal bound on DAG sharing, and its class counts alone
+do not prove security for correlated revelations.
+
+### Linear mixing and partial words
+
+A linear-closure experiment checked 574 circuits and 5,058 budgets. In its
+model, free linear mixing did not create a new authentication resource beyond
+the authenticated oracle values. Nonlinear functions and nonlinear global
+constraints remain outside that conclusion.
+
+A separate experiment split oracle answers into 64-bit pieces. Across 1,307
+circuits it found 7,163 reduced frontiers and checked 18,328 word/cost budgets.
+Allowing backward search for a gate's sole unknown 64-bit input reduced the
+maximum antichain in 3,405 budgets; the largest reduction was six to two.
+
+For example, let four-piece answers satisfy
+
+    u = H(tag0,c,d),
+    v = H(tag1,a,u1),
+    pk = first128(H(tag2,u2,u3,v1,v2,v3)).
+
+From `(c,d,v1,v2,v3)`, compute u1, then enumerate a and check the three known
+pieces of v. This derives `(a,u1,u2,u3)`. At 64 bits per piece, the search
+uses about `2^64` oracle calls and tests 192 output bits, giving fewer than
+`2^-128` expected false matches. This is a concrete derivability relation,
+not itself a complete message-binding forgery. A scaled eight-bit instance
+was exhaustively checked; all 7,163 closure computations were independently
+rechecked, and 36,608 antichain calculations matched brute force.
+
+Comparisons against one arbitrary pairing of 64-bit pieces into 128-bit words
+were representation dependent and are not evidence of a construction gain.
+Future partial-word schemes must account for both forward evaluation and
+backward recovery.
+
+### Fusing message binding into authentication
+
+Using otherwise unused output bits as public coefficients in
+`A_cut * message + B_cut * nonce = 0` fails: after a signature, the adversary
+reconstructs those coefficients and solves for another accepted pair on the
+same cut. With 128 equations and 384 message/nonce bits, the kernel has
+dimension at least 256. A nonzero vector gives either a new-message forgery
+or a same-message strong forgery. Two toy variants each checked 1,048,576
+oracle/key/message combinations and admitted a forgery whenever signing
+succeeded.
+
+Another proposal hashes the message and nonce into an XOR target associated
+with the disclosed cut and omits one recoverable word. It faces two separate
+obstacles in the tested form:
+
+- A chosen-message birthday attack forces at least 62 nonce bits. A family
+  large enough for the existing availability target needs a 115-bit cut ID.
+  With 42 transmitted words, this totals `42*128 + 62 + 115 = 5553` bits,
+  exceeding the signature limit by 49 bits. Implicit routing would have to
+  remove that metadata cost.
+- The target count needs an exceptionally strong lower-tail guarantee. For
+  a 115-dimensional affine cut family mapped by a random 128-by-115 binary
+  matrix, a rank-114 event has probability about `2^-13` and contributes
+  signing failure about `2^-105`, already too large. This stress family is
+  not asserted to equal the current tree's cuts; it shows why expected
+  distinct-target count is insufficient.
+
+Common-nonce XOR/sum binding and fresh message-bearing edges also failed the
+modeled availability requirements. These results concern the specific tested
+fusions, not all ways to combine indexing and authentication.
+
+## Next direction: unequal class masses and best-of-L signing
+
+The most promising open direction changes the signing distribution. Give cut
+class i public per-query mass p_i. Query all L distinct nonces, then return
+an accepted class with the smallest p_i, using a symmetric tie rule. Common
+classes supply availability on rare transcripts; most signatures use rare
+classes. This differs essentially from stopping at the first acceptance.
+
+Here is a simple exact candidate. For tiers j=0 through 79, set
+
+    p_j = 2^(j-128),
+    n_j = 9 * 2^(105-j).
+
+Each tier has acceptance mass `9/2^23`; the total remains `45/524288` and
+`L * acceptance = 90`. A 128-bit index can implement this by dividing the
+accepted range into 80 blocks of size `9*2^105`; inside block j, each cut has
+`2^j` aliases. The nonce remains 128 bits. The number of distinct cuts is
+
+    9*(2^106-2^26) = 730166745731460135262100442316800.
+
+The rank-74 family on the existing graph contains
+
+    choose(18,6) * [x^74](1+x+...+x^18)^36
+      = 776610074300844075289060847283864
+
+cuts, enough for this candidate at **92 verification compressions**. This is
+an exact combinatorial count, not a completed 92-compression certificate.
+
+For fresh distinct signing queries, if P_j is cumulative tier mass, the
+probability of choosing tier j is exactly
+
+    W_j = (1-P_(j-1))^L - (1-P_j)^L.
+
+Integer interval arithmetic certifies the failure bound and
+
+    E[p_selected | signing succeeds] < 0.962867 * 2^-127.
+
+A short analytic bound follows from `exp(-9/8) < 13/40`: the unconditional
+mean is below `(27/28)*2^-127`. A continuous relaxation of the tier problem
+requires about `4*2^107` classes, while this simple schedule uses about
+`4.5*2^107`. Eight numerically optimized tiers use about `4.15629*2^107`.
+All these class counts fit cost 92; even the continuous lower bound exceeds
+the rank-73 family's capacity, so this fixed family and selection model
+cannot reach 91 by adjusting the weights alone.
+
+**The unresolved problem is full adaptive strong security.** The honest
+mean is insufficient when the attacker queries before choosing the signed
+message. Cached repeated classes and choosing a favorable message row can
+bias the selected class. Post-sign queries in that same row also see a
+posterior distribution: the returned minimum implies that hidden sampled
+positions did not contain a rarer class. A hand-derived correction bounds
+that hit rate by `p_i/(1-F_i)`, where F_i is the total mass of rarer classes;
+the uniform inflation is below `1.000086`, within the numerical margin.
+That does not resolve pre-sign adaptive choice or replay.
+
+A useful next theorem would bound cached replay plus all fresh post-sign
+matches using a potential with per-query charge at most `2^-127`, with the
+honest L-call signing reserve paying the initial value. It must then combine
+with hidden-input and spurious-reconstruction events in the same whole-budget
+simulation. No such theorem or complete weighted construction is claimed here.
+
+## Provenance
+
+The predecessor is the [officially verified 102-compression submission](https://ots.golf/submissions/440fbe4103a5cfff1f213e25ac09bfd9),
+checked at commit `ceeb8503c3950869440af1cb6fa69b52b79044fc` in
+[PR #6](https://github.com/leanEthereum/ots.golf-submissions/pull/6). Its archived
+source and notes contain the earlier 104-to-102 construction history. This
+candidate changes only the admitted UpperCompressions root and leaves the
+protected contract unchanged.
+
+Local experiment scripts and full logs are retained in the research workspace;
+they are exploratory evidence, not dependencies of the submitted proof. The
+Lean modules in this root supply the complete certificate for the claim in
+`claim.txt`. Every larger claimed research gain above is explicitly separate
+from that certificate.
