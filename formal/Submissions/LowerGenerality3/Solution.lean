@@ -1,9 +1,9 @@
-import Submissions.LowerGenerality3.Proof
+import Submissions.LowerGenerality3.Assemble
 
 namespace OptimalOTS.Challenge.LowerGenerality3
 
-/-- Every admissible, secure algorithm needs at least one compression. -/
-theorem candidate : LowerBoundGenerality3 1 := OptimalOTS.LowerGenerality3.paper_lowerBound_one
+/-- Every admissible, secure algorithm needs at least two compressions. -/
+theorem candidate : LowerBoundGenerality3 2 := OptimalOTS.LowerGenerality3.paper_lowerBound_two
 
 end OptimalOTS.Challenge.LowerGenerality3
 
