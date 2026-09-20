@@ -31,7 +31,7 @@ def prologueLinear (k : ℕ) : Code :=
 
 theorem chainPrologue_parts (k : ℕ) :
     chainPrologue k = prologueLinear k ++
-      [.JALR .x0 .x28 (imm12 ((tableEnd k : ℤ) - (jumpBase k : ℤ)))] := by
+      [.JALR .x14 .x28 (imm12 ((tableEnd k : ℤ) - (jumpBase k : ℤ)))] := by
   simp [chainPrologue, prologueLinear]
 
 theorem prologueLinear_length (k : ℕ) : (prologueLinear k).length = 8 := by

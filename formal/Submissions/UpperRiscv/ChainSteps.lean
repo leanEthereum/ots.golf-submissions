@@ -3,9 +3,11 @@ import Submissions.UpperRiscv.ChainPrologue
 /-!
 # The hash steps of a chain
 
-Step `t` of chain `k` stores the level tag of `t` in the header's top halfword and hashes the
+Step `t` of chain `k` stores the 32-bit level tag of `t` in the header's top word and hashes the
 192-bit header and value in place, exactly as the specification evaluates the nodes
-`ci k t`, `ch k t`, `cv k t`.
+`ci k t`, `ch k t`, `cv k t`. The tag registers of levels `11`, `12` and `13` are the chain's own
+slot pointer, HASH input pointer and table address, so their tags are read off the chain
+invariant rather than the fixed context.
 -/
 
 namespace OptimalOTS.RiscvUpperProgram
@@ -42,9 +44,15 @@ theorem writeHash_pc (w : MachineState) (a : BitVec hashBits) :
     (Riscv.writeHash w a).pc = w.pc + 4 := rfl
 
 /-- The header of chain `k` with level tag `L`. -/
-abbrev hdrW (k L : ℕ) : Word := W (Flat.slotAddr k + L * 2 ^ 48)
+abbrev hdrW (k L : ℕ) : Word := W (Flat.slotAddr k + L * 2 ^ 32)
 
-theorem hdr_eq_hdrW (k : Fin 32) (t : Fin 15) : Forest.hdr k t = hdrW k (Flat.levVal t) := rfl
+theorem hdr_eq_hdrW (k : Fin 32) (t : Fin 15) : Forest.hdr k t = hdrW k (Flat.levVal k t) := rfl
+
+/-- The low 32 bits of a literal. -/
+theorem truncate_W (a : ℕ) : (W a).truncate 32 = BitVec.ofNat 32 a := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.truncate_eq_setWidth, BitVec.toNat_setWidth, BitVec.toNat_ofNat]
+  exact Nat.mod_mod_of_dvd a (by norm_num : 2 ^ 32 ∣ 2 ^ 64)
 
 /-- The node holding chain `k`'s value at position `t ≤ 15`. -/
 def valueNode (k : Fin 32) (t : ℕ) : Name :=
@@ -87,9 +95,32 @@ structure StepInv (s : MachineState) (x : graph.Assignment) (k : Fin 32) (t : �
   ctx : Ctx s index payload pk
   slot : s.getReg .x12 = slotW k
   input : s.getReg .x10 = W (Flat.slotAddr k - 8)
-  header : ∃ L, L < 2 ^ 16 ∧ s.getMem (W (Flat.slotAddr k - 8)) = hdrW k L ∧ (t = 15 → L = 0)
+  /-- The return address of the prologue's jump: the address of the chain's step table. -/
+  table : s.getReg .x14 = W (Flat.tableStart k)
+  header : ∃ L, L < 2 ^ 32 ∧ s.getMem (W (Flat.slotAddr k - 8)) = hdrW k L ∧ (t = 15 → L = 0)
   pc : s.pc = W (blockStart k + 4 * (9 + 2 * t))
   done : 1 ≤ k.val → MemBits s (W Flat.slotBase) (rootAcc (topFun (tops x)) (k.val - 1))
+
+/-- Every level's tag register holds that level's tag for the current chain. -/
+theorem StepInv.tag {s : MachineState} {x : graph.Assignment} {k : Fin 32} {t₀ : ℕ}
+    (inv : StepInv index payload pk s x k t₀) (t : ℕ) (ht : t < 15) :
+    (s.getReg (levReg t)).truncate 32 = BitVec.ofNat 32 (Flat.levVal k t) := by
+  by_cases h11 : t = 11
+  · subst h11
+    rw [show levReg 11 = .x12 from rfl, inv.slot, show Flat.levVal k 11 = Flat.slotAddr k from rfl]
+    exact truncate_W _
+  by_cases h12 : t = 12
+  · subst h12
+    rw [show levReg 12 = .x10 from rfl, inv.input,
+      show Flat.levVal k 12 = Flat.slotAddr k - 8 from rfl]
+    exact truncate_W _
+  by_cases h13 : t = 13
+  · subst h13
+    rw [show levReg 13 = .x14 from rfl, inv.table,
+      show Flat.levVal k 13 = Flat.tableStart k from rfl]
+    exact truncate_W _
+  rw [Flat.levVal_const k t h11 h12 h13]
+  exact inv.ctx.levels t ht ⟨h11, h12, h13⟩
 
 /-- The three specification steps of level `t` of an evaluated chain, as one hash. -/
 def tripleUpdate (x : graph.Assignment) (k : Fin 32) (t : Fin 15) (y : BitVec hashBits) :
@@ -148,21 +179,21 @@ theorem tops_congr_prefix {x y : graph.Assignment} (k : ℕ)
     · rw [h ⟨i, hi32⟩ (by simp; omega)]
     · rfl
 
-theorem minus2 : signExtend12 (BitVec.ofNat 12 4094) = BitVec.ofInt 64 (-2) := by decide
+theorem minus4 : signExtend12 (BitVec.ofNat 12 4092) = BitVec.ofInt 64 (-4) := by decide
 
-theorem slot_minus2 (k : ℕ) (hk : k < 32) :
-    slotW k + signExtend12 (BitVec.ofNat 12 4094) = W (Flat.slotAddr k - 8 + 6) := by
+theorem slot_minus4 (k : ℕ) (hk : k < 32) :
+    slotW k + signExtend12 (BitVec.ofNat 12 4092) = W (Flat.slotAddr k - 8 + 4) := by
   have hs := slot_bounds k hk
-  have e : BitVec.ofNat 12 4094 = imm12 (-2) := by decide
+  have e : BitVec.ofNat 12 4092 = imm12 (-4) := by decide
   rw [e, W_add_imm _ _ (by norm_num) (by norm_num) (by omega) (by omega)]
   congr 1
   omega
 
 /-- The header after a level-tag store. -/
-theorem header_store (k : ℕ) (hk : k < 32) (L L' : ℕ) (hL : L < 2 ^ 16) (hL' : L' < 2 ^ 16) :
-    replaceHalfword (hdrW k L) 3 (BitVec.ofNat 16 L') = hdrW k L' := by
+theorem header_store (k : ℕ) (hk : k < 32) (L L' : ℕ) (hL : L < 2 ^ 32) (hL' : L' < 2 ^ 32) :
+    replaceWord32 (hdrW k L) 1 (BitVec.ofNat 32 L') = hdrW k L' := by
   have hs := slot_bounds k hk
-  rw [hdrW, hdrW, W_hdr _ _ (by omega) hL, W_hdr _ _ (by omega) hL', replaceHalfword_append]
+  rw [hdrW, hdrW, W_hdr32 _ _ (by omega) hL, W_hdr32 _ _ (by omega) hL', replaceWord32_append]
 
 /-- The prefix of the root input lies below chain `k`'s header. -/
 theorem rootAcc_frame {s t : MachineState} {k : ℕ} (hk : k < 32) (hk1 : 1 ≤ k)
@@ -197,25 +228,27 @@ theorem step_refines (k : Fin 32) (t : Fin 15) (ht : pos index k ≤ t.val)
   have hs := slot_bounds k k.isLt
   obtain ⟨L, hL, hhdr, -⟩ := inv.header
   -- the tag store
-  have fetchSH : s.code s.pc = some (.SH .x12 (levReg t) (BitVec.ofNat 12 4094)) := located.head
-  have addrSH : s.getReg .x12 + signExtend12 (BitVec.ofNat 12 4094) = W (Flat.slotAddr k - 8 + 6) := by
-    rw [inv.slot]; exact slot_minus2 k k.isLt
-  have readySH : Riscv.memoryReady s (.SH .x12 (levReg t) (BitVec.ofNat 12 4094)) := by
-    show isValidHalfwordAccess _ = true
-    rw [addrSH]
-    exact half_ok _ (by omega) (by omega) (by omega)
-  set w := execInstrBr s (.SH .x12 (levReg t) (BitVec.ofNat 12 4094)) with hw
+  have fetchSW : s.code s.pc = some (.SW .x12 (levReg t) (BitVec.ofNat 12 4092)) := located.head
+  have addrSW : s.getReg .x12 + signExtend12 (BitVec.ofNat 12 4092) =
+      W (Flat.slotAddr k - 8 + 4) := by
+    rw [inv.slot]; exact slot_minus4 k k.isLt
+  have readySW : Riscv.memoryReady s (.SW .x12 (levReg t) (BitVec.ofNat 12 4092)) := by
+    show isValidMemAccess _ = true
+    rw [addrSW]
+    exact word_ok _ (by omega) (by omega) (by omega)
+  set w := execInstrBr s (.SW .x12 (levReg t) (BitVec.ofNat 12 4092)) with hw
   have wEq : w = (s.setMem (W (Flat.slotAddr k - 8))
-      (hdrW k (Flat.levVal t))).setPC (s.pc + 4) := by
+      (hdrW k (Flat.levVal k t))).setPC (s.pc + 4) := by
     rw [hw]
-    show (s.setHalfword (s.getReg .x12 + signExtend12 (BitVec.ofNat 12 4094))
-      ((s.getReg (levReg t)).truncate 16)).setPC (s.pc + 4) = _
-    rw [addrSH, setHalfword_top s _ (by omega) (by omega), hhdr, inv.ctx.levels t t.isLt,
-      header_store k k.isLt L _ hL (Flat.levVal_lt t)]
+    show (s.setWord32 (s.getReg .x12 + signExtend12 (BitVec.ofNat 12 4092))
+      ((s.getReg (levReg t)).truncate 32)).setPC (s.pc + 4) = _
+    rw [addrSW, setWord32_top s _ (by omega) (by omega), hhdr,
+      StepInv.tag index payload pk inv t.val t.isLt,
+      header_store k k.isLt L _ hL (Flat.levVal_lt k t k.isLt)]
   have wRegs : ∀ r, w.getReg r = s.getReg r := by
     intro r; rw [wEq]; simp
   have wMem : ∀ addr, w.getMem addr =
-      if addr = W (Flat.slotAddr k - 8) then hdrW k (Flat.levVal t) else s.getMem addr := by
+      if addr = W (Flat.slotAddr k - 8) then hdrW k (Flat.levVal k t) else s.getMem addr := by
     intro addr; rw [wEq, MachineState.getMem_setPC, getMem_setMem_ite]
   have wPc : w.pc = s.pc + 4 := by rw [wEq]; rfl
   have wCodeEq : w.code = s.code := by rw [wEq]; simp
@@ -263,8 +296,8 @@ theorem step_refines (k : Fin 32) (t : Fin 15) (ht : pos index k ≤ t.val)
     rw [graph_len_fin]; show blockCost 192 = 1; decide
   -- compose: tag store, hash, continuation
   rw [show fuel = 1 + ((fuel - 2) + 1) by omega, show 2 + c = 1 + (1 + c) by omega]
-  apply Riscv.Refines.steps (Riscv.PureSteps.cons fetchSH rfl (fun h => by cases h)
-    (Riscv.linear_step s _ rfl readySH fetchSH) (Riscv.PureSteps.refl _))
+  apply Riscv.Refines.steps (Riscv.PureSteps.cons fetchSW rfl (fun h => by cases h)
+    (Riscv.linear_step s _ rfl readySW fetchSW) (Riscv.PureSteps.refl _))
   have step := Riscv.Refines.hash (fuel := fuel - 2) wFetch wCall wValid
     (k := fun y => K (tripleUpdate x k t y, cursor)) (c := c) ?_
   · rw [wInput, blocks] at step
@@ -309,8 +342,9 @@ theorem step_refines (k : Fin 32) (t : Fin 15) (ht : pos index k ≤ t.val)
     rwa [tripleUpdate_ch] at h
   apply continuation v y ?_ cvHeld vLocated (fuel - 2) (by omega)
   refine ⟨inv.ctx.frame k k.isLt (fun r _ => vRegs r) frame,
-    by rw [vRegs]; exact inv.slot, by rw [vRegs]; exact inv.input, ?_, ?_, ?_⟩
-  · refine ⟨Flat.levVal t, Flat.levVal_lt t, ?_, ?_⟩
+    by rw [vRegs]; exact inv.slot, by rw [vRegs]; exact inv.input,
+    by rw [vRegs]; exact inv.table, ?_, ?_, ?_⟩
+  · refine ⟨Flat.levVal k t, Flat.levVal_lt k t k.isLt, ?_, ?_⟩
     · rw [outFrame, wMem, if_pos rfl]
       intro j hj e
       have e' := congrArg BitVec.toNat e

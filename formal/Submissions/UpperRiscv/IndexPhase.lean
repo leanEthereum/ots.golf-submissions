@@ -4,8 +4,9 @@ import Submissions.UpperRiscv.IndexArith
 # The index phase
 
 The machine saves the public key, copies the nonce below the message, hashes `nonce ‖ message`,
-rejects wrong lengths, builds the lane words, rejects unless the nibbles sum to `157`, and loads
-the remaining level tags: the state `afterIndex` then satisfies the chain-phase invariant.
+rejects wrong lengths, builds the lane words, rejects unless the nibbles sum to `157` (held in
+`x1`), and sets the one remaining level tag and the chain input length: the state `afterIndex`
+then satisfies the chain-phase invariant.
 -/
 
 namespace OptimalOTS.RiscvUpperProgram
@@ -79,6 +80,8 @@ theorem S0_regs :
     (S0 pk m bits).getReg .x10 = W 0x400000 ∧ (S0 pk m bits).getReg .x12 = W 0x400030 ∧
     (S0 pk m bits).getReg .x13 = BitVec.ofNat 64 (min bits.length 5505) := ⟨rfl, rfl, rfl⟩
 
+theorem S0_x2 : (S0 pk m bits).getReg .x2 = W 0x1000000 := rfl
+
 theorem S0_pc : (S0 pk m bits).pc = W 4096 := by
   simp [Riscv.initialState]; rfl
 
@@ -102,6 +105,8 @@ structure PrefixEffect (s : MachineState) : Prop where
   x12 : s.getReg .x12 = W dataAddr
   x5 : s.getReg .x5 = 1
   x13 : s.getReg .x13 = BitVec.ofNat 64 (min bits.length 5505)
+  /-- The stack top, untouched by the image, serves as a level tag. -/
+  x2 : s.getReg .x2 = W 0x1000000
   nonce0 : s.getMem (W 0x400000) = (S0 pk m bits).getMem (W 0x400030)
   nonce1 : s.getMem (W 0x400008) = (S0 pk m bits).getMem (W 0x400038)
   frame : ∀ addr, addr ≠ W 0x400000 → addr ≠ W 0x400008 → s.getMem addr = (S0 pk m bits).getMem addr
@@ -168,7 +173,7 @@ theorem prefix_effect : PrefixEffect pk m bits (afterPrefix pk m bits) := by
   have bcode : b.code = a.code := by rw [← hb]; exact Riscv.fold_code _ _
   have lui : ((BitVec.ofNat 20 0x200).zeroExtend 32 <<< 12).signExtend 64 = W dataAddr := by decide
   have ne1 : W 0x400000 ≠ W 0x400008 := by decide
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   all_goals simp only [List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
     getReg_setReg_ite, MachineState.getMem_setPC, MachineState.getMem_setReg]
   · simp only [show ¬ (Reg.x9 = Reg.x5) by decide, show ¬ (Reg.x9 = Reg.x12) by decide,
@@ -191,6 +196,10 @@ theorem prefix_effect : PrefixEffect pk m bits (afterPrefix pk m bits) := by
       show ¬ (Reg.x13 = Reg.x11) by decide, false_and, if_false]
     rw [bregs .x13 (by decide) (by decide), aregs .x13 (by decide) (by decide) (by decide)]
     exact (S0_regs pk m bits).2.2
+  · simp only [show ¬ (Reg.x2 = Reg.x5) by decide, show ¬ (Reg.x2 = Reg.x12) by decide,
+      show ¬ (Reg.x2 = Reg.x11) by decide, false_and, if_false]
+    rw [bregs .x2 (by decide) (by decide), aregs .x2 (by decide) (by decide) (by decide)]
+    exact S0_x2 pk m bits
   · rw [bmem, if_neg ne1, if_pos rfl, amem]
   · rw [bmem, if_pos rfl, amem]
   · intro addr h1 h2
@@ -269,9 +278,9 @@ def S3 : MachineState := lenBlock.foldl execInstrBr (S2 pk m bits answer)
 
 def S4 : MachineState := (S3 pk m bits answer).setPC ((S3 pk m bits answer).pc + 16)
 
-def sumOps : Code := [.MUL .x27 .x27 .x23, .SRLI .x27 .x27 48, .XORI .x27 .x27 1256]
+def sumOps : Code := [.ADDI .x1 .x0 1256, .MUL .x27 .x27 .x23, .SRLI .x27 .x27 48]
 
-theorem sumCheck_parts : sumCheck = sumOps ++ ([.BEQ .x27 .x0 16] ++ reject) := rfl
+theorem sumCheck_parts : sumCheck = sumOps ++ ([.BEQ .x27 .x1 16] ++ reject) := rfl
 
 def mainBlock : Code := loadWords ++ lanes ++ sumOps
 
@@ -433,7 +442,7 @@ theorem mainBlock_ready : Riscv.LinearReady (S4 pk m bits answer) mainBlock := b
   simp [sumOps, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
 theorem S5_x27 : (S5 pk m bits answer).getReg .x27 =
-    (((laneSum (S45 pk m bits answer) 8) * W (broadcast 1)) >>> 48) ^^^ signExtend12 1256 := by
+    ((laneSum (S45 pk m bits answer) 8) * W (broadcast 1)) >>> 48 := by
   have L := (lanes_effect pk m bits answer).2
   have x23 : (S46 pk m bits answer).getReg .x23 = W (broadcast 1) := by
     rw [L.regs .x23 (by decide) (by decide)]; exact (loadWords_effect pk m bits answer).x23
@@ -442,29 +451,34 @@ theorem S5_x27 : (S5 pk m bits answer).getReg .x27 =
     getReg_setReg_ite]
   simp [L.acc (by norm_num), x23]
 
-theorem S5_regs (r : Reg) (h26 : r ≠ .x26) (h27 : r ≠ .x27) :
+/-- The sum comparator, which then serves as a level tag. -/
+theorem S5_x1 : (S5 pk m bits answer).getReg .x1 = W 1256 := by
+  rw [S5_eq]
+  simp only [sumOps, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
+    getReg_setReg_ite]
+  simp [getReg_x0']
+  decide
+
+theorem S5_regs (r : Reg) (h1 : r ≠ .x1) (h26 : r ≠ .x26) (h27 : r ≠ .x27) :
     (S5 pk m bits answer).getReg r = (S45 pk m bits answer).getReg r := by
   have L := (lanes_effect pk m bits answer).2
   rw [S5_eq]
   simp only [sumOps, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
     getReg_setReg_ite]
-  simp [h27, L.regs r h26 h27]
+  simp [h1, h27, L.regs r h26 h27]
 
 theorem S5_mem (addr : Word) : (S5 pk m bits answer).getMem addr = (S46 pk m bits answer).getMem addr := by
   rw [S5_eq]
   simp [sumOps, execInstrBr]
 
 /-- The machine's sum check accepts exactly the accepted indices. -/
-theorem sum_iff : (S5 pk m bits answer).getReg .x27 = (S5 pk m bits answer).getReg .x0 ↔
+theorem sum_iff : (S5 pk m bits answer).getReg .x27 = (S5 pk m bits answer).getReg .x1 ↔
     Accepted (answer.setWidth 128).toNat := by
   have LE := loadWords_effect pk m bits answer
-  rw [S5_x27, accepted_iff_wordSum, show (S5 pk m bits answer).getReg .x0 = 0#64 from rfl,
-    BitVec.xor_eq_zero_iff]
-  have e1256 : signExtend12 (1256 : BitVec 12) = W 1256 := by decide
+  rw [S5_x27, S5_x1, accepted_iff_wordSum]
   have top := top_laneSum (S45 pk m bits answer)
   rw [show (S45 pk m bits answer).getReg .x20 = answer.extractLsb' 0 64 from LE.x20,
     show (S45 pk m bits answer).getReg .x21 = answer.extractLsb' 64 64 from LE.x21] at top
-  rw [e1256]
   constructor
   · intro h
     have hn := congrArg BitVec.toNat h
@@ -487,23 +501,19 @@ theorem levelSetup_ready (s : MachineState) : Riscv.LinearReady s levelSetup := 
 
 /-- The registers written by the level setup. -/
 theorem afterIndex_levelRegs :
-    (afterIndex pk m bits answer).getReg .x1 = 2 ∧ (afterIndex pk m bits answer).getReg .x2 = 3 ∧
-    (afterIndex pk m bits answer).getReg .x3 = 4 ∧ (afterIndex pk m bits answer).getReg .x4 = 5 ∧
-    (afterIndex pk m bits answer).getReg .x6 = 6 ∧ (afterIndex pk m bits answer).getReg .x7 = 7 ∧
-    (afterIndex pk m bits answer).getReg .x8 = 8 ∧ (afterIndex pk m bits answer).getReg .x11 = 192 := by
+    (afterIndex pk m bits answer).getReg .x3 = 2 ∧ (afterIndex pk m bits answer).getReg .x11 = 192 := by
   unfold afterIndex
   simp only [levelSetup, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
     getReg_setReg_ite]
   simp [getReg_x0']
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> decide
+  refine ⟨?_, ?_⟩ <;> decide
 
-theorem afterIndex_regs (r : Reg) (h1 : r ≠ .x1) (h2 : r ≠ .x2) (h3 : r ≠ .x3) (h4 : r ≠ .x4)
-    (h6 : r ≠ .x6) (h7 : r ≠ .x7) (h8 : r ≠ .x8) (h11 : r ≠ .x11) :
+theorem afterIndex_regs (r : Reg) (h3 : r ≠ .x3) (h11 : r ≠ .x11) :
     (afterIndex pk m bits answer).getReg r = (S6 pk m bits answer).getReg r := by
   unfold afterIndex
   simp only [levelSetup, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
     getReg_setReg_ite]
-  simp [h1, h2, h3, h4, h6, h7, h8, h11]
+  simp [h3, h11]
 
 theorem afterIndex_mem (addr : Word) :
     (afterIndex pk m bits answer).getMem addr = (S46 pk m bits answer).getMem addr := by
@@ -511,20 +521,18 @@ theorem afterIndex_mem (addr : Word) :
   simp [levelSetup, execInstrBr, S6_mem, S5_mem]
 
 /-- A register untouched after the prefix. -/
-theorem afterIndex_prefixReg (r : Reg) (h1 : r ≠ .x1) (h2 : r ≠ .x2) (h3 : r ≠ .x3) (h4 : r ≠ .x4)
-    (h6 : r ≠ .x6) (h7 : r ≠ .x7) (h8 : r ≠ .x8) (h11 : r ≠ .x11) (h20 : r ≠ .x20)
-    (h21 : r ≠ .x21) (h22 : r ≠ .x22) (h23 : r ≠ .x23) (h24 : r ≠ .x24) (h25 : r ≠ .x25)
-    (h26 : r ≠ .x26) (h27 : r ≠ .x27) :
+theorem afterIndex_prefixReg (r : Reg) (h1 : r ≠ .x1) (h3 : r ≠ .x3) (h6 : r ≠ .x6)
+    (h11 : r ≠ .x11) (h20 : r ≠ .x20) (h21 : r ≠ .x21) (h22 : r ≠ .x22) (h23 : r ≠ .x23)
+    (h24 : r ≠ .x24) (h25 : r ≠ .x25) (h26 : r ≠ .x26) (h27 : r ≠ .x27) :
     (afterIndex pk m bits answer).getReg r = (afterPrefix pk m bits).getReg r := by
-  rw [afterIndex_regs _ _ _ _ r h1 h2 h3 h4 h6 h7 h8 h11, S6_regs, S5_regs _ _ _ _ r h26 h27, S45,
+  rw [afterIndex_regs _ _ _ _ r h3 h11, S6_regs, S5_regs _ _ _ _ r h1 h26 h27, S45,
     (loadWords_effect pk m bits answer).regs r h20 h21 h22 h23 h24 h25, S4_regs,
     S3_regs _ _ _ _ r h6]
 
-theorem afterIndex_loadReg (r : Reg) (h1 : r ≠ .x1) (h2 : r ≠ .x2) (h3 : r ≠ .x3) (h4 : r ≠ .x4)
-    (h6 : r ≠ .x6) (h7 : r ≠ .x7) (h8 : r ≠ .x8) (h11 : r ≠ .x11) (h26 : r ≠ .x26)
-    (h27 : r ≠ .x27) :
+theorem afterIndex_loadReg (r : Reg) (h1 : r ≠ .x1) (h3 : r ≠ .x3) (h11 : r ≠ .x11)
+    (h26 : r ≠ .x26) (h27 : r ≠ .x27) :
     (afterIndex pk m bits answer).getReg r = (S45 pk m bits answer).getReg r := by
-  rw [afterIndex_regs _ _ _ _ r h1 h2 h3 h4 h6 h7 h8 h11, S6_regs, S5_regs _ _ _ _ r h26 h27]
+  rw [afterIndex_regs _ _ _ _ r h3 h11, S6_regs, S5_regs _ _ _ _ r h1 h26 h27]
 
 /-- Memory outside the index answer, the nonce copy and the lane words is the loader's. -/
 theorem afterIndex_frame (addr : Word)
@@ -568,34 +576,45 @@ theorem afterIndex_payload :
 theorem afterIndex_x13 (hlen : bits.length = 4224) :
     (afterIndex pk m bits answer).getReg .x13 = W 4224 := by
   rw [afterIndex_prefixReg _ _ _ _ .x13 (by decide) (by decide) (by decide) (by decide) (by decide)
-    (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-    (by decide) (by decide) (by decide) (by decide), (prefix_effect pk m bits).x13, hlen]
+    (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide),
+    (prefix_effect pk m bits).x13, hlen]
   rfl
 
-theorem afterIndex_levels (hlen : bits.length = 4224) (t : ℕ) (ht : t < 15) :
-    ((afterIndex pk m bits answer).getReg (levReg t)).truncate 16 =
-      BitVec.ofNat 16 (Flat.levVal t) := by
-  obtain ⟨r1, r2, r3, r4, r6, r7, r8, r11⟩ := afterIndex_levelRegs pk m bits answer
+theorem afterIndex_levels (hlen : bits.length = 4224) (t : ℕ) (ht : t < 15) (hf : FixedLevel t) :
+    ((afterIndex pk m bits answer).getReg (levReg t)).truncate 32 =
+      BitVec.ofNat 32 (Flat.levVal 0 t) := by
+  obtain ⟨r3, r11⟩ := afterIndex_levelRegs pk m bits answer
   have LE := loadWords_effect pk m bits answer
   have P := prefix_effect pk m bits
+  have pre : ∀ r : Reg, r ≠ .x1 → r ≠ .x3 → r ≠ .x6 → r ≠ .x11 → r ≠ .x20 → r ≠ .x21 →
+      r ≠ .x22 → r ≠ .x23 → r ≠ .x24 → r ≠ .x25 → r ≠ .x26 → r ≠ .x27 →
+      (afterIndex pk m bits answer).getReg r = (afterPrefix pk m bits).getReg r :=
+    fun r h1 h3 h6 h11 h20 h21 h22 h23 h24 h25 h26 h27 =>
+      afterIndex_prefixReg pk m bits answer r h1 h3 h6 h11 h20 h21 h22 h23 h24 h25 h26 h27
   have x5 : (afterIndex pk m bits answer).getReg .x5 = 1 := by
-    rw [afterIndex_prefixReg _ _ _ _ .x5 (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide), P.x5]
+    rw [pre .x5 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide), P.x5]
   have x9 : (afterIndex pk m bits answer).getReg .x9 = W payloadAddr := by
-    rw [afterIndex_prefixReg _ _ _ _ .x9 (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide), P.x9]
+    rw [pre .x9 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide), P.x9]
+  have x2 : (afterIndex pk m bits answer).getReg .x2 = W 0x1000000 := by
+    rw [pre .x2 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
+      (by decide) (by decide) (by decide) (by decide) (by decide), P.x2]
+  have load : ∀ r : Reg, r ≠ .x1 → r ≠ .x3 → r ≠ .x11 → r ≠ .x26 → r ≠ .x27 →
+      (afterIndex pk m bits answer).getReg r = (S45 pk m bits answer).getReg r :=
+    fun r h1 h3 h11 h26 h27 => afterIndex_loadReg pk m bits answer r h1 h3 h11 h26 h27
   have x22 : (afterIndex pk m bits answer).getReg .x22 = W (broadcast 120) := by
-    rw [afterIndex_loadReg _ _ _ _ .x22 (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide)]; exact LE.x22
+    rw [load .x22 (by decide) (by decide) (by decide) (by decide) (by decide)]; exact LE.x22
+  have x23 : (afterIndex pk m bits answer).getReg .x23 = W (broadcast 1) := by
+    rw [load .x23 (by decide) (by decide) (by decide) (by decide) (by decide)]; exact LE.x23
   have x24 : (afterIndex pk m bits answer).getReg .x24 = W (broadcast Flat.jumpBase0) := by
-    rw [afterIndex_loadReg _ _ _ _ .x24 (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide)]; exact LE.x24
+    rw [load .x24 (by decide) (by decide) (by decide) (by decide) (by decide)]; exact LE.x24
   have x25 : (afterIndex pk m bits answer).getReg .x25 = W (broadcast Flat.jumpBase1) := by
-    rw [afterIndex_loadReg _ _ _ _ .x25 (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide)]; exact LE.x25
+    rw [load .x25 (by decide) (by decide) (by decide) (by decide) (by decide)]; exact LE.x25
+  have x1 : (afterIndex pk m bits answer).getReg .x1 = W 1256 := by
+    rw [afterIndex_regs _ _ _ _ .x1 (by decide) (by decide), S6_regs, S5_x1]
   have x13 := afterIndex_x13 pk m bits answer hlen
+  obtain ⟨h11, h12, h13⟩ := hf
   interval_cases t
   · rw [show levReg 0 = .x5 from rfl, x5]; decide
   · rw [show levReg 1 = .x11 from rfl, r11]; decide
@@ -604,13 +623,13 @@ theorem afterIndex_levels (hlen : bits.length = 4224) (t : ℕ) (ht : t < 15) :
   · rw [show levReg 4 = .x13 from rfl, x13]; decide
   · rw [show levReg 5 = .x24 from rfl, x24]; decide
   · rw [show levReg 6 = .x25 from rfl, x25]; decide
-  · rw [show levReg 7 = .x1 from rfl, r1]; decide
-  · rw [show levReg 8 = .x2 from rfl, r2]; decide
-  · rw [show levReg 9 = .x3 from rfl, r3]; decide
-  · rw [show levReg 10 = .x4 from rfl, r4]; decide
-  · rw [show levReg 11 = .x6 from rfl, r6]; decide
-  · rw [show levReg 12 = .x7 from rfl, r7]; decide
-  · rw [show levReg 13 = .x8 from rfl, r8]; decide
+  · rw [show levReg 7 = .x23 from rfl, x23]; decide
+  · rw [show levReg 8 = .x2 from rfl, x2]; decide
+  · rw [show levReg 9 = .x1 from rfl, x1]; decide
+  · rw [show levReg 10 = .x3 from rfl, r3]; decide
+  · exact absurd rfl h11
+  · exact absurd rfl h12
+  · exact absurd rfl h13
   · rfl
 
 theorem afterIndex_lanes (hi : Accepted (answer.setWidth 128).toNat) (k : Fin 32) :
@@ -657,14 +676,14 @@ theorem afterIndex_lanes (hi : Accepted (answer.setWidth 128).toNat) (k : Fin 32
 theorem afterIndex_ctx (hi : Accepted (answer.setWidth 128).toNat) (hlen : bits.length = 4224) :
     Ctx (afterIndex pk m bits answer) (acceptedIdx answer hi) (bits.drop 128) pk := by
   have P := prefix_effect pk m bits
-  obtain ⟨r1, r2, r3, r4, r6, r7, r8, r11⟩ := afterIndex_levelRegs pk m bits answer
+  obtain ⟨r3, r11⟩ := afterIndex_levelRegs pk m bits answer
   have pre : ∀ r : Reg, r = .x9 ∨ r = .x30 ∨ r = .x31 ∨ r = .x5 →
       (afterIndex pk m bits answer).getReg r = (afterPrefix pk m bits).getReg r := by
     intro r hr
     rcases hr with rfl | rfl | rfl | rfl <;>
       exact afterIndex_prefixReg _ _ _ _ _ (by decide) (by decide) (by decide) (by decide)
         (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-        (by decide) (by decide) (by decide) (by decide) (by decide)
+        (by decide)
   refine ⟨?_, afterIndex_payload pk m bits answer, ?_, ?_, ?_, r11,
     afterIndex_levels pk m bits answer hlen, afterIndex_lanes pk m bits answer hi,
     afterIndex_x13 pk m bits answer hlen⟩
@@ -718,11 +737,11 @@ theorem beq_refines (s : MachineState) (r r' : Reg) (fuel : ℕ) (tail : Code)
     exact (Riscv.Refines.branch fetch rfl (fun h => nomatch h) transition rej).mono (by omega)
 
 theorem indexPhase_parts : indexPhase = indexPrefix ++ ([.ECALL] ++ (lenBlock ++
-    ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++ ([.BEQ .x27 .x0 16] ++ reject ++
+    ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++ ([.BEQ .x27 .x1 16] ++ reject ++
       levelSetup))))) := by
   simp only [indexPhase, lengthCheck_parts, sumCheck_parts, mainBlock, List.append_assoc]
 
-theorem indexPhase_length : indexPhase.length = 76 := by decide
+theorem indexPhase_length : indexPhase.length = 70 := by decide
 
 theorem mainBlock_length : mainBlock.length = 48 := by decide
 
@@ -734,7 +753,7 @@ theorem pc_add (p : Word) (a b : ℕ) : p + W a + W b = p + W (a + b) := by
   rw [BitVec.add_assoc, W_add]
 
 /-- The index phase: the specified first query, the length and sum rejections, and otherwise the
-continuation from `afterIndex`, at 71 cycles plus the continuation. -/
+continuation from `afterIndex`, at 64 cycles plus the continuation. -/
 theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (q : BitVec hashBits → OracleComp Spec (Option Bool)) (c : ℕ) (hc : 3 ≤ c)
     (located : Riscv.CodeAt (S0 pk m bits) (S0 pk m bits).pc (indexPhase ++ tail))
@@ -744,7 +763,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     Riscv.Refines fuel (S0 pk m bits) (do
       let answer ← hash (m ++ ofBits 128 bits)
       if Accepted (answer.setWidth 128).toNat ∧ bits.length = 4224 then q answer
-      else pure (some false)) (c + 70) := by
+      else pure (some false)) (c + 64) := by
   rw [indexPhase_length] at bound
   rw [indexPhase_parts] at located
   simp only [List.append_assoc] at located
@@ -752,18 +771,18 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
   -- the prefix
   have ready := indexPrefix_ready pk m bits
   rw [show fuel = indexPrefix.length + ((fuel - 11) + 1) by rw [indexPrefix_length]; omega,
-    show c + 70 = indexPrefix.length + (1 + (c + 59)) by rw [indexPrefix_length]; omega]
+    show c + 64 = indexPrefix.length + (1 + (c + 53)) by rw [indexPrefix_length]; omega]
   apply Riscv.Refines.linear _ located.append_left ready
   have callLocated : Riscv.CodeAt (afterPrefix pk m bits) (afterPrefix pk m bits).pc
       ([.ECALL] ++ (lenBlock ++ ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
-        ([.BEQ .x27 .x0 16] ++ reject ++ (levelSetup ++ tail)))))) := by
+        ([.BEQ .x27 .x1 16] ++ reject ++ (levelSetup ++ tail)))))) := by
     have h := located.append_right
     have e : (afterPrefix pk m bits).pc = (S0 pk m bits).pc +
         BitVec.ofNat 64 (4 * indexPrefix.length) := Riscv.linear_fold_pc _ _ ready
     rw [e]
     simpa only [List.append_assoc] using h.code_eq P.code
   have hashed := Riscv.Refines.hash (fuel := fuel - 11) callLocated.head P.x5
-    (prefix_hashValid pk m bits) (c := c + 59)
+    (prefix_hashValid pk m bits) (c := c + 53)
     (k := fun answer => if Accepted (answer.setWidth 128).toNat ∧ bits.length = 4224 then q answer
       else pure (some false)) ?_
   · rw [prefix_hashInput pk m bits] at hashed
@@ -774,7 +793,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
   -- the length check
   have S2code : Riscv.CodeAt (S2 pk m bits answer) (S2 pk m bits answer).pc
       (lenBlock ++ ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
-        ([.BEQ .x27 .x0 16] ++ reject ++ (levelSetup ++ tail))))) :=
+        ([.BEQ .x27 .x1 16] ++ reject ++ (levelSetup ++ tail))))) :=
     callLocated.tail.code_eq (by simp [Riscv.writeHash])
   have lenReady : Riscv.LinearReady (S2 pk m bits answer) lenBlock := by
     simp only [lenBlock, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady, true_and,
@@ -783,11 +802,11 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     exact dword_ok _ (by unfold dataAddr; omega) (by unfold dataAddr; omega)
       (by unfold dataAddr; omega)
   rw [show fuel - 11 = lenBlock.length + (fuel - 12) by simp [lenBlock]; omega,
-    show c + 59 = lenBlock.length + (c + 58) by simp [lenBlock]; omega]
+    show c + 53 = lenBlock.length + (c + 52) by simp [lenBlock]; omega]
   apply Riscv.Refines.linear _ S2code.append_left lenReady
   have S3code : Riscv.CodeAt (S3 pk m bits answer) (S3 pk m bits answer).pc
       ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
-        ([.BEQ .x27 .x0 16] ++ reject ++ (levelSetup ++ tail)))) := by
+        ([.BEQ .x27 .x1 16] ++ reject ++ (levelSetup ++ tail)))) := by
     have h := S2code.append_right
     rw [show (S3 pk m bits answer).pc = (S2 pk m bits answer).pc + BitVec.ofNat 64 (4 * lenBlock.length)
       from Riscv.linear_fold_pc _ _ lenReady]
@@ -795,7 +814,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
   have reorder : (if Accepted (answer.setWidth 128).toNat ∧ bits.length = 4224 then q answer
       else pure (some false)) =
       if (S3 pk m bits answer).getReg .x13 = (S3 pk m bits answer).getReg .x6 then
-        (if (S5 pk m bits answer).getReg .x27 = (S5 pk m bits answer).getReg .x0 then q answer
+        (if (S5 pk m bits answer).getReg .x27 = (S5 pk m bits answer).getReg .x1 then q answer
           else pure (some false)) else pure (some false) := by
     by_cases hl : bits.length = 4224
     · rw [if_pos ((length_iff pk m bits answer).mpr hl)]
@@ -803,37 +822,37 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
       · rw [if_pos ⟨ha, hl⟩, if_pos ((sum_iff pk m bits answer).mpr ha)]
       · rw [if_neg (fun h => ha h.1), if_neg (fun h => ha ((sum_iff pk m bits answer).mp h))]
     · rw [if_neg (fun h => hl h.2), if_neg (fun h => hl ((length_iff pk m bits answer).mp h))]
-  rw [reorder, show c + 58 = (c + 57) + 1 by omega]
+  rw [reorder, show c + 52 = (c + 51) + 1 by omega]
   apply beq_refines _ _ _ _ _ S3code (by omega) (by omega)
   intro hlenEq
   have hl := (length_iff pk m bits answer).mp hlenEq
   -- the loads, the lanes and the sum
   have S4code : Riscv.CodeAt (S4 pk m bits answer) (S4 pk m bits answer).pc
-      (mainBlock ++ ([.BEQ .x27 .x0 16] ++ reject ++ (levelSetup ++ tail))) := by
+      (mainBlock ++ ([.BEQ .x27 .x1 16] ++ reject ++ (levelSetup ++ tail))) := by
     have h := S3code.append_right (first := [.BEQ .x13 .x6 16] ++ reject)
     rw [show (4 * ([Instr.BEQ .x13 .x6 16] ++ reject).length) = 16 from rfl] at h
     exact h.code_eq (by simp [S4])
   have mReady := mainBlock_ready pk m bits answer
   rw [show fuel - 12 - 1 = mainBlock.length + (fuel - 61) by rw [mainBlock_length]; omega,
-    show c + 57 = mainBlock.length + (c + 9) by rw [mainBlock_length]; omega]
+    show c + 51 = mainBlock.length + (c + 3) by rw [mainBlock_length]; omega]
   apply Riscv.Refines.linear _ (S4code.append_left) mReady
   have S5code : Riscv.CodeAt (S5 pk m bits answer) (S5 pk m bits answer).pc
-      ([.BEQ .x27 .x0 16] ++ reject ++ (levelSetup ++ tail)) := by
+      ([.BEQ .x27 .x1 16] ++ reject ++ (levelSetup ++ tail)) := by
     have h := S4code.append_right
     rw [show (S5 pk m bits answer).pc = (S4 pk m bits answer).pc +
       BitVec.ofNat 64 (4 * mainBlock.length) from Riscv.linear_fold_pc _ _ mReady]
     exact h.code_eq (Riscv.fold_code _ _)
-  rw [show c + 9 = (c + 8) + 1 by omega]
+  rw [show c + 3 = (c + 2) + 1 by omega]
   apply beq_refines _ _ _ _ _ S5code (by omega) (by omega)
   intro hsumEq
   have ha := (sum_iff pk m bits answer).mp hsumEq
   -- the level tags
   have S6code : Riscv.CodeAt (S6 pk m bits answer) (S6 pk m bits answer).pc (levelSetup ++ tail) := by
-    have h := S5code.append_right (first := [.BEQ .x27 .x0 16] ++ reject)
-    rw [show (4 * ([Instr.BEQ .x27 .x0 16] ++ reject).length) = 16 from rfl] at h
+    have h := S5code.append_right (first := [.BEQ .x27 .x1 16] ++ reject)
+    rw [show (4 * ([Instr.BEQ .x27 .x1 16] ++ reject).length) = 16 from rfl] at h
     exact h.code_eq (by simp [S6])
-  rw [show fuel - 61 - 1 = levelSetup.length + (fuel - 70) by simp [levelSetup]; omega,
-    show c + 8 = levelSetup.length + c by simp [levelSetup]; omega]
+  rw [show fuel - 61 - 1 = levelSetup.length + (fuel - 64) by simp [levelSetup]; omega,
+    show c + 2 = levelSetup.length + c by simp [levelSetup]; omega]
   apply Riscv.Refines.linear _ S6code.append_left (levelSetup_ready _)
   exact continuation answer ha hl _ (by omega)
 

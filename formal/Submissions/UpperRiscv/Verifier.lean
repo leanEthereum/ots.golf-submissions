@@ -5,7 +5,7 @@ import Submissions.UpperRiscv.IndexPhase
 # Exact refinement of the machine image
 
 The image observes exactly the certified raw-signature verifier, preserving every oracle query,
-and every run, accepting or rejecting, costs at most `cycleBound = 693` cycles: 70 for the index
+and every run, accepting or rejecting, costs at most `cycleBound = 687` cycles: 64 for the index
 phase, `9 + 2 · nibble` per chain (602 in all, since the nibbles sum to 157), and 21 for the root
 and the decision.
 -/
@@ -59,7 +59,7 @@ theorem directVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
 
 theorem image_code : image.code = verifier := rfl
 
-theorem verifier_length : verifier.length = 1337 := by decide +kernel
+theorem verifier_length : verifier.length = 1331 := by decide +kernel
 
 theorem image_valid : image.Valid := by
   refine ⟨?_, ?_, ?_⟩
@@ -73,7 +73,7 @@ theorem image_valid : image.Valid := by
     exact List.all_eq_true.mp checked
 
 /-- The certified cycle bound on every execution. -/
-def cycleBound : ℕ := 693
+def cycleBound : ℕ := 687
 
 theorem order_eq : order = chainsFrom 0 ++ [rc, rh] := by
   rw [← chainsFrom_zero]
@@ -108,8 +108,8 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   have e : verifier = indexPhase ++ (chains ++ (root ++ decision)) := by
     simp only [verifier, List.append_assoc]
   rw [e] at located
-  rw [directVerify_unfold, show cycleBound = (602 + 21) + 70 from rfl]
-  apply indexPhase_refines pk m bits (chains ++ (root ++ decision)) 1261 1337
+  rw [directVerify_unfold, show cycleBound = (602 + 21) + 64 from rfl]
+  apply indexPhase_refines pk m bits (chains ++ (root ++ decision)) 1267 1337
     (fun answer => acceptedTail pk bits answer) _ (by norm_num) located
     (by rw [indexPhase_length])
   intro answer hi hlen left hleft
@@ -121,12 +121,12 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
     refine ⟨afterIndex_ctx pk m bits answer hi hlen, ?_, afterIndex_pc pk m bits answer, ?_⟩
     · rw [afterIndex_prefixReg _ _ _ _ .x12 (by decide) (by decide) (by decide) (by decide)
         (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-        (by decide) (by decide) (by decide) (by decide) (by decide), (prefix_effect pk m bits).x12]
+        (by decide), (prefix_effect pk m bits).x12]
       rfl
     · intro h; omega
   have located2 : Riscv.CodeAt s s.pc (blocksFrom 0 ++ (root ++ decision)) := by
     have h := located.append_right (first := indexPhase)
-    have hp : (Riscv.initialState image pk m bits).pc + BitVec.ofNat 64 (4 * 76) =
+    have hp : (Riscv.initialState image pk m bits).pc + BitVec.ofNat 64 (4 * 70) =
         W (blockStart 0) := by rw [pc0]; decide
     rw [indexPhase_length, blocks_eq, hp] at h
     rw [afterIndex_pc]

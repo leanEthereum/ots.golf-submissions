@@ -241,17 +241,30 @@ theorem jump_target (k : Fin 32) (p : ℕ) (hp : p ≤ 15) (v : Word)
   unfold blockStart
   omega
 
+/-- The prologue's jump also leaves its return address, the start of the table, in `x14`. -/
 theorem jalr_transition (s : MachineState) (i : BitVec 12)
-    (fetch : s.code s.pc = some (.JALR .x0 .x28 i)) :
-    RiscvZkvm.Rv64.step s = some (s.setPC ((s.getReg .x28 + signExtend12 i) &&& ~~~(1#64))) := by
+    (fetch : s.code s.pc = some (.JALR .x14 .x28 i)) :
+    RiscvZkvm.Rv64.step s =
+      some ((s.setReg .x14 (s.pc + 4)).setPC ((s.getReg .x28 + signExtend12 i) &&& ~~~(1#64))) := by
   rw [RiscvZkvm.Rv64.step, fetch]
   rfl
 
+/-- The address of chain `k`'s step table is the return address of its prologue's jump. -/
+theorem tableStart_eq (k : ℕ) : W (blockStart k) + BitVec.ofNat 64 (4 * 8) + 4 = W (Flat.tableStart k) := by
+  rw [show (4 : Word) = W 4 from rfl, W_add, W_add]
+  congr 1
+  unfold blockStart indexLength blockLength Flat.tableStart
+  ring
+
 theorem notCtx_of_prologue (r : Reg) (h : CtxReg r) :
-    r ≠ .x10 ∧ r ≠ .x12 ∧ r ≠ .x26 ∧ r ≠ .x27 ∧ r ≠ .x28 := by
-  rcases h with rfl | rfl | rfl | rfl | rfl | ⟨t, ht, rfl⟩
-  all_goals try (refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> decide)
-  interval_cases t <;> (refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> decide)
+    r ≠ .x10 ∧ r ≠ .x12 ∧ r ≠ .x14 ∧ r ≠ .x26 ∧ r ≠ .x27 ∧ r ≠ .x28 := by
+  rcases h with rfl | rfl | rfl | rfl | rfl | ⟨t, ht, ⟨h11, h12, h13⟩, rfl⟩
+  all_goals try (refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;> decide)
+  interval_cases t <;> first
+    | exact absurd rfl h11
+    | exact absurd rfl h12
+    | exact absurd rfl h13
+    | (refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;> decide)
 
 /-- The disclosed word of chain `k`, read from the payload. -/
 theorem payload_words (s : MachineState) (k : ℕ) (hk : k < 32)
@@ -275,7 +288,8 @@ theorem payload_words (s : MachineState) (k : ℕ) (hk : k < 32)
     simp [hi]
 
 /-- Chain `k`'s prologue: the slot receives the disclosed word, the HASH pointers and the header
-are set, and control jumps to the step of the disclosed position, at nine cycles. -/
+are set, the table address is left in `x14`, and control jumps to the step of the disclosed
+position, at nine cycles. -/
 theorem prologue_refines (k : Fin 32) (rest : Code) (s : MachineState)
     (x : graph.Assignment) (inv : ChainsInv index payload pk s x k.val)
     (located : Riscv.CodeAt s s.pc (chainPrologue k ++ rest))
@@ -340,8 +354,10 @@ theorem prologue_refines (k : Fin 32) (rest : Code) (s : MachineState)
         exact half_ok _ (by omega) (by omega) hl.2.2
   have E := prologueLinear_effect s k k.isLt inv.slot inv.ctx.payloadReg
   set b := (prologueLinear k).foldl execInstrBr s with hb
+  have bPc : b.pc = W (blockStart k) + BitVec.ofNat 64 (4 * 8) := by
+    rw [hb, Riscv.linear_fold_pc s _ ready, prologueLinear_length, inv.pc]
   have bLocated : Riscv.CodeAt b b.pc
-      ([Instr.JALR .x0 .x28 (imm12 ((tableEnd k : ℤ) - (jumpBase k : ℤ)))] ++ rest) := by
+      ([Instr.JALR .x14 .x28 (imm12 ((tableEnd k : ℤ) - (jumpBase k : ℤ)))] ++ rest) := by
     rw [Riscv.linear_fold_pc s _ ready, prologueLinear_length]
     have h := located.append_right
     rw [prologueLinear_length] at h
@@ -357,8 +373,13 @@ theorem prologue_refines (k : Fin 32) (rest : Code) (s : MachineState)
     have := jumpBase_bounds k
     omega
   rw [jump_target k (pos index k) (pos_le index k) _ hx28]
-  set u := b.setPC (W (blockStart k + 4 * (9 + 2 * pos index k))) with hu
-  have uRegs : ∀ r, u.getReg r = b.getReg r := fun r => by rw [hu]; simp
+  set u := (b.setReg .x14 (b.pc + 4)).setPC (W (blockStart k + 4 * (9 + 2 * pos index k))) with hu
+  have uRegs : ∀ r, r ≠ .x14 → u.getReg r = b.getReg r := by
+    intro r hr
+    rw [hu, MachineState.getReg_setPC, MachineState.getReg_setReg_ne _ _ _ _ (Ne.symm hr)]
+  have u14 : u.getReg .x14 = W (Flat.tableStart k) := by
+    rw [hu, MachineState.getReg_setPC, MachineState.getReg_setReg_eq (by decide), bPc,
+      tableStart_eq]
   have uMem : ∀ addr, u.getMem addr = b.getMem addr := fun addr => by rw [hu]; simp
   have frame : SlotFrame s u k := by
     intro addr haddr
@@ -368,11 +389,11 @@ theorem prologue_refines (k : Fin 32) (rest : Code) (s : MachineState)
     · intro e; rw [e, W_toNat _ (by omega)] at haddr; omega
     · intro e; rw [e, W_toNat _ (by omega)] at haddr; omega
   apply continuation u ?_ ?_ (by rw [hu]; simp [E.code])
-  · refine ⟨inv.ctx.frame k k.isLt (fun r hr => ?_) frame, ?_, ?_, ?_, rfl, ?_⟩
-    · obtain ⟨h10, h12, h26, h27, h28⟩ := notCtx_of_prologue r hr
-      rw [uRegs, E.regs r h10 h12 h26 h27 h28]
-    · rw [uRegs, E.slot]
-    · rw [uRegs, E.input]
+  · refine ⟨inv.ctx.frame k k.isLt (fun r hr => ?_) frame, ?_, ?_, u14, ?_, rfl, ?_⟩
+    · obtain ⟨h10, h12, h14, h26, h27, h28⟩ := notCtx_of_prologue r hr
+      rw [uRegs r h14, E.regs r h10 h12 h26 h27 h28]
+    · rw [uRegs .x12 (by decide), E.slot]
+    · rw [uRegs .x10 (by decide), E.input]
     · refine ⟨0, by norm_num, ?_, fun _ => rfl⟩
       rw [uMem, E.header]
       simp [hdrW]

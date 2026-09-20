@@ -107,7 +107,7 @@ theorem chain_refines (k : Fin 32) (tail : Code)
       blockStart k + 4 * (9 + 2 * pos index k) from rfl, ← inv'.pc] at h
     exact h.code_eq code
   have inv'' : StepInv index payload pk u x' k (pos index k) := by
-    refine ⟨inv'.ctx, inv'.slot, inv'.input, inv'.header, inv'.pc, ?_⟩
+    refine ⟨inv'.ctx, inv'.slot, inv'.input, inv'.table, inv'.header, inv'.pc, ?_⟩
     intro hk1
     have e : rootAcc (topFun (tops x')) (k.val - 1) = rootAcc (topFun (tops x)) (k.val - 1) := by
       apply rootAcc_congr

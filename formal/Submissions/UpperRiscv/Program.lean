@@ -11,12 +11,14 @@ Straight-line code except for two rejection branches and one computed jump per c
    signature of other than 4224 bits.
 2. **Lanes.** From the two index words, build eight lane words: 16-bit lanes holding
    `8 · nibble`. Their sum, multiplied by `0x0001000100010001`, carries `8 · Σ nibbles` in its top
-   lane; reject unless the nibbles sum to `target = 157`. Store `jumpBase - 8 · nibble` for every
-   chain.
+   lane; reject unless it equals `8 · 157 = 1256`, held in `x1`. Store `jumpBase - 8 · nibble`
+   for every chain.
 3. **Chains.** Chain `k`'s slot holds its value at `Flat.slotAddr k`, after an 8-byte header.
    The block copies the disclosed word into the slot, writes the slot address as the header,
-   loads its jump target and jumps into a table of 15 steps: each step stores its level tag in
-   the header's top halfword and hashes the 192-bit header and value in place.
+   loads its jump target and jumps into a table of 15 steps, keeping the return address in `x14`:
+   each step stores its 32-bit level tag in the header's top word and hashes the 192-bit header
+   and value in place. Fourteen of the fifteen tags are the low 32 bits of registers that already
+   hold them; only `x3` is set for the purpose.
 4. **Root.** The 32 slots with the headers between them are the 6080-bit root input; the low
    128 bits of its hash are compared with the saved public key.
 -/
@@ -64,35 +66,34 @@ def laneWord (w i : ℕ) : Code :=
 
 def lanes : Code := (List.range 8).flatMap fun j => laneWord (j / 4) (j % 4)
 
-/-- Reject unless the nibbles sum to 157: the top lane of `sum * 0x0001000100010001` is `8 · Σ`. -/
+/-- Reject unless the nibbles sum to 157: the top lane of `sum * 0x0001000100010001` is `8 · Σ`,
+compared with `1256` in `x1`, which then serves as a level tag. -/
 def sumCheck : Code :=
-  [.MUL .x27 .x27 .x23, .SRLI .x27 .x27 48, .XORI .x27 .x27 1256, .BEQ .x27 .x0 16] ++ reject
+  [.ADDI .x1 .x0 1256, .MUL .x27 .x27 .x23, .SRLI .x27 .x27 48, .BEQ .x27 .x1 16] ++ reject
 
-/-- The level tags not already held by a register, and the chain input length. -/
-def levelSetup : Code :=
-  [.ADDI .x1 .x0 2, .ADDI .x2 .x0 3, .ADDI .x3 .x0 4, .ADDI .x4 .x0 5, .ADDI .x6 .x0 6,
-   .ADDI .x7 .x0 7, .ADDI .x8 .x0 8, .ADDI .x11 .x0 192]
+/-- The one level tag not already held by a register, and the chain input length. -/
+def levelSetup : Code := [.ADDI .x3 .x0 2, .ADDI .x11 .x0 192]
 
 def indexPhase : Code :=
   indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++ lanes ++ sumCheck ++ levelSetup
 
 /-! ## The chains -/
 
-/-- The register holding the level tag of level `t` in its low sixteen bits. -/
+/-- The register holding the level tag of level `t` in its low 32 bits. -/
 def levReg (t : ℕ) : Reg :=
   match t with
   | 0 => .x5 | 1 => .x11 | 2 => .x9 | 3 => .x22 | 4 => .x13 | 5 => .x24 | 6 => .x25
-  | 7 => .x1 | 8 => .x2 | 9 => .x3 | 10 => .x4 | 11 => .x6 | 12 => .x7 | 13 => .x8
+  | 7 => .x23 | 8 => .x2 | 9 => .x1 | 10 => .x3 | 11 => .x12 | 12 => .x10 | 13 => .x14
   | _ => .x0
 
 /-- Step `t` of a chain: store the level tag, hash the header and value in place. -/
-def chainStep (t : ℕ) : Code := [.SH .x12 (levReg t) (BitVec.ofNat 12 4094), .ECALL]
+def chainStep (t : ℕ) : Code := [.SW .x12 (levReg t) (BitVec.ofNat 12 4092), .ECALL]
 
 /-- The fifteen steps of a chain; the prologue jumps to step `15 - nibble`. -/
 def chainTable : Code := (List.range 15).flatMap chainStep
 
 /-- Number of instructions before chain `0`. -/
-def indexLength : ℕ := 76
+def indexLength : ℕ := 70
 
 /-- Number of instructions of a chain block. -/
 def blockLength : ℕ := 39
@@ -111,13 +112,14 @@ def jumpBase (k : ℕ) : ℕ := if k < 16 then Flat.jumpBase0 else Flat.jumpBase
 def imm12 (z : ℤ) : BitVec 12 := BitVec.ofInt 12 z
 
 /-- Chain `k`'s prologue: move the slot pointer, copy the disclosed word, write the header,
-load the jump target `jumpBase - 8 · nibble` and jump to `tableEnd k - 8 · nibble`. -/
+load the jump target `jumpBase - 8 · nibble` and jump to `tableEnd k - 8 · nibble`, leaving the
+table's address in `x14`. -/
 def chainPrologue (k : ℕ) : Code :=
   [.ADDI .x12 .x12 (BitVec.ofNat 12 (if k = 0 then 136 else 24)), .ADDI .x10 .x12 (imm12 (-8))] ++
   copy128 .x9 (16 * k) .x12 0 ++
   [.SD .x12 .x12 (imm12 (-8)),
    .LHU .x28 .x12 (imm12 ((laneAddr k : ℤ) - (Flat.slotAddr k : ℤ))),
-   .JALR .x0 .x28 (imm12 ((tableEnd k : ℤ) - (jumpBase k : ℤ)))]
+   .JALR .x14 .x28 (imm12 ((tableEnd k : ℤ) - (jumpBase k : ℤ)))]
 
 def chainBlock (k : ℕ) : Code := chainPrologue k ++ chainTable
 
