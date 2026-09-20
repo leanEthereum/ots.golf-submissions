@@ -85,7 +85,7 @@ private theorem uniform_miss (a : ℝ≥0∞) :
   rfl
 
 /-- Exact failure probability while enough untried nonces remain and their queries are fresh. -/
-theorem loop_failure (m : Message) :
+theorem loop_failure (m : EMessage) :
     ∀ (k : ℕ) (tried : Finset Nonce) (c : Cache),
       tried.card + k ≤ 2 ^ nonceBits →
       (∀ η ∉ tried, c (encQuery (m ++ η)) = none) →
@@ -244,12 +244,13 @@ theorem sum_le_allowance : (882 / 1000 : ℝ≥0∞) / 2 ^ 128 + 1 / 2 ^ 135 ≤
 
 /-- Signing has the same failure probability for every message and every fresh index cache. -/
 theorem sign_failure (x : forestScheme.graph.Assignment) (m : Message)
-    (c : Cache) (hfresh : ∀ η : Nonce, c (encQuery (m ++ η)) = none) :
+    (c : Cache)
+    (hfresh : ∀ η : Nonce, c (encQuery (emsg m (forestScheme.publicKey x) ++ η)) = none) :
     E (run (forestScheme.sign x m) c)
       (fun p => if p.1.isNone then 1 else 0) = miss ^ trials := by
   rw [sign_eq_map, run_map, E_map]
   simp only [Option.isNone_map]
-  exact loop_failure m _ ∅ c (by norm_num [nonceBits, idxBits, numCuts, trials, idxCost, blockCost, signBudget, msgBits, blockBits]) (fun η _ => hfresh η)
+  exact loop_failure (emsg m (forestScheme.publicKey x)) _ ∅ c (by norm_num [nonceBits, idxBits, numCuts, trials, idxCost, blockCost, signBudget, msgBits, blockBits]) (fun η _ => hfresh η)
 
 /-- Failure remains bounded even when the message is chosen after seeing the public key. -/
 theorem signingFailure_strong :

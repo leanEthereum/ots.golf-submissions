@@ -43,7 +43,7 @@ def M : ℝ := numValid
 def q : ℝ := M / I
 def θ : ℝ := I / (I - 2 * trials)
 
-variable (d : Cache) (m : Message)
+variable (d : Cache) (m : EMessage)
 
 def v : ℝ := (V d).card
 def r : ℝ := v d / M
@@ -63,7 +63,7 @@ end Row
 def psi (d : Cache) : ℝ := Row.r d + ∑ m, Row.pr d m
 
 /-- The bound on the growth of `psi` when the answer to `m₀ ++ η₀` has index `i`. -/
-def gCls (d : Cache) (m₀ : Message) (i : ℕ) : ℝ :=
+def gCls (d : Cache) (m₀ : EMessage) (i : ℕ) : ℝ :=
   if i ∈ validSet then
     (if i ∈ V d then (1 - Row.r d) / Row.D d m₀ + ∑ m, Row.hit d m i / Row.D d m
     else 1 / Row.M)
@@ -127,9 +127,9 @@ theorem qI : q * I = M := div_mul_cancel₀ _ I_pos.ne'
 theorem nonce_card (hP : RowHyp) : (2 : ℝ) ^ nonceBits = I := by
   rw [hP.nonce_eq]; rfl
 
-theorem u_nonneg (d : Cache) (m : Message) : 0 ≤ u d m := Nat.cast_nonneg _
+theorem u_nonneg (d : Cache) (m : EMessage) : 0 ≤ u d m := Nat.cast_nonneg _
 
-theorem u_le_card (d : Cache) (m : Message) : u d m ≤ 2 ^ nonceBits := by
+theorem u_le_card (d : Cache) (m : EMessage) : u d m ≤ 2 ^ nonceBits := by
   unfold u
   have : (rowCached d m).card ≤ 2 ^ nonceBits := by
     calc (rowCached d m).card ≤ (Finset.univ : Finset Nonce).card :=
@@ -137,18 +137,18 @@ theorem u_le_card (d : Cache) (m : Message) : u d m ≤ 2 ^ nonceBits := by
       _ = 2 ^ nonceBits := by rw [Finset.card_univ, Fintype.card_bitVec]
   exact_mod_cast this
 
-theorem N_nonneg (d : Cache) (m : Message) : 0 ≤ N d m := by
+theorem N_nonneg (d : Cache) (m : EMessage) : 0 ≤ N d m := by
   unfold N; linarith [u_le_card d m]
 
-theorem a_nonneg (d : Cache) (m : Message) : 0 ≤ a d m := Nat.cast_nonneg _
-theorem dd_nonneg (d : Cache) (m : Message) : 0 ≤ dd d m := Nat.cast_nonneg _
+theorem a_nonneg (d : Cache) (m : EMessage) : 0 ≤ a d m := Nat.cast_nonneg _
+theorem dd_nonneg (d : Cache) (m : EMessage) : 0 ≤ dd d m := Nat.cast_nonneg _
 theorem v_nonneg (d : Cache) : 0 ≤ v d := Nat.cast_nonneg _
-theorem hit_nonneg (d : Cache) (m : Message) (i : ℕ) : 0 ≤ hit d m i := Nat.cast_nonneg _
+theorem hit_nonneg (d : Cache) (m : EMessage) (i : ℕ) : 0 ≤ hit d m i := Nat.cast_nonneg _
 
-theorem b_le_a (d : Cache) (m : Message) : b d m ≤ a d m := by
+theorem b_le_a (d : Cache) (m : EMessage) : b d m ≤ a d m := by
   unfold a b; exact_mod_cast Finset.card_le_card (rowBad_subset d m)
 
-theorem dd_le_a (d : Cache) (m : Message) : dd d m ≤ a d m := by
+theorem dd_le_a (d : Cache) (m : EMessage) : dd d m ≤ a d m := by
   unfold a dd; exact_mod_cast Finset.card_le_card Finset.sdiff_subset
 
 theorem v_le_M (d : Cache) : v d ≤ M := by
@@ -163,10 +163,10 @@ theorem r_le_one (hP : RowHyp) (d : Cache) : r d ≤ 1 := by
 theorem rM (hP : RowHyp) (d : Cache) : r d * M = v d :=
   div_mul_cancel₀ _ (M_pos hP).ne'
 
-theorem D_nonneg (d : Cache) (m : Message) : 0 ≤ D d m :=
+theorem D_nonneg (d : Cache) (m : EMessage) : 0 ≤ D d m :=
   add_nonneg (a_nonneg d m) (mul_nonneg q_nonneg (N_nonneg d m))
 
-theorem pr_nonneg (d : Cache) (m : Message) : 0 ≤ pr d m :=
+theorem pr_nonneg (d : Cache) (m : EMessage) : 0 ≤ pr d m :=
   div_nonneg (le_max_right _ _) (D_nonneg d m)
 
 section Budget
@@ -182,30 +182,30 @@ theorem sum_u_le : ∑ m, u d m ≤ I / 2 := by
   have h3 : (∑ m, ((rowCached d m).card : ℝ)) ≤ encCount d := by exact_mod_cast h1
   linarith
 
-theorem u_le_half (m : Message) : u d m ≤ I / 2 :=
+theorem u_le_half (m : EMessage) : u d m ≤ I / 2 :=
   (Finset.single_le_sum (fun m _ => u_nonneg d m) (Finset.mem_univ m)).trans (sum_u_le hP hc)
 
-theorem N_ge (m : Message) : I / 2 ≤ N d m := by
+theorem N_ge (m : EMessage) : I / 2 ≤ N d m := by
   unfold N; rw [nonce_card hP]; linarith [u_le_half hP hc m]
 
-theorem N_le (m : Message) : N d m ≤ I := by
+theorem N_le (m : EMessage) : N d m ≤ I := by
   unfold N; rw [nonce_card hP]; linarith [u_nonneg d m]
 
-theorem qN_ge (m : Message) : M / 2 ≤ q * N d m := by
+theorem qN_ge (m : EMessage) : M / 2 ≤ q * N d m := by
   have := mul_le_mul_of_nonneg_left (N_ge hP hc m) (q_nonneg)
   rw [← qI]; linarith
 
-theorem qN_le (m : Message) : q * N d m ≤ M := by
+theorem qN_le (m : EMessage) : q * N d m ≤ M := by
   have := mul_le_mul_of_nonneg_left (N_le hP hc m) (q_nonneg)
   rw [← qI]; linarith
 
-theorem D_ge (m : Message) : M / 2 ≤ D d m := by
+theorem D_ge (m : EMessage) : M / 2 ≤ D d m := by
   unfold D; linarith [a_nonneg d m, qN_ge hP hc m]
 
-theorem D_pos (m : Message) : 0 < D d m := by
+theorem D_pos (m : EMessage) : 0 < D d m := by
   linarith [D_ge hP hc m, M_pos hP]
 
-theorem one_le_D (m : Message) : 1 ≤ D d m := by
+theorem one_le_D (m : EMessage) : 1 ≤ D d m := by
   linarith [D_ge hP hc m, two_le_M hP]
 
 end Budget
@@ -232,7 +232,7 @@ theorem psi_of_ne {d : Cache} {q : Query} (hq : ∀ u : EncInput, q ≠ encQuery
 section Step
 
 variable {P} (hP : RowHyp) {d : Cache} (hc : 2 * encCount d ≤ 2 ^ idxBits)
-  {m₀ : Message} {η₀ : Nonce} (hfresh : d (encQuery (m₀ ++ η₀)) = none)
+  {m₀ : EMessage} {η₀ : Nonce} (hfresh : d (encQuery (m₀ ++ η₀)) = none)
   (w : BitVec hashBits)
 include hP hc hfresh
 
@@ -373,7 +373,7 @@ section Classes
 variable {P} (hP : RowHyp) {d : Cache} (hc : 2 * encCount d ≤ 2 ^ idxBits)
 include hP hc
 
-theorem sum_gCls_le (m₀ : Message) :
+theorem sum_gCls_le (m₀ : EMessage) :
     ∑ i ∈ Finset.range (2 ^ idxBits), gCls d m₀ i ≤ 11 / 6 := by
   have hM := Row.M_pos hP
   have hMI2 := Row.two_M_le hP
@@ -535,7 +535,7 @@ theorem sum_idxOf (f : ℕ → ℝ) :
   push_cast
   ring
 
-theorem psi_avg {m₀ : Message} {η₀ : Nonce} (hfresh : d (encQuery (m₀ ++ η₀)) = none) :
+theorem psi_avg {m₀ : EMessage} {η₀ : Nonce} (hfresh : d (encQuery (m₀ ++ η₀)) = none) :
     (∑ w : BitVec hashBits, psi (d.cacheQuery (encQuery (m₀ ++ η₀)) w)) /
         (2 : ℝ) ^ hashBits ≤ psi d + 11 / 6 / Row.I := by
   have hK : (2 : ℝ) ^ hashBits = Row.I * 2 ^ (hashBits - idxBits) := by
@@ -559,7 +559,7 @@ theorem psi_avg {m₀ : Message} {η₀ : Nonce} (hfresh : d (encQuery (m₀ ++ 
         field_simp
 
 /-- One fresh encoding answer raises `θ psi` by at most `2 / 2^idxBits` on average. -/
-theorem psi_charge {m₀ : Message} {η₀ : Nonce} (hfresh : d (encQuery (m₀ ++ η₀)) = none) :
+theorem psi_charge {m₀ : EMessage} {η₀ : Nonce} (hfresh : d (encQuery (m₀ ++ η₀)) = none) :
     ∑ w, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         ENNReal.ofReal (Row.θ * psi (d.cacheQuery (encQuery (m₀ ++ η₀)) w)) ≤
       ENNReal.ofReal (Row.θ * psi d) + 2 * ((2 : ℝ≥0∞) ^ idxBits)⁻¹ := by
@@ -592,7 +592,7 @@ theorem psi_charge {m₀ : Message} {η₀ : Nonce} (hfresh : d (encQuery (m₀ 
         nlinarith
 
 /-- `θ psi` bounds the signing loss of every row (the hypothesis of `signRho_bound`). -/
-theorem psi_dom (m : Message) (c : ℕ) (hc1 : (rowFresh d m).card ≤ c + trials)
+theorem psi_dom (m : EMessage) (c : ℕ) (hc1 : (rowFresh d m).card ≤ c + trials)
     (hc2 : c ≤ (rowFresh d m).card) :
     ((rowBad d m).card : ℝ≥0∞) + c * (((V d).card : ℝ≥0∞) / 2 ^ idxBits) ≤
       ENNReal.ofReal (Row.θ * psi d) *

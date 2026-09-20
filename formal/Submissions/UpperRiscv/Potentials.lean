@@ -110,8 +110,10 @@ theorem publicKey_eq_pkOf (ξ : Rec) : forestScheme.publicKey (graph.evalRec ξ)
   exact (trunc128_cast_pot _ _).symm
 
 theorem sign_eq (ξ : Rec) (m : Message) :
-    forestScheme.sign (graph.evalRec ξ) m = sigOf ξ <$> signIdx m :=
-  sign_eq_map forestScheme (graph.evalRec ξ) m
+    forestScheme.sign (graph.evalRec ξ) m = sigOf ξ <$> signIdx (emsg m (pkOf ξ)) := by
+  have h := sign_eq_map forestScheme (graph.evalRec ξ) m
+  rw [publicKey_eq_pkOf] at h
+  exact h
 
 /-! ## Potentials -/
 
@@ -366,7 +368,7 @@ theorem ΦA_charge (pk : BitVec 128) : ∀ (c : Cache) (b : ℕ) (q : Query), In
   refine le_trans ?_ (add_le_add_right
     (le_mul_of_one_le_right zero_le (one_le_queryCost_ennreal q)) _)
   simp only [ΦA_eq, mul_add, Finset.sum_add_distrib]
-  by_cases hk : q.1 = msgBits + nonceBits
+  by_cases hk : q.1 = emsgBits + nonceBits
   · obtain ⟨u₀, rfl⟩ := exists_eq_encQuery_of_length_eq hk
     rw [hits_avg_eq _ _ _ _ (fun ξ => kc_enc ξ u₀), spr_avg_eq]
     have hE := encTerm_avg_le c hI u₀ hq
@@ -396,7 +398,7 @@ theorem ΦB_charge_some {Ac : Finset Name} (hAc : IsCut Ac) (dt : Data) {T : Fin
   refine le_trans ?_ (add_le_add_right
     (le_mul_of_one_le_right zero_le (one_le_queryCost_ennreal q)) _)
   simp only [ΦB_eq, mul_add, Finset.sum_add_distrib, ind_exists_some]
-  by_cases hk : q.1 = msgBits + nonceBits
+  by_cases hk : q.1 = emsgBits + nonceBits
   · obtain ⟨u₀, rfl⟩ := exists_eq_encQuery_of_length_eq hk
     rw [hits_avg_eq _ _ _ _ (fun ξ => fHid_enc (some Ac) ξ u₀), spr_avg_eq]
     have h3 := idxPost_avg_le T d' c u₀ hq i
@@ -421,7 +423,7 @@ theorem ΦB_charge_none (pk : BitVec 128) {T : Finset Rec} (hT : T ⊆ fiberA pk
     (le_mul_of_one_le_right zero_le (one_le_queryCost_ennreal q)) _)
   simp only [ΦB_eq, mul_add, Finset.sum_add_distrib, ind_exists_none, mul_zero,
     Finset.sum_const_zero, add_zero, fHid_none]
-  by_cases hk : q.1 = msgBits + nonceBits
+  by_cases hk : q.1 = emsgBits + nonceBits
   · obtain ⟨u₀, rfl⟩ := exists_eq_encQuery_of_length_eq hk
     rw [hits_avg_eq _ _ _ _ (fun ξ => kc_enc ξ u₀), spr_avg_eq]
     exact le_self_add

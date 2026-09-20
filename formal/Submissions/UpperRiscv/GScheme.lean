@@ -80,45 +80,66 @@ theorem extractLsb'_cast' {n m s l : ℕ} (h : n = m) (x : BitVec n) :
 
 /-- The two halves of an encoding input exchanged: the nonce above the message, as the machine
 finds them in memory. -/
-def swapHalves (u : BitVec (msgBits + nonceBits)) : BitVec (msgBits + nonceBits) :=
-  (u.setWidth nonceBits ++ u.extractLsb' nonceBits msgBits).cast (Nat.add_comm _ _)
+def swapHalves {w : ℕ} (u : BitVec (w + nonceBits)) : BitVec (w + nonceBits) :=
+  (u.setWidth nonceBits ++ u.extractLsb' nonceBits w).cast (Nat.add_comm _ _)
 
 /-- The inverse exchange. -/
-def swapBack (v : BitVec (msgBits + nonceBits)) : BitVec (msgBits + nonceBits) :=
-  v.setWidth msgBits ++ v.extractLsb' msgBits nonceBits
+def swapBack {w : ℕ} (v : BitVec (w + nonceBits)) : BitVec (w + nonceBits) :=
+  v.setWidth w ++ v.extractLsb' w nonceBits
 
-theorem swapHalves_append (m : Message) (η : Nonce) :
+theorem swapHalves_append {w : ℕ} (m : BitVec w) (η : Nonce) :
     swapHalves (m ++ η) = (η ++ m).cast (Nat.add_comm _ _) := by
   unfold swapHalves
   rw [setWidth_append_lo, extract_append_hi]
 
-theorem swapBack_swapHalves (u : BitVec (msgBits + nonceBits)) : swapBack (swapHalves u) = u := by
+theorem swapBack_swapHalves {w : ℕ} (u : BitVec (w + nonceBits)) : swapBack (swapHalves u) = u := by
   unfold swapBack swapHalves
   rw [setWidth_cast', extractLsb'_cast', setWidth_append_lo, extract_append_hi,
     append_extract_setWidth]
 
-theorem swapHalves_swapBack (v : BitVec (msgBits + nonceBits)) : swapHalves (swapBack v) = v := by
+theorem swapHalves_swapBack {w : ℕ} (v : BitVec (w + nonceBits)) : swapHalves (swapBack v) = v := by
   unfold swapBack
   rw [swapHalves_append]
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
   rw [getLsbD_cast', BitVec.getLsbD_append]
-  by_cases h1 : i < msgBits
+  by_cases h1 : i < w
   · rw [if_pos h1]
     simp [BitVec.getLsbD_setWidth, h1]
   · rw [if_neg h1]
     rw [BitVec.getLsbD_extractLsb']
-    have : i - msgBits < nonceBits := by omega
-    simp [this, show msgBits + (i - msgBits) = i by omega]
+    have : i - w < nonceBits := by omega
+    simp [this, show w + (i - w) = i by omega]
 
-theorem swapHalves_injective : Function.Injective swapHalves := by
+theorem swapHalves_injective {w : ℕ} : Function.Injective (swapHalves (w := w)) := by
   intro u v h
   rw [← swapBack_swapHalves u, ← swapBack_swapHalves v, h]
 
-/-- The disclosure index selected by message `m` and nonce `η`: the packed digits of the answer
-to the query `η ‖ m`. The index query shares the one oracle with the graph's hash nodes. -/
-def packIndex (m : Message) (η : Nonce) : OracleComp Spec ℕ :=
-  (fun y => pack y) <$> hash (swapHalves (m ++ η))
+/-! ### The extended message: the message above the public key -/
+
+/-- The width of an extended message. -/
+abbrev emsgBits : ℕ := msgBits + pkBits
+
+/-- An extended message: the message above the public key, as the loader lays them out. -/
+abbrev EMessage := BitVec emsgBits
+
+/-- The extended message of `m` under the public key `pk`. -/
+def emsg (m : Message) (pk : PublicKey) : EMessage := m ++ pk
+
+theorem emsg_inj {m m' : Message} {pk pk' : PublicKey} (h : emsg m pk = emsg m' pk') :
+    m = m' ∧ pk = pk' := by
+  unfold emsg at h
+  constructor
+  · have := congrArg (fun v : BitVec (msgBits + pkBits) => v.extractLsb' pkBits msgBits) h
+    simpa only [extract_append_hi] using this
+  · have := congrArg (fun v : BitVec (msgBits + pkBits) => v.setWidth pkBits) h
+    simpa only [setWidth_append_lo] using this
+
+/-- The disclosure index selected by the extended message `M` and nonce `η`: the packed digits of
+the answer to the query `η ‖ M`, that is `η ‖ m ‖ pk`. The index query shares the one oracle with
+the graph's hash nodes. -/
+def packIndex (M : EMessage) (η : Nonce) : OracleComp Spec ℕ :=
+  (fun y => pack y) <$> hash (swapHalves (M ++ η))
 
 namespace GScheme
 
@@ -141,7 +162,7 @@ def signLoop (x : S.graph.Assignment) (m : Message) :
     if h : 0 < fresh.card then do
       let j ← (liftM ($[0..(fresh.card - 1)]) : OracleComp Spec (Fin (fresh.card - 1 + 1)))
       let η : Nonce := (fresh.equivFin.symm (Fin.cast (by omega) j)).1
-      let i ← packIndex m η
+      let i ← packIndex (emsg m (S.publicKey x)) η
       if hi : i ∈ validSet then
         return some (η, S.graph.encode (S.sets ⟨i, hi⟩) x)
       else
@@ -156,7 +177,7 @@ def sign (x : S.graph.Assignment) (m : Message) : OracleComp Spec (Option Signat
 /-- Reject invalid indices or payload lengths; otherwise reconstruct the root and compare its
 public-key bits with `pk`. -/
 def verify (pk : PublicKey) (m : Message) (σ : Signature) : OracleComp Spec Bool := do
-  let i ← packIndex m σ.1
+  let i ← packIndex (emsg m pk) σ.1
   if hi : i ∈ validSet then
     let A := S.sets ⟨i, hi⟩
     if σ.2.length = S.graph.revealBits A then

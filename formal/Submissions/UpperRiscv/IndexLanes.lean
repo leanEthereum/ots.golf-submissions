@@ -21,16 +21,16 @@ theorem laneOff_eq (w i : ℕ) : laneBase + laneOff w i = laneWordAddr (2 * w + 
 
 /-- The store offset of lane word `(w, i)` from the message pointer. -/
 theorem laneStore_addr (w i : ℕ) (hw : w < 4) (hi : i < 2) :
-    W messageAddr + signExtend12 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr)) =
+    W hashBase + signExtend12 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - hashBase)) =
       W (laneWordAddr (2 * w + i)) := by
-  have e : BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr) =
-      imm12 ((laneBase + laneOff w i : ℤ) - messageAddr) := rfl
-  rw [e, W_add_imm _ _ (by simp only [laneBase, laneOff, messageAddr]; omega)
-    (by simp only [laneBase, laneOff, messageAddr]; omega)
-    (by simp only [laneBase, laneOff, messageAddr]; omega)
-    (by simp only [messageAddr]; omega)]
+  have e : BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - hashBase) =
+      imm12 ((laneBase + laneOff w i : ℤ) - hashBase) := rfl
+  rw [e, W_add_imm _ _ (by simp only [laneBase, laneOff, hashBase]; omega)
+    (by simp only [laneBase, laneOff, hashBase]; omega)
+    (by simp only [laneBase, laneOff, hashBase]; omega)
+    (by simp only [hashBase]; omega)]
   congr 1
-  simp only [laneBase, laneOff, messageAddr, laneWordAddr]
+  simp only [laneBase, laneOff, hashBase, laneWordAddr]
   omega
 
 theorem srcReg_ne (w : ℕ) : srcReg w ≠ .x26 ∧ srcReg w ≠ .x27 ∧ srcReg w ≠ .x10 := by
@@ -55,7 +55,7 @@ def lanePre (w i : ℕ) : Code :=
 
 theorem laneWord_parts (w i : ℕ) :
     laneWord w i = lanePre w i ++
-      [.SD .x10 .x26 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr))] := by
+      [.SD .x10 .x26 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - hashBase))] := by
   simp [laneWord, lanePre]
 
 theorem lanePre_ready (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2) :
@@ -76,14 +76,14 @@ theorem lanePre_regs (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2) :
     (try constructor) <;> (try intro r h26 h27) <;> simp_all
 
 theorem laneWord_effect (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2)
-    (h10 : a.getReg .x10 = W messageAddr) :
+    (h10 : a.getReg .x10 = W hashBase) :
     LaneEffect a ((laneWord w i).foldl execInstrBr a) w i := by
   obtain ⟨r27, r26, rr, rm⟩ := lanePre_regs a w i hw hi
   rw [laneWord_parts, List.foldl_append]
   generalize hb : (lanePre w i).foldl execInstrBr a = b at r27 r26 rr rm
-  have b10 : b.getReg .x10 = W messageAddr := by rw [rr .x10 (by decide) (by decide), h10]
+  have b10 : b.getReg .x10 = W hashBase := by rw [rr .x10 (by decide) (by decide), h10]
   have st : b.getReg .x10 +
-      signExtend12 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr)) =
+      signExtend12 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - hashBase)) =
       W (laneWordAddr (2 * w + i)) := by
     rw [b10, laneStore_addr w i hw hi]
   refine ⟨?_, ?_, ?_⟩
@@ -99,7 +99,7 @@ theorem laneWord_effect (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2)
       getMem_setMem_ite, st, r26, rm]
 
 theorem laneWord_ready (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2)
-    (h10 : a.getReg .x10 = W messageAddr) :
+    (h10 : a.getReg .x10 = W hashBase) :
     Riscv.LinearReady a (laneWord w i) := by
   obtain ⟨-, -, rr, -⟩ := lanePre_regs a w i hw hi
   rw [laneWord_parts]
@@ -140,7 +140,7 @@ theorem laneWordAddr_ne (i j : ℕ) (hi : i < 8) (hj : j < 8) (h : i ≠ j) :
   W_ne (by unfold laneWordAddr laneBase; omega) (by unfold laneWordAddr laneBase; omega)
     (by unfold laneWordAddr; omega)
 
-theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W messageAddr) :
+theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
     ∀ n, n ≤ 8 → Riscv.LinearReady a (lanesUpTo n) ∧
       LanesEffect a ((lanesUpTo n).foldl execInstrBr a) n := by
   intro n
@@ -154,7 +154,7 @@ theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W messageAddr
     intro hn
     obtain ⟨ready, eff⟩ := ih (by omega)
     set b := (lanesUpTo n).foldl execInstrBr a with hb
-    have b10 : b.getReg .x10 = W messageAddr := by rw [eff.regs .x10 (by decide) (by decide), h10]
+    have b10 : b.getReg .x10 = W hashBase := by rw [eff.regs .x10 (by decide) (by decide), h10]
     have hw : n / 2 < 4 := by omega
     have hi : n % 2 < 2 := Nat.mod_lt _ (by norm_num)
     have e := laneWord_effect b (n / 2) (n % 2) hw hi b10

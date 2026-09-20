@@ -56,7 +56,7 @@ theorem sign_result (S : GScheme) (x : S.graph.Assignment) (m : Message)
     (h : (some σ, d) ∈ support (run (S.sign x m) c)) :
     ∃ i : Idx, ∃ w : BitVec hashBits,
       σ.2 = S.graph.encode (S.sets i) x ∧
-      d ⟨msgBits + nonceBits, swapHalves (m ++ σ.1)⟩ = some w ∧
+      d ⟨emsgBits + nonceBits, swapHalves (emsg m (S.publicKey x) ++ σ.1)⟩ = some w ∧
       idxOf w = i.val := by
   rw [sign_eq_map, run_map, support_map, Set.mem_image] at h
   obtain ⟨⟨r, d'⟩, hr, he⟩ := h
@@ -66,7 +66,7 @@ theorem sign_result (S : GScheme) (x : S.graph.Assignment) (m : Message)
     obtain ⟨η, i⟩ := r
     simp only [Option.map_some, Prod.mk.injEq, Option.some.injEq] at he
     rcases he with ⟨he, rfl⟩
-    obtain ⟨w, hw, hi⟩ := (signIdx_support m c _ hr).2.2 η i rfl
+    obtain ⟨w, hw, hi⟩ := (signIdx_support (emsg m (S.publicKey x)) c _ hr).2.2 η i rfl
     cases he
     exact ⟨i, w, rfl, hw, hi⟩
 
@@ -75,7 +75,7 @@ theorem verify_accepts (S : GScheme) (x : S.graph.Assignment) (m : Message)
     (σ : Signature) (c : Cache) (hc : S.graph.CacheConsistent x c)
     (i : Idx) (w : BitVec hashBits)
     (hσ : σ.2 = S.graph.encode (S.sets i) x)
-    (hw : c ⟨msgBits + nonceBits, swapHalves (m ++ σ.1)⟩ = some w)
+    (hw : c ⟨emsgBits + nonceBits, swapHalves (emsg m (S.publicKey x) ++ σ.1)⟩ = some w)
     (hi : idxOf w = i.val) :
     ∀ p ∈ support (run (S.verify (S.publicKey x) m σ) c), p.1 = true := by
   intro p hp
@@ -83,7 +83,7 @@ theorem verify_accepts (S : GScheme) (x : S.graph.Assignment) (m : Message)
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
   obtain ⟨⟨j, d⟩, hj, hp⟩ := hp
-  obtain ⟨hcd, w', hw', hj⟩ := index_support m σ.1 c ⟨j, d⟩ hj
+  obtain ⟨hcd, w', hw', hj⟩ := index_support (emsg m (S.publicKey x)) σ.1 c ⟨j, d⟩ hj
   have hww : w' = w := Option.some.inj (hw'.symm.trans (hcd _ _ hw))
   rw [hww] at hj
   have hji : j = i.val := hj.trans hi

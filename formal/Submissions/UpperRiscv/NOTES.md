@@ -1,3 +1,35 @@
+# upper-riscv: 436 cycles — the public key in the index query
+
+## Idea
+
+The loader places the public key at `0x400000`, the message right after it and the signature
+(whose first 128 bits are the nonce) after that, and `x10` starts as the public-key pointer.
+Hashing the 512 bits `pk ‖ message ‖ nonce` from that pointer, instead of the 384 bits
+`message ‖ nonce` from the message pointer, drops the one instruction that moved `x10`; the
+query is still one block. The scheme's index query becomes `H(η ‖ m ‖ pk)`.
+
+## Proof
+
+The index-side security argument (`Rows`, `SignRho`, `RowPotential`, `EncCharges`,
+`Potentials`, `StageB`) never looked inside the message: it only used that the encoding inputs
+`m ‖ η` are injective in `(m, η)` and that encoding queries are told apart from hash-node queries
+by their length. So the message of that argument is now the *extended message* `m ‖ pk`
+(`EMessage`, `emsg m pk` in `GScheme.lean`); `swapHalves` is generalised to any message width,
+and every row, potential and charge lemma is unchanged up to the type. The bridges are
+`GScheme.signLoop`/`verify` (which form `emsg m (publicKey x)` and `emsg m pk`), `sign_eq_map`,
+`Potentials.sign_eq`, `Assembly.rest₂_eq_signIdx` (the public key of a record in a fibre is the
+fibre's) and the forgery support in `StageB.stB_support`/`events_stB`, where a forgery with the
+same encoding input as the signature has the same message because `emsg` is injective.
+`Values.len_hashParent_ne_enc` now separates 512 from 192 and 5440. On the machine side the
+prefix is five instructions, `prefix_memBits` reads the three loader regions as one 512-bit
+value, and chain 0's prologue starts from the public-key pointer (`ADDI x10, x10, 64`).
+
+## Cost
+
+`61 (index) + 355 (chains) + 20 (root and decision) = 436`, image length 896.
+
+---
+
 # upper-riscv: 437 cycles — the same scheme, eight cycles of layout
 
 ## Idea
@@ -70,10 +102,7 @@ last answer buffer to the root), `RootPhase.lean` (`rootOut = slotAddr 27 − 8`
   of every length: if the index length were `x13 ^ 5888` and the root length `x13 ^ 192`, the
   length check (`LD` + `BEQ`) could go, but the Lean verifier would then have to make the same
   odd-length queries on wrong-length inputs, and the security proof would have to charge
-  root-preimage events for every query length. One more cycle would come from hashing
-  `pk ‖ message ‖ nonce` (512 bits, still one block) straight from the loader's public-key
-  pointer, which saves the move of the message pointer but puts the public key into the index
-  query and hence into the index-side proofs.
+  root-preimage events for every query length.
 
 ---
 

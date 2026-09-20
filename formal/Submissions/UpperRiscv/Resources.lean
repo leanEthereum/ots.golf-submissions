@@ -76,11 +76,11 @@ theorem rejectsOversized (S : GScheme) :
 theorem keygenCost (S : GScheme) : S.toAlgorithm.KeygenCostAtMost keygenBudget :=
   AlgorithmCosts.GScheme.costAtMost_keygen S
 
-theorem signCost (S : GScheme) (hidx : blockCost (msgBits + nonceBits) = 1) :
+theorem signCost (S : GScheme) (hidx : blockCost (emsgBits + nonceBits) = 1) :
     S.toAlgorithm.SignCostAtMost trials :=
   AlgorithmCosts.GScheme.costAtMost_sign S hidx
 
-theorem verifyCost (S : GScheme) (hidx : blockCost (msgBits + nonceBits) = 1)
+theorem verifyCost (S : GScheme) (hidx : blockCost (emsgBits + nonceBits) = 1)
     {v : ℕ} (hv : ∀ i, S.graph.reconstructCost (S.sets i) ≤ v) :
     S.toAlgorithm.VerifyCostAtMost (1 + v) :=
   AlgorithmCosts.GScheme.costAtMost_verify S hidx hv

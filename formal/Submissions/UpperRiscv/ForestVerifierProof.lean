@@ -151,7 +151,7 @@ theorem directReconstruct_eq (i : Idx) (payload : List Bool) :
 /-- The complete verifier compiled to the direct node program. -/
 def directVerify (pk : PublicKey) (m : Message) (bits : List Bool) :
     OracleComp Spec Bool := do
-  let i ← packIndex m (ofBits 128 (bits.take 128))
+  let i ← packIndex (emsg m pk) (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
     if bits.length = 5504 then
       let y ← directReconstruct ⟨i, hi⟩ (bits.drop 128)
@@ -164,7 +164,7 @@ theorem directVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     directVerify pk m bits = Wire.scheme.verify pk m bits := by
   rw [← verify_eq]
   unfold directVerify verify
-  apply congrArg (fun f => packIndex m (ofBits 128 (bits.take 128)) >>= f)
+  apply congrArg (fun f => packIndex (emsg m pk) (ofBits 128 (bits.take 128)) >>= f)
   funext i
   by_cases hi : i ∈ validSet
   · rw [dif_pos hi, dif_pos hi]

@@ -15,7 +15,7 @@ open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleCom
 
 /-- The three straight-line instructions of the prologue. -/
 def prologueLinear (k : ℕ) : Code :=
-  [.ADDI .x10 .x10 (if k = 0 then 48 else 24), .ADDI .x12 .x10 (imm12 (-8)),
+  [.ADDI .x10 .x10 (if k = 0 then 64 else 24), .ADDI .x12 .x10 (imm12 (-8)),
    .LHU .x28 .x12 (imm12 ((laneBase + laneHalf k : ℤ) - outAddr k))]
 
 theorem chainPrologue_parts (k : ℕ) :
@@ -52,12 +52,12 @@ theorem lane_offset (k : ℕ) (hk : k < 28) :
 /-- The first prologue instruction moves the input pointer onto the slot. -/
 theorem prologue_step0 (a : MachineState) (k : ℕ) (hk : k < 28)
     (slot : a.getReg .x10 = W (prevInput k)) :
-    a.getReg .x10 + signExtend12 (if k = 0 then (48 : BitVec 12) else 24) = slotW k := by
+    a.getReg .x10 + signExtend12 (if k = 0 then (64 : BitVec 12) else 24) = slotW k := by
   have hs := slot_bounds k hk
   rw [slot]
   unfold prevInput
   by_cases hk0 : k = 0
-  · rw [if_pos hk0, if_pos hk0, show (48 : BitVec 12) = BitVec.ofNat 12 48 from rfl,
+  · rw [if_pos hk0, if_pos hk0, show (64 : BitVec 12) = BitVec.ofNat 12 64 from rfl,
       signExtend12_nat _ (by norm_num), W_add]
     subst hk0
     rfl

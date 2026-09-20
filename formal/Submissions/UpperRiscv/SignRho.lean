@@ -33,30 +33,30 @@ attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits max
 
 
 /-- Nonces of row `m` cached with an accepted index. -/
-def rowAcc (d : Cache) (m : Message) : Finset Nonce :=
+def rowAcc (d : Cache) (m : EMessage) : Finset Nonce :=
   Finset.univ.filter fun η => ∃ w, d (encQuery (m ++ η)) = some w ∧ idxOf w ∈ validSet
 
 /-- Nonces of row `m` cached with an accepted index that another cached entry shares. -/
-def rowBad (d : Cache) (m : Message) : Finset Nonce :=
+def rowBad (d : Cache) (m : EMessage) : Finset Nonce :=
   Finset.univ.filter fun η => ∃ w, d (encQuery (m ++ η)) = some w ∧ idxOf w ∈ validSet ∧
     IdxPre d (m ++ η) (idxOf w)
 
 /-- Uncached nonces of row `m`. -/
-def rowFresh (d : Cache) (m : Message) : Finset Nonce :=
+def rowFresh (d : Cache) (m : EMessage) : Finset Nonce :=
   Finset.univ.filter fun η => d (encQuery (m ++ η)) = none
 
 /-- Nonces of row `m` cached with a rejected index. -/
-def rowRej (d : Cache) (m : Message) : Finset Nonce :=
+def rowRej (d : Cache) (m : EMessage) : Finset Nonce :=
   Finset.univ.filter fun η => ∃ w, d (encQuery (m ++ η)) = some w ∧ idxOf w ∉ validSet
 
-theorem rowBad_subset (d : Cache) (m : Message) : rowBad d m ⊆ rowAcc d m := by
+theorem rowBad_subset (d : Cache) (m : EMessage) : rowBad d m ⊆ rowAcc d m := by
   intro η hη
   simp only [rowBad, rowAcc, Finset.mem_filter, Finset.mem_univ, true_and] at hη ⊢
   obtain ⟨w, hw, hi, -⟩ := hη
   exact ⟨w, hw, hi⟩
 
 /-- The three statuses of a nonce partition every set of nonces. -/
-theorem card_status (d : Cache) (m : Message) (U : Finset Nonce) :
+theorem card_status (d : Cache) (m : EMessage) (U : Finset Nonce) :
     U.card = (U ∩ rowAcc d m).card + (U ∩ rowRej d m).card + (U ∩ rowFresh d m).card := by
   have h1 : Disjoint (U ∩ rowAcc d m) (U ∩ rowRej d m) := by
     rw [Finset.disjoint_left]
@@ -109,7 +109,7 @@ theorem frac_V (hidx : idxBits ≤ hashBits) (d : Cache) :
     inv_card_mul_pow hidx]
 
 /-- The bound for a single trial: losing mass at most `ρ` times the trial's mass. -/
-theorem trial_mass (d : Cache) (m : Message) (U : Finset Nonce) (ρ vf af rf : ℝ≥0∞)
+theorem trial_mass (d : Cache) (m : EMessage) (U : Finset Nonce) (ρ vf af rf : ℝ≥0∞)
     (hsplit : af + rf = 1) (hacc : rowAcc d m ⊆ U)
     (hρ : ((rowBad d m).card : ℝ≥0∞) + (U ∩ rowFresh d m).card * vf ≤
       ρ * ((rowAcc d m).card + (U ∩ rowFresh d m).card * af)) :
@@ -130,7 +130,7 @@ theorem trial_mass (d : Cache) (m : Message) (U : Finset Nonce) (ρ vf af rf : �
           (U ∩ rowFresh d m).card * (af + rf)) := by ring
     _ = _ := by rw [hsplit, mul_one]
 
-theorem ind_le_rowBad {d : Cache} {m : Message} {η : Nonce} {w : BitVec hashBits}
+theorem ind_le_rowBad {d : Cache} {m : EMessage} {η : Nonce} {w : BitVec hashBits}
     (hi : idxOf w ∈ validSet) (hw : d (encQuery (m ++ η)) = some w) :
     (if ∃ η' i, (some (η, ⟨idxOf w, hi⟩) : Option (Nonce × Idx)) = some (η', i) ∧
         IdxPre d (m ++ η') i.val then (1 : ℝ≥0∞) else 0) ≤
@@ -151,7 +151,7 @@ set_option maxHeartbeats 4000000 in
 used, current cache `d'` differing from `d` only by rejected entries at tried nonces. The loop's
 value, plus `λ ρ` when it fails, is at most `Φ d + κ b + λ ρ`. -/
 theorem signRhoLoop_bound (hM' : numValid ≤ 2 ^ idxBits) (hidx : idxBits ≤ hashBits)
-    (m : Message) (d : Cache) {β J : Type} [Nonempty J]
+    (m : EMessage) (d : Cache) {β J : Type} [Nonempty J]
     (kont : J → Option (Nonce × Idx) → OracleComp Spec β)
     (Fn : Option (Nonce × Idx) → Cache → ℝ≥0∞)
     (Φ : Cache → ℝ≥0∞) (hΦ : EncInvariant Φ) (κ lam ρ : ℝ≥0∞)
@@ -420,7 +420,7 @@ theorem signRhoLoop_bound (hM' : numValid ≤ 2 ^ idxBits) (hidx : idxBits ≤ h
 
 /-- **The signing bound, as one disjoint case split.** -/
 theorem signRho_bound (hM' : numValid ≤ 2 ^ idxBits) (hidx : idxBits ≤ hashBits)
-    (m : Message) (d : Cache) {β J : Type} [Nonempty J]
+    (m : EMessage) (d : Cache) {β J : Type} [Nonempty J]
     (k : J → Option (Nonce × Idx) → OracleComp Spec β)
     (Fn : Option (Nonce × Idx) → Cache → ℝ≥0∞)
     (Φ : Cache → ℝ≥0∞) (hΦ : EncInvariant Φ) (κ lam ρ : ℝ≥0∞)

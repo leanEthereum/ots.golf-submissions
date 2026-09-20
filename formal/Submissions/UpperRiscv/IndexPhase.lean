@@ -79,18 +79,18 @@ theorem indexPrefix_ready : Riscv.LinearReady (S0 pk m bits) indexPrefix := by
     MachineState.setMem, MachineState.setPC, Riscv.signatureBase, Riscv.publicKeyBase,
     signExtend12, MachineState.getMem, MEM_START, MEM_END]
 
-theorem indexPrefix_length : indexPrefix.length = 6 := rfl
+theorem indexPrefix_length : indexPrefix.length = 5 := rfl
 
 structure PrefixEffect (s : MachineState) : Prop where
   x30 : s.getReg .x30 = pk.extractLsb' 0 64
   x31 : s.getReg .x31 = pk.extractLsb' 64 64
-  x10 : s.getReg .x10 = W 0x400010
-  x11 : s.getReg .x11 = 384
+  x10 : s.getReg .x10 = W 0x400000
+  x11 : s.getReg .x11 = 512
   x12 : s.getReg .x12 = W dataAddr
   x5 : s.getReg .x5 = 1
   x13 : s.getReg .x13 = BitVec.ofNat 64 (min bits.length 5505)
   frame : ∀ addr, s.getMem addr = (S0 pk m bits).getMem addr
-  pc : s.pc = W (4096 + 24)
+  pc : s.pc = W (4096 + 20)
   code : s.code = (S0 pk m bits).code
 
 theorem pk_word0 : (S0 pk m bits).getMem (W 0x400000) = pk.extractLsb' 0 64 := by
@@ -116,8 +116,8 @@ theorem prefix_effect : PrefixEffect pk m bits (afterPrefix pk m bits) := by
   have w1 := pk_word1 pk m bits
   have hmem : ∀ addr, (afterPrefix pk m bits).getMem addr = (S0 pk m bits).getMem addr := by
     intro addr; simp [afterPrefix, indexPrefix, execInstrBr]
-  have hpc : (afterPrefix pk m bits).pc = W (4096 + 24) := by
-    show (S0 pk m bits).pc + 4 + 4 + 4 + 4 + 4 + 4 = _
+  have hpc : (afterPrefix pk m bits).pc = W (4096 + 20) := by
+    show (S0 pk m bits).pc + 4 + 4 + 4 + 4 + 4 = _
     rw [S0_pc]; decide
   have hcode : (afterPrefix pk m bits).code = (S0 pk m bits).code := by
     simp [afterPrefix, indexPrefix, execInstrBr]
@@ -130,46 +130,62 @@ theorem image_data_length : image.data.length ≤ 1048576 := by
   rw [show image.data = dataImage from rfl, dataImage_length]; norm_num
 
 set_option maxRecDepth 100000 in
-/-- The message and the nonce lie at the loader's addresses: `message ‖ nonce` with the message
-in the low bits is the specification's query input. -/
+/-- The public key, the message and the nonce lie at the loader's addresses:
+`pk ‖ message ‖ nonce` with the public key in the low bits is the specification's query input. -/
 theorem prefix_memBits :
-    MemBits (afterPrefix pk m bits) (W 0x400010) (swapHalves (m ++ ofBits nonceBits bits)) := by
+    MemBits (afterPrefix pk m bits) (W 0x400000)
+      (swapHalves (emsg m pk ++ ofBits nonceBits bits)) := by
   have E := prefix_effect pk m bits
   have hm : msgBits = 256 := rfl
   have hn : nonceBits = 128 := rfl
+  have hp : pkBits = 128 := rfl
   rw [swapHalves_append]
   apply (memBits_cast _ _ _ _).mpr
   apply memBits_of_words _ _ _ (by decide)
   intro j hj
-  change j < 6 at hj
+  change j < 8 at hj
   rw [W_add, E.frame]
-  by_cases hlow : j < 4
-  · have hw := initialState_message_word image pk m bits j (by omega)
-    have e : Riscv.messageBase + BitVec.ofNat 64 (8 * j) = W (0x400010 + 8 * j) := by
-      rw [show Riscv.messageBase = W 0x400010 from rfl, W_add]
+  unfold emsg
+  by_cases hpk : j < 2
+  · have hw := initialState_publicKey_word image pk m bits j (by omega)
+    have e : Riscv.publicKeyBase + BitVec.ofNat 64 (8 * j) = W (0x400000 + 8 * j) := by
+      rw [show Riscv.publicKeyBase = W 0x400000 from rfl, W_add]
     rw [e] at hw
-    rw [hw, BitVec.extractLsb'_append_eq_of_add_le (by omega)]
-  · have hs := initialState_signature_word image pk m bits image_data_length (j - 4) (by omega)
-    have e : Riscv.signatureBase + BitVec.ofNat 64 (8 * (j - 4)) = W (0x400010 + 8 * j) := by
-      rw [show Riscv.signatureBase = W 0x400030 from rfl, W_add]
-      congr 1
-      omega
-    rw [e] at hs
-    rw [hs, BitVec.extractLsb'_append_eq_of_le (by omega), ofBits_extract _ (by omega),
-      ofBits_drop_take _ (by omega), show 64 * j - msgBits = 64 * (j - 4) by rw [hm]; omega]
+    rw [hw, BitVec.extractLsb'_append_eq_of_add_le (by omega),
+      BitVec.extractLsb'_append_eq_of_add_le (by omega)]
+  · by_cases hlow : j < 6
+    · have hw := initialState_message_word image pk m bits (j - 2) (by omega)
+      have e : Riscv.messageBase + BitVec.ofNat 64 (8 * (j - 2)) = W (0x400000 + 8 * j) := by
+        rw [show Riscv.messageBase = W 0x400010 from rfl, W_add]
+        congr 1
+        omega
+      rw [e] at hw
+      rw [hw, BitVec.extractLsb'_append_eq_of_add_le (by omega),
+        BitVec.extractLsb'_append_eq_of_le (by omega),
+        show 64 * j - pkBits = 64 * (j - 2) by rw [hp]; omega]
+    · have hs := initialState_signature_word image pk m bits image_data_length (j - 6) (by omega)
+      have e : Riscv.signatureBase + BitVec.ofNat 64 (8 * (j - 6)) = W (0x400000 + 8 * j) := by
+        rw [show Riscv.signatureBase = W 0x400030 from rfl, W_add]
+        congr 1
+        omega
+      rw [e] at hs
+      rw [hs, BitVec.extractLsb'_append_eq_of_le (by omega), ofBits_extract _ (by omega),
+        ofBits_drop_take _ (by omega),
+        show 64 * j - (msgBits + pkBits) = 64 * (j - 6) by rw [hm, hp]; omega]
 
 theorem prefix_hashInput :
-    Riscv.hashInput (afterPrefix pk m bits) = ⟨384, swapHalves (m ++ ofBits nonceBits bits)⟩ := by
+    Riscv.hashInput (afterPrefix pk m bits) =
+      ⟨512, swapHalves (emsg m pk ++ ofBits nonceBits bits)⟩ := by
   have E := prefix_effect pk m bits
   apply hashInput_of_memBits E.x10 (by rw [E.x11]; rfl) (prefix_memBits pk m bits)
 
 theorem prefix_hashValid : Riscv.hashArgumentsValid (afterPrefix pk m bits) = true := by
   have E := prefix_effect pk m bits
-  have r1 : isValidOutputRange (W 0x400010) 48 = true :=
+  have r1 : isValidOutputRange (W 0x400000) 64 = true :=
     range_ok _ _ (by norm_num) (by norm_num) (by norm_num) (by norm_num)
   have r2 := hashOutput_ok dataAddr (by unfold dataAddr; omega) (by unfold dataAddr; omega)
     (by unfold dataAddr; omega)
-  have e : ((384 : Word).toNat + 7) / 8 = 48 := rfl
+  have e : ((512 : Word).toNat + 7) / 8 = 64 := rfl
   unfold Riscv.hashArgumentsValid
   rw [E.x10, E.x11, E.x12, e, r1, Bool.true_and]
   exact r2
@@ -345,7 +361,7 @@ theorem S45_x12 : (S45 pk m bits answer).getReg .x12 = W dataAddr := by
   rw [S45, (loadWords_effect pk m bits answer).regs .x12 (by decide) (by decide) (by decide)
     (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), S4_x12]
 
-theorem S45_x10 : (S45 pk m bits answer).getReg .x10 = W messageAddr := by
+theorem S45_x10 : (S45 pk m bits answer).getReg .x10 = W hashBase := by
   rw [S45, (loadWords_effect pk m bits answer).regs .x10 (by decide) (by decide) (by decide)
     (by decide) (by decide) (by decide) (by decide) (by decide) (by decide), S4_regs,
     S3_regs _ _ _ _ _ (by decide), (prefix_effect pk m bits).x10]
@@ -438,8 +454,8 @@ theorem minus24 : signExtend12 (BitVec.ofInt 12 (-24)) = BitVec.ofInt 64 (-24) :
 /-- The registers written by the setup, and the input pointer still at the message. -/
 theorem afterIndex_setupRegs :
     (afterIndex pk m bits answer).getReg .x11 = 192 ∧
-    (afterIndex pk m bits answer).getReg .x10 = W messageAddr := by
-  have x10 : (S6 pk m bits answer).getReg .x10 = W messageAddr := by
+    (afterIndex pk m bits answer).getReg .x10 = W hashBase := by
+  have x10 : (S6 pk m bits answer).getReg .x10 = W hashBase := by
     rw [S6_regs, S5_regs _ _ _ _ _ (by decide) (by decide), S45_x10]
   unfold afterIndex
   simp only [setup, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
@@ -625,7 +641,7 @@ theorem indexPhase_parts : indexPhase = indexPrefix ++ ([.ECALL] ++ (lenBlock ++
       setup))))) := by
   simp only [indexPhase, lengthCheck_parts, sumCheck_parts, mainBlock, List.append_assoc]
 
-theorem indexPhase_length : indexPhase.length = 68 := by decide
+theorem indexPhase_length : indexPhase.length = 67 := by decide
 
 theorem mainBlock_length : mainBlock.length = 51 := by decide
 
@@ -637,7 +653,7 @@ theorem pc_add (p : Word) (a b : ℕ) : p + W a + W b = p + W (a + b) := by
   rw [BitVec.add_assoc, W_add]
 
 /-- The index phase: the specified first query, the length and sum rejections, and otherwise the
-continuation from `afterIndex`, at 62 cycles plus the continuation. -/
+continuation from `afterIndex`, at 61 cycles plus the continuation. -/
 theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (q : BitVec hashBits → OracleComp Spec (Option Bool)) (c : ℕ) (hc : 3 ≤ c)
     (located : Riscv.CodeAt (S0 pk m bits) (S0 pk m bits).pc (indexPhase ++ tail))
@@ -645,17 +661,17 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (continuation : ∀ answer, Accepted (pack answer) → bits.length = 5504 →
       ∀ left, rest ≤ left → Riscv.Refines left (afterIndex pk m bits answer) (q answer) c) :
     Riscv.Refines fuel (S0 pk m bits) (do
-      let answer ← hash (swapHalves (m ++ ofBits nonceBits bits))
+      let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits bits))
       if Accepted (pack answer) ∧ bits.length = 5504 then q answer
-      else pure (some false)) (c + 62) := by
+      else pure (some false)) (c + 61) := by
   rw [indexPhase_length] at bound
   rw [indexPhase_parts] at located
   simp only [List.append_assoc] at located
   have P := prefix_effect pk m bits
   -- the prefix
   have ready := indexPrefix_ready pk m bits
-  rw [show fuel = indexPrefix.length + ((fuel - 7) + 1) by rw [indexPrefix_length]; omega,
-    show c + 62 = indexPrefix.length + (1 + (c + 55)) by rw [indexPrefix_length]; omega]
+  rw [show fuel = indexPrefix.length + ((fuel - 6) + 1) by rw [indexPrefix_length]; omega,
+    show c + 61 = indexPrefix.length + (1 + (c + 55)) by rw [indexPrefix_length]; omega]
   apply Riscv.Refines.linear _ located.append_left ready
   have callLocated : Riscv.CodeAt (afterPrefix pk m bits) (afterPrefix pk m bits).pc
       ([.ECALL] ++ (lenBlock ++ ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
@@ -665,13 +681,13 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
         BitVec.ofNat 64 (4 * indexPrefix.length) := Riscv.linear_fold_pc _ _ ready
     rw [e]
     simpa only [List.append_assoc] using h.code_eq P.code
-  have hashed := Riscv.Refines.hash (fuel := fuel - 7) callLocated.head P.x5
+  have hashed := Riscv.Refines.hash (fuel := fuel - 6) callLocated.head P.x5
     (prefix_hashValid pk m bits) (c := c + 55)
     (k := fun answer => if Accepted (pack answer) ∧ bits.length = 5504 then q answer
       else pure (some false)) ?_
   · rw [prefix_hashInput pk m bits] at hashed
     dsimp only at hashed
-    rw [show blockCost 384 = 1 by decide] at hashed
+    rw [show blockCost 512 = 1 by decide] at hashed
     exact hashed
   intro answer
   -- the length check
@@ -685,7 +701,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [S2_regs, (prefix_effect pk m bits).x12, signExtend12_nat 72 (by norm_num), W_add]
     exact dword_ok _ (by unfold dataAddr; omega) (by unfold dataAddr; omega)
       (by unfold dataAddr; omega)
-  rw [show fuel - 7 = lenBlock.length + (fuel - 8) by simp [lenBlock]; omega,
+  rw [show fuel - 6 = lenBlock.length + (fuel - 7) by simp [lenBlock]; omega,
     show c + 55 = lenBlock.length + (c + 54) by simp [lenBlock]; omega]
   apply Riscv.Refines.linear _ S2code.append_left lenReady
   have S3code : Riscv.CodeAt (S3 pk m bits answer) (S3 pk m bits answer).pc
@@ -717,7 +733,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [show (4 * ([Instr.BEQ .x13 .x6 16] ++ reject).length) = 16 from rfl] at h
     exact h.code_eq (by simp [S4])
   have mReady := mainBlock_ready pk m bits answer
-  rw [show fuel - 8 - 1 = mainBlock.length + (fuel - 60) by rw [mainBlock_length]; omega,
+  rw [show fuel - 7 - 1 = mainBlock.length + (fuel - 59) by rw [mainBlock_length]; omega,
     show c + 53 = mainBlock.length + (c + 2) by rw [mainBlock_length]; omega]
   apply Riscv.Refines.linear _ (S4code.append_left) mReady
   have S5code : Riscv.CodeAt (S5 pk m bits answer) (S5 pk m bits answer).pc
@@ -735,7 +751,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     have h := S5code.append_right (first := [.BEQ .x27 .x0 16] ++ reject)
     rw [show (4 * ([Instr.BEQ .x27 .x0 16] ++ reject).length) = 16 from rfl] at h
     exact h.code_eq (by simp [S6])
-  rw [show fuel - 60 - 1 = setup.length + (fuel - 62) by simp [setup]; omega,
+  rw [show fuel - 59 - 1 = setup.length + (fuel - 61) by simp [setup]; omega,
     show c + 1 = setup.length + c by simp only [setup, List.length_cons, List.length_nil]; omega]
   apply Riscv.Refines.linear _ S6code.append_left (setup_ready _)
   exact continuation answer ha hl _ (by omega)
@@ -760,7 +776,7 @@ theorem afterIndex_pc (answer : BitVec hashBits) :
       BitVec.ofNat 64 (4 * lenBlock.length) := Riscv.linear_fold_pc _ _ lenReady
   have e6 : (S2 pk m bits answer).pc = (afterPrefix pk m bits).pc + 4 := rfl
   rw [e1, e2, e3, e4, e5, e6, (prefix_effect pk m bits).pc, mainBlock_length, blockStart_zero,
-    show indexLength = 68 from indexPhase_length]
+    show indexLength = 67 from indexPhase_length]
   simp only [setup, lenBlock, List.length_cons, List.length_nil]
   decide
 

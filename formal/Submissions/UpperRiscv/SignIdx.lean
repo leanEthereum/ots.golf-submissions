@@ -36,7 +36,7 @@ namespace Analysis
 
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
-lemma setWidth_append_nonce (m : Message) (η : Nonce) :
+lemma setWidth_append_nonce {w : ℕ} (m : BitVec w) (η : Nonce) :
     (m ++ η).setWidth nonceBits = η := by
   ext j hj
   simp [BitVec.getElem_setWidth, BitVec.getLsbD_append, hj]
@@ -111,17 +111,17 @@ attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits max
 
 
 /-- An encoding input. -/
-abbrev EncInput := BitVec (msgBits + nonceBits)
+abbrev EncInput := BitVec (emsgBits + nonceBits)
 
-/-- The encoding query at input `u`: the query of length `msgBits + nonceBits` with bits `u`. The
+/-- The encoding query at input `u`: the query of length `emsgBits + nonceBits` with bits `u`. The
 oracle has no labels, so an encoding query is told apart from every other query by its length. -/
-def encQuery (u : EncInput) : Query := ⟨msgBits + nonceBits, swapHalves u⟩
+def encQuery (u : EncInput) : Query := ⟨emsgBits + nonceBits, swapHalves u⟩
 
 /-- The index read from an oracle answer. -/
 def idxOf (w : BitVec hashBits) : ℕ := pack w
 
 /-- The signing loop, returning the nonce and the index. -/
-def signIdxLoop (m : Message) :
+def signIdxLoop (m : EMessage) :
     ℕ → Finset Nonce → OracleComp Spec (Option (Nonce × Idx))
   | 0, _ => pure none
   | k + 1, tried =>
@@ -138,7 +138,7 @@ def signIdxLoop (m : Message) :
       pure none
 
 /-- Signing, returning the nonce and the index. -/
-def signIdx (m : Message) : OracleComp Spec (Option (Nonce × Idx)) :=
+def signIdx (m : EMessage) : OracleComp Spec (Option (Nonce × Idx)) :=
   signIdxLoop m trials ∅
 
 /-! ### Basic facts on encoding inputs -/
@@ -148,21 +148,21 @@ theorem encQuery_inj {u u' : EncInput} (h : encQuery u = encQuery u') : u = u' :
   exact swapHalves_injective h
 
 /-- A query of another length is not an encoding query. -/
-theorem ne_encQuery_of_length_ne {q : Query} (hq : q.1 ≠ msgBits + nonceBits)
+theorem ne_encQuery_of_length_ne {q : Query} (hq : q.1 ≠ emsgBits + nonceBits)
     (u : EncInput) : q ≠ encQuery u := by
   rintro rfl
   exact hq rfl
 
 /-- The queries of encoding length are exactly the encoding queries. -/
-theorem exists_eq_encQuery_of_length_eq {q : Query} (hq : q.1 = msgBits + nonceBits) :
+theorem exists_eq_encQuery_of_length_eq {q : Query} (hq : q.1 = emsgBits + nonceBits) :
     ∃ u : EncInput, q = encQuery u := by
   obtain ⟨k, v⟩ := q
-  change k = msgBits + nonceBits at hq
+  change k = emsgBits + nonceBits at hq
   subst hq
   exact ⟨swapBack v, by rw [encQuery, swapHalves_swapBack]⟩
 
-theorem append_nonce_inj (m : Message) {η η' : Nonce} (h : m ++ η = m ++ η') : η = η' := by
-  have := congrArg (fun u : EncInput => u.setWidth nonceBits) h
+theorem append_nonce_inj {w : ℕ} (m : BitVec w) {η η' : Nonce} (h : m ++ η = m ++ η') : η = η' := by
+  have := congrArg (fun u : BitVec (w + nonceBits) => u.setWidth nonceBits) h
   simpa only [Analysis.setWidth_append_nonce] using this
 
 /-! ### The loop in query normal form -/
@@ -175,13 +175,13 @@ theorem liftM_uniformFin_eq (n : ℕ) :
   rfl
 
 /-- The continuation of the loop after the encoding answer `w` at nonce `η`. -/
-def afterHash (m : Message) (k : ℕ) (tried : Finset Nonce) (η : Nonce)
+def afterHash (m : EMessage) (k : ℕ) (tried : Finset Nonce) (η : Nonce)
     (w : BitVec hashBits) : OracleComp Spec (Option (Nonce × Idx)) :=
   if hi : idxOf w ∈ validSet then pure (some (η, ⟨idxOf w, hi⟩))
   else signIdxLoop m k (insert η tried)
 
 /-- The body of the loop at nonce `η`: one encoding query, then stop or recurse. -/
-def loopBody (m : Message) (k : ℕ) (tried : Finset Nonce) (η : Nonce) :
+def loopBody (m : EMessage) (k : ℕ) (tried : Finset Nonce) (η : Nonce) :
     OracleComp Spec (Option (Nonce × Idx)) :=
   (liftM (Spec.query (.inr (encQuery (m ++ η)))) :
       OracleComp Spec (BitVec hashBits)) >>= afterHash m k tried η
@@ -196,7 +196,7 @@ theorem nonceOf_mem (tried : Finset Nonce) (hc : 0 < (Finset.univ \ tried).card)
     nonceOf tried hc j ∈ Finset.univ \ tried :=
   ((Finset.univ \ tried).equivFin.symm (Fin.cast (by omega) j)).2
 
-theorem signIdxLoop_succ (m : Message) (k : ℕ) (tried : Finset Nonce)
+theorem signIdxLoop_succ (m : EMessage) (k : ℕ) (tried : Finset Nonce)
     (hc : 0 < (Finset.univ \ tried).card) :
     signIdxLoop m (k + 1) tried =
       (liftM (Spec.query (.inl ((Finset.univ \ tried).card - 1))) :
@@ -281,7 +281,7 @@ theorem signLoop_eq_map (S : GScheme) (x : S.graph.Assignment) (m : Message) :
     ∀ (k : ℕ) (tried : Finset Nonce),
       S.signLoop x m k tried =
         (Option.map fun r : Nonce × Idx => (r.1, S.graph.encode (S.sets r.2) x)) <$>
-          signIdxLoop m k tried := by
+          signIdxLoop (emsg m (S.publicKey x)) k tried := by
   intro k
   induction k with
   | zero => intro tried; simp [GScheme.signLoop, signIdxLoop]
@@ -302,12 +302,12 @@ theorem signLoop_eq_map (S : GScheme) (x : S.graph.Assignment) (m : Message) :
 theorem sign_eq_map (S : GScheme) (x : S.graph.Assignment) (m : Message) :
     S.sign x m =
       (Option.map fun r : Nonce × Idx => (r.1, S.graph.encode (S.sets r.2) x)) <$>
-        signIdx m :=
+        signIdx (emsg m (S.publicKey x)) :=
   signLoop_eq_map S x m trials ∅
 
 /-! ### Non-encoding entries are irrelevant -/
 
-theorem run_signIdxLoop_extend (m : Message) (f : Cache)
+theorem run_signIdxLoop_extend (m : EMessage) (f : Cache)
     (hf : ∀ u : EncInput, f (encQuery u) = none) :
     ∀ (k : ℕ) (tried : Finset Nonce) (d : Cache),
       run (signIdxLoop m k tried) (Cache.extend d f) =
@@ -346,7 +346,7 @@ theorem run_signIdxLoop_extend (m : Message) (f : Cache)
       simp [run_pure]
 
 /-- Entries at non-encoding points (queries of another length) are irrelevant to the loop. -/
-theorem run_signIdx_extend (m : Message) (d f : Cache)
+theorem run_signIdx_extend (m : EMessage) (d f : Cache)
     (hf : ∀ u : EncInput, f (encQuery u) = none) :
     run (signIdx m) (Cache.extend d f) =
       (fun p => (p.1, Cache.extend p.2 f)) <$> run (signIdx m) d :=
@@ -354,7 +354,7 @@ theorem run_signIdx_extend (m : Message) (d f : Cache)
 
 /-! ### The new cache entries -/
 
-theorem signIdxLoop_support (m : Message) :
+theorem signIdxLoop_support (m : EMessage) :
     ∀ (k : ℕ) (tried : Finset Nonce) (d : Cache),
       ∀ p ∈ support (run (signIdxLoop m k tried) d),
         Cache.Sub d p.2 ∧
@@ -438,7 +438,7 @@ theorem signIdxLoop_support (m : Message) :
       rw [h1] at h2; cases h2
 
 /-- The new cache entries of the loop. -/
-theorem signIdx_support (m : Message) (d : Cache) :
+theorem signIdx_support (m : EMessage) (d : Cache) :
     ∀ p ∈ support (run (signIdx m) d),
       Cache.Sub d p.2 ∧
       (∀ q w, d q = none → p.2 q = some w →
@@ -453,13 +453,13 @@ theorem signIdx_support (m : Message) (d : Cache) :
 def IdxPre (d : Cache) (u₁ : EncInput) (i : ℕ) : Prop :=
   ∃ u, u ≠ u₁ ∧ ∃ w, d (encQuery u) = some w ∧ idxOf w = i
 
-/-- `Φ` does not see encoding entries: the entries at queries of length `msgBits + nonceBits`. -/
+/-- `Φ` does not see encoding entries: the entries at queries of length `emsgBits + nonceBits`. -/
 def EncInvariant (Φ : Cache → ℝ≥0∞) : Prop :=
   ∀ (c : Cache) (u : EncInput) (w : BitVec hashBits),
     Φ (c.cacheQuery (encQuery u) w) = Φ c
 
 /-- `d'` extends `d` by the entries of a signing run with outcome `r`. -/
-def SignExt (m : Message) (d : Cache) (r : Option (Nonce × Idx)) (d' : Cache) :
+def SignExt (m : EMessage) (d : Cache) (r : Option (Nonce × Idx)) (d' : Cache) :
     Prop :=
   Cache.Sub d d' ∧
   (∀ q w, d q = none → d' q = some w →
@@ -516,7 +516,7 @@ theorem E_query_unif (n : ℕ) (g : Fin (n + 1) → ℝ≥0∞) :
   congr 1
   exact ProbComp.probOutput_uniformFin n j
 
-theorem cache_eq_of_notMem {d d' : Cache} {m : Message} {tried : Finset Nonce}
+theorem cache_eq_of_notMem {d d' : Cache} {m : EMessage} {tried : Finset Nonce}
     (hSub : Cache.Sub d d')
     (hNew : ∀ q w, d q = none → d' q = some w →
       ∃ η ∈ tried, q = encQuery (m ++ η) ∧ ¬ idxOf w ∈ validSet)
@@ -529,7 +529,7 @@ theorem cache_eq_of_notMem {d d' : Cache} {m : Message} {tried : Finset Nonce}
       exact absurd (by rw [append_nonce_inj m (encQuery_inj he)]; exact hη') hη
   · exact hSub _ _ hdq
 
-theorem new_cacheQuery {d d' : Cache} {m : Message} {tried : Finset Nonce}
+theorem new_cacheQuery {d d' : Cache} {m : EMessage} {tried : Finset Nonce}
     (hNew : ∀ q w, d q = none → d' q = some w →
       ∃ η ∈ tried, q = encQuery (m ++ η) ∧ ¬ idxOf w ∈ validSet)
     (η : Nonce) {w : BitVec hashBits} (hw : ¬ idxOf w ∈ validSet) :
@@ -545,7 +545,7 @@ theorem new_cacheQuery {d d' : Cache} {m : Message} {tried : Finset Nonce}
     obtain ⟨η', hη', he, hi⟩ := hNew q w' h1 h2
     exact ⟨η', Finset.mem_insert_of_mem hη', he, hi⟩
 
-theorem new_insert {d d' : Cache} {m : Message} {tried : Finset Nonce}
+theorem new_insert {d d' : Cache} {m : EMessage} {tried : Finset Nonce}
     (hNew : ∀ q w, d q = none → d' q = some w →
       ∃ η ∈ tried, q = encQuery (m ++ η) ∧ ¬ idxOf w ∈ validSet)
     (η : Nonce) :
@@ -555,7 +555,7 @@ theorem new_insert {d d' : Cache} {m : Message} {tried : Finset Nonce}
     let ⟨η', hη', he, hi⟩ := hNew q w h1 h2
     ⟨η', Finset.mem_insert_of_mem hη', he, hi⟩
 
-theorem signExt_none {d d' : Cache} {m : Message} {tried : Finset Nonce}
+theorem signExt_none {d d' : Cache} {m : EMessage} {tried : Finset Nonce}
     (hSub : Cache.Sub d d')
     (hNew : ∀ q w, d q = none → d' q = some w →
       ∃ η ∈ tried, q = encQuery (m ++ η) ∧ ¬ idxOf w ∈ validSet) :
@@ -565,7 +565,7 @@ theorem signExt_none {d d' : Cache} {m : Message} {tried : Finset Nonce}
   obtain ⟨η, -, he, hi⟩ := hNew q w h1 h2
   exact ⟨η, he, fun hi' => absurd hi' hi⟩
 
-theorem signExt_cached {d d' : Cache} {m : Message} {tried : Finset Nonce}
+theorem signExt_cached {d d' : Cache} {m : EMessage} {tried : Finset Nonce}
     (hSub : Cache.Sub d d')
     (hNew : ∀ q w, d q = none → d' q = some w →
       ∃ η ∈ tried, q = encQuery (m ++ η) ∧ ¬ idxOf w ∈ validSet)
@@ -580,7 +580,7 @@ theorem signExt_cached {d d' : Cache} {m : Message} {tried : Finset Nonce}
     obtain ⟨rfl, rfl⟩ := h
     exact ⟨w, hq, rfl⟩
 
-theorem signExt_fresh {d d' : Cache} {m : Message} {tried : Finset Nonce}
+theorem signExt_fresh {d d' : Cache} {m : EMessage} {tried : Finset Nonce}
     (hSub : Cache.Sub d d')
     (hNew : ∀ q w, d q = none → d' q = some w →
       ∃ η ∈ tried, q = encQuery (m ++ η) ∧ ¬ idxOf w ∈ validSet)
@@ -602,7 +602,7 @@ theorem signExt_fresh {d d' : Cache} {m : Message} {tried : Finset Nonce}
     obtain ⟨rfl, rfl⟩ := h
     exact ⟨w, QueryCache.cacheQuery_self _ _ _, rfl⟩
 
-theorem ind_le_V {d : Cache} {m : Message} {η : Nonce} {w : BitVec hashBits}
+theorem ind_le_V {d : Cache} {m : EMessage} {η : Nonce} {w : BitVec hashBits}
     (hi : idxOf w ∈ validSet) :
     (if ∃ η' i, (some (η, ⟨idxOf w, hi⟩) : Option (Nonce × Idx)) = some (η', i) ∧
         IdxPre d (m ++ η') i.val then (1 : ℝ≥0∞) else 0) ≤
@@ -620,7 +620,7 @@ theorem ind_le_V {d : Cache} {m : Message} {η : Nonce} {w : BitVec hashBits}
     rw [if_pos this]
   · rw [if_neg h1]; exact zero_le
 
-theorem not_exists_none {d : Cache} {m : Message} :
+theorem not_exists_none {d : Cache} {m : EMessage} :
     ¬ ∃ (η : Nonce) (i : Idx),
       (none : Option (Nonce × Idx)) = some (η, i) ∧ IdxPre d (m ++ η) i.val := by
   rintro ⟨_, _, h, _⟩

@@ -47,8 +47,7 @@ def sigBits : ℕ := 5504
 /-! ## The index phase -/
 
 def indexPrefix : Code :=
-  [.LD .x30 .x10 0, .LD .x31 .x10 8, .ADDI .x10 .x11 0,
-   .ADDI .x11 .x0 384, .LUI .x12 0x200, .ADDI .x5 .x0 1]
+  [.LD .x30 .x10 0, .LD .x31 .x10 8, .ADDI .x11 .x0 512, .LUI .x12 0x200, .ADDI .x5 .x0 1]
 
 def lengthCheck : Code := [.LD .x6 .x12 (BitVec.ofNat 12 72), .BEQ .x13 .x6 16] ++ reject
 
@@ -64,8 +63,9 @@ def laneOff (w i : ℕ) : ℕ := 8 * (2 * w + i)
 message and nonce. -/
 def laneBase : ℕ := 0x3FFFF8
 
-/-- The message pointer, the store base of the lane area (`x10` after the index query). -/
-def messageAddr : ℕ := 0x400010
+/-- The public-key pointer: the input of the 512-bit index query `pk ‖ message ‖ nonce` and the
+store base of the lane area (`x10` through the index phase). -/
+def hashBase : ℕ := 0x400000
 
 def srcReg (w : ℕ) : Reg := match w with | 0 => .x20 | 1 => .x21 | 2 => .x22 | _ => .x23
 
@@ -77,7 +77,7 @@ def laneWord (w i : ℕ) : Code :=
   let dst : Reg := if w = 0 ∧ i = 0 then .x27 else .x26
   (if i = 0 then [.SLLI dst (srcReg w) 2] else [.SRLI dst (srcReg w) 6]) ++
   [.AND dst dst (maskReg w)] ++ (if w = 0 ∧ i = 0 then [] else [.ADD .x27 .x27 .x26]) ++
-  [.SUB .x26 .x3 dst, .SD .x10 .x26 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - messageAddr))]
+  [.SUB .x26 .x3 dst, .SD .x10 .x26 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - hashBase))]
 
 def lanes : Code := (List.range 8).flatMap fun j => laneWord (j / 2) (j % 2)
 
@@ -113,7 +113,7 @@ def tableEnd (k : ℕ) : ℕ :=
 def jumpBase : ℕ := 6088
 
 def chainPrologue (k : ℕ) : Code :=
-  [.ADDI .x10 .x10 (if k = 0 then 48 else 24), .ADDI .x12 .x10 (imm12 (-8)),
+  [.ADDI .x10 .x10 (if k = 0 then 64 else 24), .ADDI .x12 .x10 (imm12 (-8)),
    .LHU .x28 .x12 (imm12 ((laneBase + laneHalf k : ℤ) - outAddr k)),
    .JALR .x0 .x28 (imm12 ((tableEnd k : ℤ) - 4 - jumpBase))]
 

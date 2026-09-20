@@ -185,8 +185,8 @@ theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
 
 /-- The input of a hash node never has the length of an index query. -/
 theorem len_hashParent_ne_enc {h p : Name} (hp : hashParent h = some p) :
-    p.len ≠ msgBits + nonceBits := by
-  have e : msgBits + nonceBits = 384 := rfl
+    p.len ≠ emsgBits + nonceBits := by
+  have e : emsgBits + nonceBits = 512 := rfl
   rw [e]
   rcases len_hashParent_cases hp with e | e <;> omega
 

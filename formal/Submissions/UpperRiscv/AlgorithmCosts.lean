@@ -141,8 +141,8 @@ end Dag.Graph
 
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
-theorem costAtMost_index (hidx : blockCost (msgBits + nonceBits) = 1)
-    (m : Message) (η : Nonce) : CostAtMost (packIndex m η) 1 :=
+theorem costAtMost_index (hidx : blockCost (emsgBits + nonceBits) = 1)
+    (M : EMessage) (η : Nonce) : CostAtMost (packIndex M η) 1 :=
   CostAtMost.map (costAtMost_hash _ hidx.le) _
 
 namespace GScheme
@@ -153,7 +153,7 @@ theorem costAtMost_keygen : CostAtMost S.keygen keygenBudget :=
   CostAtMost.mono (CostAtMost.bind_le (Dag.Graph.costAtMost_keygen S.graph)
     (fun _ => costAtMost_pure _ 0) (by simp)) S.keygen_le
 
-theorem costAtMost_signLoop (hidx : blockCost (msgBits + nonceBits) = 1)
+theorem costAtMost_signLoop (hidx : blockCost (emsgBits + nonceBits) = 1)
     (x : S.graph.Assignment) (m : Message) :
     ∀ k tried, CostAtMost (S.signLoop x m k tried) k
   | 0, _ => costAtMost_pure _ _
@@ -167,11 +167,11 @@ theorem costAtMost_signLoop (hidx : blockCost (msgBits + nonceBits) = 1)
         · exact costAtMost_signLoop hidx x m k _
       · exact costAtMost_pure _ _
 
-theorem costAtMost_sign (hidx : blockCost (msgBits + nonceBits) = 1)
+theorem costAtMost_sign (hidx : blockCost (emsgBits + nonceBits) = 1)
     (x : S.graph.Assignment) (m : Message) : CostAtMost (S.sign x m) trials :=
   costAtMost_signLoop S hidx x m _ _
 
-theorem costAtMost_verify (hidx : blockCost (msgBits + nonceBits) = 1) {v : ℕ}
+theorem costAtMost_verify (hidx : blockCost (emsgBits + nonceBits) = 1) {v : ℕ}
     (hv : ∀ i, S.graph.reconstructCost (S.sets i) ≤ v) (pk : PublicKey) (m : Message)
     (σ : Signature) : CostAtMost (S.verify pk m σ) (1 + v) := by
   unfold GScheme.verify

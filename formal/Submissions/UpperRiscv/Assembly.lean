@@ -89,20 +89,20 @@ theorem sum_mul_E_asm {ι : Type} (s : Finset ι) (c : ι → ℝ≥0∞) {α : 
   exact congrArg _ (funext fun y => mul_comm _ _)
 
 /-- Signing followed by the second stage, through the signing loop. -/
-theorem rest₂_eq_signIdx (pk : BitVec 128) (ξ : Rec) (x : Message × A.State) :
+theorem rest₂_eq_signIdx (pk : BitVec 128) (ξ : Rec) (hpk : pkOf ξ = pk) (x : Message × A.State) :
     rest₂ A pk (graph.evalRec ξ) x =
-      signIdx x.1 >>= fun r => stB A pk x.1 x.2 (sigOf ξ r) := by
+      signIdx (emsg x.1 pk) >>= fun r => stB A pk x.1 x.2 (sigOf ξ r) := by
   unfold rest₂
-  rw [sign_eq, bind_map_left]
+  rw [sign_eq, hpk, bind_map_left]
 
 /-- The keygen cache is irrelevant to the signing loop. -/
-theorem E_rest₂_extend_kc (pk : BitVec 128) (ξ : Rec) (x : Message × A.State)
+theorem E_rest₂_extend_kc (pk : BitVec 128) (ξ : Rec) (hpk : pkOf ξ = pk) (x : Message × A.State)
     (d : Cache) :
     E (run (rest₂ A pk (graph.evalRec ξ) x) (Cache.extend d (kc ξ))) g =
-      E (run (signIdx x.1) d) (fun p =>
+      E (run (signIdx (emsg x.1 pk)) d) (fun p =>
         E (run (stB A pk x.1 x.2 (sigOf ξ p.1)) (Cache.extend p.2 (kc ξ))) g) := by
-  rw [rest₂_eq_signIdx, run_bind, run_signIdx_extend x.1 d (kc ξ) (fun u => kc_enc ξ u),
-    bind_map_left, E_bind]
+  rw [rest₂_eq_signIdx A pk ξ hpk, run_bind,
+    run_signIdx_extend (emsg x.1 pk) d (kc ξ) (fun u => kc_enc ξ u), bind_map_left, E_bind]
 
 /-- The continuation bound after the first stage. -/
 theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' : ℕ)
@@ -122,11 +122,12 @@ theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' :
     exact hξ.2.2
   -- Step 1: split `FA` into the records hit by `d` and the good others.
   have hsplit : FA A pk x d ≤ ∑ ξ ∈ fiberA pk, w * ind (Cache.Hits d (kc ξ)) +
-      ∑ ξ ∈ T, w * E (run (signIdx x.1) d) (fun p =>
+      ∑ ξ ∈ T, w * E (run (signIdx (emsg x.1 pk)) d) (fun p =>
         E (run (stB A pk x.1 x.2 (sigOf ξ p.1)) (Cache.extend p.2 (kc ξ))) g) := by
     unfold FA
     rw [hTdef, Finset.sum_filter, ← Finset.sum_add_distrib]
-    refine Finset.sum_le_sum fun ξ _ => ?_
+    refine Finset.sum_le_sum fun ξ hξ => ?_
+    have hpk : pkOf ξ = pk := mem_fiberA_asm hξ
     unfold ind
     by_cases hg : GoodRec ξ
     · rw [if_pos hg, one_mul]
@@ -134,7 +135,7 @@ theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' :
       · rw [if_pos h, if_pos h,
           if_neg (show ¬ (¬ Cache.Hits d (kc ξ) ∧ GoodRec ξ) from fun h' => h'.1 h), add_zero, mul_one]
       · rw [if_neg h, if_neg h, if_pos (show ¬ Cache.Hits d (kc ξ) ∧ GoodRec ξ from ⟨h, hg⟩),
-          mul_zero, zero_add, E_rest₂_extend_kc]
+          mul_zero, zero_add, E_rest₂_extend_kc A pk ξ hpk]
     · rw [if_neg hg, zero_mul, mul_zero]
       exact zero_le
   -- Step 2: the signing bound on the records of `T`.
@@ -144,21 +145,21 @@ theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' :
     refine Finset.sum_congr rfl fun ξ _ => ?_
     rw [spr_cacheQuery_enc c ξ u w']
   have hB' : ∀ j : {ξ // ξ ∈ fiberA pk},
-      CostAtMost (signIdx x.1 >>= fun r => stB A pk x.1 x.2 (sigOf j.1 r)) b' := by
+      CostAtMost (signIdx (emsg x.1 pk) >>= fun r => stB A pk x.1 x.2 (sigOf j.1 r)) b' := by
     intro j
     have h : CostAtMost (rest₂ A pk (graph.evalRec j.1) x) b' := hB j.1 j.2
-    rw [rest₂_eq_signIdx] at h
+    rw [rest₂_eq_signIdx A pk j.1 (mem_fiberA_asm j.2)] at h
     exact h
-  have hsig : E (run (signIdx x.1) d) (fun p => ∑ ξ ∈ T, w *
+  have hsig : E (run (signIdx (emsg x.1 pk)) d) (fun p => ∑ ξ ∈ T, w *
         E (run (stB A pk x.1 x.2 (sigOf ξ p.1)) (Cache.extend p.2 (kc ξ))) g) ≤
       ∑ ξ ∈ T, w * ind (Spr d ξ) + sumW T * encTerm d + κ * sumW (fiberA pk) * b' := by
-    refine signRho_bound (numValid_le) (by decide) x.1 d
+    refine signRho_bound (numValid_le) (by decide) (emsg x.1 pk) d
       (β := Bool) (J := {ξ // ξ ∈ fiberA pk}) (fun j r => stB A pk x.1 x.2 (sigOf j.1 r))
       (fun r d' => ∑ ξ ∈ T, w * E (run (stB A pk x.1 x.2 (sigOf ξ r))
         (Cache.extend d' (kc ξ))) g)
       (fun c => ∑ ξ ∈ T, w * ind (Spr c ξ)) hΦ (κ * sumW (fiberA pk)) (sumW T) (encTerm d)
       Inv Inv_fresh Inv_cached ?_
-      (fun c h1 h2 => psi_dom paperRowHyp (two_encCount_le hI) x.1 c h1 h2) hI hB'
+      (fun c h1 h2 => psi_dom paperRowHyp (two_encCount_le hI) (emsg x.1 pk) c h1 h2) hI hB'
     intro r d' b'' hd' hI' hB''
     have hB''' : ∀ ξ ∈ T, CostAtMost (stB A pk x.1 x.2 (sigOf ξ r)) b'' := by
       intro ξ hξ

@@ -92,7 +92,7 @@ theorem reconstruct_eq (A : Finset Name) (payload : List Bool) :
 /-- Raw signatures begin with the 128-bit signing nonce. -/
 def verify (pk : PublicKey) (m : Message) (bits : List Bool) :
     OracleComp Spec Bool := do
-  let i ← packIndex m (ofBits 128 (bits.take 128))
+  let i ← packIndex (emsg m pk) (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
     let A := Forest.setsName ⟨i, hi⟩
     if (bits.drop 128).length = graph.revealBits (fins A) then
@@ -106,7 +106,7 @@ theorem verify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     verify pk m bits = Wire.scheme.verify pk m bits := by
   change verify pk m bits = Forest.forestScheme.verify pk m (Wire.decode bits)
   unfold verify GScheme.verify Wire.decode
-  apply congrArg (fun f => packIndex m (ofBits 128 (bits.take 128)) >>= f)
+  apply congrArg (fun f => packIndex (emsg m pk) (ofBits 128 (bits.take 128)) >>= f)
   funext i
   by_cases hi : i ∈ validSet
   · rw [dif_pos hi, dif_pos hi]

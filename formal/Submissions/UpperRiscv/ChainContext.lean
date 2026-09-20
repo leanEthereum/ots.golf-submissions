@@ -46,7 +46,7 @@ theorem outAddr_eq (k : ℕ) : outAddr k = slotAddr k - 8 := by
 
 /-- The input pointer before chain `k`: the message pointer before chain `0`, then 24 bytes below
 the slot. -/
-def prevInput (k : ℕ) : ℕ := if k = 0 then messageAddr else slotAddr k - 24
+def prevInput (k : ℕ) : ℕ := if k = 0 then hashBase else slotAddr k - 24
 
 theorem slotAddr_toNat (k : ℕ) (hk : k < 28) : (slotW k).toNat = slotAddr k :=
   W_toNat _ (by unfold slotAddr payloadAddr; omega)

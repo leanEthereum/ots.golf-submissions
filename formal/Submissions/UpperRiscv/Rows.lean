@@ -25,7 +25,7 @@ open OptimalOTS.Dag
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
 
-theorem append_pair_inj {m m' : Message} {η η' : Nonce} (h : m ++ η = m' ++ η') :
+theorem append_pair_inj {m m' : EMessage} {η η' : Nonce} (h : m ++ η = m' ++ η') :
     m = m' ∧ η = η' := by
   have key : ∀ i, (m ++ η).getLsbD i = (m' ++ η').getLsbD i := fun i => by rw [h]
   simp only [BitVec.getLsbD_append] at key
@@ -42,23 +42,23 @@ theorem append_pair_inj {m m' : Message} {η η' : Nonce} (h : m ++ η = m' ++ �
     simp only [hi, if_true] at this
     exact this
 
-theorem exists_append (u : EncInput) : ∃ (m : Message) (η : Nonce), u = m ++ η := by
-  refine ⟨u.extractLsb' nonceBits msgBits, u.setWidth nonceBits, ?_⟩
+theorem exists_append (u : EncInput) : ∃ (m : EMessage) (η : Nonce), u = m ++ η := by
+  refine ⟨u.extractLsb' nonceBits emsgBits, u.setWidth nonceBits, ?_⟩
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
   rw [BitVec.getLsbD_append]
   split_ifs with h
   · simp [BitVec.getLsbD_setWidth, h]
   · rw [BitVec.getLsbD_extractLsb']
-    have : i - nonceBits < msgBits := by omega
+    have : i - nonceBits < emsgBits := by omega
     simp [this, show nonceBits + (i - nonceBits) = i by omega]
 
 /-- Cached nonces of row `m`. -/
-def rowCached (d : Cache) (m : Message) : Finset Nonce :=
+def rowCached (d : Cache) (m : EMessage) : Finset Nonce :=
   Finset.univ.filter fun η => (d (encQuery (m ++ η))).isSome
 
 /-- Accepted nonces of row `m` with index `i` that no other entry shares. -/
-def rowHit (d : Cache) (m : Message) (i : ℕ) : Finset Nonce :=
+def rowHit (d : Cache) (m : EMessage) (i : ℕ) : Finset Nonce :=
   Finset.univ.filter fun η => ∃ w, d (encQuery (m ++ η)) = some w ∧ idxOf w ∈ validSet ∧
     ¬ IdxPre d (m ++ η) (idxOf w) ∧ idxOf w = i
 
@@ -80,7 +80,7 @@ theorem V_sub_valid (d : Cache) : ∀ i ∈ V d, i ∈ validSet := by
 theorem card_V_le_numValid (d : Cache) : (V d).card ≤ numValid :=
   Finset.card_le_card (V_sub_valid d)
 
-theorem rowHit_subset (d : Cache) (m : Message) (i : ℕ) :
+theorem rowHit_subset (d : Cache) (m : EMessage) (i : ℕ) :
     rowHit d m i ⊆ rowAcc d m \ rowBad d m := by
   intro η hη
   simp only [rowHit, Finset.mem_filter, Finset.mem_univ, true_and] at hη
@@ -92,7 +92,7 @@ theorem rowHit_subset (d : Cache) (m : Message) (i : ℕ) :
   cases hw'
   exact hn hpre
 
-theorem rowHit_eq_empty (d : Cache) (m : Message) {i : ℕ} (hi : i ∉ V d) :
+theorem rowHit_eq_empty (d : Cache) (m : EMessage) {i : ℕ} (hi : i ∉ V d) :
     rowHit d m i = ∅ := by
   ext η
   simp only [rowHit, Finset.mem_filter, Finset.mem_univ, true_and, Finset.notMem_empty,
@@ -101,7 +101,7 @@ theorem rowHit_eq_empty (d : Cache) (m : Message) {i : ℕ} (hi : i ∉ V d) :
   exact hi (mem_V hw hv)
 
 /-- Every non-shared accepted entry of row `m` has its index in `V`. -/
-theorem sum_rowHit (d : Cache) (m : Message) :
+theorem sum_rowHit (d : Cache) (m : EMessage) :
     ∑ i ∈ V d, (rowHit d m i).card = (rowAcc d m \ rowBad d m).card := by
   have hdisj : ∀ i ∈ V d, ∀ j ∈ V d, i ≠ j → Disjoint (rowHit d m i) (rowHit d m j) := by
     intro i _ j _ hij
@@ -175,9 +175,9 @@ theorem sum_rowCached_le (d : Cache) :
 
 section Step
 
-variable {P} {d : Cache} {m₀ : Message} {η₀ : Nonce} (w : BitVec hashBits)
+variable {P} {d : Cache} {m₀ : EMessage} {η₀ : Nonce} (w : BitVec hashBits)
 
-theorem cacheQuery_enc_apply (m : Message) (η : Nonce) :
+theorem cacheQuery_enc_apply (m : EMessage) (η : Nonce) :
     (d.cacheQuery (encQuery (m₀ ++ η₀)) w) (encQuery (m ++ η)) =
       if m = m₀ ∧ η = η₀ then some w else d (encQuery (m ++ η)) := by
   split_ifs with h
@@ -189,7 +189,7 @@ theorem cacheQuery_enc_apply (m : Message) (η : Nonce) :
 variable (hfresh : d (encQuery (m₀ ++ η₀)) = none)
 include hfresh
 
-theorem rowCached_cacheQuery (m : Message) :
+theorem rowCached_cacheQuery (m : EMessage) :
     (rowCached (d.cacheQuery (encQuery (m₀ ++ η₀)) w) m).card =
       (rowCached d m).card + if m = m₀ then 1 else 0 := by
   by_cases hm : m = m₀
@@ -209,7 +209,7 @@ theorem rowCached_cacheQuery (m : Message) :
     simp only [rowCached, Finset.mem_filter, Finset.mem_univ, true_and, cacheQuery_enc_apply,
       hm, false_and, if_false]
 
-theorem rowAcc_cacheQuery (m : Message) :
+theorem rowAcc_cacheQuery (m : EMessage) :
     (rowAcc (d.cacheQuery (encQuery (m₀ ++ η₀)) w) m).card =
       (rowAcc d m).card + if m = m₀ ∧ idxOf w ∈ validSet then 1 else 0 := by
   by_cases hm : m = m₀ ∧ idxOf w ∈ validSet
@@ -286,7 +286,7 @@ theorem V_cacheQuery :
 
 /-- A cached entry is shared after the answer only if it was shared before, or it is the new
 entry (then its index was already held), or it holds the new index alone. -/
-theorem rowBad_cacheQuery (m : Message) :
+theorem rowBad_cacheQuery (m : EMessage) :
     (rowBad (d.cacheQuery (encQuery (m₀ ++ η₀)) w) m).card ≤
       (rowBad d m).card + (rowHit d m (idxOf w)).card +
         if m = m₀ ∧ idxOf w ∈ V d then 1 else 0 := by
@@ -342,16 +342,16 @@ include hq
 theorem enc_apply_of_ne (u : EncInput) : (d.cacheQuery q w) (encQuery u) = d (encQuery u) :=
   QueryCache.cacheQuery_of_ne _ _ (hq u).symm
 
-theorem rowCached_of_ne (m : Message) : rowCached (d.cacheQuery q w) m = rowCached d m := by
+theorem rowCached_of_ne (m : EMessage) : rowCached (d.cacheQuery q w) m = rowCached d m := by
   simp only [rowCached, enc_apply_of_ne hq]
 
-theorem rowAcc_of_ne (m : Message) : rowAcc (d.cacheQuery q w) m = rowAcc d m := by
+theorem rowAcc_of_ne (m : EMessage) : rowAcc (d.cacheQuery q w) m = rowAcc d m := by
   simp only [rowAcc, enc_apply_of_ne hq]
 
 theorem idxPre_of_ne (u : EncInput) (i : ℕ) : IdxPre (d.cacheQuery q w) u i ↔ IdxPre d u i := by
   simp only [IdxPre, enc_apply_of_ne hq]
 
-theorem rowBad_of_ne (m : Message) : rowBad (d.cacheQuery q w) m = rowBad d m := by
+theorem rowBad_of_ne (m : EMessage) : rowBad (d.cacheQuery q w) m = rowBad d m := by
   simp only [rowBad, enc_apply_of_ne hq, idxPre_of_ne hq]
 
 theorem V_of_ne : V (d.cacheQuery q w) = V d := by

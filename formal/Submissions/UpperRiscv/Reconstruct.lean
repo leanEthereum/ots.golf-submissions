@@ -424,9 +424,9 @@ theorem encode_decode (A : Finset (Fin G.size)) (l : List Bool)
 end Dag.Graph
 
 /-- The index query records its answer in the cache. -/
-theorem index_support (m : Message) (η : Nonce) (c : Cache) :
-    ∀ p ∈ support (run (packIndex m η) c),
-      Cache.Sub c p.2 ∧ ∃ w, p.2 ⟨msgBits + nonceBits, swapHalves (m ++ η)⟩ = some w ∧
+theorem index_support (M : EMessage) (η : Nonce) (c : Cache) :
+    ∀ p ∈ support (run (packIndex M η) c),
+      Cache.Sub c p.2 ∧ ∃ w, p.2 ⟨emsgBits + nonceBits, swapHalves (M ++ η)⟩ = some w ∧
         p.1 = pack w := by
   intro p hp
   unfold packIndex at hp
@@ -442,7 +442,7 @@ theorem verify_support (S : GScheme) (pk : PublicKey) (m : Message)
     (σ : Signature) (c : Cache) :
     ∀ p ∈ support (run (S.verify pk m σ) c),
       Cache.Sub c p.2 ∧ (p.1 = true →
-        ∃ w, p.2 ⟨msgBits + nonceBits, swapHalves (m ++ σ.1)⟩ = some w ∧
+        ∃ w, p.2 ⟨emsgBits + nonceBits, swapHalves (emsg m pk ++ σ.1)⟩ = some w ∧
           ∃ hi : pack w ∈ validSet,
             σ.2.length = S.graph.revealBits (S.sets ⟨_, hi⟩) ∧
             ∃ y : S.graph.Assignment,
@@ -453,7 +453,7 @@ theorem verify_support (S : GScheme) (pk : PublicKey) (m : Message)
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
   obtain ⟨⟨i, c₁⟩, hi₁, hp⟩ := hp
-  obtain ⟨hsub₁, w, hw, rfl⟩ := index_support m σ.1 c ⟨i, c₁⟩ hi₁
+  obtain ⟨hsub₁, w, hw, rfl⟩ := index_support (emsg m pk) σ.1 c ⟨i, c₁⟩ hi₁
   dsimp only at hp hw
   by_cases hi : pack w ∈ validSet
   · rw [dif_pos hi] at hp
