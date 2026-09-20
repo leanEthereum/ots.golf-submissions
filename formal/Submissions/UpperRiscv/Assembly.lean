@@ -1,4 +1,5 @@
 import Submissions.UpperRiscv.StageB
+import Submissions.UpperRiscv.GoodRec
 
 /-!
 # The security bound of the concrete scheme
@@ -6,10 +7,13 @@ import Submissions.UpperRiscv.StageB
 For every adversary `A` whose experiment costs at most `B ≤ 2 ^ 127` on every path,
 
 ```
-probTrue (GScheme.experiment forestScheme A) ≤ 2 ε (B - 492),  ε = 2 ^ (-128).
+probTrue (GScheme.experiment forestScheme A) ≤ 2 ε (B - 907) + 2 δ,  ε = 2 ^ (-128),
 ```
 
-The proof follows `DESIGN.md`: key generation is a uniform record (`E_run_keygen`); the
+where `δ = 2 · 897² · 2 ^ (-192)` bounds the weight of the bad records (`GoodRec.lean`).
+
+The proof follows `DESIGN.md`: key generation is a uniform record (`E_run_keygen_le`, up to the
+records whose keygen points collide); the bad records are given up at once; the
 attacker's first stage is coupled to a run without the keygen cache (`iub`), charged through the
 potential `ΦA` by the master lemma; the signing loop is handled by `signRho_bound`; the second
 stage is coupled to a run without the hidden keygen points (`iub` again), and the events lemma
@@ -47,14 +51,14 @@ variable (A : Adversary)
 
 /-- The quantity bounded after the first stage. -/
 def FA (pk : BitVec 128) (x : Message × A.State) (d : Cache) : ℝ≥0∞ :=
-  ∑ ξ ∈ fiberA pk, w * (if Cache.Hits d (kc ξ) then 1 else
-    E (run (rest₂ A pk (graph.evalRec ξ) x) (Cache.extend d (kc ξ))) g)
+  ∑ ξ ∈ fiberA pk, w * (ind (GoodRec ξ) * (if Cache.Hits d (kc ξ) then 1 else
+    E (run (rest₂ A pk (graph.evalRec ξ) x) (Cache.extend d (kc ξ))) g))
 
 theorem fiberA_nonempty (pk : BitVec 128) : (fiberA pk).Nonempty := by
   refine ⟨(fun _ => 0, fun _ => pk.setWidth 256), ?_⟩
   simp only [fiberA, Finset.mem_filter, Finset.mem_univ, true_and]
-  show trunc (pk.setWidth 256) = pk
-  rw [trunc, BitVec.setWidth_setWidth_of_le _ (by norm_num), BitVec.setWidth_eq]
+  show trunc128 (pk.setWidth 256) = pk
+  rw [trunc128, BitVec.setWidth_setWidth_of_le _ (by norm_num), BitVec.setWidth_eq]
 
 /-! ### Auxiliary lemmas -/
 
@@ -104,25 +108,35 @@ theorem E_rest₂_extend_kc (pk : BitVec 128) (ξ : Rec) (x : Message × A.State
 theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' : ℕ)
     (hI : Inv d b') (hB : ∀ ξ ∈ fiberA pk, CostAtMost (rest₂ A pk (graph.evalRec ξ) x) b') :
     FA A pk x d ≤ ΦA pk d + κ * sumW (fiberA pk) * b' := by
-  obtain ⟨T, hTdef⟩ : ∃ T : Finset Rec, T = (fiberA pk).filter (fun ξ => ¬ Cache.Hits d (kc ξ)) :=
-    ⟨_, rfl⟩
+  obtain ⟨T, hTdef⟩ : ∃ T : Finset Rec,
+      T = (fiberA pk).filter (fun ξ => ¬ Cache.Hits d (kc ξ) ∧ GoodRec ξ) := ⟨_, rfl⟩
   have hT : T ⊆ fiberA pk := by
     rw [hTdef]; exact Finset.filter_subset _ _
   have hTd : ∀ ξ ∈ T, ¬ Cache.Hits d (kc ξ) := by
     intro ξ hξ
     rw [hTdef, Finset.mem_filter] at hξ
-    exact hξ.2
-  -- Step 1: split `FA` into the records hit by `d` and the others.
-  have hsplit : FA A pk x d = ∑ ξ ∈ fiberA pk, w * ind (Cache.Hits d (kc ξ)) +
+    exact hξ.2.1
+  have hTg : ∀ ξ ∈ T, GoodRec ξ := by
+    intro ξ hξ
+    rw [hTdef, Finset.mem_filter] at hξ
+    exact hξ.2.2
+  -- Step 1: split `FA` into the records hit by `d` and the good others.
+  have hsplit : FA A pk x d ≤ ∑ ξ ∈ fiberA pk, w * ind (Cache.Hits d (kc ξ)) +
       ∑ ξ ∈ T, w * E (run (signIdx x.1) d) (fun p =>
         E (run (stB A pk x.1 x.2 (sigOf ξ p.1)) (Cache.extend p.2 (kc ξ))) g) := by
     unfold FA
     rw [hTdef, Finset.sum_filter, ← Finset.sum_add_distrib]
-    refine Finset.sum_congr rfl fun ξ _ => ?_
+    refine Finset.sum_le_sum fun ξ _ => ?_
     unfold ind
-    by_cases h : Cache.Hits d (kc ξ)
-    · rw [if_pos h, if_pos h, if_neg (not_not.2 h), add_zero]
-    · rw [if_neg h, if_neg h, if_pos h, mul_zero, zero_add, E_rest₂_extend_kc]
+    by_cases hg : GoodRec ξ
+    · rw [if_pos hg, one_mul]
+      by_cases h : Cache.Hits d (kc ξ)
+      · rw [if_pos h, if_pos h,
+          if_neg (show ¬ (¬ Cache.Hits d (kc ξ) ∧ GoodRec ξ) from fun h' => h'.1 h), add_zero, mul_one]
+      · rw [if_neg h, if_neg h, if_pos (show ¬ Cache.Hits d (kc ξ) ∧ GoodRec ξ from ⟨h, hg⟩),
+          mul_zero, zero_add, E_rest₂_extend_kc]
+    · rw [if_neg hg, zero_mul, mul_zero]
+      exact zero_le
   -- Step 2: the signing bound on the records of `T`.
   have hne : Nonempty {ξ // ξ ∈ fiberA pk} := (fiberA_nonempty pk).to_subtype
   have hΦ : EncInvariant (fun c => ∑ ξ ∈ T, w * ind (Spr c ξ)) := by
@@ -149,11 +163,12 @@ theorem stageA_cont (pk : BitVec 128) (x : Message × A.State) (d : Cache) (b' :
     have hB''' : ∀ ξ ∈ T, CostAtMost (stB A pk x.1 x.2 (sigOf ξ r)) b'' := by
       intro ξ hξ
       exact hB'' ⟨ξ, hT hξ⟩
-    refine (stageB A pk x.1 x.2 d T hT hTd r d' hd' b'' hI' hB''').trans ?_
+    refine (stageB A pk x.1 x.2 d T hT hTg hTd r d' hd' b'' hI' hB''').trans ?_
     refine add_le_add (add_le_add ?_ (mul_le_mul_right (le_of_eq (ind_eq_ite_asm _)) _)) le_rfl
     exact Finset.sum_le_sum fun ξ _ => mul_le_mul_right (ind_mono_asm (Spr.mono hd'.1)) w
   -- Step 3: assemble.
-  rw [hsplit, sum_mul_E_asm]
+  refine hsplit.trans ?_
+  rw [sum_mul_E_asm]
   refine (add_le_add_right hsig _).trans ?_
   unfold ΦA
   have h1 : ∑ ξ ∈ T, w * ind (Spr d ξ) ≤ ∑ ξ ∈ fiberA pk, w * ind (Spr d ξ) :=
@@ -228,29 +243,37 @@ theorem sum_sumW_fiberA : ∑ pk : BitVec 128, sumW (fiberA pk) = 1 := by
 
 /-! ## The bound -/
 
-/-- Key generation as a uniform record, for the concrete scheme. -/
+/-- Key generation as a uniform record, for the concrete scheme, up to the records whose keygen
+points collide. -/
 theorem E_run_keygen_forest
-    (g' : (PublicKey × forestScheme.graph.Assignment) × Cache → ℝ≥0∞) :
-    E (run forestScheme.keygen ∅) g' = ∑ ξ : Rec, w * g' ((pkOf ξ, graph.evalRec ξ), kc ξ) := by
-  rw [E_run_keygen forestScheme tagging g']
+    (g' : (PublicKey × forestScheme.graph.Assignment) × Cache → ℝ≥0∞) (hg : ∀ a, g' a ≤ 1) :
+    E (run forestScheme.keygen ∅) g' ≤
+      ∑ ξ : Rec, w * (g' ((pkOf ξ, graph.evalRec ξ), kc ξ) + ind (¬ DistinctRec ξ)) := by
+  refine (E_run_keygen_le forestScheme g' hg).trans (le_of_eq ?_)
   show ∑ ξ : Rec, (Fintype.card Rec : ℝ≥0∞)⁻¹ *
-    g' ((forestScheme.publicKey (graph.evalRec ξ), graph.evalRec ξ), graph.keygenCache ξ) = _
+    (g' ((forestScheme.publicKey (graph.evalRec ξ), graph.evalRec ξ), graph.keygenCache ξ) +
+      if graph.Distinct (graph.evalRec ξ) then 0 else 1) = _
   refine Finset.sum_congr rfl fun ξ _ => ?_
   rw [publicKey_eq_pkOf]
-  rfl
+  refine congrArg _ (congrArg _ ?_)
+  unfold ind
+  by_cases hd : DistinctRec ξ
+  · rw [if_pos (show graph.Distinct (graph.evalRec ξ) from hd), if_neg (not_not.2 hd)]
+  · rw [if_neg (show ¬ graph.Distinct (graph.evalRec ξ) from hd), if_pos hd]
 
-/-- The experiment as a uniform average over records of the continuation after key generation. -/
-theorem E_run_experiment (g' : Bool × Cache → ℝ≥0∞) :
-    E (run (GScheme.experiment forestScheme A) ∅) g' =
-      ∑ ξ : Rec, w * E (run (rest A (pkOf ξ, graph.evalRec ξ)) (kc ξ)) g' := by
+/-- The experiment as a uniform average over records of the continuation after key generation,
+up to the records whose keygen points collide. -/
+theorem E_run_experiment (g' : Bool × Cache → ℝ≥0∞) (hg : ∀ a, g' a ≤ 1) :
+    E (run (GScheme.experiment forestScheme A) ∅) g' ≤
+      ∑ ξ : Rec, w * (E (run (rest A (pkOf ξ, graph.evalRec ξ)) (kc ξ)) g' + ind (¬ DistinctRec ξ)) := by
   rw [experiment_eq]
   have h1 := run_bind forestScheme.keygen (rest A) ∅
-  rw [h1, E_bind, E_run_keygen_forest]
-  rfl
+  rw [h1, E_bind]
+  exact E_run_keygen_forest _ fun a => E_le_one _ hg
 
 /-- The budget after key generation, for the concrete scheme. -/
 theorem costAtMost_rest_forest {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) :
-    492 ≤ B ∧ ∀ ξ : Rec, CostAtMost (rest A (pkOf ξ, graph.evalRec ξ)) (B - 492) := by
+    907 ≤ B ∧ ∀ ξ : Rec, CostAtMost (rest A (pkOf ξ, graph.evalRec ξ)) (B - 907) := by
   rw [experiment_eq] at hB
   obtain ⟨h1, h2⟩ := costAtMost_keygen_bind forestScheme (rest A) hB
   refine ⟨?_, fun ξ => ?_⟩
@@ -260,40 +283,73 @@ theorem costAtMost_rest_forest {B : ℕ} (hB : CostAtMost (GScheme.experiment fo
         (B - graph.keygenCost) := h2 ξ
     rwa [publicKey_eq_pkOf, graph_keygenCost] at h2'
 
-theorem keygen_le {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) : 492 ≤ B :=
+theorem keygen_le {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) : 907 ≤ B :=
   (costAtMost_rest_forest A hB).1
 
+theorem sum_w_ind_not_goodRec_le : ∑ ξ : Rec, w * ind (¬ GoodRec ξ) ≤ δ := by
+  refine le_trans (le_of_eq (Finset.sum_congr rfl fun ξ _ => ?_)) sum_w_not_goodRec_le
+  unfold ind
+  split_ifs <;> simp
+
+theorem sum_w_ind_not_distinctRec_le : ∑ ξ : Rec, w * ind (¬ DistinctRec ξ) ≤ δ := by
+  refine le_trans (le_of_eq (Finset.sum_congr rfl fun ξ _ => ?_)) sum_w_not_distinctRec_le
+  unfold ind
+  split_ifs <;> simp
+
 theorem main_bound {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) (hB' : B ≤ 2 ^ 127) :
-    probTrue (GScheme.experiment forestScheme A) ≤ κ * ((B - 492 : ℕ) : ℝ≥0∞) := by
-  obtain ⟨h492, hrest⟩ := costAtMost_rest_forest A hB
-  rw [probTrue_eq, E_run_experiment]
+    probTrue (GScheme.experiment forestScheme A) ≤ κ * ((B - 907 : ℕ) : ℝ≥0∞) + 2 * δ := by
+  obtain ⟨h907, hrest⟩ := costAtMost_rest_forest A hB
+  rw [probTrue_eq]
+  refine (E_run_experiment A g g_le_one).trans ?_
+  simp only [mul_add, Finset.sum_add_distrib]
+  refine le_trans (add_le_add le_rfl sum_w_ind_not_distinctRec_le) ?_
+  rw [two_mul, ← add_assoc]
+  refine add_le_add ?_ le_rfl
   calc ∑ ξ : Rec, w * E (run (rest A (pkOf ξ, graph.evalRec ξ)) (kc ξ)) g
-      ≤ ∑ ξ : Rec, w * E (run (A.choose (pkOf ξ)) ∅) (fun p =>
+      ≤ ∑ ξ : Rec, (w * ind (¬ GoodRec ξ) +
+          w * (ind (GoodRec ξ) * E (run (rest A (pkOf ξ, graph.evalRec ξ)) (kc ξ)) g)) := by
+        refine Finset.sum_le_sum fun ξ _ => ?_
+        unfold ind
+        by_cases hg : GoodRec ξ
+        · rw [if_neg (not_not.2 hg), if_pos hg, mul_zero, zero_add, one_mul]
+        · rw [if_pos hg, if_neg hg, zero_mul, mul_zero, add_zero, mul_one]
+          exact mul_le_of_le_one_right zero_le (E_le_one _ g_le_one)
+    _ = ∑ ξ : Rec, w * ind (¬ GoodRec ξ) +
+          ∑ ξ : Rec, w * (ind (GoodRec ξ) * E (run (rest A (pkOf ξ, graph.evalRec ξ)) (kc ξ)) g) :=
+        Finset.sum_add_distrib
+    _ ≤ δ + ∑ ξ : Rec, w * (ind (GoodRec ξ) * E (run (A.choose (pkOf ξ)) ∅) (fun p =>
           if Cache.Hits p.2 (kc ξ) then 1 else
-            E (run (rest₂ A (pkOf ξ) (graph.evalRec ξ) p.1) (Cache.extend p.2 (kc ξ))) g) := by
-        gcongr with ξ _
+            E (run (rest₂ A (pkOf ξ) (graph.evalRec ξ) p.1) (Cache.extend p.2 (kc ξ))) g)) := by
+        refine add_le_add sum_w_ind_not_goodRec_le (Finset.sum_le_sum fun ξ _ => ?_)
+        gcongr
         exact stageA_iub A ξ
-    _ = ∑ pk, E (run (A.choose pk) ∅) (fun p => ∑ ξ ∈ fiberA pk, w *
+    _ = δ + ∑ ξ : Rec, w * E (run (A.choose (pkOf ξ)) ∅) (fun p => ind (GoodRec ξ) *
           (if Cache.Hits p.2 (kc ξ) then 1 else
-            E (run (rest₂ A (pkOf ξ) (graph.evalRec ξ) p.1) (Cache.extend p.2 (kc ξ))) g)) :=
-        regroup A (fun ξ p => if Cache.Hits p.2 (kc ξ) then 1 else
-          E (run (rest₂ A (pkOf ξ) (graph.evalRec ξ) p.1) (Cache.extend p.2 (kc ξ))) g)
-    _ = ∑ pk, E (run (A.choose pk) ∅) (fun p => FA A pk p.1 p.2) := by
-        refine Finset.sum_congr rfl fun pk _ => ?_
+            E (run (rest₂ A (pkOf ξ) (graph.evalRec ξ) p.1) (Cache.extend p.2 (kc ξ))) g)) := by
+        refine congrArg _ (Finset.sum_congr rfl fun ξ _ => ?_)
+        rw [E_const_mul]
+    _ = δ + ∑ pk, E (run (A.choose pk) ∅) (fun p => ∑ ξ ∈ fiberA pk, w * (ind (GoodRec ξ) *
+          (if Cache.Hits p.2 (kc ξ) then 1 else
+            E (run (rest₂ A (pkOf ξ) (graph.evalRec ξ) p.1) (Cache.extend p.2 (kc ξ))) g))) := by
+        refine congrArg _ (regroup A (fun ξ p => ind (GoodRec ξ) *
+          (if Cache.Hits p.2 (kc ξ) then 1 else
+            E (run (rest₂ A (pkOf ξ) (graph.evalRec ξ) p.1) (Cache.extend p.2 (kc ξ))) g)))
+    _ = δ + ∑ pk, E (run (A.choose pk) ∅) (fun p => FA A pk p.1 p.2) := by
+        refine congrArg _ (Finset.sum_congr rfl fun pk _ => ?_)
         refine congrArg _ (funext fun p => ?_)
         unfold FA
         refine Finset.sum_congr rfl fun ξ hξ => ?_
         rw [mem_fiberA_asm hξ]
-    _ ≤ ∑ pk, κ * sumW (fiberA pk) * ((B - 492 : ℕ) : ℝ≥0∞) := by
-        refine Finset.sum_le_sum fun pk _ => ?_
-        refine stageA_master A pk (B - 492) ((Nat.sub_le B 492).trans hB') fun ξ hξ => ?_
+    _ ≤ δ + ∑ pk, κ * sumW (fiberA pk) * ((B - 907 : ℕ) : ℝ≥0∞) := by
+        refine add_le_add le_rfl (Finset.sum_le_sum fun pk _ => ?_)
+        refine stageA_master A pk (B - 907) ((Nat.sub_le B 907).trans hB') fun ξ hξ => ?_
         have h := hrest ξ
         rw [mem_fiberA_asm hξ] at h
         unfold rest at h
         dsimp only at h
         exact h
-    _ = κ * ((B - 492 : ℕ) : ℝ≥0∞) := by
-        rw [← Finset.sum_mul, ← Finset.mul_sum, sum_sumW_fiberA, mul_one]
+    _ = κ * ((B - 907 : ℕ) : ℝ≥0∞) + δ := by
+        rw [← Finset.sum_mul, ← Finset.mul_sum, sum_sumW_fiberA, mul_one, add_comm]
 
 end Forest
 

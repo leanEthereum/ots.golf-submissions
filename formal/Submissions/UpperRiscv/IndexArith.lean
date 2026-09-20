@@ -3,167 +3,169 @@ import Submissions.UpperRiscv.IndexLanes
 /-!
 # The arithmetic of the index check
 
-The index is the low 128 bits of the answer, held in two words. The sum of the eight lane words
-has four lanes, each the sum of eight nibbles times eight; its top lane after the broadcast
-multiplication is eight times the nibble sum of the index (`sumCheck_iff`). Each stored lane
-holds `jumpBase - 8 · nibble` (`lane_halfword`).
+The index answer is held in four words. The sum of the eight lane words has four lanes, each the
+sum of eight fields times four; its top lane after the broadcast multiplication is four times the
+field sum of the answer (`top_laneSum`), which the sum check compares with `4 · 216`. Each stored
+lane holds `jumpBase - 4 · field` (`lane_halfword`).
 -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64
 
-theorem nibble_le15 (u m : ℕ) : nibble u m ≤ 15 := Nat.le_of_lt_succ (nibble_lt u m)
+/-- A field of a word: bits `p …` of width `b`. -/
+def fld (u p b : ℕ) : ℕ := u / 2 ^ p % 2 ^ b
 
-theorem laneNat_le (u i : ℕ) : laneNat u i ≤ 120 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) := by
-  unfold laneNat
-  have := nibble_le15 u i
-  have := nibble_le15 u (4 + i)
-  have := nibble_le15 u (8 + i)
-  have := nibble_le15 u (12 + i)
+theorem wid_le (k : ℕ) : wid k ≤ 5 := by unfold wid; split_ifs <;> omega
+
+theorem fld_le (u p b : ℕ) (hb : b ≤ 5) : fld u p b ≤ 31 := by
+  have h1 : u / 2 ^ p % 2 ^ b < 2 ^ b := Nat.mod_lt _ (by positivity)
+  have h2 : 2 ^ b ≤ 2 ^ 5 := Nat.pow_le_pow_right (by norm_num) hb
+  unfold fld; omega
+
+theorem laneNat_eq (u w i : ℕ) :
+    laneNat u w i = 4 * fld u (8 * i) (wid (8 * w + i)) +
+      2 ^ 16 * (4 * fld u (16 + 8 * i) (wid (8 * w + 2 + i))) +
+      2 ^ 32 * (4 * fld u (32 + 8 * i) (wid (8 * w + 4 + i))) +
+      2 ^ 48 * (4 * fld u (48 + 8 * i) (wid (8 * w + 6 + i))) := rfl
+
+theorem laneNat_le (u w i : ℕ) : laneNat u w i ≤ 124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) := by
+  rw [laneNat_eq]
+  have := fld_le u (8 * i) _ (wid_le (8 * w + i))
+  have := fld_le u (16 + 8 * i) _ (wid_le (8 * w + 2 + i))
+  have := fld_le u (32 + 8 * i) _ (wid_le (8 * w + 4 + i))
+  have := fld_le u (48 + 8 * i) _ (wid_le (8 * w + 6 + i))
   omega
 
-theorem laneOf_toNat (a : MachineState) (j : ℕ) :
-    (laneOf a j).toNat = laneNat (a.getReg (wordReg (j / 4))).toNat (j % 4) :=
-  laneValue_toNat _ _ (Nat.mod_lt _ (by norm_num))
+/-- The mask registers hold the three masks. -/
+def MasksLoaded (a : MachineState) : Prop := ∀ w, w < 4 → a.getReg (maskReg w) = W (maskNat w)
 
-theorem laneSum_toNat (a : MachineState) :
+theorem laneOf_toNat (a : MachineState) (hm : MasksLoaded a) (j : ℕ) (hj : j < 8) :
+    (laneOf a j).toNat = laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2) := by
+  unfold laneOf
+  rw [hm (j / 2) (by omega)]
+  exact laneValue_toNat _ _ _ (by omega) (Nat.mod_lt _ (by norm_num))
+
+theorem laneSum_toNat (a : MachineState) (hm : MasksLoaded a) :
     ∀ n, n ≤ 8 → (laneSum a n).toNat =
-      ∑ j ∈ Finset.range n, laneNat (a.getReg (wordReg (j / 4))).toNat (j % 4) := by
+      ∑ j ∈ Finset.range n, laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2) := by
   intro n
   induction n with
   | zero => intro _; rfl
   | succ n ih =>
     intro hn
-    have hb : ∀ n, n ≤ 8 → ∑ j ∈ Finset.range n, laneNat (a.getReg (wordReg (j / 4))).toNat (j % 4) ≤
-        n * (120 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by
+    have hb : ∀ n, n ≤ 8 → ∑ j ∈ Finset.range n, laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2) ≤
+        n * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by
       intro n _
-      calc ∑ j ∈ Finset.range n, laneNat (a.getReg (wordReg (j / 4))).toNat (j % 4)
-          ≤ ∑ _j ∈ Finset.range n, 120 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) :=
-            Finset.sum_le_sum fun j _ => laneNat_le _ _
-        _ = n * (120 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by simp
-    rw [laneSum, BitVec.toNat_add, ih (by omega), laneOf_toNat, Finset.sum_range_succ,
-      Nat.mod_eq_of_lt]
+      calc ∑ j ∈ Finset.range n, laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2)
+          ≤ ∑ _j ∈ Finset.range n, 124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) :=
+            Finset.sum_le_sum fun j _ => laneNat_le _ _ _
+        _ = n * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by simp
+    rw [laneSum, BitVec.toNat_add, ih (by omega), laneOf_toNat a hm n (by omega),
+      Finset.sum_range_succ, Nat.mod_eq_of_lt]
     have h1 := hb n (by omega)
-    have h2 := laneNat_le (a.getReg (wordReg (n / 4))).toNat (n % 4)
-    have : n * (120 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) + 120 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) <
+    have h2 := laneNat_le (a.getReg (srcReg (n / 2))).toNat (n / 2) (n % 2)
+    have : n * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) + 124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) <
         2 ^ 64 := by
-      have : n * (120 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) ≤ 7 * (120 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) :=
+      have : n * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) ≤ 7 * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) :=
         Nat.mul_le_mul_right _ (by omega)
       omega
     omega
 
-/-- The nibble sum of two words. -/
-def wordNibbleSum (u0 u1 : ℕ) : ℕ :=
-  (∑ m ∈ Finset.range 16, nibble u0 m) + ∑ m ∈ Finset.range 16, nibble u1 m
+/-- Lane `l` of the lane sum, for the word values `u`. -/
+def laneTotal (u : ℕ → ℕ) (l : ℕ) : ℕ :=
+  ∑ w ∈ Finset.range 4, ∑ i ∈ Finset.range 2, 4 * fld (u w) (16 * l + 8 * i) (wid (8 * w + 2 * l + i))
 
-/-- Lane `l` of the lane sum. -/
-def laneTotal (u0 u1 l : ℕ) : ℕ :=
-  8 * nibble u0 (4 * l) + 8 * nibble u0 (4 * l + 1) + 8 * nibble u0 (4 * l + 2) +
-    8 * nibble u0 (4 * l + 3) + 8 * nibble u1 (4 * l) + 8 * nibble u1 (4 * l + 1) +
-    8 * nibble u1 (4 * l + 2) + 8 * nibble u1 (4 * l + 3)
-
-theorem laneTotal_le (u0 u1 l : ℕ) : laneTotal u0 u1 l ≤ 960 := by
+theorem laneTotal_le (u : ℕ → ℕ) (l : ℕ) : laneTotal u l ≤ 1000 := by
   unfold laneTotal
-  have := nibble_le15 u0 (4 * l); have := nibble_le15 u0 (4 * l + 1)
-  have := nibble_le15 u0 (4 * l + 2); have := nibble_le15 u0 (4 * l + 3)
-  have := nibble_le15 u1 (4 * l); have := nibble_le15 u1 (4 * l + 1)
-  have := nibble_le15 u1 (4 * l + 2); have := nibble_le15 u1 (4 * l + 3)
+  simp only [Finset.sum_range_succ, Finset.sum_range_zero]
+  have := fld_le (u 0) (16 * l + 8 * 0) (wid (8 * 0 + 2 * l + 0)) (wid_le _)
+  have := fld_le (u 0) (16 * l + 8 * 1) (wid (8 * 0 + 2 * l + 1)) (wid_le _)
+  have := fld_le (u 1) (16 * l + 8 * 0) (wid (8 * 1 + 2 * l + 0)) (wid_le _)
+  have := fld_le (u 1) (16 * l + 8 * 1) (wid (8 * 1 + 2 * l + 1)) (wid_le _)
+  have := fld_le (u 2) (16 * l + 8 * 0) (wid (8 * 2 + 2 * l + 0)) (wid_le _)
+  have := fld_le (u 2) (16 * l + 8 * 1) (wid (8 * 2 + 2 * l + 1)) (wid_le _)
+  have := fld_le (u 3) (16 * l + 8 * 0) (wid (8 * 3 + 2 * l + 0)) (wid_le _)
+  have := fld_le (u 3) (16 * l + 8 * 1) (wid (8 * 3 + 2 * l + 1)) (wid_le _)
   omega
 
+/-- The word values of a state. -/
+def wordsOf (a : MachineState) (w : ℕ) : ℕ := (a.getReg (srcReg w)).toNat
+
 theorem laneSum_lanes (a : MachineState) :
-    ∑ j ∈ Finset.range 8, laneNat (a.getReg (wordReg (j / 4))).toNat (j % 4) =
-      laneTotal (a.getReg .x20).toNat (a.getReg .x21).toNat 0 +
-      2 ^ 16 * laneTotal (a.getReg .x20).toNat (a.getReg .x21).toNat 1 +
-      2 ^ 32 * laneTotal (a.getReg .x20).toNat (a.getReg .x21).toNat 2 +
-      2 ^ 48 * laneTotal (a.getReg .x20).toNat (a.getReg .x21).toNat 3 := by
-  simp only [Finset.sum_range_succ, Finset.sum_range_zero, laneNat, laneTotal, wordReg]
+    ∑ j ∈ Finset.range 8, laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2) =
+      laneTotal (wordsOf a) 0 + 2 ^ 16 * laneTotal (wordsOf a) 1 +
+      2 ^ 32 * laneTotal (wordsOf a) 2 + 2 ^ 48 * laneTotal (wordsOf a) 3 := by
+  simp only [Finset.sum_range_succ, Finset.sum_range_zero, laneNat_eq, laneTotal, wordsOf]
   norm_num
   ring
 
-theorem laneTotals_sum (u0 u1 : ℕ) :
-    laneTotal u0 u1 0 + laneTotal u0 u1 1 + laneTotal u0 u1 2 + laneTotal u0 u1 3 =
-      8 * wordNibbleSum u0 u1 := by
-  simp only [laneTotal, wordNibbleSum, Finset.sum_range_succ, Finset.sum_range_zero]
+/-- The field sum of the answer, over all 32 bytes (the last four have width zero). -/
+theorem laneTotals_sum (u : ℕ → ℕ) :
+    laneTotal u 0 + laneTotal u 1 + laneTotal u 2 + laneTotal u 3 =
+      4 * ∑ k ∈ Finset.range 32, fld (u (k / 8)) (8 * (k % 8)) (wid k) := by
+  simp only [laneTotal, Finset.sum_range_succ, Finset.sum_range_zero]
   norm_num
   ring
 
-/-- The top lane of the lane sum is eight times the nibble sum. -/
-theorem top_laneSum (a : MachineState) :
+/-- The top lane of the lane sum is four times the field sum. -/
+theorem top_laneSum (a : MachineState) (hm : MasksLoaded a) :
     ((laneSum a 8).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
-      8 * wordNibbleSum (a.getReg .x20).toNat (a.getReg .x21).toNat := by
-  rw [laneSum_toNat a 8 le_rfl, laneSum_lanes, topLane _ _ _ _ (laneTotal_le _ _ _)
-    (laneTotal_le _ _ _) (laneTotal_le _ _ _) (laneTotal_le _ _ _), laneTotals_sum]
+      4 * ∑ k ∈ Finset.range 32, fld (wordsOf a (k / 8)) (8 * (k % 8)) (wid k) := by
+  rw [laneSum_toNat a hm 8 le_rfl, laneSum_lanes, topLane _ _ _ _ (laneTotal_le _ _)
+    (laneTotal_le _ _) (laneTotal_le _ _) (laneTotal_le _ _), laneTotals_sum]
 
-/-! ## The index and its words -/
+/-! ## The fields of the answer -/
 
-def joinWords (lo hi : Word) : BitVec 128 := hi ++ lo
+/-- Word `w` of the index answer. -/
+def wordOf (answer : BitVec hashBits) (w : ℕ) : Word := answer.extractLsb' (64 * w) 64
 
-theorem joinWords_toNat (lo hi : Word) :
-    (joinWords lo hi).toNat = hi.toNat * 2 ^ 64 + lo.toNat := by
-  rw [joinWords, BitVec.toNat_append, ← Nat.shiftLeft_add_eq_or_of_lt lo.isLt, Nat.shiftLeft_eq]
+theorem fld_extract (answer : BitVec hashBits) (w p b : ℕ) (hpb : p + b ≤ 64) :
+    fld (wordOf answer w).toNat p b = answer.toNat / 2 ^ (64 * w + p) % 2 ^ b := by
+  unfold fld wordOf
+  rw [show (BitVec.extractLsb' (64 * w) 64 answer).toNat = answer.toNat / 2 ^ (64 * w) % 2 ^ 64 by
+      simp [BitVec.extractLsb', Nat.shiftRight_eq_div_pow],
+    show (2 : ℕ) ^ 64 = 2 ^ p * 2 ^ (64 - p) by
+      rw [← pow_add, Nat.add_sub_cancel' (by omega)],
+    Nat.mod_mul_right_div_self, Nat.mod_mod_of_dvd _ (pow_dvd_pow 2 (by omega)),
+    Nat.div_div_eq_div_mul, ← pow_add]
 
-theorem answer_low128 (answer : BitVec hashBits) :
-    joinWords (answer.extractLsb' 0 64) (answer.extractLsb' 64 64) = answer.setWidth 128 := by
-  rw [joinWords, BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (by decide)]
-  ext i hi
-  simp
-
-theorem nibble_joinWords_lo (lo hi : Word) (m : ℕ) (hm : m < 16) :
-    nibble (joinWords lo hi).toNat m = nibble lo.toNat m := by
-  rw [joinWords_toNat, nibble, nibble]
-  have split : (16 : ℕ) ^ m * (16 * 16 ^ (15 - m)) = 2 ^ 64 := by
-    rw [← pow_succ', ← pow_add, show m + (15 - m + 1) = 16 by omega]
-    norm_num
-  have e : hi.toNat * 2 ^ 64 + lo.toNat =
-      lo.toNat + 16 ^ m * (16 * (hi.toNat * 16 ^ (15 - m))) := by
-    rw [← split]
-    ring
-  rw [e, Nat.add_mul_div_left _ _ (by positivity), Nat.add_mul_mod_self_left]
-
-theorem nibble_joinWords_hi (lo hi : Word) (m : ℕ) (hm : 16 ≤ m) :
-    nibble (joinWords lo hi).toNat m = nibble hi.toNat (m - 16) := by
-  rw [joinWords_toNat, nibble, nibble]
-  have e : (16 : ℕ) ^ m = 2 ^ 64 * 16 ^ (m - 16) := by
-    rw [show (2 : ℕ) ^ 64 = 16 ^ 16 by norm_num, ← pow_add, Nat.add_sub_cancel' hm]
-  rw [e, ← Nat.div_div_eq_div_mul, Nat.mul_comm hi.toNat, Nat.mul_add_div (by positivity),
-    Nat.div_eq_of_lt lo.isLt, Nat.add_zero]
-
-/-- The index's nibble sum is the nibble sum of its two words. -/
-theorem index_nibbleSum (answer : BitVec hashBits) :
-    ∑ k ∈ Finset.range 32, nibble (answer.setWidth 128).toNat k =
-      wordNibbleSum (answer.extractLsb' 0 64).toNat (answer.extractLsb' 64 64).toNat := by
-  rw [← answer_low128]
-  unfold wordNibbleSum
-  rw [show (32 : ℕ) = 16 + 16 from rfl, Finset.sum_range_add]
-  have h1 := Finset.sum_congr (s₁ := Finset.range 16) rfl fun k hk =>
-    nibble_joinWords_lo (answer.extractLsb' 0 64) (answer.extractLsb' 64 64) k
-      (Finset.mem_range.mp hk)
-  have h2 : ∑ k ∈ Finset.range 16,
-      nibble (joinWords (answer.extractLsb' 0 64) (answer.extractLsb' 64 64)).toNat (16 + k) =
-      ∑ k ∈ Finset.range 16, nibble (answer.extractLsb' 64 64).toNat k := by
-    refine Finset.sum_congr rfl fun k hk => ?_
-    rw [nibble_joinWords_hi _ _ _ (by omega), Nat.add_sub_cancel_left]
-  rw [h1, h2]
-
-theorem accepted_iff_wordSum (answer : BitVec hashBits) :
-    Accepted (answer.setWidth 128).toNat ↔
-      wordNibbleSum (answer.extractLsb' 0 64).toNat (answer.extractLsb' 64 64).toNat = 157 := by
-  unfold Accepted
-  rw [index_nibbleSum]
+/-- The fields of the words are the byte fields of the answer. -/
+theorem fld_word (answer : BitVec hashBits) (k : ℕ) (hk : k < 32) :
+    fld (wordOf answer (k / 8)).toNat (8 * (k % 8)) (wid k) = byteDigit answer k := by
+  rw [fld_extract _ _ _ _ (by have := wid_le k; omega),
+    show 64 * (k / 8) + 8 * (k % 8) = 8 * k by omega]
   rfl
 
-theorem index_nibble (answer : BitVec hashBits) (k : ℕ) (hk : k < 32) :
-    nibble (answer.setWidth 128).toNat k =
-      nibble ((if k / 16 = 0 then answer.extractLsb' 0 64 else answer.extractLsb' 64 64).toNat)
-        (k % 16) := by
-  rw [← answer_low128]
-  by_cases h : k < 16
-  · rw [if_pos (by omega), nibble_joinWords_lo _ _ _ h, Nat.mod_eq_of_lt h]
-  · rw [if_neg (by omega), nibble_joinWords_hi _ _ _ (by omega)]
-    congr 1
-    omega
+theorem byteDigit_high (answer : BitVec hashBits) (k : ℕ) (hk : 28 ≤ k) : byteDigit answer k = 0 := by
+  unfold byteDigit wid
+  rw [if_neg (by omega), if_neg (by omega), pow_zero, Nat.mod_one]
+
+theorem field_sum (answer : BitVec hashBits) :
+    ∑ k ∈ Finset.range 32, byteDigit answer k = ∑ k ∈ Finset.range 28, byteDigit answer k := by
+  rw [show (32 : ℕ) = 28 + 4 from rfl, Finset.sum_range_add,
+    Finset.sum_eq_zero fun k _ => byteDigit_high answer (28 + k) (by omega), add_zero]
+
+/-- The words of the answer are in the index registers. -/
+def WordsLoaded (a : MachineState) (answer : BitVec hashBits) : Prop :=
+  ∀ w, w < 4 → a.getReg (srcReg w) = wordOf answer w
+
+theorem top_laneSum_answer (a : MachineState) (hm : MasksLoaded a) (answer : BitVec hashBits)
+    (hw : WordsLoaded a answer) :
+    ((laneSum a 8).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
+      4 * ∑ k ∈ Finset.range 28, byteDigit answer k := by
+  rw [top_laneSum a hm, ← field_sum]
+  refine congrArg (4 * ·) (Finset.sum_congr rfl fun k hk => ?_)
+  rw [Finset.mem_range] at hk
+  rw [wordsOf, hw _ (by omega), fld_word answer k hk]
+
+/-- The accepted indices are those with field sum `216`. -/
+theorem accepted_iff (answer : BitVec hashBits) :
+    Accepted (pack answer) ↔ ∑ k ∈ Finset.range 28, byteDigit answer k = 216 := by
+  unfold Accepted
+  rw [Finset.sum_congr rfl fun k hk => digit_pack answer (Finset.mem_range.mp hk)]
+  rfl
 
 /-! ## The stored lanes -/
 
@@ -179,23 +181,36 @@ theorem lane_extract (x0 x1 x2 x3 l : ℕ) (h0 : x0 < 2 ^ 16) (h1 : x1 < 2 ^ 16)
       [x0, x1, x2, x3].getD l 0 := by
   interval_cases l <;> simp <;> omega
 
-/-- Lane `l` of `broadcast B - lane word` is `B - 8 · nibble`. -/
-theorem lane_halfword (B u i l : ℕ) (hB1 : 120 ≤ B) (hB2 : B < 2 ^ 16) (hl : l < 4) (L : Word)
-    (hL : L.toNat = laneNat u i) :
-    (W (broadcast B) - L).toNat / 2 ^ (16 * l) % 2 ^ 16 = B - 8 * nibble u (4 * l + i) := by
-  have n0 := nibble_le15 u i
-  have n1 := nibble_le15 u (4 + i)
-  have n2 := nibble_le15 u (8 + i)
-  have n3 := nibble_le15 u (12 + i)
-  have hle : L ≤ W (broadcast B) := by
-    rw [BitVec.le_def, hL, broadcast_toNat B hB2]
-    unfold laneNat broadcast
-    omega
-  rw [BitVec.toNat_sub_of_le hle, hL, broadcast_toNat B hB2]
-  have e : broadcast B - laneNat u i = (B - 8 * nibble u i) + 2 ^ 16 * (B - 8 * nibble u (4 + i)) +
-      2 ^ 32 * (B - 8 * nibble u (8 + i)) + 2 ^ 48 * (B - 8 * nibble u (12 + i)) := by
-    unfold laneNat broadcast; omega
-  rw [e, lane_extract _ _ _ _ l (by omega) (by omega) (by omega) (by omega) hl]
-  interval_cases l <;> simp
+/-- Lane `l` of lane word `(w, i)`: field `8 w + 2 l + i`. -/
+def laneFld (u w i l : ℕ) : ℕ := fld u (16 * l + 8 * i) (wid (8 * w + 2 * l + i))
 
-end OptimalOTS.RiscvUpperProgram
+theorem laneNat_eq' (u w i : ℕ) :
+    laneNat u w i = 4 * laneFld u w i 0 + 2 ^ 16 * (4 * laneFld u w i 1) +
+      2 ^ 32 * (4 * laneFld u w i 2) + 2 ^ 48 * (4 * laneFld u w i 3) := by
+  rw [laneNat_eq]
+  simp only [laneFld, Nat.mul_zero, Nat.zero_add, Nat.add_zero, Nat.mul_one]
+
+theorem laneFld_le (u w i l : ℕ) : laneFld u w i l ≤ 31 := fld_le _ _ _ (wid_le _)
+
+/-- Lane `l` of `broadcast B - lane word` is `B - 4 · field`. -/
+theorem lane_halfword (B u w i l : ℕ) (hB1 : 124 ≤ B) (hB2 : B < 2 ^ 16) (hl : l < 4) (L : Word)
+    (hL : L.toNat = laneNat u w i) :
+    (W (broadcast B) - L).toNat / 2 ^ (16 * l) % 2 ^ 16 = B - 4 * laneFld u w i l := by
+  have n0 := laneFld_le u w i 0
+  have n1 := laneFld_le u w i 1
+  have n2 := laneFld_le u w i 2
+  have n3 := laneFld_le u w i 3
+  have hle : L ≤ W (broadcast B) := by
+    rw [BitVec.le_def, hL, broadcast_toNat B hB2, laneNat_eq']
+    unfold broadcast
+    omega
+  rw [BitVec.toNat_sub_of_le hle, hL, broadcast_toNat B hB2, laneNat_eq']
+  have e : broadcast B - (4 * laneFld u w i 0 + 2 ^ 16 * (4 * laneFld u w i 1) +
+      2 ^ 32 * (4 * laneFld u w i 2) + 2 ^ 48 * (4 * laneFld u w i 3)) =
+      (B - 4 * laneFld u w i 0) + 2 ^ 16 * (B - 4 * laneFld u w i 1) +
+      2 ^ 32 * (B - 4 * laneFld u w i 2) + 2 ^ 48 * (B - 4 * laneFld u w i 3) := by
+    unfold broadcast; omega
+  rw [e, lane_extract _ _ _ _ l (by omega) (by omega) (by omega) (by omega) hl]
+  interval_cases l <;> rfl
+
+end OptimalOTS.Riscv2Program

@@ -3,7 +3,7 @@ import Submissions.UpperRiscv.LoaderProof
 
 /-! The four-instruction, 128-bit memory-copy macro. -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 
@@ -129,4 +129,4 @@ theorem copy128_memBits (s : MachineState) (src dst : Reg) (srcOff dstOff : ℕ)
     rw [haddr, hhi]
     simpa only [BitVec.ofNat_add, BitVec.add_assoc, show (8 : Word) = BitVec.ofNat 64 8 from rfl] using sourceHigh
 
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

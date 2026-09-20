@@ -1,3 +1,65 @@
+# upper-riscv: 445 cycles — bare chains
+
+## Idea
+
+The previous submissions (693, then 687 under the expanded keygen budget) spent two cycles per
+hash step: a `SH` writing a level tag into the chain input's header, then the `ECALL`. The tag
+existed only for the security proof, which mapped every 192-bit chain query to a unique node
+`(k, t)` through `decodeHdr` and charged one target per query. The earlier notes estimated that
+dropping the tag would need "a genuinely sharper argument" because the per-query bound had no
+slack. It does not: the slack comes from the *width* of the values, not from the analysis.
+
+- **Widen the chain values from 128 to 192 bits and drop headers and tags entirely.** A chain
+  input is now the bare 192-bit value; the chain step keeps the high 192 bits of the 256-bit
+  answer. A fresh 192-bit query is a candidate second preimage for *all* 896 chain hash nodes,
+  but each is matched on 192 bits, so the union bound costs `896 · 2^-192 ≈ 2^-182 ≪ 2^-128`
+  (`spr_charge`). The old zero-slack bound charged `ε = 2^-128` per query for a single target;
+  the same `ε` now covers all targets with room to spare. Nothing about the potential argument
+  changes: `Potentials`, `RowPotential`, `StageB` and `Assembly` are the old files.
+- **What the proof loses without tags is uniqueness, not probability.** Two things in the old
+  proof silently used that distinct keygen points had distinct tags: `pointOf_inj_left` (the
+  keygen cache is a function of the point) and `not_spr_kc` (an honest output never sits at a
+  foreign point). Both are now *events* about the honest record — `DistinctRec` and
+  `NoOutCollision`, packaged as `GoodRec` — bounded by resampling one coordinate at a time
+  (`GoodRec.lean`): `δ = 2 · 897² · 2^-192 ≈ 2^-171`. Key generation is analysed as a real
+  cache-reusing run (`E_run_keygen_le` adds an indicator for non-distinct points), and the bad
+  records are given up at once in `Assembly.main_bound`: `probTrue ≤ 2ε(B − 907) + 2δ`, which is
+  below `B/2^127` because `2δ < 907 · 2^-127` with ~50 bits to spare.
+- **The cut nodes are the chain inputs, not the values above them**, so the exposed-cache
+  coupling (`fExp`) had to be made canonical (a chosen exposed node per point) to stay
+  resampling-invariant on records that are not good; on good records it is the keygen cache.
+- **Byte fields instead of nibbles.** With 192-bit values a signature holds 28 values
+  (`28 · 192 + 128 = 5504`, the maximum). The index reads its field `k` as the low 5 (k < 16) or
+  4 (16 ≤ k < 28) bits of byte `k` of the answer, packed into a 128-bit index; a field is
+  extracted into a 16-bit lane with one shift and one mask (`0x7C`/`0x3C` broadcast, `0x003C003C`
+  for the last word), so the eight lane words cost 39 instructions. Target 216 gives
+  `compW wid 28 216 ≥ 729 · 2^105` accepted indices, the same availability threshold as before;
+  the block bound was sharpened to `miss^8192 ≤ 0.493` so that `miss^(2^20) ≤ 2^-129` leaves room
+  for `δ`.
+- **In-place hashing is impossible, hashing eight bytes below is free.** Hashing a 24-byte slot
+  with the 32-byte answer written *on* it spills eight bytes into the next slot, which still holds
+  an undisclosed value if chains run upward, while the reader (node order = payload order) forces
+  chains to run upward. Writing the answer at `slot − 8` instead spills only into the tail of the
+  previous chain's final answer: its high 192 bits (the next input) land exactly on the slot, and
+  the root then reads the 680 bytes from `sig + 8` — the low 192 bits of every top and the full
+  top of chain 27 — with no copy. `x12 = x10 − 8` is one `ADDI` in the prologue, which otherwise
+  only advances `x10` by 24 and loads the jump target. Chain 0's spill lands on the second half of
+  the nonce, already consumed.
+- **Cost.** `68 (index) + Σ_k (4 + field_k + 1) + 21 (root) = 68 + 112 + 244 + 21 = 445`. The
+  root hash is 5440 bits, eleven compressions (down from twelve).
+
+## What is left
+
+- The chain prologue (4 cycles × 28 = 112) is now a quarter of the total. Chains with more levels
+  would trade prologues for hash steps one for one, so the optimum is where `4 + (field + 1)`
+  per chain is balanced against the number of chains a 5504-bit signature can hold; with 192-bit
+  values that is 28 chains, fixed by the signature cap.
+- The index phase (68) is dominated by the eight lane words (39). A fused mask that keeps two
+  fields per lane, or a single 64-bit multiply-and-shift field sum, could shave a dozen cycles.
+- The keygen budget is now `2^20`; nothing here uses it (907 compressions).
+
+---
+
 # upper-riscv: 687 cycles
 
 ## Idea

@@ -41,7 +41,7 @@ theorem reveal_positive (i : Idx) :
     exact ⟨0, rfl⟩
   have bound := Finset.single_le_sum (s := Forest.setsName i)
     (f := fun n => n.len) (fun _ _ => Nat.zero_le _) present
-  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 128 := Forest.chainNode_len _ _
+  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 192 := Forest.chainNode_len _ _
   rw [len] at bound
   omega
 
@@ -76,11 +76,11 @@ theorem admissible : scheme.Admissible :=
   WireAdapter.admissible RiscvUpperForest.scheme decode decode_encode canonical
     RiscvUpperForest.admissible
 
-theorem cost : scheme.VerifyCostAtMost 170 :=
-  WireAdapter.verifyCost RiscvUpperForest.scheme decode 170 RiscvUpperForest.cost
+theorem cost : scheme.VerifyCostAtMost 256 :=
+  WireAdapter.verifyCost RiscvUpperForest.scheme decode 256 RiscvUpperForest.cost
 
 /-- A complete OTS certificate on its transmitted signature bits. -/
-theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 170 := ⟨admissible, secure, cost⟩
+theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 256 := ⟨admissible, secure, cost⟩
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.Wire.certificate' depends on axioms: [propext, Classical.choice, Quot.sound]

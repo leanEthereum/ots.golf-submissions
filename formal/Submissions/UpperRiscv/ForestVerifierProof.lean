@@ -49,7 +49,7 @@ def cursorStep (i : Idx) (payload : List Bool)
     pure (Function.update x n.fin
       (ofBits (graph.len n.fin) ((payload.drop cursor).take (graph.len n.fin))), cursor + n.len)
   else if evaluated (fixedPositions i) n then
-    (fun y => (Function.update x n.fin y, cursor)) <$> runOp x n
+    (fun y => (Function.update x n.fin y, cursor)) <$> evalName x n
   else pure (Function.update x n.fin 0, cursor)
 
 private theorem evaluated_iff_reachable (i : Idx) (n : Name)
@@ -74,9 +74,9 @@ theorem cursorStep_eq (i : Idx) (payload : List Bool)
   · have hn : n ∉ setsName i := mt (disclosed_eq i n).mpr hd
     simp only [cursorStep, hd, Bool.false_eq_true, if_false, consumedBits, Nat.add_zero, step, hn]
     simp only [evaluated_iff_reachable i n hn]
-    split_ifs <;> simp only [map_pure, Functor.map_map, runOp_eq]
+    split_ifs <;> simp only [map_pure, Functor.map_map]
 
-/-- Execute the node sequence, consuming signature words in topological order. -/
+/-- Execute the node sequence, consuming signature values in topological order. -/
 def runNodes (i : Idx) (payload : List Bool) :
     List Name → graph.Assignment → ℕ → OracleComp Spec graph.Assignment
   | [], x, _ => pure x
@@ -151,9 +151,9 @@ theorem directReconstruct_eq (i : Idx) (payload : List Bool) :
 /-- The complete verifier compiled to the direct node program. -/
 def directVerify (pk : PublicKey) (m : Message) (bits : List Bool) :
     OracleComp Spec Bool := do
-  let i ← index m (ofBits 128 (bits.take 128))
+  let i ← packIndex m (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
-    if bits.length = 4224 then
+    if bits.length = 5504 then
       let y ← directReconstruct ⟨i, hi⟩ (bits.drop 128)
       return decide ((y rh.fin).setWidth 128 = pk)
     else return false
@@ -164,21 +164,21 @@ theorem directVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     directVerify pk m bits = Wire.scheme.verify pk m bits := by
   rw [← verify_eq]
   unfold directVerify verify
-  apply congrArg (fun f => index m (ofBits 128 (bits.take 128)) >>= f)
+  apply congrArg (fun f => packIndex m (ofBits 128 (bits.take 128)) >>= f)
   funext i
   by_cases hi : i ∈ validSet
   · rw [dif_pos hi, dif_pos hi]
     have hlen := Wire.payload_length_iff bits ⟨i, hi⟩
-    change (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) ↔ bits.length = 4224 at hlen
+    change (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) ↔ bits.length = 5504 at hlen
     simp only [hlen, directReconstruct_eq]
   · rw [dif_neg hi, dif_neg hi]
 
-/-- The sequential disclosure cursor advances by one word exactly at disclosed nodes. -/
-theorem consumedBits_word (i : Idx) (n : Name) :
-    consumedBits i n = if disclosed (fixedPositions i) n then 128 else 0 := by
+/-- The sequential disclosure cursor advances by one value exactly at disclosed nodes. -/
+theorem consumedBits_value (i : Idx) (n : Name) :
+    consumedBits i n = if disclosed (fixedPositions i) n then 192 else 0 := by
   unfold consumedBits
   split_ifs with hd
-  · exact (fixedCut_isCut i).values n (by simpa only [setsName] using (disclosed_eq i n).mp hd)
+  · exact (fixedCut_isCut i).len_eq (by simpa only [setsName] using (disclosed_eq i n).mp hd)
   · rfl
 
 /--

@@ -1,6 +1,7 @@
 import Submissions.UpperRiscv.Candidate
 
-/-! A flat forest OTS with an equivalent RV64IM verifier, at most 687 cycles on every execution. -/
+/-! A bare-chain forest OTS with an equivalent RV64IM verifier, at most 445 cycles on every
+execution. -/
 
 namespace OptimalOTS.Challenge.UpperRiscv
 
@@ -8,7 +9,7 @@ namespace OptimalOTS.Challenge.UpperRiscv
 noncomputable def submission : Riscv.Submission := RiscvUpperForest.submission
 
 /-- Correctness, signing availability, resource limits, 127-bit strong security, exact machine
-refinement on every input, and at most 687 cycles on every execution. -/
-theorem certificate : submission.Certificate 687 := RiscvUpperForest.machineCertificate
+refinement on every input, and at most 445 cycles on every execution. -/
+theorem certificate : submission.Certificate 445 := RiscvUpperForest.machineCertificate
 
 end OptimalOTS.Challenge.UpperRiscv

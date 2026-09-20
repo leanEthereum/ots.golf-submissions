@@ -1,85 +1,64 @@
 import OptimalOTS.Dag
 import Submissions.UpperRiscv.Count
+import Submissions.UpperRiscv.Digits
 
 /-!
 # Accepted indices
 
-An index is the 128-bit prefix of the hash of message and nonce. It is accepted when its 32
-nibbles sum to `target = 157`; every nibble value is allowed. The accepted indices are counted
-exactly by `comp 32 157`. There are more than `729 * 2 ^ 105` of them, which is the exact
-threshold at which the signing loop still fails with probability at most `2 ^ -128`.
+The index is the 128-bit number packing the 28 chain digits: five-bit digits for the first
+sixteen chains (bits `5 k, …, 5 k + 4`), four-bit digits for the other twelve (bits
+`80 + 4 (k - 16), …`). An index is accepted when its digits sum to `target = 216`. The accepted
+indices are counted exactly by `compW wid 28 216`; there are more than `729 * 2 ^ 105` of them,
+the exact threshold at which the signing loop still fails with probability at most `2 ^ -128`.
+
+The machine reads digit `k` from byte `k` of the 256-bit index answer; `pack` is that reading.
 -/
 
 namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 /-- The digit sum of every accepted index. -/
-def target : ℕ := 157
+def target : ℕ := 216
 
-/-- Nibble `k` of `i`. -/
-def nibble (i k : ℕ) : ℕ := i / 16 ^ k % 16
+/-- Digit widths: five bits for the first sixteen chains, four for the next twelve, none beyond. -/
+def wid (k : ℕ) : ℕ := if k < 16 then 5 else if k < 28 then 4 else 0
 
-theorem nibble_lt (i k : ℕ) : nibble i k < 16 := Nat.mod_lt _ (by norm_num)
+/-- Position of digit `k` in the packed index. -/
+abbrev pos : ℕ → ℕ := posW wid
 
-theorem nibble_zero (i : ℕ) : nibble i 0 = i % 16 := by simp [nibble]
+theorem pos_28 : pos 28 = 128 := by decide
 
-theorem nibble_succ (i k : ℕ) : nibble i (k + 1) = nibble (i / 16) k := by
-  rw [nibble, nibble, Nat.div_div_eq_div_mul, Nat.pow_succ, Nat.mul_comm]
+theorem pos_of_le {k : ℕ} (hk : 28 ≤ k) : pos k = 128 := by
+  induction k with
+  | zero => omega
+  | succ k ih =>
+    rcases Nat.lt_succ_iff_lt_or_eq.mp (Nat.lt_succ_of_le hk) with h | h
+    · show posW wid (k + 1) = 128
+      have := ih (by omega)
+      rw [posW_succ, show posW wid k = 128 from this]
+      simp [wid, show ¬ k < 16 by omega, show ¬ k < 28 by omega]
+    · rw [← h]; exact pos_28
 
-/-- The number whose `n` low nibbles are `c 0, …, c (n - 1)`. -/
-def ofNibbles (c : ℕ → ℕ) (n : ℕ) : ℕ := ∑ k ∈ Finset.range n, c k * 16 ^ k
+/-- Digit `k` of `i`. -/
+abbrev digit : ℕ → ℕ → ℕ := digitW wid
 
-theorem ofNibbles_zero (c : ℕ → ℕ) : ofNibbles c 0 = 0 := by simp [ofNibbles]
+theorem digit_lt (i k : ℕ) : digit i k < 2 ^ wid k := digitW_lt wid i k
 
-theorem ofNibbles_succ (c : ℕ → ℕ) (n : ℕ) :
-    ofNibbles c (n + 1) = c 0 + 16 * ofNibbles (fun k => c (k + 1)) n := by
-  unfold ofNibbles
-  rw [Finset.sum_range_succ', Finset.mul_sum, add_comm]
-  simp only [pow_zero, mul_one]
-  congr 1
-  refine Finset.sum_congr rfl fun k _ => ?_
-  ring
+/-- The number whose `n` low digits are `c 0, …, c (n - 1)`. -/
+abbrev ofDigits : (ℕ → ℕ) → ℕ → ℕ := ofDigitsW wid
 
-theorem nibble_ofNibbles (c : ℕ → ℕ) (hc : ∀ k, c k < 16) :
-    ∀ n j, j < n → nibble (ofNibbles c n) j = c j := by
-  intro n
-  induction n generalizing c with
-  | zero => intro j hj; omega
-  | succ n ih =>
-    intro j hj
-    rw [ofNibbles_succ]
-    cases j with
-    | zero => rw [nibble_zero, Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt (hc 0)]
-    | succ j =>
-      rw [nibble_succ, Nat.add_mul_div_left _ _ (by norm_num : 0 < 16), Nat.div_eq_of_lt (hc 0),
-        zero_add]
-      exact ih (fun k => c (k + 1)) (fun k => hc (k + 1)) j (by omega)
+theorem ofDigits_lt (c : ℕ → ℕ) (hc : ∀ k, c k < 2 ^ wid k) (n : ℕ) :
+    ofDigits c n < 2 ^ pos n := ofDigitsW_lt wid c hc n
 
-theorem ofNibbles_lt (c : ℕ → ℕ) (hc : ∀ k, c k < 16) : ∀ n, ofNibbles c n < 16 ^ n := by
-  intro n
-  induction n generalizing c with
-  | zero => simp [ofNibbles]
-  | succ n ih =>
-    rw [ofNibbles_succ, pow_succ]
-    have := ih (fun k => c (k + 1)) (fun k => hc (k + 1))
-    have h0 := hc 0
-    omega
+theorem digit_ofDigits (c : ℕ → ℕ) (hc : ∀ k, c k < 2 ^ wid k) (n j : ℕ) (hj : j < n) :
+    digit (ofDigits c n) j = c j := digitW_ofDigitsW wid c hc n j hj
 
-theorem ofNibbles_nibble (i : ℕ) : ∀ n, i < 16 ^ n → ofNibbles (nibble i) n = i := by
-  intro n
-  induction n generalizing i with
-  | zero => intro hi; rw [ofNibbles_zero]; omega
-  | succ n ih =>
-    intro hi
-    rw [ofNibbles_succ, nibble_zero]
-    have e : (fun k => nibble i (k + 1)) = nibble (i / 16) := funext fun k => nibble_succ i k
-    rw [e, ih (i / 16) (by rw [pow_succ] at hi; omega)]
-    omega
+theorem ofDigits_digit (i n : ℕ) (hi : i < 2 ^ pos n) : ofDigits (digit i) n = i :=
+  ofDigitsW_digitW wid i n hi
 
-/-- An index is accepted when its 32 nibbles sum to `target`. -/
-def Accepted (i : ℕ) : Prop := ∑ k ∈ Finset.range 32, nibble i k = target
+/-- An index is accepted when its 28 digits sum to `target`. -/
+def Accepted (i : ℕ) : Prop := ∑ k ∈ Finset.range 28, digit i k = target
 
 instance : DecidablePred Accepted := fun i => by unfold Accepted; infer_instance
 
@@ -111,34 +90,37 @@ theorem numValid_le : numValid ≤ 2 ^ idxBits := by
 
 /-! ## Counting the accepted indices -/
 
-/-- The digit tuples counted by `comp 32 target`. -/
-def tuples : Finset (Fin 32 → Fin 16) := Finset.univ.filter fun c => ∑ k, (c k).val = target
+/-- The digit tuples counted by `compW wid 28 target`. -/
+def tuples : Finset ((k : Fin 28) → Fin (2 ^ wid k)) :=
+  Finset.univ.filter fun c => ∑ k, (c k).val = target
 
-theorem tuples_card : tuples.card = Forest.comp 32 target := Forest.card_comp 32 target
+theorem tuples_card : tuples.card = Forest.compW wid 28 target := Forest.card_compW wid 28 target
 
 /-- The digits of an index. -/
-def digitsOf (i : ℕ) (k : Fin 32) : Fin 16 := ⟨nibble i k, nibble_lt i k⟩
+def digitsOf (i : ℕ) (k : Fin 28) : Fin (2 ^ wid k) := ⟨digit i k, digit_lt i k⟩
 
 /-- The digit function of a tuple, extended by zero. -/
-def digitFun (c : Fin 32 → Fin 16) (k : ℕ) : ℕ := if h : k < 32 then (c ⟨k, h⟩).val else 0
+def digitFun (c : (k : Fin 28) → Fin (2 ^ wid k)) (k : ℕ) : ℕ :=
+  if h : k < 28 then (c ⟨k, h⟩).val else 0
 
-theorem digitFun_lt (c : Fin 32 → Fin 16) (k : ℕ) : digitFun c k < 16 := by
+theorem digitFun_lt (c : (k : Fin 28) → Fin (2 ^ wid k)) (k : ℕ) : digitFun c k < 2 ^ wid k := by
   unfold digitFun
   split_ifs with h
   · exact (c ⟨k, h⟩).isLt
-  · norm_num
+  · positivity
 
 /-- The index with the given digits. -/
-def indexOf (c : Fin 32 → Fin 16) : ℕ := ofNibbles (digitFun c) 32
+def indexOf (c : (k : Fin 28) → Fin (2 ^ wid k)) : ℕ := ofDigits (digitFun c) 28
 
-theorem nibble_indexOf (c : Fin 32 → Fin 16) (k : Fin 32) : nibble (indexOf c) k = (c k).val := by
-  rw [indexOf, nibble_ofNibbles _ (digitFun_lt c) 32 k k.isLt, digitFun, dif_pos k.isLt]
+theorem digit_indexOf (c : (k : Fin 28) → Fin (2 ^ wid k)) (k : Fin 28) :
+    digit (indexOf c) k = (c k).val := by
+  rw [indexOf, digit_ofDigits _ (digitFun_lt c) 28 k k.isLt, digitFun, dif_pos k.isLt]
 
-theorem idxBits_eq : 2 ^ idxBits = 16 ^ 32 := by norm_num [idxBits]
+theorem idxBits_eq : 2 ^ idxBits = 2 ^ pos 28 := by rw [pos_28]; norm_num [idxBits]
 
 attribute [local irreducible] validSet tuples
 
-theorem card_validSet : (validSet).card = Forest.comp 32 target := by
+theorem card_validSet : (validSet).card = Forest.compW wid 28 target := by
   rw [← tuples_card]
   refine Finset.card_bij' (fun i _ => digitsOf i) (fun c _ => indexOf c) ?_ ?_ ?_ ?_
   · intro i hi
@@ -150,39 +132,73 @@ theorem card_validSet : (validSet).card = Forest.comp 32 target := by
     simp only [tuples, Finset.mem_filter, Finset.mem_univ, true_and] at hc
     refine mem_validSet.mpr ⟨?_, ?_⟩
     · rw [idxBits_eq]
-      exact ofNibbles_lt _ (digitFun_lt c) 32
-    · show ∑ k ∈ Finset.range 32, nibble (indexOf c) k = target
+      exact ofDigits_lt _ (digitFun_lt c) 28
+    · show ∑ k ∈ Finset.range 28, digit (indexOf c) k = target
       rw [← hc, ← Fin.sum_univ_eq_sum_range]
-      exact Finset.sum_congr rfl fun k _ => nibble_indexOf c k
+      exact Finset.sum_congr rfl fun k _ => digit_indexOf c k
   · intro i hi
     obtain ⟨lt, _⟩ := mem_validSet.mp hi
-    show ofNibbles (digitFun (digitsOf i)) 32 = i
-    have agree : ∀ k ∈ Finset.range 32, digitFun (digitsOf i) k * 16 ^ k = nibble i k * 16 ^ k := by
+    show ofDigits (digitFun (digitsOf i)) 28 = i
+    have agree : ∀ k ∈ Finset.range 28,
+        digitFun (digitsOf i) k * 2 ^ pos k = digit i k * 2 ^ pos k := by
       intro k hk
       have hk' := Finset.mem_range.mp hk
       rw [digitFun, dif_pos hk', digitsOf]
-    rw [ofNibbles, Finset.sum_congr rfl agree]
+    show ∑ k ∈ Finset.range 28, digitFun (digitsOf i) k * 2 ^ pos k = i
+    rw [Finset.sum_congr rfl agree]
     rw [idxBits_eq] at lt
-    exact ofNibbles_nibble i 32 lt
+    exact ofDigits_digit i 28 lt
   · intro c _
     funext k
     apply Fin.ext
-    show nibble (indexOf c) k = (c k).val
-    rw [nibble_indexOf]
-
-theorem comp_32_target : Forest.comp 32 target = 30465700825049557482282408820464096 := by
-  show Forest.comp 32 157 = _
-  rw [← Forest.compTable_getD 157 32 157 le_rfl]
-  decide +kernel
-
-theorem numValid_ge : 2 ^ 114 ≤ numValid := by
-  rw [numValid, card_validSet, comp_32_target]
-  norm_num
+    show digit (indexOf c) k = (c k).val
+    rw [digit_indexOf]
 
 /-- The availability threshold: a fresh index is accepted with probability at least
 `729 / 2 ^ 23`, which is what the `2 ^ 20` signing trials need. -/
 theorem numValid_avail : 729 * 2 ^ 105 ≤ numValid := by
-  rw [numValid, card_validSet, comp_32_target]
-  norm_num
+  rw [numValid, card_validSet]
+  show 729 * 2 ^ 105 ≤ Forest.compW wid 28 216
+  rw [← Forest.compTableW_getD wid 216 28 216 le_rfl]
+  decide +kernel
+
+/-! ## The machine's reading of the digits -/
+
+/-- Digit `k` as the machine reads it: the low `wid k` bits of byte `k` of the index answer. -/
+def byteDigit (y : BitVec hashBits) (k : ℕ) : ℕ := y.toNat / 2 ^ (8 * k) % 2 ^ wid k
+
+theorem byteDigit_lt (y : BitVec hashBits) (k : ℕ) : byteDigit y k < 2 ^ wid k :=
+  Nat.mod_lt _ (by positivity)
+
+/-- The packed index of an answer. -/
+def pack (y : BitVec hashBits) : ℕ := ofDigits (byteDigit y) 28
+
+theorem pack_lt (y : BitVec hashBits) : pack y < 2 ^ idxBits := by
+  rw [idxBits_eq]
+  exact ofDigits_lt _ (byteDigit_lt y) 28
+
+theorem digit_pack (y : BitVec hashBits) {k : ℕ} (hk : k < 28) : digit (pack y) k = byteDigit y k :=
+  digit_ofDigits _ (byteDigit_lt y) 28 k hk
+
+theorem pack_lt_pos (y : BitVec hashBits) : pack y < 2 ^ pos 28 :=
+  ofDigits_lt _ (byteDigit_lt y) 28
+
+theorem pack_lt' (y : BitVec hashBits) : pack y < 2 ^ 128 := by
+  rw [← pos_28]; exact pack_lt_pos y
+
+attribute [irreducible] pack
+
+/-- Fewer than half of the indices are accepted. -/
+theorem compW_target_le : Forest.compW wid 28 target ≤ 2 ^ 127 := by
+  rw [← Forest.compTableW_getD wid target 28 target le_rfl]
+  decide +kernel
+
+theorem numValid_le_half : numValid ≤ 2 ^ 127 := by
+  rw [numValid, card_validSet]
+  exact compW_target_le
+
+theorem two_numValid_le : 2 * numValid ≤ 2 ^ 128 := by
+  have := numValid_le_half
+  omega
 
 end OptimalOTS

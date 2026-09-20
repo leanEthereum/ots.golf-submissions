@@ -99,14 +99,15 @@ def cutOf? (r : Option (Nonce × Idx)) : Option (Finset Name) :=
 /-- The index of the outcome of the signing loop. -/
 def idxOf? (r : Option (Nonce × Idx)) : Option ℕ := r.map fun r => r.2.val
 
-theorem trunc_cast_pot {n m : ℕ} (h : n = m) (x : BitVec n) : trunc (x.cast h) = trunc x := by
+theorem trunc128_cast_pot {n m : ℕ} (h : n = m) (x : BitVec n) :
+    trunc128 (x.cast h) = trunc128 x := by
   subst h; rfl
 
 theorem publicKey_eq_pkOf (ξ : Rec) : forestScheme.publicKey (graph.evalRec ξ) = pkOf ξ := by
-  show trunc (graph.evalRec ξ rh.fin) = trunc (ξ.2 rh.fin)
+  show trunc128 (graph.evalRec ξ rh.fin) = trunc128 (ξ.2 rh.fin)
   rw [← val_rh]
   unfold val
-  exact (trunc_cast_pot _ _).symm
+  exact (trunc128_cast_pot _ _).symm
 
 theorem sign_eq (ξ : Rec) (m : Message) :
     forestScheme.sign (graph.evalRec ξ) m = sigOf ξ <$> signIdx m :=
@@ -174,11 +175,8 @@ theorem encCount_le_of_inv {c : Cache} {b : ℕ} (h : Inv c b) :
 theorem paperRowHyp : RowHyp where
   nonce_eq := rfl
   idx_le := by decide
-  two_le := le_trans (by norm_num) numValid_ge
-  numCuts_le := by
-    rw [numValid, card_validSet, comp_32_target]
-    show 2 * 30465700825049557482282408820464096 ≤ 2 ^ 128
-    norm_num
+  two_le := le_trans (by norm_num) numValid_avail
+  numCuts_le := two_numValid_le
   trial_le := by show 24 * 2 ^ 20 ≤ 2 ^ 128; norm_num
 
 theorem two_encCount_le {c : Cache} {b : ℕ} (h : Inv c b) :

@@ -85,7 +85,7 @@ variable (S : GScheme)
 
 theorem deterministic_verify (pk : PublicKey) (m : Message) (σ : Signature) :
     Deterministic (S.verify pk m σ) := by
-  unfold GScheme.verify index
+  unfold GScheme.verify packIndex
   refine Deterministic.bind (Deterministic.map (Deterministic.hash _) _) fun i => ?_
   split_ifs
   · dsimp only

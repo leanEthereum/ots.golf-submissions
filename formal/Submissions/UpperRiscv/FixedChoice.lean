@@ -2,11 +2,12 @@ import Submissions.UpperRiscv.Cuts
 import Submissions.UpperRiscv.Valid
 
 /-!
-# The nibble layout
+# The digit layout
 
-Reveal one value from each of the 32 chains: chain `k` is revealed at position `15 - d_k`, where
-`d_k` is nibble `k` of the accepted index. The chain steps sum to `target`, so every disclosure
-set is a cut of the same cost, and distinct indices give distinct cuts.
+Reveal one input from each of the 28 chains: chain `k` is revealed at position `31 - d_k`, where
+`d_k` is digit `k` of the accepted index, so that the verifier makes `d_k + 1` hash steps on
+chain `k`. The digits sum to `target`, so every disclosure set is a cut of the same cost, and
+distinct indices give distinct cuts.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -19,42 +20,49 @@ namespace OptimalOTS.Forest
 
 open OptimalOTS.Dag
 
-theorem nibble_sum (i : Idx) : ∑ k ∈ Finset.range 32, nibble i.val k = target :=
+theorem digit_sum (i : Idx) : ∑ k ∈ Finset.range 28, digit i.val k = target :=
   mem_validSet_accepted i.2
 
-/-- The chain digits of an accepted index: its 32 nibbles. -/
-def fixedDigits (i : Idx) (k : Fin 32) : Fin 16 := ⟨nibble i.val k, nibble_lt _ _⟩
+theorem digit_lt_32 (i : ℕ) (k : ℕ) : digit i k < 32 := by
+  have h := digit_lt i k
+  have : 2 ^ wid k ≤ 32 := by unfold wid; split_ifs <;> norm_num
+  omega
+
+/-- The chain digits of an accepted index. -/
+def fixedDigits (i : Idx) (k : Fin 28) : Fin 32 := ⟨digit i.val k, digit_lt_32 _ _⟩
 
 theorem fixedDigits_sum (i : Idx) : ∑ k, (fixedDigits i k).val = target := by
-  rw [← nibble_sum i, ← Fin.sum_univ_eq_sum_range]
+  rw [← digit_sum i, ← Fin.sum_univ_eq_sum_range]
   rfl
 
 theorem fixedDigits_injective : Function.Injective fixedDigits := by
   intro i j h
   apply Subtype.ext
-  have hi : i.val < 16 ^ 32 := by rw [← idxBits_eq]; exact Idx.isLt i
-  have hj : j.val < 16 ^ 32 := by rw [← idxBits_eq]; exact Idx.isLt j
-  rw [← ofNibbles_nibble i.val 32 hi, ← ofNibbles_nibble j.val 32 hj]
-  unfold ofNibbles
+  have hi : i.val < 2 ^ pos 28 := by rw [← idxBits_eq]; exact Idx.isLt i
+  have hj : j.val < 2 ^ pos 28 := by rw [← idxBits_eq]; exact Idx.isLt j
+  rw [← ofDigits_digit i.val 28 hi, ← ofDigits_digit j.val 28 hj]
+  unfold ofDigits
   refine Finset.sum_congr rfl fun k hk => ?_
   have hk' := Finset.mem_range.mp hk
-  have e := congrArg (fun d : Fin 32 → Fin 16 => (d ⟨k, hk'⟩).val) h
+  have e := congrArg (fun d : Fin 28 → Fin 32 => (d ⟨k, hk'⟩).val) h
   simp only [fixedDigits] at e
   rw [e]
 
-/-- The revealed positions: chain `k` at `15 - d_k`. -/
-def fixedPositions (i : Idx) (k : Fin 32) : Fin 16 := Fin.rev (fixedDigits i k)
+/-- The revealed positions: chain `k` at `31 - d_k`. -/
+def fixedPositions (i : Idx) (k : Fin 28) : Fin 32 := Fin.rev (fixedDigits i k)
 
-theorem fixedPositions_val (i : Idx) (k : Fin 32) :
-    (fixedPositions i k).val = 15 - nibble i.val k := by
+theorem fixedPositions_val (i : Idx) (k : Fin 28) :
+    (fixedPositions i k).val = 31 - digit i.val k := by
   simp [fixedPositions, fixedDigits, Fin.val_rev]
 
-theorem fixedPositions_sum (i : Idx) : ∑ k, (15 - (fixedPositions i k).val) = target := by
-  rw [← fixedDigits_sum i]
-  refine Finset.sum_congr rfl fun k _ => ?_
-  simp only [fixedPositions, Fin.val_rev]
-  have := (fixedDigits i k).isLt
-  omega
+theorem fixedPositions_sum (i : Idx) : ∑ k, (32 - (fixedPositions i k).val) = target + 28 := by
+  have : ∑ k : Fin 28, (32 - (fixedPositions i k).val) = ∑ k : Fin 28, ((fixedDigits i k).val + 1) := by
+    refine Finset.sum_congr rfl fun k _ => ?_
+    simp only [fixedPositions, Fin.val_rev]
+    have := (fixedDigits i k).isLt
+    omega
+  rw [this, Finset.sum_add_distrib, fixedDigits_sum]
+  simp
 
 /-- The disclosure set of an accepted index. -/
 def fixedChoice (i : Idx) : Choice := fixedPositions i
@@ -72,13 +80,13 @@ theorem fixedCut_injective : Function.Injective (fun i => cutOf (fixedChoice i))
 
 theorem fixedCut_isCut (i : Idx) : IsCut (cutOf (fixedChoice i)) := isCut_cutOf _
 
-theorem fixedCut_card (i : Idx) : (cutOf (fixedChoice i)).card = 32 := card_cutOf _
+theorem fixedCut_card (i : Idx) : (cutOf (fixedChoice i)).card = 28 := card_cutOf _
 
-/-- Every disclosure set costs `target + 12 = 169` compressions to reconstruct. -/
+/-- Every disclosure set costs `target + 28 + 11 = 255` compressions to reconstruct. -/
 theorem fixedCut_cost (i : Idx) :
-    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 169 := by
+    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 255 := by
   rw [cost_cutOf]
-  change ∑ k, (15 - (fixedPositions i k).val) + 12 = 169
+  change ∑ k, (32 - (fixedPositions i k).val) + 11 = 255
   rw [fixedPositions_sum]
   rfl
 

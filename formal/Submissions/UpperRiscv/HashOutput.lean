@@ -2,7 +2,7 @@ import Submissions.UpperRiscv.LoaderProof
 
 /-! Exact output words and memory frames for the machine's hash call. -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 
@@ -60,4 +60,4 @@ theorem writeHash_frame (s : MachineState) (answer : BitVec hashBits) (addr : Wo
   rw [MachineState.getMem_setPC]
   exact getMem_writeWords_of_disjoint _ _ _ _ disjoint
 
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

@@ -8,7 +8,7 @@ The representation records the bits read by the machine's HASH boundary. Its app
 lemma follows the little-endian ABI: the low vector occupies the lower addresses.
 -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 
@@ -309,4 +309,4 @@ theorem memBits_cast {a b : ℕ} (s : MachineState) (base : Word) (v : BitVec a)
   subst equal
   rfl
 
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

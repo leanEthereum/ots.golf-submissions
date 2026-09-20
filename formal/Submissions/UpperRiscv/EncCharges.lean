@@ -84,8 +84,7 @@ theorem not_idxPost_extend_of_enc_none (d' f : Cache) (hf : ∀ u : EncInput, f 
 
 /-! ### Auxiliary counting facts -/
 
-theorem idxOf_lt (w : BitVec hashBits) : idxOf w < 2 ^ idxBits :=
-  (w.setWidth idxBits).isLt
+theorem idxOf_lt (w : BitVec hashBits) : idxOf w < 2 ^ idxBits := pack_lt w
 
 /-- Averaging `a * 2 ^ (hashBits - idxBits)` over the `2 ^ hashBits` answers gives `a / 2 ^ idxBits`. -/
 theorem inv_card_mul_pow (hidx : idxBits ≤ hashBits) (a : ℝ≥0∞) :

@@ -3,7 +3,7 @@ import Submissions.UpperRiscv.Program
 
 /-! Verified ordinary-instruction macros used by the assembly proof. -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open RiscvZkvm.Rv64
 
@@ -38,4 +38,4 @@ theorem beq_transition (s : MachineState) (r r' : Reg)
   simp only [execInstrBr, hsign]
   by_cases h : s.getReg r = s.getReg r' <;> simp [h]
 
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

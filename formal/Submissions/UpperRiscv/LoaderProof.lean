@@ -2,7 +2,7 @@ import Submissions.UpperRiscv.MachineMemory
 
 /-! Exact raw-memory contents installed by the competition loader. -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 
@@ -207,4 +207,4 @@ theorem ofBits_drop_take (bits : List Bool) {cap start len : ℕ}
     testBit_foldr_bits, List.getD_eq_getElem?_getD, List.getElem?_drop,
     List.getElem?_take, hcap, ↓reduceIte]
 
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

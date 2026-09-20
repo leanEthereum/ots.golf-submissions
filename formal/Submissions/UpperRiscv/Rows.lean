@@ -67,9 +67,8 @@ theorem mem_V_iff {d : Cache} {i : ℕ} :
   constructor
   · intro h
     obtain ⟨u, hu, rfl⟩ := Finset.mem_image.1 h
-    simp only [validInputs, Finset.mem_filter, Finset.mem_univ, true_and] at hu
-    obtain ⟨w, hw, hi⟩ := hu
-    exact ⟨u, w, hw, hi, by simp [hw]⟩
+    obtain ⟨w, hw, hi⟩ := mem_validInputs.1 hu
+    exact ⟨u, w, hw, hi, by rw [hw, idxOfOpt_some]⟩
   · rintro ⟨u, w, hw, hi, rfl⟩
     exact mem_V hw hi
 
@@ -135,19 +134,21 @@ theorem sum_rowFree_le (d : Cache) :
     ∑ m, (rowAcc d m \ rowBad d m).card ≤ (V d).card := by
   rw [← Finset.card_sigma]
   refine Finset.card_le_card_of_injOn
-    (fun p => ((d (encQuery (p.1 ++ p.2))).map (idxOf)).getD 0) ?_ ?_
+    (fun p => idxOfOpt (d (encQuery (p.1 ++ p.2)))) ?_ ?_
   · intro p hp
     simp only [Finset.coe_sigma, Set.mem_sigma_iff, Finset.mem_coe, Finset.mem_univ,
       true_and, Finset.mem_sdiff, rowAcc, Finset.mem_filter] at hp
     obtain ⟨⟨w, hw, hi⟩, -⟩ := hp
-    simp only [Finset.mem_coe, hw, Option.map_some, Option.getD_some]
+    show idxOfOpt (d (encQuery (p.1 ++ p.2))) ∈ V d
+    rw [hw, idxOfOpt_some]
     exact mem_V hw hi
   · intro p hp p' hp' heq
     simp only [Finset.coe_sigma, Set.mem_sigma_iff, Finset.mem_coe, Finset.mem_univ,
       true_and, Finset.mem_sdiff, rowAcc, rowBad, Finset.mem_filter] at hp hp'
     obtain ⟨⟨w, hw, hi⟩, hn⟩ := hp
     obtain ⟨⟨w', hw', hi'⟩, -⟩ := hp'
-    simp only [hw, hw', Option.map_some, Option.getD_some] at heq
+    dsimp only at heq
+    rw [hw, hw', idxOfOpt_some, idxOfOpt_some] at heq
     by_contra hne
     apply hn
     refine ⟨w, hw, hi, p'.1 ++ p'.2, ?_, w', hw', heq.symm⟩

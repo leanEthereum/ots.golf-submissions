@@ -4,14 +4,13 @@ import Submissions.UpperRiscv.HashOutput
 import Submissions.UpperRiscv.Lanes
 
 /-!
-# Addresses, accesses and headers of the machine image
+# Addresses and accesses of the machine image
 
-Numeric facts shared by the three phases of the image: valid accesses, signed immediates, the
-header doubleword of a chain slot and its level-tag halfword, halfword loads, and the constants
-installed by the data image.
+Numeric facts shared by the three phases of the image: valid accesses, signed immediates and
+halfword loads.
 -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open RiscvZkvm.Rv64
 
@@ -21,8 +20,15 @@ abbrev W (n : ℕ) : Word := BitVec.ofNat 64 n
 /-- The data base, where the index answer, the lane constants and the lane words lie. -/
 def dataAddr : ℕ := 0x200000
 
-/-- The disclosed words start after the 128-bit nonce. -/
+/-- The disclosed values start after the 128-bit nonce; chain `k`'s 192-bit value is at
+`slotAddr k`. -/
 def payloadAddr : ℕ := 0x400040
+
+def slotAddr (k : ℕ) : ℕ := payloadAddr + 24 * k
+
+/-- The root input starts eight bytes below chain `0`'s value: the 32-byte answer of chain `k`
+is written at `slotAddr k - 8`. -/
+def regionAddr : ℕ := 0x400038
 
 theorem W_toNat (n : ℕ) (h : n < 2 ^ 64) : (W n).toNat = n := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]
@@ -123,47 +129,6 @@ theorem getMem_setMem_ite (s : MachineState) (a a' v : Word) :
   · subst h; simp
   · simp [h]
 
-/-! ## Headers -/
-
-/-- The header doubleword with slot address `a` and level tag `lev`, as an append. -/
-theorem W_hdr (a lev : ℕ) (ha : a < 2 ^ 48) (hl : lev < 2 ^ 16) :
-    W (a + lev * 2 ^ 48) = BitVec.ofNat 16 lev ++ BitVec.ofNat 48 a := by
-  apply BitVec.eq_of_toNat_eq
-  rw [BitVec.toNat_append, BitVec.toNat_ofNat, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
-    Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hl, ← Nat.shiftLeft_add_eq_or_of_lt ha,
-    Nat.shiftLeft_eq, Nat.mod_eq_of_lt (by
-      have : lev * 2 ^ 48 ≤ (2 ^ 16 - 1) * 2 ^ 48 := Nat.mul_le_mul_right _ (by omega)
-      omega)]
-  ring
-
-/-- Replacing the top halfword of a doubleword. -/
-theorem replaceHalfword_append (y : BitVec 48) (x h : BitVec 16) :
-    replaceHalfword (x ++ y) 3 h = h ++ y := by
-  apply BitVec.eq_of_getLsbD_eq
-  intro i hi
-  simp only [replaceHalfword, BitVec.getLsbD_or, BitVec.getLsbD_and, BitVec.getLsbD_not,
-    BitVec.getLsbD_shiftLeft, BitVec.getLsbD_append, BitVec.getLsbD_setWidth, hi]
-  by_cases hlow : i < 48
-  · simp [hlow]
-  · have : i - 48 < 16 := by omega
-    have hb : Nat.testBit 65535 (i - 48) = true := by
-      rw [show (65535 : ℕ) = 2 ^ 16 - 1 by norm_num, Nat.testBit_two_pow_sub_one]
-      simpa using this
-    simp [hlow, this, BitVec.getLsbD_ofNat, hb, show i - 48 < 64 by omega]
-
-/-- A halfword store at byte `6` of an aligned doubleword replaces its top halfword. -/
-theorem setHalfword_top (s : MachineState) (a : ℕ) (ha : a % 8 = 0) (hlt : a + 8 < 2 ^ 64)
-    (h : BitVec 16) :
-    s.setHalfword (W (a + 6)) h = s.setMem (W a) (replaceHalfword (s.getMem (W a)) 3 h) := by
-  have hal : alignToDword (W (a + 6)) = W a := by
-    apply BitVec.eq_of_toNat_eq
-    rw [alignToDword_toNat, W_toNat _ (by omega), W_toNat _ (by omega)]
-    omega
-  have hoff : byteOffset (W (a + 6)) = 6 := by
-    rw [byteOffset_eq_mod, W_toNat _ (by omega)]
-    omega
-  simp only [MachineState.setHalfword, hal, hoff]
-
 /-- A halfword load from an aligned doubleword. -/
 theorem getHalfword_lane (s : MachineState) (b l : ℕ) (hb : b % 8 = 0) (hl : l < 4)
     (hlt : b + 8 < 2 ^ 64) :
@@ -179,52 +144,4 @@ theorem getHalfword_lane (s : MachineState) (b l : ℕ) (hb : b % 8 = 0) (hl : l
     BitVec.toNat_setWidth, BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
   rw [Nat.mul_comm l 16]
 
-/-! ## Word stores into headers -/
-
-theorem word_ok (a : ℕ) (h1 : 32 ≤ a) (h2 : a ≤ 0x78000000) (h3 : a % 4 = 0) :
-    isValidMemAccess (W a) = true := by
-  simp only [isValidMemAccess, isAligned4, isValidMemAddr, MEM_START, MEM_END,
-    INPUT_MEM_START, INPUT_MEM_END, RAM_MEM_START, RAM_MEM_END, BitVec.toNat_ofNat,
-    Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq]
-  omega
-
-/-- The header doubleword with slot address `a` and 32-bit level tag `lev`, as an append. -/
-theorem W_hdr32 (a lev : ℕ) (ha : a < 2 ^ 32) (hl : lev < 2 ^ 32) :
-    W (a + lev * 2 ^ 32) = BitVec.ofNat 32 lev ++ BitVec.ofNat 32 a := by
-  apply BitVec.eq_of_toNat_eq
-  rw [BitVec.toNat_append, BitVec.toNat_ofNat, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
-    Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hl, ← Nat.shiftLeft_add_eq_or_of_lt ha,
-    Nat.shiftLeft_eq, Nat.mod_eq_of_lt (by
-      have : lev * 2 ^ 32 ≤ (2 ^ 32 - 1) * 2 ^ 32 := Nat.mul_le_mul_right _ (by omega)
-      omega)]
-  ring
-
-/-- Replacing the top word of a doubleword. -/
-theorem replaceWord32_append (y : BitVec 32) (x h : BitVec 32) :
-    replaceWord32 (x ++ y) 1 h = h ++ y := by
-  apply BitVec.eq_of_getLsbD_eq
-  intro i hi
-  simp only [replaceWord32, BitVec.getLsbD_or, BitVec.getLsbD_and, BitVec.getLsbD_not,
-    BitVec.getLsbD_shiftLeft, BitVec.getLsbD_append, BitVec.getLsbD_setWidth, hi]
-  by_cases hlow : i < 32
-  · simp [hlow]
-  · have : i - 32 < 32 := by omega
-    have hb : Nat.testBit 4294967295 (i - 32) = true := by
-      rw [show (4294967295 : ℕ) = 2 ^ 32 - 1 by norm_num, Nat.testBit_two_pow_sub_one]
-      simpa using this
-    simp [hlow, this, BitVec.getLsbD_ofNat, hb, show i - 32 < 64 by omega]
-
-/-- A word store at byte `4` of an aligned doubleword replaces its top word. -/
-theorem setWord32_top (s : MachineState) (a : ℕ) (ha : a % 8 = 0) (hlt : a + 8 < 2 ^ 64)
-    (v : BitVec 32) :
-    s.setWord32 (W (a + 4)) v = s.setMem (W a) (replaceWord32 (s.getMem (W a)) 1 v) := by
-  have hal : alignToDword (W (a + 4)) = W a := by
-    apply BitVec.eq_of_toNat_eq
-    rw [alignToDword_toNat, W_toNat _ (by omega), W_toNat _ (by omega)]
-    omega
-  have hoff : byteOffset (W (a + 4)) = 4 := by
-    rw [byteOffset_eq_mod, W_toNat _ (by omega)]
-    omega
-  simp only [MachineState.setWord32, hal, hoff]
-
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

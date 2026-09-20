@@ -23,12 +23,12 @@ attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.setsName Forest.fixedChoice Forest.fixedPositions Forest.fixedDigits
 
 /-- The nodes of chain `k`, in topological order. -/
-def chainNodes (k : Fin 32) : List Name :=
-  src k :: (List.finRange 15).flatMap (fun t => [ci k t, ch k t, cv k t])
+def chainNodes (k : Fin 28) : List Name :=
+  src k :: (List.finRange 32).flatMap (fun t => [ci k t, ch k t, cv k t])
 
 /-- Topological order: the chains one after the other, then the root. -/
 def order : List Name :=
-  (List.finRange 32).flatMap chainNodes ++ [rc, rh]
+  (List.finRange 28).flatMap chainNodes ++ [rc, rh]
 
 set_option maxRecDepth 100000 in
 theorem order_fin : order.map Name.fin = List.finRange N := by decide +kernel
@@ -92,7 +92,7 @@ theorem reconstruct_eq (A : Finset Name) (payload : List Bool) :
 /-- Raw signatures begin with the 128-bit signing nonce. -/
 def verify (pk : PublicKey) (m : Message) (bits : List Bool) :
     OracleComp Spec Bool := do
-  let i ← index m (ofBits 128 (bits.take 128))
+  let i ← packIndex m (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
     let A := Forest.setsName ⟨i, hi⟩
     if (bits.drop 128).length = graph.revealBits (fins A) then
@@ -106,7 +106,7 @@ theorem verify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     verify pk m bits = Wire.scheme.verify pk m bits := by
   change verify pk m bits = Forest.forestScheme.verify pk m (Wire.decode bits)
   unfold verify GScheme.verify Wire.decode
-  apply congrArg (fun f => index m (ofBits 128 (bits.take 128)) >>= f)
+  apply congrArg (fun f => packIndex m (ofBits 128 (bits.take 128)) >>= f)
   funext i
   by_cases hi : i ∈ validSet
   · rw [dif_pos hi, dif_pos hi]
@@ -120,61 +120,16 @@ theorem verify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     · rfl
   · rw [dif_neg hi, dif_neg hi]
 
-/-- The finite operation vocabulary compiled to RV64IM. -/
-inductive NodeOp where
-  | zero
-  | copy (source : Name)
-  | headed (header : BitVec 64) (source : Name)
-  | root
-  | hash (source : Name)
-
-/-- The static operation at each named node. -/
-def nodeOp : Name → NodeOp
-  | .src _ => .zero
-  | .ci k t => .headed (hdr k t) (prev k t)
-  | .ch k t => .hash (ci k t)
-  | .cv k t => .copy (ch k t)
-  | .rc => .root
-  | .rh => .hash rc
-
-/-- Numerical value produced by an operation, before storage in the destination slot. -/
-def evalOp (x : graph.Assignment) : NodeOp → OracleComp Spec ℕ
-  | .zero => pure 0
-  | .copy source => pure (trunc (x source.fin)).toNat
-  | .headed header source => pure (trunc (x source.fin) ++ header).toNat
-  | .root => pure (rootCat fun k => trunc (x (cv k 14).fin)).toNat
-  | .hash source => BitVec.toNat <$> OptimalOTS.hash (x source.fin)
-
-/-- Write an operation's output using the destination node's specified length. -/
-def runOp (x : graph.Assignment) (n : Name) :
-    OracleComp Spec (BitVec (graph.len n.fin)) :=
-  (fun y => y.cast (graph_len_fin n).symm) <$>
-    (BitVec.ofNat n.len <$> evalOp x (nodeOp n))
-
-private theorem cast_zero {n m : ℕ} (h : n = m) : (0 : BitVec n).cast h = 0 := by
-  subst h
-  rfl
-
-/-- Every operation preserves the graph's exact bit order and hash input length. -/
-theorem runOp_eq (x : graph.Assignment) (n : Name) : runOp x n = evalName x n := by
-  cases n <;> dsimp only [runOp, nodeOp, evalOp, evalName, detVal, Name.len]
-  all_goals simp only [map_pure, Functor.map_map,
-    BitVec.ofNat_toNat, BitVec.setWidth_eq]
-  all_goals first
-    | exact congrArg pure (cast_zero _)
-    | (apply congrArg (fun f => f <$> _); funext y;
-       exact congrArg (fun z => z.cast _) (BitVec.setWidth_eq y))
-
-/-- Whether a node supplies one of the 32 signature words. -/
-def disclosed (positions : Fin 32 → Fin 16) : Name → Bool
-  | .src k => decide ((positions k).val = 0)
-  | .cv k t => decide ((positions k).val = t.val + 1)
+/-- Whether a node supplies one of the 28 signature values. -/
+def disclosed (positions : Fin 28 → Fin 32) : Name → Bool
+  | .ci k t => decide (positions k = t)
   | _ => false
 
 /-- Whether a node is computed from earlier nodes rather than read from the signature. -/
-def evaluated (positions : Fin 32 → Fin 16) : Name → Bool
+def evaluated (positions : Fin 28 → Fin 32) : Name → Bool
   | .src _ => false
-  | .ci k t | .ch k t | .cv k t => decide ((positions k).val ≤ t.val)
+  | .ci k t => decide ((positions k).val < t.val)
+  | .ch k t | .cv k t => decide ((positions k).val ≤ t.val)
   | .rc | .rh => true
 
 /-- The machine's disclosure predicate agrees with the certified cut. -/
@@ -182,14 +137,12 @@ theorem disclosed_eq (i : Idx) (n : Name) :
     disclosed (fixedPositions i) n = true ↔ n ∈ Forest.setsName i := by
   rw [Forest.setsName]
   cases n with
-  | src k =>
-    rw [src_mem_cutOf_iff]
-    simp only [disclosed, decide_eq_true_eq, fixedChoice, Fin.ext_iff, Fin.val_zero]
-  | cv k t =>
-    rw [cv_mem_cutOf_iff]
+  | ci k t =>
+    rw [ci_mem_cutOf_iff]
     simp only [disclosed, decide_eq_true_eq, fixedChoice]
-  | ci k t => simp only [disclosed, Bool.false_eq_true, ci_not_mem_cutOf]
+  | src k => simp only [disclosed, Bool.false_eq_true, src_not_mem_cutOf]
   | ch k t => simp only [disclosed, Bool.false_eq_true, ch_not_mem_cutOf]
+  | cv k t => simp only [disclosed, Bool.false_eq_true, cv_not_mem_cutOf]
   | rc => simp only [disclosed, Bool.false_eq_true, rc_not_mem_cutOf]
   | rh => simp only [disclosed, Bool.false_eq_true, rh_not_mem_cutOf]
 
@@ -201,7 +154,7 @@ private theorem evaluated_child {A : Finset Name} {n p : Name} (hc : child n = s
 theorem evaluated_eq (i : Idx) (n : Name) :
     evaluated (fixedPositions i) n = true ↔ Evaluated (Forest.setsName i) n := by
   rw [Forest.setsName]
-  have chain (k : Fin 32) (t : Fin 15) :
+  have chain (k : Fin 28) (t : Fin 32) :
       Evaluated (cutOf (fixedChoice i)) (ch k t) ↔ (fixedPositions i k).val ≤ t.val := by
     rw [evaluated_ch_iff]
     simp only [fixedChoice]

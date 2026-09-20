@@ -100,19 +100,19 @@ theorem not_hits_fHid_of_signExt {m₁ : Message} {d d' : Cache}
 
 theorem not_hits_extend_fExp_fHid {m₁ : Message} {d d' : Cache}
     {r : Option (Nonce × Idx)} (hd' : SignExt m₁ d r d')
-    {ξ : Rec} (hξ : ¬ Cache.Hits d (kc ξ)) (A? : Option (Finset Name)) :
+    {ξ : Rec} (hg : DistinctRec ξ) (hξ : ¬ Cache.Hits d (kc ξ)) (A? : Option (Finset Name)) :
     ¬ Cache.Hits (Cache.extend d' (fExp A? ξ)) (fHid A? ξ) := by
   rw [Cache.hits_extend]
   rintro (h | h)
   · exact not_hits_fHid_of_signExt hd' hξ A? h
-  · exact (disjoint_fExp_fHid A? ξ).not_hits h
+  · exact (disjoint_fExp_fHid A? hg).not_hits h
 
 theorem spr_signExt_iff {m₁ : Message} {d d' : Cache}
     {r : Option (Nonce × Idx)} (hd' : SignExt m₁ d r d')
     (ξ : Rec) : Spr d' ξ ↔ Spr d ξ := by
   constructor
-  · rintro ⟨h, p, hp, u, hu, htag, w, hw, htr⟩
-    refine ⟨h, p, hp, u, hu, htag, w, ?_, htr⟩
+  · rintro ⟨h, p, hp, u, hu, w, hw, htr⟩
+    refine ⟨h, p, hp, u, hu, w, ?_, htr⟩
     rcases hdq : d ⟨p.len, u⟩ with _ | v
     · exfalso
       obtain ⟨η, hqe, -⟩ := hd'.2.1 _ w hdq hw
@@ -123,13 +123,13 @@ theorem spr_signExt_iff {m₁ : Message} {d d' : Cache}
 
 theorem spr_extend_fExp_iff {m₁ : Message} {d d' : Cache}
     {r : Option (Nonce × Idx)} (hd' : SignExt m₁ d r d')
-    (ξ : Rec) (A? : Option (Finset Name)) :
+    {ξ : Rec} (hg : GoodRec ξ) (A? : Option (Finset Name)) :
     Spr (Cache.extend d' (fExp A? ξ)) ξ ↔ Spr d ξ := by
   constructor
   · intro hs
     rcases spr_of_extend hs with hs | hs
     · exact (spr_signExt_iff hd' ξ).1 hs
-    · exact absurd hs (not_spr_fExp A? ξ)
+    · exact absurd hs (not_spr_fExp A? hg)
   · intro hs
     exact Spr.mono (sub_extend_left d' _) ((spr_signExt_iff hd' ξ).2 hs)
 
@@ -155,11 +155,11 @@ theorem stB_support (pk : PublicKey) (m₁ : Message) (st : A.State) (σ : Optio
     (c : Cache) : ∀ p ∈ support (run (stB A pk m₁ st σ) c), Cache.Sub c p.2 ∧
       (p.1 = true → ∃ m₂ σ₂, σ.map (fun s => (m₁, s)) ≠ some (m₂, σ₂) ∧
         ∃ w, p.2 (encQuery (m₂ ++ σ₂.1)) = some w ∧
-          ∃ hi : idxOf w ∈ validSet,
+          ∃ hi : pack w ∈ validSet,
             σ₂.2.length = graph.revealBits (fins (setsName ⟨_, hi⟩)) ∧
             ∃ y : graph.Assignment,
               graph.ReconEqs p.2 (fins (setsName ⟨_, hi⟩))
-                (graph.decode (fins (setsName ⟨_, hi⟩)) σ₂.2) y ∧ trunc (yv y rh) = pk) := by
+                (graph.decode (fins (setsName ⟨_, hi⟩)) σ₂.2) y ∧ trunc128 (yv y rh) = pk) := by
   intro p hp
   unfold stB at hp
   rw [run_bind, support_bind] at hp
@@ -179,7 +179,7 @@ theorem stB_support (pk : PublicKey) (m₁ : Message) (st : A.State) (σ : Optio
   obtain ⟨hok, hne⟩ := hok
   obtain ⟨w, hw, hi, hlen, y, hy, hpk⟩ := hver hok
   refine ⟨m₂, σ₂, hne, w, hw, hi, hlen, y, hy, ?_⟩
-  exact (trunc_cast_eq (graph_len_fin rh) (y rh.fin)).trans hpk
+  exact (trunc128_cast_pot (graph_len_fin rh) (y rh.fin)).trans hpk
 
 /-- An accepted forgery is one of the charged events. -/
 theorem events_stB (ξ : Rec) (r : Option (Nonce × Idx)) (m₁ : Message) (st : A.State)
@@ -197,9 +197,9 @@ theorem events_stB (ξ : Rec) (r : Option (Nonce × Idx)) (m₁ : Message) (st :
     · left
       rw [cutOf?_none, fHid_none]
       exact hh
-  · by_cases hji : (⟨idxOf w, hi⟩ : Idx) = i
+  · by_cases hji : (⟨pack w, hi⟩ : Idx) = i
     · -- the forgery uses the signed disclosure set
-      have hA : setsName ⟨idxOf w, hi⟩ = setsName i := congrArg setsName hji
+      have hA : setsName ⟨pack w, hi⟩ = setsName i := congrArg setsName hji
       rw [hA] at hy hlen
       by_cases hu : m₂ ++ σ₂.1 = m₁ ++ η
       · -- same encoding input: same message and nonce, different revealed values
@@ -240,7 +240,7 @@ theorem events_stB (ξ : Rec) (r : Option (Nonce × Idx)) (m₁ : Message) (st :
         exact hh
 
 /-- The second stage, coupled to the run without the hidden points. -/
-theorem stageB_iub (ξ : Rec) (r : Option (Nonce × Idx)) (m₁ : Message)
+theorem stageB_iub (ξ : Rec) (hg : GoodRec ξ) (r : Option (Nonce × Idx)) (m₁ : Message)
     (st : A.State) (d d' : Cache) (hξ : ¬ Cache.Hits d (kc ξ)) (hd' : SignExt m₁ d r d') :
     E (run (stB A (pkOf ξ) m₁ st (sigOf ξ r)) (Cache.extend d' (kc ξ))) g ≤
       E (run (stB A (pkOf ξ) m₁ st (sigOf ξ r)) (Cache.extend d' (fExp (cutOf? r) ξ)))
@@ -249,14 +249,14 @@ theorem stageB_iub (ξ : Rec) (r : Option (Nonce × Idx)) (m₁ : Message)
           ind (∃ η i, r = some (η, i) ∧ IdxPre d (m₁ ++ η) i.val)) := by
   have hkc : Cache.extend d' (kc ξ) =
       Cache.extend (Cache.extend d' (fExp (cutOf? r) ξ)) (fHid (cutOf? r) ξ) := by
-    rw [Cache.extend_assoc, extend_fExp_fHid]
+    rw [Cache.extend_assoc, extend_fExp_fHid _ hg.1]
   have hdisj : Cache.Disjoint (Cache.extend d' (fExp (cutOf? r) ξ)) (fHid (cutOf? r) ξ) := by
     intro q hq
     have hkq : (kc ξ q).isSome := by
       obtain ⟨h, p, hp, -, hqp⟩ := (fHid_isSome_iff _ ξ q).1 hq
       exact (kc_isSome_iff ξ q).2 ⟨h, p, hp, hqp⟩
     rw [Cache.extend_apply, signExt_kc_none hd' hξ hkq, Option.none_or]
-    exact disjoint_fExp_fHid _ ξ q hq
+    exact disjoint_fExp_fHid _ hg.1 q hq
   rw [hkc]
   refine (iub (stB A (pkOf ξ) m₁ st (sigOf ξ r)) (fHid (cutOf? r) ξ) g g_le_one _
     hdisj).trans ?_
@@ -295,7 +295,8 @@ theorem pkOf_of_subset_fiberA {pk : BitVec 128} {T : Finset Rec} (hT : T ⊆ fib
 
 /-- The second stage for the records `T` of a public key: signing succeeded. -/
 theorem stageB_some (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache)
-    (T : Finset Rec) (hT : T ⊆ fiberA pk) (hTd : ∀ ξ ∈ T, ¬ Cache.Hits d (kc ξ))
+    (T : Finset Rec) (hT : T ⊆ fiberA pk) (hTg : ∀ ξ ∈ T, GoodRec ξ)
+    (hTd : ∀ ξ ∈ T, ¬ Cache.Hits d (kc ξ))
     (η : Nonce) (i : Idx) (d' : Cache) (hd' : SignExt m₁ d (some (η, i)) d')
     (b'' : ℕ) (hI : Inv d' b'')
     (hB : ∀ ξ ∈ T, CostAtMost (stB A pk m₁ st (sigOf ξ (some (η, i)))) b'') :
@@ -394,8 +395,8 @@ theorem stageB_some (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache
       have h3 : ¬ ∃ j, some i.val = some j ∧
           IdxPost d' (Cache.extend d' (fExp (some (setsName i)) ξ)) j :=
         fun ⟨j, _, h⟩ => not_idxPost_extend_fExp d' ξ _ j h
-      rw [ind_not (not_hits_extend_fExp_fHid hd' (hTd ξ hξT) (some (setsName i))),
-        spr_extend_fExp_iff hd' ξ (some (setsName i)), ind_not h3, zero_add, add_zero]
+      rw [ind_not (not_hits_extend_fExp_fHid hd' (hTg ξ hξT).1 (hTd ξ hξT) (some (setsName i))),
+        spr_extend_fExp_iff hd' (hTg ξ hξT) (some (setsName i)), ind_not h3, zero_add, add_zero]
     rw [hsum]
     exact hmaster.trans (by rw [hΦ])
   -- the weights of the fibers add up to at most the weight of the public key
@@ -468,7 +469,7 @@ theorem stageB_none (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache
 
 /-- The second stage: the continuation bound handed to the signing lemma. -/
 theorem stageB (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache) (T : Finset Rec)
-    (hT : T ⊆ fiberA pk) (hTd : ∀ ξ ∈ T, ¬ Cache.Hits d (kc ξ))
+    (hT : T ⊆ fiberA pk) (hTg : ∀ ξ ∈ T, GoodRec ξ) (hTd : ∀ ξ ∈ T, ¬ Cache.Hits d (kc ξ))
     (r : Option (Nonce × Idx)) (d' : Cache) (hd' : SignExt m₁ d r d') (b'' : ℕ)
     (hI : Inv d' b'') (hB : ∀ ξ ∈ T, CostAtMost (stB A pk m₁ st (sigOf ξ r)) b'') :
     ∑ ξ ∈ T, w * E (run (stB A pk m₁ st (sigOf ξ r)) (Cache.extend d' (kc ξ))) g ≤
@@ -485,7 +486,7 @@ theorem stageB (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache) (T 
         w * ind (∃ η i, r = some (η, i) ∧ IdxPre d (m₁ ++ η) i.val) := by
     intro ξ hξ
     rw [← mul_add, ← hTpk ξ hξ]
-    refine mul_le_mul_right ((stageB_iub A ξ r m₁ st d d' (hTd ξ hξ) hd').trans ?_) _
+    refine mul_le_mul_right ((stageB_iub A ξ (hTg ξ hξ) r m₁ st d d' (hTd ξ hξ) hd').trans ?_) _
     rw [E_add]
     exact add_le_add_right (E_const_le _ _) _
   -- the master lemma on the run without the hidden points
@@ -504,7 +505,7 @@ theorem stageB (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache) (T 
         have h3 : ¬ ∃ j, (none : Option ℕ) = some j ∧ IdxPost d' p.2 j := by
           rintro ⟨j, h, -⟩; cases h
         rw [ind_not h3, add_zero]
-    · refine le_trans ?_ (stageB_some A pk m₁ st d T hT hTd η i d' hd' b'' hI hB)
+    · refine le_trans ?_ (stageB_some A pk m₁ st d T hT hTg hTd η i d' hd' b'' hI hB)
       refine Finset.sum_le_sum fun ξ _ => ?_
       rw [cutOf?_some, idxOf?_some]
       refine mul_le_mul_right (E_mono _ fun p => ?_) _

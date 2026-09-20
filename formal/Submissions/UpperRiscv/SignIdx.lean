@@ -1,5 +1,6 @@
 import Submissions.UpperRiscv.Master
 import Submissions.UpperRiscv.GScheme
+import Submissions.UpperRiscv.PackCount
 
 /-!
 # The signing loop
@@ -46,12 +47,24 @@ lemma sum_fin_equivFin {α : Type*} {s : Finset α} {n : ℕ} (h : n = s.card) (
   exact Equiv.sum_comp ((finCongr h).trans s.equivFin.symm) (fun x => G x.1)
 
 /-- The index read from an oracle output. -/
-def idxOfOut (y : BitVec hashBits) : ℕ := (y.setWidth idxBits).toNat
+def idxOfOut (y : BitVec hashBits) : ℕ := pack y
+
+theorem two_pow_idxBits : 2 ^ idxBits = 2 ^ 128 := by norm_num [idxBits]
+
+theorem two_pow_hashBits_sub : 2 ^ (hashBits - idxBits) = 2 ^ 128 := by norm_num [hashBits, idxBits]
 
 /-- Number of oracle outputs whose index lies in a set of index values. -/
-theorem card_idxOfOut_mem (hidx : idxBits ≤ hashBits) (A : Finset ℕ)
+theorem card_idxOfOut_mem (_hidx : idxBits ≤ hashBits) (A : Finset ℕ)
     (hA : ∀ n ∈ A, n < 2 ^ idxBits) :
     (Finset.univ.filter fun y : BitVec hashBits => idxOfOut y ∈ A).card =
+      A.card * 2 ^ (hashBits - idxBits) := by
+  rw [two_pow_hashBits_sub]
+  exact card_pack_mem A fun n hn => by rw [← two_pow_idxBits]; exact hA n hn
+
+/-- The old, direct proof for the truncated index, kept for reference. -/
+theorem card_setWidth_mem (hidx : idxBits ≤ hashBits) (A : Finset ℕ)
+    (hA : ∀ n ∈ A, n < 2 ^ idxBits) :
+    (Finset.univ.filter fun y : BitVec hashBits => (y.setWidth idxBits).toNat ∈ A).card =
       A.card * 2 ^ (hashBits - idxBits) := by
   have hH : 2 ^ hashBits = 2 ^ idxBits * 2 ^ (hashBits - idxBits) := by
     rw [← pow_add, Nat.add_sub_cancel' hidx]
@@ -63,7 +76,7 @@ theorem card_idxOfOut_mem (hidx : idxBits ≤ hashBits) (A : Finset ℕ)
     simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq] at hy
     simp only [Finset.coe_product, Set.mem_prod, Finset.mem_coe, Finset.mem_range]
     refine ⟨?_, ?_⟩
-    · simpa [idxOfOut, BitVec.toNat_setWidth] using hy
+    · simpa [BitVec.toNat_setWidth] using hy
     · rw [Nat.div_lt_iff_lt_mul hNpos]
       have := y.isLt
       rw [hH] at this
@@ -75,7 +88,7 @@ theorem card_idxOfOut_mem (hidx : idxBits ≤ hashBits) (A : Finset ℕ)
       rw [hH]
       have := hA _ hx.1
       nlinarith
-    simp only [idxOfOut, BitVec.toNat_setWidth, BitVec.toNat_ofNat, Nat.mod_eq_of_lt h1,
+    simp only [BitVec.toNat_setWidth, BitVec.toNat_ofNat, Nat.mod_eq_of_lt h1,
       Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt (hA _ hx.1)]
     exact hx.1
   · intro y _
@@ -105,7 +118,7 @@ oracle has no labels, so an encoding query is told apart from every other query 
 def encQuery (u : EncInput) : Query := ⟨msgBits + nonceBits, u⟩
 
 /-- The index read from an oracle answer. -/
-def idxOf (w : BitVec hashBits) : ℕ := (w.setWidth idxBits).toNat
+def idxOf (w : BitVec hashBits) : ℕ := pack w
 
 /-- The signing loop, returning the nonce and the index. -/
 def signIdxLoop (m : Message) :
@@ -116,7 +129,7 @@ def signIdxLoop (m : Message) :
     if h : 0 < fresh.card then do
       let j ← (liftM ($[0..(fresh.card - 1)]) : OracleComp Spec (Fin (fresh.card - 1 + 1)))
       let η : Nonce := (fresh.equivFin.symm (Fin.cast (by omega) j)).1
-      let i ← index m η
+      let i ← packIndex m η
       if hi : i ∈ validSet then
         return some (η, ⟨i, hi⟩)
       else
@@ -191,7 +204,7 @@ theorem signIdxLoop_succ (m : Message) (k : ℕ) (tried : Finset Nonce)
         loopBody m k tried (nonceOf tried hc j) := by
   rw [signIdxLoop, dif_pos hc, liftM_uniformFin_eq]
   refine bind_congr fun j => ?_
-  simp only [loopBody, nonceOf, index, hash, map_eq_bind_pure_comp, bind_assoc, pure_bind,
+  simp only [loopBody, nonceOf, packIndex, hash, map_eq_bind_pure_comp, bind_assoc, pure_bind,
     Function.comp_def]
   rfl
 
@@ -458,24 +471,36 @@ def SignExt (m : Message) (d : Cache) (r : Option (Nonce × Idx)) (d' : Cache) :
 def validInputs (d : Cache) : Finset (EncInput) :=
   Finset.univ.filter fun u : EncInput => ∃ w, d (encQuery u) = some w ∧ idxOf w ∈ validSet
 
+/-- The index of an optional answer (`0` for none). Defined by pattern matching so that the
+kernel reduces it before unfolding `idxOf`. -/
+def idxOfOpt : Option (BitVec hashBits) → ℕ
+  | some w => idxOf w
+  | none => 0
+
+theorem idxOfOpt_some (w : BitVec hashBits) : idxOfOpt (some w) = idxOf w := rfl
+
 /-- The valid indices of the entries of `d`. -/
 def V (d : Cache) : Finset ℕ :=
-  (validInputs d).image fun u => ((d (encQuery u)).map (idxOf)).getD 0
+  (validInputs d).image fun u => idxOfOpt (d (encQuery u))
+
+theorem mem_validInputs {d : Cache} {u : EncInput} :
+    u ∈ validInputs d ↔ ∃ w, d (encQuery u) = some w ∧ idxOf w ∈ validSet := by
+  unfold validInputs
+  rw [Finset.mem_filter]
+  exact ⟨fun h => h.2, fun h => ⟨Finset.mem_univ _, h⟩⟩
 
 theorem mem_V {d : Cache} {u : EncInput} {w : BitVec hashBits}
     (hu : d (encQuery u) = some w) (hw : idxOf w ∈ validSet) : idxOf w ∈ V d := by
   refine Finset.mem_image.2 ⟨u, ?_, ?_⟩
-  · simp only [validInputs, Finset.mem_filter, Finset.mem_univ, true_and]
-    exact ⟨w, hu, hw⟩
-  · simp [hu]
+  · exact mem_validInputs.2 ⟨w, hu, hw⟩
+  · rw [hu, idxOfOpt_some]
 
 theorem V_lt (d : Cache) : ∀ n ∈ V d, n < 2 ^ idxBits := by
   intro n hn
   obtain ⟨u, hu, rfl⟩ := Finset.mem_image.1 hn
-  simp only [validInputs, Finset.mem_filter, Finset.mem_univ, true_and] at hu
-  obtain ⟨w, hw, -⟩ := hu
-  simp only [hw, Option.map_some, Option.getD_some]
-  exact (w.setWidth idxBits).isLt
+  obtain ⟨w, hw, -⟩ := mem_validInputs.1 hu
+  rw [hw, idxOfOpt_some]
+  exact pack_lt w
 
 theorem card_idxOf_mem (hidx : idxBits ≤ hashBits) (A : Finset ℕ)
     (hA : ∀ n ∈ A, n < 2 ^ idxBits) :

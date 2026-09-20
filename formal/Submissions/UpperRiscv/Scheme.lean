@@ -2,10 +2,10 @@ import Submissions.UpperRiscv.FixedChoice
 import Submissions.UpperRiscv.GScheme
 
 /-!
-# The flat nibble-layout forest
+# The bare-chain forest
 
-A family of cuts indexed by the accepted indices, with 32 revealed 128-bit values. Verification
-costs 170 compressions.
+A family of cuts indexed by the accepted indices, with 28 revealed 192-bit values. Verification
+costs 256 compressions.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -45,8 +45,7 @@ def forestScheme : GScheme where
     show graph.revealBits (fins (setsName i)) ≤ 5376
     rw [revealBits_eq]
     change ∑ n ∈ cutOf (fixedChoice i), n.len ≤ 5376
-    rw [Finset.sum_const_nat fun n hn => (fixedCut_isCut i).values n hn, fixedCut_card i]
-    norm_num
+    rw [Finset.sum_const_nat fun n hn => (fixedCut_isCut i).len_eq hn, fixedCut_card i]
   keygen_le := by
     show graph.keygenCost ≤ 2 ^ 20
     rw [graph_keygenCost]
@@ -55,12 +54,12 @@ def forestScheme : GScheme where
 theorem isCut_setsName (i : Idx) : IsCut (setsName i) :=
   fixedCut_isCut i
 
-theorem cost_setsName (i : Idx) : ∑ n ∈ evaluatedSet (setsName i), n.cost = 169 :=
+theorem cost_setsName (i : Idx) : ∑ n ∈ evaluatedSet (setsName i), n.cost = 255 :=
   fixedCut_cost i
 
-/-- Every signature verifies in `170` compressions. -/
-theorem forestScheme_verifyCost (i : Idx) : forestScheme.verifyCost i = 170 := by
-  show idxCost + graph.reconstructCost (fins (setsName i)) = 170
+/-- Every signature verifies in `256` compressions. -/
+theorem forestScheme_verifyCost (i : Idx) : forestScheme.verifyCost i = 256 := by
+  show idxCost + graph.reconstructCost (fins (setsName i)) = 256
   have hidx : idxCost = 1 := by decide
   rw [reconstructCost_eq, hidx]
   have h := cost_setsName i

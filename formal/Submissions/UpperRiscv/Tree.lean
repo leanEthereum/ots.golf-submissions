@@ -14,7 +14,7 @@ tree.  This file relates the generic notions of `OptimalOTS.Dag` (`Graph.Visited
 * `Evaluated A n`: `n ∉ A` and no strict ancestor of `n` lies in `A`;
 * `reconstructCost_eq`, `revealBits_eq`, `no_hidden_source_iff`: the scheme's quantities in
   tree terms;
-* cuts (`IsCut`): antichains of 128-bit nodes meeting every source path; distinct cuts of equal
+* cuts (`IsCut`): antichains of 192-bit nodes meeting every source path; distinct cuts of equal
   cost are incomparable (`exists_mem_evaluated_of_ne`).
 -/
 
@@ -40,10 +40,10 @@ inductive Above : Name → Name → Prop
 
 /-- Distance to the root. -/
 def height : Name → ℕ
-  | src _ => 47
-  | ci _ t => 46 - 3 * t
-  | ch _ t => 45 - 3 * t
-  | cv _ t => 44 - 3 * t
+  | src _ => 98
+  | ci _ t => 97 - 3 * t
+  | ch _ t => 96 - 3 * t
+  | cv _ t => 95 - 3 * t
   | rc => 1
   | rh => 0
 
@@ -78,15 +78,15 @@ theorem not_above_rh (m : Name) : ¬ Above m rh := by
 def ancSet : Name → Finset Name
   | rh => ∅
   | rc => {rh}
-  | cv k t => (Finset.univ.filter fun t' : Fin 15 => t < t').image (ci k) ∪
-      (Finset.univ.filter fun t' : Fin 15 => t < t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 15 => t < t').image (cv k) ∪ {rc, rh}
-  | ch k t => (Finset.univ.filter fun t' : Fin 15 => t < t').image (ci k) ∪
-      (Finset.univ.filter fun t' : Fin 15 => t < t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 15 => t ≤ t').image (cv k) ∪ {rc, rh}
-  | ci k t => (Finset.univ.filter fun t' : Fin 15 => t < t').image (ci k) ∪
-      (Finset.univ.filter fun t' : Fin 15 => t ≤ t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 15 => t ≤ t').image (cv k) ∪ {rc, rh}
+  | cv k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
+      (Finset.univ.filter fun t' : Fin 32 => t < t').image (ch k) ∪
+      (Finset.univ.filter fun t' : Fin 32 => t < t').image (cv k) ∪ {rc, rh}
+  | ch k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
+      (Finset.univ.filter fun t' : Fin 32 => t < t').image (ch k) ∪
+      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {rc, rh}
+  | ci k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
+      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (ch k) ∪
+      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {rc, rh}
   | src k => Finset.univ.image (ci k) ∪ Finset.univ.image (ch k) ∪ Finset.univ.image (cv k) ∪
       {rc, rh}
 
@@ -94,43 +94,43 @@ theorem child_eq_none {n : Name} (h : child n = none) : n = rh := by
   cases n <;> simp only [Name.child, reduceCtorEq] at h <;> try rfl
   split_ifs at h
 
-theorem filter_lt_succ (t : Fin 15) (ht : t.val < 14) :
-    Finset.univ.filter (fun t' : Fin 15 => t < t') =
-      insert (⟨t.val + 1, by omega⟩ : Fin 15)
-        (Finset.univ.filter (fun t' : Fin 15 => (⟨t.val + 1, by omega⟩ : Fin 15) < t')) := by
+theorem filter_lt_succ (t : Fin 32) (ht : t.val < 31) :
+    Finset.univ.filter (fun t' : Fin 32 => t < t') =
+      insert (⟨t.val + 1, by omega⟩ : Fin 32)
+        (Finset.univ.filter (fun t' : Fin 32 => (⟨t.val + 1, by omega⟩ : Fin 32) < t')) := by
   ext t'
   simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_insert, Fin.lt_def,
     Fin.ext_iff]
   omega
 
-theorem filter_lt_eq_filter_le (t : Fin 15) (ht : t.val < 14) :
-    Finset.univ.filter (fun t' : Fin 15 => t < t') =
-      Finset.univ.filter (fun t' : Fin 15 => (⟨t.val + 1, by omega⟩ : Fin 15) ≤ t') := by
+theorem filter_lt_eq_filter_le (t : Fin 32) (ht : t.val < 31) :
+    Finset.univ.filter (fun t' : Fin 32 => t < t') =
+      Finset.univ.filter (fun t' : Fin 32 => (⟨t.val + 1, by omega⟩ : Fin 32) ≤ t') := by
   ext t'
   simp only [Finset.mem_filter, Finset.mem_univ, true_and, Fin.lt_def, Fin.le_def]
   omega
 
-theorem filter_le_eq_insert (t : Fin 15) :
-    Finset.univ.filter (fun t' : Fin 15 => t ≤ t') =
-      insert t (Finset.univ.filter (fun t' : Fin 15 => t < t')) := by
+theorem filter_le_eq_insert (t : Fin 32) :
+    Finset.univ.filter (fun t' : Fin 32 => t ≤ t') =
+      insert t (Finset.univ.filter (fun t' : Fin 32 => t < t')) := by
   ext t'
   simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_insert, Fin.le_def,
     Fin.lt_def, Fin.ext_iff]
   omega
 
-theorem filter_lt_14 : Finset.univ.filter (fun t' : Fin 15 => (14 : Fin 15) < t') = ∅ :=
+theorem filter_lt_31 : Finset.univ.filter (fun t' : Fin 32 => (31 : Fin 32) < t') = ∅ :=
   Finset.filter_eq_empty_iff.mpr fun t' _ => not_lt.mpr (Fin.le_last t')
 
 theorem univ_eq_insert_zero :
-    (Finset.univ : Finset (Fin 15)) =
-      insert 0 (Finset.univ.filter (fun t' : Fin 15 => 0 < t')) := by
+    (Finset.univ : Finset (Fin 32)) =
+      insert 0 (Finset.univ.filter (fun t' : Fin 32 => 0 < t')) := by
   ext t'
   simp only [Finset.mem_univ, Finset.mem_insert, Finset.mem_filter, true_and, true_iff, Fin.lt_def,
     Fin.ext_iff, Fin.val_zero]
   omega
 
 theorem filter_zero_le :
-    Finset.univ.filter (fun t' : Fin 15 => (0 : Fin 15) ≤ t') = Finset.univ := by
+    Finset.univ.filter (fun t' : Fin 32 => (0 : Fin 32) ≤ t') = Finset.univ := by
   simp
 
 theorem ancSet_child {n p : Name} (h : child n = some p) : ancSet n = insert p (ancSet p) := by
@@ -139,46 +139,46 @@ theorem ancSet_child {n p : Name} (h : child n = some p) : ancSet n = insert p (
     simp only [Name.child, Option.some.injEq] at h; subst h
     simp only [ancSet]
     rw [show Finset.univ.image (cv k) =
-        (Finset.univ.filter (fun t' : Fin 15 => (0 : Fin 15) ≤ t')).image (cv k) from by
+        (Finset.univ.filter (fun t' : Fin 32 => (0 : Fin 32) ≤ t')).image (cv k) from by
       rw [filter_zero_le]]
     rw [show Finset.univ.image (ch k) =
-        (Finset.univ.filter (fun t' : Fin 15 => (0 : Fin 15) ≤ t')).image (ch k) from by
+        (Finset.univ.filter (fun t' : Fin 32 => (0 : Fin 32) ≤ t')).image (ch k) from by
       rw [filter_zero_le]]
     rw [show Finset.univ.image (ci k) =
-        insert (ci k 0) ((Finset.univ.filter (fun t' : Fin 15 => 0 < t')).image (ci k)) from by
+        insert (ci k 0) ((Finset.univ.filter (fun t' : Fin 32 => 0 < t')).image (ci k)) from by
       rw [← Finset.image_insert, ← univ_eq_insert_zero]]
     rw [Finset.insert_union, Finset.insert_union, Finset.insert_union]
   | ci k t =>
     simp only [Name.child, Option.some.injEq] at h; subst h
     simp only [ancSet]
-    have hB : (Finset.univ.filter (fun t' : Fin 15 => t ≤ t')).image (ch k) =
-        insert (ch k t) ((Finset.univ.filter (fun t' : Fin 15 => t < t')).image (ch k)) := by
+    have hB : (Finset.univ.filter (fun t' : Fin 32 => t ≤ t')).image (ch k) =
+        insert (ch k t) ((Finset.univ.filter (fun t' : Fin 32 => t < t')).image (ch k)) := by
       rw [filter_le_eq_insert t, Finset.image_insert]
     rw [hB, Finset.union_insert (ch k t), Finset.insert_union (ch k t),
       Finset.insert_union (ch k t)]
   | ch k t =>
     simp only [Name.child, Option.some.injEq] at h; subst h
     simp only [ancSet]
-    have hC : (Finset.univ.filter (fun t' : Fin 15 => t ≤ t')).image (cv k) =
-        insert (cv k t) ((Finset.univ.filter (fun t' : Fin 15 => t < t')).image (cv k)) := by
+    have hC : (Finset.univ.filter (fun t' : Fin 32 => t ≤ t')).image (cv k) =
+        insert (cv k t) ((Finset.univ.filter (fun t' : Fin 32 => t < t')).image (cv k)) := by
       rw [filter_le_eq_insert t, Finset.image_insert]
     rw [hC, Finset.union_insert (cv k t), Finset.insert_union (cv k t)]
   | cv k t =>
     simp only [Name.child] at h
     split_ifs at h with ht
     · simp only [Option.some.injEq] at h; subst h
-      have ht' : t = 14 := Fin.ext ht
+      have ht' : t = 31 := Fin.ext ht
       subst ht'
-      simp only [ancSet, filter_lt_14, Finset.image_empty, Finset.empty_union]
+      simp only [ancSet, filter_lt_31, Finset.image_empty, Finset.empty_union]
     · simp only [Option.some.injEq] at h; subst h
       simp only [ancSet]
-      rw [show (Finset.univ.filter (fun t' : Fin 15 => t < t')).image (cv k) =
+      rw [show (Finset.univ.filter (fun t' : Fin 32 => t < t')).image (cv k) =
           (Finset.univ.filter
-            (fun t' : Fin 15 => (⟨t.val + 1, by omega⟩ : Fin 15) ≤ t')).image (cv k) from by
+            (fun t' : Fin 32 => (⟨t.val + 1, by omega⟩ : Fin 32) ≤ t')).image (cv k) from by
         rw [filter_lt_eq_filter_le t (by omega)]]
-      rw [show (Finset.univ.filter (fun t' : Fin 15 => t < t')).image (ch k) =
+      rw [show (Finset.univ.filter (fun t' : Fin 32 => t < t')).image (ch k) =
           (Finset.univ.filter
-            (fun t' : Fin 15 => (⟨t.val + 1, by omega⟩ : Fin 15) ≤ t')).image (ch k) from by
+            (fun t' : Fin 32 => (⟨t.val + 1, by omega⟩ : Fin 32) ≤ t')).image (ch k) from by
         rw [filter_lt_eq_filter_le t (by omega)]]
       rw [filter_lt_succ t (by omega), Finset.image_insert, Finset.insert_union,
         Finset.insert_union, Finset.insert_union]
@@ -308,39 +308,83 @@ theorem no_hidden_source_iff (A : Finset Name) :
     · exact hvA' h1
     · exact hv' m hm hmA
 
-/-- The hash node whose output is the value of a 128-bit node (none for sources). -/
+/-- The hash node whose output carries the value of a 192-bit node: `ch k (t-1)` for `ci k t`
+with `t ≥ 1` (none for sources and for `ci k 0`, whose value is the source). -/
 def hashOf : Name → Option Name
-  | cv k t => some (ch k t)
+  | ci k t => if h : t.val = 0 then none else some (ch k ⟨t.val - 1, by omega⟩)
   | _ => none
 
-theorem child_hashOf {a h : Name} (hh : hashOf a = some h) : child h = some a := by
-  cases a <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;> subst hh <;> rfl
+/-- The value node between the hash node and the input node it feeds. -/
+theorem child_hashOf {a h : Name} (hh : hashOf a = some h) :
+    ∃ v, child h = some v ∧ child v = some a := by
+  cases a with
+  | ci k t =>
+    simp only [hashOf] at hh
+    split_ifs at hh with h0
+    simp only [Option.some.injEq] at hh
+    subst hh
+    refine ⟨cv k ⟨t.val - 1, by omega⟩, rfl, ?_⟩
+    simp only [Name.child]
+    rw [dif_neg (by omega)]
+    congr 2
+    exact Fin.ext (by simp; omega)
+  | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hh
 
-theorem hashOf_isSome_iff (a : Name) : (hashOf a).isSome ↔ a.len = 128 ∧ ∀ k, a ≠ src k := by
-  cases a <;> simp [hashOf, Name.len]
+theorem hashOf_isSome_iff (a : Name) :
+    (hashOf a).isSome ↔ a.len = 192 ∧ (∀ k, a ≠ src k) ∧ ∀ k, a ≠ ci k 0 := by
+  cases a with
+  | ci k t =>
+    simp only [hashOf, Name.len, true_and, ne_eq, reduceCtorEq, not_false_eq_true, forall_const,
+      Name.ci.injEq]
+    split_ifs with h0
+    · simp only [Option.isSome_none, Bool.false_eq_true, false_iff, not_forall, not_not]
+      exact ⟨k, rfl, Fin.ext h0⟩
+    · simp only [Option.isSome_some, true_iff]
+      rintro k' ⟨-, rfl⟩
+      exact h0 rfl
+  | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf, Name.len]
 
 theorem len_of_hashOf {a p : Name} (hp : hashOf a = some p) : p.len = 256 := by
-  cases a <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;> rfl
+  cases a with
+  | ci k t =>
+    simp only [hashOf] at hp
+    split_ifs at hp
+    simp only [Option.some.injEq] at hp
+    subst hp; rfl
+  | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hp
 
 theorem one_le_cost_of_hashOf {a p : Name} (hp : hashOf a = some p) : 1 ≤ p.cost := by
-  cases a <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;>
-    simp [Name.cost]
+  cases a with
+  | ci k t =>
+    simp only [hashOf] at hp
+    split_ifs at hp
+    simp only [Option.some.injEq] at hp
+    subst hp; simp [Name.cost]
+  | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hp
 
-/-- A cut: an antichain of 128-bit nodes, other than the root, meeting every source path. -/
+/-- A cut: an antichain of chain input nodes meeting every source path. -/
 structure IsCut (A : Finset Name) : Prop where
-  values : ∀ n ∈ A, n.len = 128
+  values : ∀ n ∈ A, ∃ k t, n = ci k t
   antichain : ∀ n ∈ A, ∀ m, Above m n → m ∉ A
   covers : ∀ k, src k ∈ A ∨ ∃ m ∈ A, Above m (src k)
 
 theorem IsCut.rh_not_mem {A : Finset Name} (h : IsCut A) : rh ∉ A := by
   intro hm
-  have := h.values rh hm
-  simp [Name.len] at this
+  obtain ⟨_, _, h'⟩ := h.values rh hm
+  cases h'
+
+theorem IsCut.len_eq {A : Finset Name} (h : IsCut A) {n : Name} (hn : n ∈ A) : n.len = 192 := by
+  obtain ⟨_, _, rfl⟩ := h.values n hn
+  rfl
+
+theorem above_hashOf {a h : Name} (hh : hashOf a = some h) : Above a h := by
+  obtain ⟨v, hv, hva⟩ := child_hashOf hh
+  exact Above.step hv (Above.child hva)
 
 /-- The parent hash node of a cut node is not evaluated. -/
 theorem IsCut.not_evaluated_hashOf {A : Finset Name} (hA : IsCut A) {a h : Name} (ha : a ∈ A)
     (hh : hashOf a = some h) : ¬ Evaluated A h :=
-  fun he => he.2 a (Above.child (child_hashOf hh)) ha
+  fun he => he.2 a (above_hashOf hh) ha
 
 section
 
@@ -390,24 +434,42 @@ theorem exists_mem_evaluated_of_ne {A A' : Finset Name} (hA : IsCut A) (hA' : Is
       · exact ⟨a', ha'A', hA.antichain v hvA a' ha',
           fun m hm hmA => hA.antichain v hvA m (hm.trans ha') hmA⟩
   obtain ⟨a, haA', haE⟩ := hex
-  -- `a` is not a source, so it has a hash node `p` above it
-  have hns : ∀ k, a ≠ src k := by
-    intro k hk
-    subst hk
+  -- `a` is a chain input above its source, so it has a hash node `p` below it
+  obtain ⟨k, t, rfl⟩ := hA'.values a haA'
+  have ht0 : t.val ≠ 0 := by
+    intro h0
+    have ht : t = 0 := Fin.ext h0
+    subst ht
     rcases hA.covers k with h | ⟨m, hmA, hm⟩
-    · exact haE.1 h
-    · exact haE.2 m hm hmA
-  have hsome : (hashOf a).isSome := (hashOf_isSome_iff a).mpr ⟨hA'.values a haA', hns⟩
-  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hsome
-  have hchild : child p = some a := child_hashOf hp
-  have hpA : p ∉ A := fun h => by have := hA.values p h; rw [len_of_hashOf hp] at this; omega
+    · obtain ⟨_, _, h'⟩ := hA.values _ h; cases h'
+    · rw [above_of_child (show child (src k) = some (ci k 0) from rfl)] at hm
+      rcases hm with rfl | hm
+      · exact haE.1 hmA
+      · exact haE.2 m hm hmA
+  set p : Name := ch k ⟨t.val - 1, by omega⟩ with hpdef
+  have hp : hashOf (ci k t) = some p := by
+    simp only [hashOf]
+    rw [dif_neg ht0]
+  obtain ⟨v, hpv, hva⟩ := child_hashOf hp
+  have hpA : p ∉ A := fun h => by
+    obtain ⟨_, _, h'⟩ := hA.values _ h
+    rw [hpdef] at h'
+    cases h'
+  have hvA : v ∉ A := fun h => by
+    obtain ⟨_, _, h'⟩ := hA.values _ h
+    simp only [hpdef, Name.child, Option.some.injEq] at hpv
+    rw [← hpv] at h'
+    cases h'
   have hpE : Evaluated A p := by
     refine ⟨hpA, fun m hm => ?_⟩
-    rw [above_of_child hchild] at hm
+    rw [above_of_child hpv] at hm
     rcases hm with rfl | hm
-    · exact haE.1
-    · exact haE.2 m hm
-  have hpE' : ¬ Evaluated A' p := fun h => h.2 a (Above.child hchild) haA'
+    · exact hvA
+    · rw [above_of_child hva] at hm
+      rcases hm with rfl | hm
+      · exact haE.1
+      · exact haE.2 m hm
+  have hpE' : ¬ Evaluated A' p := fun h => h.2 _ (above_hashOf hp) haA'
   -- (iii) compare the costs
   have hpcost : 1 ≤ p.cost := one_le_cost_of_hashOf hp
   have hpmem : p ∈ evaluatedSet A := by simp [evaluatedSet, hpE]

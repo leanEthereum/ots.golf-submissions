@@ -4,14 +4,15 @@ import Submissions.UpperRiscv.IndexPhase
 /-!
 # The root and the decision
 
-The 32 chain slots with the headers between them are the 6080-bit root input; its hash, charged
-twelve cycles, overwrites the last slot, and the low 128 bits of the answer are compared with
-the public key saved in `x30`/`x31`. The root length is built in one instruction from the checked
-signature length still held in `x13`, and the comparison branches on each mismatching word to a
-rejection after the accepting HALT, so the decision costs seven cycles on every path.
+The 680 bytes from eight below chain `0`'s slot are the 5440-bit root input: the low 192 bits
+of every top and the full top of chain `27`. Its hash, charged eleven cycles, is written to the
+data base, and the low 128 bits of the answer are compared with the public key saved in
+`x30`/`x31`. The root length is built in one instruction from the checked signature length still
+held in `x13`, and the comparison branches on each mismatching word to a rejection after the
+accepting HALT, so the decision costs seven cycles on every path.
 -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
@@ -22,7 +23,7 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 variable (index : Idx) (payload : List Bool) (pk : PublicKey)
 
-def rootLin : Code := [.ADDI .x10 .x12 (imm12 (-744)), .ADDI .x11 .x13 1856]
+def rootLin : Code := [.ADDI .x10 .x9 (imm12 (-8)), .ADDI .x11 .x13 (imm12 (-64)), .ADDI .x12 .x29 0]
 
 theorem root_parts : root = rootLin ++ [.ECALL] := rfl
 
@@ -59,20 +60,21 @@ open scoped Classical in
 cycles on every path: the accepting path runs all seven instructions, and a mismatch in the low
 or high word rejects after five or seven. -/
 theorem decision_refines (s : MachineState) (answer : BitVec hashBits) (fuel : ℕ)
-    (x12 : s.getReg .x12 = slotW 31) (located : Riscv.CodeAt s s.pc decision)
-    (hroot : MemBits s (slotW 31) answer)
+    (x12 : s.getReg .x12 = W dataAddr) (located : Riscv.CodeAt s s.pc decision)
+    (hroot : MemBits s (W dataAddr) answer)
     (pk0 : s.getReg .x30 = pk.extractLsb' 0 64) (pk1 : s.getReg .x31 = pk.extractLsb' 64 64)
     (bound : 7 ≤ fuel) :
     Riscv.Refines fuel s (pure (some (decide (answer.setWidth 128 = pk)))) 7 := by
-  have hs := slot_bounds 31 (by norm_num)
+  have hs : 32 ≤ dataAddr ∧ dataAddr + 32 ≤ 0x78000000 ∧ dataAddr % 8 = 0 := by
+    unfold dataAddr; norm_num
   rw [decision_parts] at located
   have l0 : signExtend12 (0 : BitVec 12) = 0#64 := by decide
   have l8 : signExtend12 (8 : BitVec 12) = W 8 := by decide
   have b24 : signExtend13 (24 : BitVec 13) = 24 := by decide
   have b16 : signExtend13 (16 : BitVec 13) = 16 := by decide
-  have a0 : s.getMem (slotW 31) = answer.extractLsb' 0 64 :=
+  have a0 : s.getMem (W dataAddr) = answer.extractLsb' 0 64 :=
     getMem_of_memBits (by decide) (aligned_W _ hs.2.2 (by omega)) hroot
-  have a1 : s.getMem (W (Flat.slotAddr 31 + 8)) = answer.extractLsb' 64 64 := by
+  have a1 : s.getMem (W (dataAddr + 8)) = answer.extractLsb' 64 64 := by
     have hm := memBits_extract (start := 64) (len := 64) hroot (by decide) (by decide)
     rw [show (64 : ℕ) / 8 = 8 by norm_num, W_add] at hm
     have hw := getMem_of_memBits (by decide : 64 ≤ 64) (aligned_W _ (by omega) (by omega)) hm
@@ -249,54 +251,86 @@ theorem decision_refines (s : MachineState) (answer : BitVec hashBits) (fuel : �
     have rej := reject_refines (s1.setPC (s1.pc + 24)) (fuel - 2) locR (by omega)
     exact (Riscv.Refines.branch fetch1 rfl (fun h => nomatch h) tr1 rej).mono (by omega)
 
-theorem root_length_literal : W 4224 + signExtend12 1856 = 6080 := by decide
+theorem root_length_literal : W 5504 + signExtend12 (imm12 (-64)) = 5440 := by decide
 
-theorem rootCat_eq (c : Fin 32 → BitVec 128) :
-    rootCat c = (rootAcc (topFun c) 31).cast (by norm_num) := rfl
+theorem rootCat_eq (c : Fin 28 → BitVec 256) :
+    rootCat c = (c 27 ++ lowCat (topFun c) 26).cast (by norm_num) := rfl
+
+/-- The root input in memory, from the invariant after the last chain. -/
+theorem root_memBits (s : MachineState) (x : graph.Assignment)
+    (inv : ChainsInv index payload pk s x 28) :
+    MemBits s (W regionAddr) (rootCat (tops x)) := by
+  rw [rootCat_eq]
+  apply (memBits_cast _ _ _ _).mpr
+  have hd := inv.done (by norm_num)
+  have ht := inv.top (by norm_num)
+  simp only [show (28 : ℕ) - 2 = 26 from rfl, show (28 : ℕ) - 1 = 27 from rfl] at hd ht
+  apply memBits_append (by norm_num) hd
+  have base : W regionAddr + BitVec.ofNat 64 (192 * (26 + 1) / 8) = W (slotAddr 27 - 8) := by
+    rw [W_add]
+    unfold slotAddr payloadAddr regionAddr
+    rfl
+  rw [base]
+  have e : topFun (tops x) 27 = tops x 27 := by simp [topFun]
+  rw [e] at ht
+  exact ht
 
 open scoped Classical in
-/-- The root hash over the 32 slots and the decision, at 21 cycles. -/
+/-- The root hash over the region and the decision, at 21 cycles. -/
 theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (inv : ChainsInv index payload pk s x 32)
-    (located : Riscv.CodeAt s s.pc (root ++ decision)) (bound : 10 ≤ fuel) :
-    Riscv.Refines fuel s (runNodes' index payload [rc, rh] x 4096 >>= fun r =>
+    (inv : ChainsInv index payload pk s x 28)
+    (located : Riscv.CodeAt s s.pc (root ++ decision)) (bound : 11 ≤ fuel) :
+    Riscv.Refines fuel s (runNodes' index payload [rc, rh] x 5376 >>= fun r =>
         pure (some (decide ((r.1 rh.fin).setWidth 128 = pk)))) 21 := by
-  have hs := slot_bounds 31 (by norm_num)
-  have hs0 := slot_bounds 0 (by norm_num)
+  have hd : 32 ≤ dataAddr ∧ dataAddr + 32 ≤ 0x78000000 ∧ dataAddr % 8 = 0 := by
+    unfold dataAddr; norm_num
   simp only [runNodes', bind_assoc, pure_bind, cursorStep_rc, cursorStep_rh, Prod.mk.eta]
   set x' := Function.update x rc.fin
-    ((rootCat fun k => Forest.trunc (x (cv k 14).fin)).cast (graph_len_fin rc).symm) with hx'
-  have value : x' rc.fin = (rootCat fun k => Forest.trunc (x (cv k 14).fin)).cast
-      (graph_len_fin rc).symm := by
+    ((rootCat fun k => (x (cv k 31).fin).cast (lenF_fin _)).cast (graph_len_fin rc).symm) with hx'
+  have value : x' rc.fin = (rootCat (tops x)).cast (graph_len_fin rc).symm := by
     rw [hx', Function.update_self]
-  have x12 : s.getReg .x12 = slotW 31 := by rw [inv.slot]; rfl
+    rfl
   -- the straight-line part
   have ready : Riscv.LinearReady s rootLin := by
     simp [rootLin, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
   rw [root_parts, List.append_assoc] at located
   set w := rootLin.foldl execInstrBr s with hw
-  have wRegs : ∀ r, r ≠ .x10 → r ≠ .x11 → w.getReg r = s.getReg r := by
-    intro r h10 h11
+  have wRegs : ∀ r, r ≠ .x10 → r ≠ .x11 → r ≠ .x12 → w.getReg r = s.getReg r := by
+    intro r h10 h11 h12
     rw [hw]
     simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
-    simp [Ne.symm h10, Ne.symm h11, h10, h11]
-  have w10 : w.getReg .x10 = W Flat.slotBase := by
+    simp [Ne.symm h10, Ne.symm h11, Ne.symm h12, h10, h11, h12]
+  have w10 : w.getReg .x10 = W regionAddr := by
     rw [hw]
     simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
-    simp only [show ¬ (Reg.x10 = Reg.x11) by decide, false_and, if_false, true_and, ne_eq,
-      reduceCtorEq, not_false_eq_true, if_true, x12]
-    rw [W_add_imm _ _ (by norm_num) (by norm_num) (by omega) (by omega)]
-    congr 1
-  have w11 : w.getReg .x11 = 6080 := by
+    simp only [show ¬ (Reg.x10 = Reg.x11) by decide, show ¬ (Reg.x10 = Reg.x12) by decide,
+      false_and, if_false, true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true,
+      show ¬ (Reg.x9 = Reg.x11) by decide, show ¬ (Reg.x9 = Reg.x12) by decide,
+      show ¬ (Reg.x9 = Reg.x10) by decide, inv.ctx.payloadReg]
+    rw [W_add_imm _ _ (by norm_num) (by norm_num) (by unfold payloadAddr; omega)
+      (by unfold payloadAddr; omega)]
+    rfl
+  have w11 : w.getReg .x11 = 5440 := by
     rw [hw]
     simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
     simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, false_and, if_false,
-      show ¬ (Reg.x13 = Reg.x10) by decide]
+      show ¬ (Reg.x13 = Reg.x10) by decide, show ¬ (Reg.x11 = Reg.x12) by decide,
+      show ¬ (Reg.x13 = Reg.x12) by decide, show ¬ (Reg.x13 = Reg.x11) by decide]
     rw [inv.ctx.sigLen]
     exact root_length_literal
+  have w12 : w.getReg .x12 = W dataAddr := by
+    rw [hw]
+    simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
+      getReg_setReg_ite]
+    simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, false_and, if_false,
+      show ¬ (Reg.x29 = Reg.x10) by decide, show ¬ (Reg.x29 = Reg.x11) by decide,
+      show ¬ (Reg.x29 = Reg.x12) by decide, inv.ctx.dataReg]
+    have l0 : signExtend12 (0 : BitVec 12) = 0 := by decide
+    rw [l0]
+    exact BitVec.add_zero _
   have wMem : ∀ addr, w.getMem addr = s.getMem addr := by
     intro addr; rw [hw]; simp [rootLin, execInstrBr]
   have wPc : w.pc = s.pc + BitVec.ofNat 64 (4 * rootLin.length) := Riscv.linear_fold_pc s _ ready
@@ -305,44 +339,27 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
   have wCodeEq : w.code = s.code := Riscv.fold_code s _
   have wFetch : w.code w.pc = some .ECALL := wCode.head
   have wCall : w.getReg .x5 = Riscv.hashCall := by
-    rw [wRegs .x5 (by decide) (by decide)]; exact inv.ctx.call
-  have w12 : w.getReg .x12 = slotW 31 := by rw [wRegs .x12 (by decide) (by decide), x12]
+    rw [wRegs .x5 (by decide) (by decide) (by decide)]; exact inv.ctx.call
   have wValid : Riscv.hashArgumentsValid w = true := by
-    have r1 : isValidOutputRange (W Flat.slotBase) 760 = true :=
-      range_ok _ _ (by norm_num [Flat.slotBase]) (by norm_num [Flat.slotBase]) (by norm_num)
+    have r1 : isValidOutputRange (W regionAddr) 680 = true :=
+      range_ok _ _ (by norm_num [regionAddr]) (by norm_num [regionAddr]) (by norm_num)
         (by norm_num)
-    have r2 := hashOutput_ok (Flat.slotAddr 31) (by omega) (by omega) hs.2.2
-    have e : ((6080 : Word).toNat + 7) / 8 = 760 := rfl
+    have r2 := hashOutput_ok dataAddr hd.1 hd.2.1 hd.2.2
+    have e : ((5440 : Word).toNat + 7) / 8 = 680 := rfl
     unfold Riscv.hashArgumentsValid
     rw [w10, w11, w12, e, r1, Bool.true_and]
     exact r2
-  have wValue : MemBits w (W Flat.slotBase)
-      ((rootCat fun k => Forest.trunc (x' (cv k 14).fin))) := by
-    have h := inv.done (by norm_num)
-    rw [rootCat_eq]
-    apply (memBits_cast _ _ _ _).mpr
-    apply memBits_of_mem_eq (show w.mem = s.mem from funext fun a => wMem a)
-    have e : topFun (fun k => Forest.trunc (x' (cv k 14).fin)) = topFun (tops x) := by
-      funext j
-      unfold topFun tops
-      split_ifs with hj
-      · show Forest.trunc (x' (cv ⟨j, hj⟩ 14).fin) = Forest.trunc (x (cv ⟨j, hj⟩ 14).fin)
-        rw [hx', Function.update_of_ne (fin_ne_of_ne (by simp))]
-      · rfl
-    rw [e]
-    exact h
-  have inner : (fun k => Forest.trunc (x' (cv k 14).fin)) = fun k => Forest.trunc (x (cv k 14).fin) := by
-    funext k
-    rw [hx', Function.update_of_ne (fin_ne_of_ne (by simp))]
+  have wValue : MemBits w (W regionAddr) (rootCat (tops x)) :=
+    memBits_of_mem_eq (show w.mem = s.mem from funext fun a => wMem a)
+      (root_memBits index payload pk s x inv)
   have wInput : Riscv.hashInput w = ⟨graph.len rc.fin, x' rc.fin⟩ := by
     apply hashInput_of_memBits w10 (by rw [w11, graph_len_fin]; rfl)
     rw [value]
     apply (memBits_cast _ _ _ _).mpr
-    rw [← inner]
     exact wValue
-  have blocks : blockCost (graph.len rc.fin) = 12 := by
-    rw [graph_len_fin]; show blockCost 6080 = 12; decide
-  rw [show (21 : ℕ) = rootLin.length + (12 + 7) by rfl,
+  have blocks : blockCost (graph.len rc.fin) = 11 := by
+    rw [graph_len_fin]; show blockCost 5440 = 11; decide
+  rw [show (21 : ℕ) = rootLin.length + (11 + 7) by rfl,
     show fuel = rootLin.length + ((fuel - rootLin.length - 1) + 1) by simp [rootLin]; omega]
   apply Riscv.Refines.linear _ located.append_left ready
   rw [← hw]
@@ -361,8 +378,8 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
   have vLocated : Riscv.CodeAt v v.pc decision := by
     rw [vPc]
     exact wCode.tail.code_eq (by rw [vCode, wCodeEq])
-  have vRoot : MemBits v (slotW 31) y := by
-    have h := writeHash_memBits w y (by rw [w12]; exact aligned_W _ hs.2.2 (by omega))
+  have vRoot : MemBits v (W dataAddr) y := by
+    have h := writeHash_memBits w y (by rw [w12]; exact aligned_W _ hd.2.2 (by unfold dataAddr; norm_num))
     rw [w12] at h
     exact h
   rw [Function.update_self]
@@ -373,9 +390,11 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
     rfl
   rw [cast_setWidth]
   apply decision_refines pk v y _ (by rw [vRegs, w12]) vLocated vRoot
-    (by rw [vRegs, wRegs .x30 (by decide) (by decide)]; exact inv.ctx.pk0)
-    (by rw [vRegs, wRegs .x31 (by decide) (by decide)]; exact inv.ctx.pk1)
-  simp [rootLin] at bound ⊢
-  omega
+    (by rw [vRegs, wRegs .x30 (by decide) (by decide) (by decide)]; exact inv.ctx.pk0)
+    (by rw [vRegs, wRegs .x31 (by decide) (by decide) (by decide)]; exact inv.ctx.pk1)
+  show 7 ≤ fuel - rootLin.length - 1
+  have h3 : rootLin.length = 3 := rfl
+  rw [h3]
+  exact Nat.le_sub_of_add_le (Nat.le_sub_of_add_le bound)
 
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

@@ -2,13 +2,14 @@ import Submissions.UpperRiscv.Tree
 import Submissions.UpperRiscv.Count
 
 /-!
-# Disclosure sets of the flat forest
+# Disclosure sets of the bare-chain forest
 
-A disclosure set is described by a *choice* `c : Fin 32 → Fin 16`: for every chain `k` the
-position `c k ∈ {0, …, 15}` of the revealed chain value (`0` reveals the source `z_k`, `p ≥ 1`
-reveals `c_{k,p} = cv k (p-1)`). `cutOf c` is always a cut (`isCut_cutOf`), the choice is
-determined by the set (`cutOf_injective`), and its reconstruction cost is `Σ (15 - c k) + 12`
-(`cost_cutOf`). `FixedChoice.lean` instantiates this with the nibbles of the index.
+A disclosure set is described by a *choice* `c : Fin 28 → Fin 32`: for every chain `k` the
+position `c k ∈ {0, …, 31}` of the revealed chain input `ci k (c k)` (`0` reveals the input
+`ci k 0`, whose value is the source `z_k`). `cutOf c` is always a cut (`isCut_cutOf`), the choice
+is determined by the set (`cutOf_injective`), and its reconstruction cost is
+`Σ (32 - c k) + 11` (`cost_cutOf`). `FixedChoice.lean` instantiates this with the digits of the
+index.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -23,107 +24,65 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 namespace Forest
 
 open Name
 
 /-- The revealed node of chain `k` at position `p`. -/
-def chainNode (k : Fin 32) (p : Fin 16) : Name :=
-  if h : p.val = 0 then src k else cv k ⟨p.val - 1, by omega⟩
+def chainNode (k : Fin 28) (p : Fin 32) : Name := ci k p
 
 /-- A choice of disclosure set: one position per chain. -/
-abbrev Choice := Fin 32 → Fin 16
+abbrev Choice := Fin 28 → Fin 32
 
 /-- The disclosure set of a choice. -/
 def cutOf (c : Choice) : Finset Name := Finset.univ.image fun k => chainNode k (c k)
 
 /-! ### Membership in a disclosure set -/
 
-theorem chainNode_eq_src_iff (k k' : Fin 32) (p : Fin 16) :
-    chainNode k p = src k' ↔ k = k' ∧ p = 0 := by
-  unfold chainNode
-  split_ifs with h
-  · simp only [Name.src.injEq, Fin.ext_iff, Fin.val_zero, h, and_true]
-  · simp only [false_iff, not_and, Fin.ext_iff, Fin.val_zero]
-    intro _ hp
-    exact h hp
-
-theorem chainNode_eq_cv_iff (k k' : Fin 32) (p : Fin 16) (t : Fin 15) :
-    chainNode k p = cv k' t ↔ k = k' ∧ p.val = t.val + 1 := by
-  unfold chainNode
-  split_ifs with h
-  · simp only [false_iff, not_and]
-    intro _
-    omega
-  · simp only [Name.cv.injEq, Fin.ext_iff]
-    constructor
-    · rintro ⟨hk, hp⟩
-      exact ⟨hk, by omega⟩
-    · rintro ⟨hk, hp⟩
-      exact ⟨hk, by omega⟩
-
-theorem chainNode_len (k : Fin 32) (p : Fin 16) : (chainNode k p).len = 128 := by
-  unfold chainNode
-  split_ifs <;> rfl
+theorem chainNode_len (k : Fin 28) (p : Fin 32) : (chainNode k p).len = 192 := rfl
 
 theorem chainNode_injective (c : Choice) : Function.Injective (fun k => chainNode k (c k)) := by
   intro k l equal
-  unfold chainNode at equal
-  dsimp only at equal
-  split_ifs at equal <;> simp only [Name.src.injEq, Name.cv.injEq, reduceCtorEq] at equal
-  · exact equal
-  · exact equal.1
+  simp only [chainNode, Name.ci.injEq] at equal
+  exact equal.1
 
 theorem mem_cutOf_iff (c : Choice) (n : Name) :
     n ∈ cutOf c ↔ ∃ k, chainNode k (c k) = n := by
   unfold cutOf
   simp only [Finset.mem_image, Finset.mem_univ, true_and]
 
-theorem src_mem_cutOf_iff (c : Choice) (k : Fin 32) : src k ∈ cutOf c ↔ c k = 0 := by
+theorem ci_mem_cutOf_iff (c : Choice) (k : Fin 28) (t : Fin 32) :
+    ci k t ∈ cutOf c ↔ c k = t := by
   rw [mem_cutOf_iff]
   constructor
   · rintro ⟨k', h⟩
-    rw [chainNode_eq_src_iff] at h
+    simp only [chainNode, Name.ci.injEq] at h
     obtain ⟨rfl, h⟩ := h
     exact h
   · intro h
-    exact ⟨k, (chainNode_eq_src_iff _ _ _).mpr ⟨rfl, h⟩⟩
+    exact ⟨k, by simp [chainNode, h]⟩
 
-theorem cv_mem_cutOf_iff (c : Choice) (k : Fin 32) (t : Fin 15) :
-    cv k t ∈ cutOf c ↔ (c k).val = t.val + 1 := by
-  rw [mem_cutOf_iff]
-  constructor
-  · rintro ⟨k', h⟩
-    rw [chainNode_eq_cv_iff] at h
-    obtain ⟨rfl, h⟩ := h
-    exact h
-  · intro h
-    exact ⟨k, (chainNode_eq_cv_iff _ _ _ _).mpr ⟨rfl, h⟩⟩
+theorem mem_cutOf_ci {c : Choice} {n : Name} (hn : n ∈ cutOf c) : ∃ k t, n = ci k t := by
+  rw [mem_cutOf_iff] at hn
+  obtain ⟨k, rfl⟩ := hn
+  exact ⟨k, c k, rfl⟩
 
-theorem not_mem_cutOf_of_len {c : Choice} {n : Name} (hn : n.len ≠ 128) : n ∉ cutOf c := by
-  intro h
-  rw [mem_cutOf_iff] at h
-  obtain ⟨k, rfl⟩ := h
-  exact hn (chainNode_len _ _)
+theorem src_not_mem_cutOf (c : Choice) (k : Fin 28) : src k ∉ cutOf c := by
+  intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
-theorem mem_cutOf_len {c : Choice} {n : Name} (hn : n ∈ cutOf c) : n.len = 128 := by
-  by_contra h
-  exact not_mem_cutOf_of_len h hn
+theorem ch_not_mem_cutOf (c : Choice) (k : Fin 28) (t : Fin 32) : ch k t ∉ cutOf c := by
+  intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
-theorem ci_not_mem_cutOf (c : Choice) (k : Fin 32) (t : Fin 15) : ci k t ∉ cutOf c :=
-  not_mem_cutOf_of_len (by simp [Name.len])
+theorem cv_not_mem_cutOf (c : Choice) (k : Fin 28) (t : Fin 32) : cv k t ∉ cutOf c := by
+  intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
-theorem ch_not_mem_cutOf (c : Choice) (k : Fin 32) (t : Fin 15) : ch k t ∉ cutOf c :=
-  not_mem_cutOf_of_len (by simp [Name.len])
+theorem rc_not_mem_cutOf (c : Choice) : rc ∉ cutOf c := by
+  intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
-theorem rc_not_mem_cutOf (c : Choice) : rc ∉ cutOf c :=
-  not_mem_cutOf_of_len (by simp [Name.len])
+theorem rh_not_mem_cutOf (c : Choice) : rh ∉ cutOf c := by
+  intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
-theorem rh_not_mem_cutOf (c : Choice) : rh ∉ cutOf c :=
-  not_mem_cutOf_of_len (by simp [Name.len])
-
-theorem card_cutOf (c : Choice) : (cutOf c).card = 32 := by
+theorem card_cutOf (c : Choice) : (cutOf c).card = 28 := by
   unfold cutOf
   rw [Finset.card_image_of_injective _ (chainNode_injective c), Finset.card_univ,
     Fintype.card_fin]
@@ -136,16 +95,7 @@ theorem cutOf_injective {c c' : Choice} (h : cutOf c = cutOf c') : c = c' := by
   have hmem : chainNode k (c k) ∈ cutOf c' := by
     rw [← h, mem_cutOf_iff]
     exact ⟨k, rfl⟩
-  unfold chainNode at hmem
-  split_ifs at hmem with h0
-  · rw [src_mem_cutOf_iff] at hmem
-    rw [hmem]
-    exact Fin.ext h0
-  · rw [cv_mem_cutOf_iff] at hmem
-    apply Fin.ext
-    rw [hmem]
-    dsimp only
-    omega
+  exact ((ci_mem_cutOf_iff c' k (c k)).mp hmem).symm
 
 /-! ### Evaluated nodes -/
 
@@ -167,85 +117,76 @@ theorem evaluated_rh (c : Choice) : Evaluated (cutOf c) rh :=
 theorem evaluated_rc (c : Choice) : Evaluated (cutOf c) rc :=
   evaluated_of_child rfl (rc_not_mem_cutOf c) (evaluated_rh c)
 
-theorem evaluated_ch_iff (c : Choice) (k : Fin 32) (t : Fin 15) :
+theorem evaluated_ch_iff (c : Choice) (k : Fin 28) (t : Fin 32) :
     Evaluated (cutOf c) (ch k t) ↔ (c k).val ≤ t.val := by
   unfold Evaluated
   simp only [above_iff_mem_ancSet, ancSet, Finset.forall_mem_union, Finset.forall_mem_image,
     Finset.mem_filter, Finset.mem_univ, true_and, Finset.forall_mem_insert, Finset.mem_singleton,
-    forall_eq, ci_not_mem_cutOf, ch_not_mem_cutOf, cv_mem_cutOf_iff, rc_not_mem_cutOf,
+    forall_eq, ci_mem_cutOf_iff, ch_not_mem_cutOf, cv_not_mem_cutOf, rc_not_mem_cutOf,
     rh_not_mem_cutOf, not_false_eq_true, true_and, and_true, implies_true]
   constructor
   · intro h1
     by_contra hlt
-    have hv := (c k).isLt
-    exact @h1 ⟨(c k).val - 1, by omega⟩ (by rw [Fin.le_def]; dsimp only; omega)
-      (by dsimp only; omega)
+    exact h1 (show t < c k from Fin.lt_def.mpr (by omega)) rfl
   · intro hle x hx h
-    rw [Fin.le_def] at hx
+    rw [Fin.lt_def] at hx
+    rw [h] at hle
     omega
 
-/-- The input of a chain hash is evaluated exactly when the chain hash is. -/
-theorem evaluated_ci_iff (c : Choice) (k : Fin 32) (t : Fin 15) :
-    Evaluated (cutOf c) (ci k t) ↔ (c k).val ≤ t.val := by
-  rw [← evaluated_ch_iff]
+/-- The input of a chain hash is evaluated exactly when it lies strictly above the revealed
+position. -/
+theorem evaluated_ci_iff (c : Choice) (k : Fin 28) (t : Fin 32) :
+    Evaluated (cutOf c) (ci k t) ↔ (c k).val < t.val := by
   constructor
   · intro h
-    exact ⟨ch_not_mem_cutOf c k t, fun m hm => h.2 m (Above.step rfl hm)⟩
+    have hne : c k ≠ t := fun e => h.1 ((ci_mem_cutOf_iff c k t).mpr e)
+    have hle := (evaluated_ch_iff c k t).mp ⟨ch_not_mem_cutOf c k t, fun m hm => h.2 m (Above.step rfl hm)⟩
+    have : (c k).val ≠ t.val := fun e => hne (Fin.ext e)
+    omega
   · intro h
-    exact evaluated_of_child rfl (ci_not_mem_cutOf c k t) h
+    refine evaluated_of_child rfl (fun e => ?_) ((evaluated_ch_iff c k t).mpr h.le)
+    have := (ci_mem_cutOf_iff c k t).mp e
+    rw [this] at h
+    exact lt_irrefl _ h
 
-theorem child_cv_of_lt (k : Fin 32) (t : Fin 15) (ht : t.val < 14) :
+theorem child_cv_of_lt (k : Fin 28) (t : Fin 32) (ht : t.val < 31) :
     child (cv k t) = some (ci k ⟨t.val + 1, by omega⟩) := by
   simp only [Name.child]
   rw [dif_neg (by omega)]
 
-theorem child_cv_of_eq (k : Fin 32) (t : Fin 15) (ht : t.val = 14) :
+theorem child_cv_of_eq (k : Fin 28) (t : Fin 32) (ht : t.val = 31) :
     child (cv k t) = some rc := by
   simp only [Name.child]
   rw [dif_pos ht]
 
 theorem isCut_cutOf (c : Choice) : IsCut (cutOf c) where
-  values _ hn := mem_cutOf_len hn
+  values _ hn := mem_cutOf_ci hn
   antichain := by
     intro n hn
     rw [mem_cutOf_iff] at hn
     obtain ⟨k, rfl⟩ := hn
-    unfold chainNode
-    split_ifs with h0
-    · exact forall_above_of_child rfl
-        ((evaluated_ci_iff c k 0).mpr (by rw [h0]; exact Nat.zero_le _))
-    · by_cases h15 : (c k).val = 15
-      · exact forall_above_of_child (child_cv_of_eq k _ (by dsimp only; omega)) (evaluated_rc c)
-      · have hlt := (c k).isLt
-        refine forall_above_of_child (child_cv_of_lt k _ (by dsimp only; omega))
-          ((evaluated_ci_iff c k _).mpr ?_)
-        dsimp only
-        omega
+    exact forall_above_of_child rfl ((evaluated_ch_iff c k (c k)).mpr le_rfl)
   covers := by
     intro k
-    by_cases h0 : (c k).val = 0
-    · exact Or.inl ((src_mem_cutOf_iff c k).mpr (Fin.ext h0))
-    · have hlt := (c k).isLt
-      refine Or.inr ⟨cv k ⟨(c k).val - 1, by omega⟩,
-        (cv_mem_cutOf_iff c k _).mpr (by dsimp only; omega), ?_⟩
-      rw [above_iff_mem_ancSet]
-      simp [ancSet]
+    refine Or.inr ⟨ci k (c k), (ci_mem_cutOf_iff c k _).mpr rfl, ?_⟩
+    rw [above_iff_mem_ancSet]
+    simp [ancSet]
 
-theorem sum_fin15_ge (v : ℕ) : ∑ t : Fin 15, (if v ≤ t.val then 1 else 0) = 15 - v := by
-  rw [Fin.sum_univ_eq_sum_range (fun t => if v ≤ t then 1 else 0) 15, ← Finset.card_filter]
-  have : (Finset.range 15).filter (fun t => v ≤ t) = Finset.Ico v 15 := by
+theorem sum_fin32_ge (v : ℕ) : ∑ t : Fin 32, (if v ≤ t.val then 1 else 0) = 32 - v := by
+  rw [Fin.sum_univ_eq_sum_range (fun t => if v ≤ t then 1 else 0) 32, ← Finset.card_filter]
+  have : (Finset.range 32).filter (fun t => v ≤ t) = Finset.Ico v 32 := by
     ext t
     simp only [Finset.mem_filter, Finset.mem_range, Finset.mem_Ico]
     omega
   rw [this, Nat.card_Ico]
 
-/-- The reconstruction cost of a disclosure set: the chain steps and the 12-block root. -/
+/-- The reconstruction cost of a disclosure set: the chain steps and the 11-block root. -/
 theorem cost_cutOf (c : Choice) :
-    ∑ n ∈ evaluatedSet (cutOf c), n.cost = (∑ k, (15 - (c k).val)) + 12 := by
+    ∑ n ∈ evaluatedSet (cutOf c), n.cost = (∑ k, (32 - (c k).val)) + 11 := by
   have h_ch : ∑ k, ∑ t, (if Evaluated (cutOf c) (ch k t) then 1 else 0) =
-      ∑ k, (15 - (c k).val) := by
+      ∑ k, (32 - (c k).val) := by
     simp only [evaluated_ch_iff]
-    exact Finset.sum_congr rfl fun k _ => sum_fin15_ge _
+    exact Finset.sum_congr rfl fun k _ => sum_fin32_ge _
   rw [evaluatedSet, Finset.sum_filter, Name.sum_eq]
   simp only [Name.cost, ite_self, Finset.sum_const_zero, zero_add, add_zero]
   rw [if_pos (evaluated_rh c), h_ch]

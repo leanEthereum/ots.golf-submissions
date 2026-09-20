@@ -142,7 +142,7 @@ end Dag.Graph
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
 theorem costAtMost_index (hidx : blockCost (msgBits + nonceBits) = 1)
-    (m : Message) (η : Nonce) : CostAtMost (index m η) 1 :=
+    (m : Message) (η : Nonce) : CostAtMost (packIndex m η) 1 :=
   CostAtMost.map (costAtMost_hash _ hidx.le) _
 
 namespace GScheme

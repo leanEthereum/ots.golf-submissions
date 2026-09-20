@@ -1,138 +1,119 @@
 import OptimalOTS.RiscvMachine
-import Submissions.UpperRiscv.Constants
 
 /-!
-# The RV64IM image of the flat forest verifier
+# The RV64IM image of the bare-chain verifier
 
-Straight-line code except for two rejection branches and one computed jump per chain.
-
-1. **Index.** Save the public key in `x30`/`x31`, copy the nonce over it so that
-   `nonce ‖ message` is contiguous, and hash these 384 bits into the data area. Reject a
-   signature of other than 4224 bits.
-2. **Lanes.** From the two index words, build eight lane words: 16-bit lanes holding
-   `8 · nibble`. Their sum, multiplied by `0x0001000100010001`, carries `8 · Σ nibbles` in its top
-   lane; reject unless it equals `8 · 157 = 1256`, held in `x1`. Store `jumpBase - 8 · nibble`
-   for every chain.
-3. **Chains.** Chain `k`'s slot holds its value at `Flat.slotAddr k`, after an 8-byte header.
-   The block copies the disclosed word into the slot, writes the slot address as the header,
-   loads its jump target and jumps into a table of 15 steps, keeping the return address in `x14`:
-   each step stores its 32-bit level tag in the header's top word and hashes the 192-bit header
-   and value in place. Fourteen of the fifteen tags are the low 32 bits of registers that already
-   hold them; only `x3` is set for the purpose.
-4. **Root.** The 32 slots with the headers between them are the 6080-bit root input; the low
-   128 bits of its hash are compared with the saved public key.
+1. **Index.** Save the public key, copy the nonce below the message, hash `nonce ‖ message`
+   (384 bits) to the data base; reject unless the signature has 5504 bits.
+2. **Lanes.** Field `k` is byte `k` of the answer, masked to 5 bits (`k < 16`) or 4 bits
+   (`16 ≤ k < 28`); bytes 28–31 are ignored. Eight lane words hold `4 · field` in 16-bit lanes;
+   their sum is checked against `4 · 216` with one multiplication; `jumpBase - 4 · field` is
+   stored for every chain.
+3. **Chains.** Chain `k`'s 192-bit value sits at `sig + 16 + 24 k`; chains run from 0 up to 27,
+   hashing the value at its slot with the 32-byte answer written eight bytes below the slot
+   (`x12 = x10 - 8`): the high 192 bits of the answer land on the slot and feed the next step,
+   the low eight bytes overwrite the tail of the already final chain below. A block is four
+   instructions and a table of `field + 1` hashes.
+4. **Root.** The 680 bytes from `sig + 8` are the 5440-bit root input: the low 192 bits of every
+   top and the full top of chain 27; the low 128 bits of its hash are compared with the saved
+   public key.
 -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open RiscvZkvm.Rv64
 
 abbrev Code := List Instr
 
-/-- The inline rejection: HALT with decision `0`. -/
 def reject : Code := [.ADDI .x5 .x0 0, .ADDI .x10 .x0 0, .ECALL]
 
-/-- Copy a 128-bit value between register-relative, doubleword-aligned locations. -/
 def copy128 (src : Reg) (srcOff : ℕ) (dst : Reg) (dstOff : ℕ) : Code :=
   [.LD .x26 src (BitVec.ofNat 12 srcOff), .LD .x27 src (BitVec.ofNat 12 (srcOff + 8)),
    .SD dst .x26 (BitVec.ofNat 12 dstOff), .SD dst .x27 (BitVec.ofNat 12 (dstOff + 8))]
 
+/-- Number of chains. -/
+def C : ℕ := 28
+
+/-- Chain `k` has a 5-bit field (32 levels) for `k < 16`, a 4-bit field (16 levels) otherwise. -/
+def levels (k : ℕ) : ℕ := if k < 16 then 32 else 16
+
+/-- The field sum of an accepted index. -/
+def target : ℕ := 216
+
+def sigBits : ℕ := 5504
+
 /-! ## The index phase -/
 
-/-- Everything before the index HASH: the payload cursor, the saved public key, the nonce copied
-below the message, and the HASH arguments (output at the data base). -/
 def indexPrefix : Code :=
   [.ADDI .x9 .x12 16, .LD .x30 .x10 0, .LD .x31 .x10 8] ++ copy128 .x12 0 .x10 0 ++
   [.ADDI .x11 .x0 384, .LUI .x12 0x200, .ADDI .x5 .x0 1]
 
-/-- Reject unless the signature has exactly 4224 bits; the constant is a word of the data image. -/
-def lengthCheck : Code := [.LD .x6 .x12 (BitVec.ofNat 12 64), .BEQ .x13 .x6 16] ++ reject
+def lengthCheck : Code := [.LD .x6 .x12 (BitVec.ofNat 12 72), .BEQ .x13 .x6 16] ++ reject
 
-/-- Load the index words and the four lane constants. -/
+/-- The four index words, the three masks, the lane multiplier and the broadcast jump base. -/
 def loadWords : Code :=
-  [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 32, .LD .x23 .x12 40, .LD .x24 .x12 48,
-   .LD .x25 .x12 56]
+  [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
+   .LD .x24 .x12 32, .LD .x25 .x12 40, .LD .x1 .x12 48, .LD .x2 .x12 56, .LD .x3 .x12 64]
 
-/-- Lane word `(w, i)`: the nibbles `16 w + 4 l + i` of the index, times eight, in the 16-bit
-lanes `l`. The first lane word starts the sum in `x27`; the others are added to it. Each lane word
-is subtracted from its broadcast jump base and stored. -/
+/-- The data-image offset of lane word `(w, i)`. -/
+def laneOff (w i : ℕ) : ℕ := 80 + 8 * (2 * w + i)
+
+def srcReg (w : ℕ) : Reg := match w with | 0 => .x20 | 1 => .x21 | 2 => .x22 | _ => .x23
+
+def maskReg (w : ℕ) : Reg := if w < 2 then .x24 else if w = 2 then .x25 else .x1
+
+/-- Lane word `(w, i)`: fields `8 w + 2 l + i` (bytes of index word `w`), times four, in the 16-bit
+lanes `l`. -/
 def laneWord (w i : ℕ) : Code :=
-  let src : Reg := if w = 0 then .x20 else .x21
-  let base : Reg := if w = 0 then .x24 else .x25
   let dst : Reg := if w = 0 ∧ i = 0 then .x27 else .x26
-  (if i = 0 then [.SLLI dst src 3] else [.SRLI dst src (BitVec.ofNat 6 (4 * i - 3))]) ++
-  [.AND dst dst .x22] ++ (if w = 0 ∧ i = 0 then [] else [.ADD .x27 .x27 .x26]) ++
-  [.SUB .x26 base dst, .SD .x12 .x26 (BitVec.ofNat 12 (64 + 8 * (4 * w + i)))]
+  (if i = 0 then [.SLLI dst (srcReg w) 2] else [.SRLI dst (srcReg w) 6]) ++
+  [.AND dst dst (maskReg w)] ++ (if w = 0 ∧ i = 0 then [] else [.ADD .x27 .x27 .x26]) ++
+  [.SUB .x26 .x3 dst, .SD .x12 .x26 (BitVec.ofNat 12 (laneOff w i))]
 
-def lanes : Code := (List.range 8).flatMap fun j => laneWord (j / 4) (j % 4)
+def lanes : Code := (List.range 8).flatMap fun j => laneWord (j / 2) (j % 2)
 
-/-- Reject unless the nibbles sum to 157: the top lane of `sum * 0x0001000100010001` is `8 · Σ`,
-compared with `1256` in `x1`, which then serves as a level tag. -/
 def sumCheck : Code :=
-  [.ADDI .x1 .x0 1256, .MUL .x27 .x27 .x23, .SRLI .x27 .x27 48, .BEQ .x27 .x1 16] ++ reject
+  [.MUL .x27 .x27 .x2, .SRLI .x27 .x27 48, .XORI .x27 .x27 (BitVec.ofNat 12 (4 * target)),
+   .BEQ .x27 .x0 16] ++ reject
 
-/-- The one level tag not already held by a register, and the chain input length. -/
-def levelSetup : Code := [.ADDI .x3 .x0 2, .ADDI .x11 .x0 192]
+/-- The chain input length, the data pointer, and the slot pointer one slot below chain 0. -/
+def setup : Code :=
+  [.ADDI .x11 .x0 192, .ADDI .x29 .x12 0, .ADDI .x10 .x9 (BitVec.ofInt 12 (-24))]
 
-def indexPhase : Code :=
-  indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++ lanes ++ sumCheck ++ levelSetup
+def indexPhase : Code := indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++ lanes ++ sumCheck ++ setup
+
+def indexLength : ℕ := indexPhase.length
 
 /-! ## The chains -/
 
-/-- The register holding the level tag of level `t` in its low 32 bits. -/
-def levReg (t : ℕ) : Reg :=
-  match t with
-  | 0 => .x5 | 1 => .x11 | 2 => .x9 | 3 => .x22 | 4 => .x13 | 5 => .x24 | 6 => .x25
-  | 7 => .x23 | 8 => .x2 | 9 => .x1 | 10 => .x3 | 11 => .x12 | 12 => .x10 | 13 => .x14
-  | _ => .x0
-
-/-- Step `t` of a chain: store the level tag, hash the header and value in place. -/
-def chainStep (t : ℕ) : Code := [.SW .x12 (levReg t) (BitVec.ofNat 12 4092), .ECALL]
-
-/-- The fifteen steps of a chain; the prologue jumps to step `15 - nibble`. -/
-def chainTable : Code := (List.range 15).flatMap chainStep
-
-/-- Number of instructions before chain `0`. -/
-def indexLength : ℕ := 70
-
-/-- Number of instructions of a chain block. -/
-def blockLength : ℕ := 39
-
-/-- The code address after chain `k`'s table. -/
-def tableEnd (k : ℕ) : ℕ := 4096 + 4 * (indexLength + blockLength * (k + 1))
-
-/-- The lane word and lane of chain `k`: chains `0-15` use the low index word. -/
-def laneAddr (k : ℕ) : ℕ :=
-  0x200000 + 64 + 8 * (4 * (k / 16) + k % 4) + 2 * (k % 16 / 4)
-
-/-- The jump base of chain `k`. -/
-def jumpBase (k : ℕ) : ℕ := if k < 16 then Flat.jumpBase0 else Flat.jumpBase1
-
-/-- A signed 12-bit immediate. -/
 def imm12 (z : ℤ) : BitVec 12 := BitVec.ofInt 12 z
 
-/-- Chain `k`'s prologue: move the slot pointer, copy the disclosed word, write the header,
-load the jump target `jumpBase - 8 · nibble` and jump to `tableEnd k - 8 · nibble`, leaving the
-table's address in `x14`. -/
+/-- The data-image offset of the halfword of chain `k`. -/
+def laneHalf (k : ℕ) : ℕ := laneOff (k / 8) (k % 2) + 2 * (k % 8 / 2)
+
+/-- Instructions of the block of chain `k`. -/
+def blockLength (k : ℕ) : ℕ := 4 + levels k
+
+/-- Code address (bytes) of the end of chain `k`'s table; chains are laid out from 0 up. -/
+def tableEnd (k : ℕ) : ℕ :=
+  4096 + 4 * (indexLength + ((List.range (k + 1)).map blockLength).sum)
+
+def jumpBase : ℕ := 6088
+
 def chainPrologue (k : ℕ) : Code :=
-  [.ADDI .x12 .x12 (BitVec.ofNat 12 (if k = 0 then 136 else 24)), .ADDI .x10 .x12 (imm12 (-8))] ++
-  copy128 .x9 (16 * k) .x12 0 ++
-  [.SD .x12 .x12 (imm12 (-8)),
-   .LHU .x28 .x12 (imm12 ((laneAddr k : ℤ) - (Flat.slotAddr k : ℤ))),
-   .JALR .x14 .x28 (imm12 ((tableEnd k : ℤ) - (jumpBase k : ℤ)))]
+  [.ADDI .x10 .x10 24, .ADDI .x12 .x10 (imm12 (-8)),
+   .LHU .x28 .x29 (BitVec.ofNat 12 (laneHalf k)),
+   .JALR .x0 .x28 (imm12 ((tableEnd k : ℤ) - 4 - jumpBase))]
 
-def chainBlock (k : ℕ) : Code := chainPrologue k ++ chainTable
+def chainBlock (k : ℕ) : Code := chainPrologue k ++ List.replicate (levels k) .ECALL
 
-def chains : Code := (List.range 32).flatMap chainBlock
+def chains : Code := (List.range C).flatMap chainBlock
 
 /-! ## The root and the decision -/
 
-/-- The root input starts at chain `0`'s slot and has 6080 bits; the answer overwrites it. The
-length is `4224 + 1856`, and `x13` still holds the checked signature length. -/
-def root : Code := [.ADDI .x10 .x12 (imm12 (-744)), .ADDI .x11 .x13 1856, .ECALL]
+def root : Code :=
+  [.ADDI .x10 .x9 (imm12 (-8)), .ADDI .x11 .x13 (imm12 (-64)), .ADDI .x12 .x29 0, .ECALL]
 
-/-- Compare the root answer's low 128 bits with the saved public key and halt: either mismatching
-word branches to the rejection placed after the accepting HALT. Seven cycles on every path. -/
 def decision : Code :=
   [.LD .x26 .x12 0, .BNE .x26 .x30 24, .LD .x28 .x12 8, .BNE .x28 .x31 16,
    .ADDI .x10 .x0 1, .ADDI .x5 .x0 0, .ECALL] ++ reject
@@ -141,18 +122,15 @@ def verifier : Code := indexPhase ++ chains ++ root ++ decision
 
 /-! ## The data image -/
 
-/-- The four lane constants, broadcast to the 16-bit lanes. -/
 def broadcast (v : ℕ) : ℕ := v + v * 2 ^ 16 + v * 2 ^ 32 + v * 2 ^ 48
 
-/-- Little-endian bytes of a word. -/
 def wordBytes (v : ℕ) : List (BitVec 8) := (List.range 8).map fun j => BitVec.ofNat 8 (v / 2 ^ (8 * j))
 
-/-- The data image: 32 zero bytes (the index answer), then `0x78`, `1` and the two jump bases,
-broadcast, then the signature length 4224. -/
 def dataImage : List (BitVec 8) :=
-  List.replicate 32 0 ++ wordBytes (broadcast 0x78) ++ wordBytes (broadcast 1) ++
-    wordBytes (broadcast Flat.jumpBase0) ++ wordBytes (broadcast Flat.jumpBase1) ++ wordBytes 4224
+  List.replicate 32 0 ++ wordBytes (broadcast 0x7C) ++ wordBytes (broadcast 0x3C) ++
+    wordBytes 0x003C003C ++ wordBytes 0x0001000100010001 ++ wordBytes (broadcast jumpBase) ++
+    wordBytes sigBits
 
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

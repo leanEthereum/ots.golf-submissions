@@ -4,8 +4,9 @@ import Submissions.UpperRiscv.Valid
 # Graph schemes with an accepted-index predicate
 
 The paper scheme of `OptimalOTS.Dag` accepts an index when it is below `numCuts`. The
-scheme of this root accepts an index when it lies in `validSet` (its 32 nibbles sum to
-`target`), so that the machine reads the chain positions directly from the index.
+scheme of this root reads its index as `pack` of the 256-bit answer to `H(message ‖ nonce)` (the
+low bits of the first 28 bytes, packed) and accepts it when it lies in `validSet` (its 28 digits
+sum to `target`), so that the machine reads the chain positions directly from the answer bytes.
 Everything else (graph, key generation, signing loop, verification, strong-forgery experiment)
 is the paper's definition verbatim.
 -/
@@ -40,6 +41,10 @@ structure GScheme where
   /-- Key generation costs at most `keygenBudget`. -/
   keygen_le : graph.keygenCost ≤ keygenBudget
 
+/-- The disclosure index selected by message `m` and nonce `η`: the packed digits of the answer.
+The index query shares the one oracle with the graph's hash nodes. -/
+def packIndex (m : Message) (η : Nonce) : OracleComp Spec ℕ := (fun y => pack y) <$> hash (m ++ η)
+
 namespace GScheme
 
 variable (S : GScheme)
@@ -61,7 +66,7 @@ def signLoop (x : S.graph.Assignment) (m : Message) :
     if h : 0 < fresh.card then do
       let j ← (liftM ($[0..(fresh.card - 1)]) : OracleComp Spec (Fin (fresh.card - 1 + 1)))
       let η : Nonce := (fresh.equivFin.symm (Fin.cast (by omega) j)).1
-      let i ← index m η
+      let i ← packIndex m η
       if hi : i ∈ validSet then
         return some (η, S.graph.encode (S.sets ⟨i, hi⟩) x)
       else
@@ -76,7 +81,7 @@ def sign (x : S.graph.Assignment) (m : Message) : OracleComp Spec (Option Signat
 /-- Reject invalid indices or payload lengths; otherwise reconstruct the root and compare its
 public-key bits with `pk`. -/
 def verify (pk : PublicKey) (m : Message) (σ : Signature) : OracleComp Spec Bool := do
-  let i ← index m σ.1
+  let i ← packIndex m σ.1
   if hi : i ∈ validSet then
     let A := S.sets ⟨i, hi⟩
     if σ.2.length = S.graph.revealBits A then

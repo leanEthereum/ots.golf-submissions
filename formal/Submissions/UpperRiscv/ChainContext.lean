@@ -4,101 +4,104 @@ import Submissions.UpperRiscv.Reader
 /-!
 # The machine context of the chain phase
 
-The facts that hold from the end of the index phase to the root: the payload pointer and bits,
-the saved public key, the HASH call number and chain input length, the fixed level-tag registers
-and the dispatch halfwords (`Ctx`). Writes into chain slots preserve them (`Ctx.frame`). The three
-chain-dependent tag registers (`x12`, `x10`, `x14`) are tracked by the chain invariants instead.
+The facts that hold from the end of the index phase to the root: the payload pointer, the saved
+public key, the HASH call number and chain input length, the data pointer and the dispatch
+halfwords (`Ctx`). Writes into the answer region of a chain preserve them (`Ctx.frame`).
 -/
 
-namespace OptimalOTS.RiscvUpperProgram
+namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
 
 /-- Chain `k`'s value slot. -/
-abbrev slotW (k : ℕ) : Word := W (Flat.slotAddr k)
+abbrev slotW (k : ℕ) : Word := W (slotAddr k)
 
 /-- The first instruction of chain `k`'s block. -/
-def blockStart (k : ℕ) : ℕ := 4096 + 4 * (indexLength + blockLength * k)
+def blockStart (k : ℕ) : ℕ := 4096 + 4 * (indexLength + ((List.range k).map blockLength).sum)
 
 theorem tableEnd_eq (k : ℕ) : tableEnd k = blockStart (k + 1) := rfl
 
-/-- The chain tops of an assignment. -/
-def tops (x : graph.Assignment) (k : Fin 32) : BitVec 128 := Forest.trunc (x (cv k 14).fin)
+theorem blockStart_succ (k : ℕ) : blockStart (k + 1) = blockStart k + 4 * blockLength k := by
+  unfold blockStart
+  rw [List.range_succ, List.map_append, List.sum_append]
+  simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil]
+  ring
 
-/-- A level whose tag register is fixed through the chain phase. -/
-def FixedLevel (t : ℕ) : Prop := t ≠ 11 ∧ t ≠ 12 ∧ t ≠ 13
+theorem blockStart_zero : blockStart 0 = 4096 + 4 * indexLength := by
+  simp [blockStart]
+
+/-- The chain tops of an assignment. -/
+def tops (x : graph.Assignment) (k : Fin 28) : BitVec 256 := (x (cv k 31).fin).cast (lenF_fin _)
+
+/-- The address of the dispatch halfword of chain `k`. -/
+def laneAddr (k : ℕ) : ℕ := dataAddr + laneHalf k
+
+theorem laneAddr_bounds (k : ℕ) (hk : k < 28) :
+    dataAddr + 80 ≤ laneAddr k ∧ laneAddr k + 2 ≤ dataAddr + 144 ∧ laneAddr k % 2 = 0 := by
+  unfold laneAddr laneHalf laneOff dataAddr; omega
+
+theorem slotAddr_toNat (k : ℕ) (hk : k < 28) : (slotW k).toNat = slotAddr k :=
+  W_toNat _ (by unfold slotAddr payloadAddr; omega)
+
+theorem slot_bounds (k : ℕ) (hk : k < 28) :
+    payloadAddr ≤ slotAddr k ∧ slotAddr k + 24 ≤ payloadAddr + 24 * 28 ∧ slotAddr k % 8 = 0 := by
+  unfold slotAddr payloadAddr; omega
 
 /-- Facts fixed throughout the chain phase. -/
-structure Ctx (s : MachineState) (index : Idx) (payload : List Bool) (pk : PublicKey) : Prop where
+structure Ctx (s : MachineState) (index : Idx) (pk : PublicKey) : Prop where
   payloadReg : s.getReg .x9 = W payloadAddr
-  payloadBits : MemBits s (W payloadAddr) (ofBits 4096 payload)
   pk0 : s.getReg .x30 = pk.extractLsb' 0 64
   pk1 : s.getReg .x31 = pk.extractLsb' 64 64
   call : s.getReg .x5 = Riscv.hashCall
   length : s.getReg .x11 = 192
-  levels : ∀ t, t < 15 → FixedLevel t →
-    (s.getReg (levReg t)).truncate 32 = BitVec.ofNat 32 (Flat.levVal 0 t)
-  lanes : ∀ k : Fin 32,
-    (s.getHalfword (W (laneAddr k))).toNat = jumpBase k - 8 * (15 - pos index k)
+  dataReg : s.getReg .x29 = W dataAddr
+  lanes : ∀ k : Fin 28,
+    (s.getHalfword (W (laneAddr k))).toNat =
+      jumpBase - 4 * (31 - RiscvUpperForest.ForestVerifier.pos index k)
   /-- The checked signature length, reused by the root phase to build the root input length. -/
-  sigLen : s.getReg .x13 = W 4224
+  sigLen : s.getReg .x13 = W 5504
 
-/-- The fixed level-tag registers, the call number, the input length and the payload pointer. -/
+/-- The registers of the context. -/
 def CtxReg (r : Reg) : Prop :=
-  r = .x9 ∨ r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x11 ∨ ∃ t, t < 15 ∧ FixedLevel t ∧ levReg t = r
+  r = .x9 ∨ r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x11 ∨ r = .x29 ∨ r = .x13
 
-/-- A memory frame outside the chain slots `[slotAddr k - 8, slotAddr k + 32)`. -/
+/-- A memory frame outside the answer region of chain `k`, `[slotAddr k - 8, slotAddr k + 24)`. -/
 def SlotFrame (s t : MachineState) (k : ℕ) : Prop :=
-  ∀ addr : Word, (addr.toNat + 8 ≤ Flat.slotAddr k - 8 ∨ Flat.slotAddr k + 32 ≤ addr.toNat) →
+  ∀ addr : Word, (addr.toNat + 8 ≤ slotAddr k - 8 ∨ slotAddr k + 24 ≤ addr.toNat) →
     t.getMem addr = s.getMem addr
 
-theorem slotAddr_toNat (k : ℕ) (hk : k < 32) : (slotW k).toNat = Flat.slotAddr k :=
-  W_toNat _ (by unfold Flat.slotAddr Flat.slotBase; omega)
-
-theorem laneAddr_bounds (k : ℕ) (hk : k < 32) :
-    0x200040 ≤ laneAddr k ∧ laneAddr k + 2 ≤ 0x200080 ∧ laneAddr k % 2 = 0 := by
-  unfold laneAddr; omega
-
-theorem fixedLevel_4 : FixedLevel 4 := ⟨by decide, by decide, by decide⟩
-
-theorem Ctx.frame {s t : MachineState} {index : Idx} {payload : List Bool} {pk : PublicKey}
-    (ctx : Ctx s index payload pk) (k : ℕ) (hk : k < 32)
+theorem Ctx.frame {s t : MachineState} {index : Idx} {pk : PublicKey}
+    (ctx : Ctx s index pk) (k : ℕ) (hk : k < 28)
     (regs : ∀ r, CtxReg r → t.getReg r = s.getReg r) (mem : SlotFrame s t k) :
-    Ctx t index payload pk := by
-  have hslot : 0x200088 ≤ Flat.slotAddr k ∧ Flat.slotAddr k ≤ 0x200088 + 24 * 31 := by
-    unfold Flat.slotAddr Flat.slotBase; omega
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    Ctx t index pk := by
+  have hslot := slot_bounds k hk
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · rw [regs .x9 (Or.inl rfl)]; exact ctx.payloadReg
-  · apply memBits_of_word_frame s t _ _ ctx.payloadBits
-    intro i hi
-    apply mem
-    right
-    rw [alignToDword_toNat, BitVec.toNat_add, W_toNat _ (by norm_num [payloadAddr]),
-      BitVec.toNat_ofNat]
-    unfold payloadAddr
-    omega
   · rw [regs .x30 (Or.inr (Or.inl rfl))]; exact ctx.pk0
   · rw [regs .x31 (Or.inr (Or.inr (Or.inl rfl)))]; exact ctx.pk1
   · rw [regs .x5 (Or.inr (Or.inr (Or.inr (Or.inl rfl))))]; exact ctx.call
   · rw [regs .x11 (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl rfl)))))]; exact ctx.length
-  · intro t' ht hf
-    rw [regs _ (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨t', ht, hf, rfl⟩)))))]
-    exact ctx.levels t' ht hf
+  · rw [regs .x29 (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl rfl))))))]; exact ctx.dataReg
   · intro j
     obtain ⟨l1, l2, l3⟩ := laneAddr_bounds j j.isLt
     have e : t.getHalfword (W (laneAddr j)) = s.getHalfword (W (laneAddr j)) := by
       simp only [MachineState.getHalfword]
       rw [mem]
       left
-      rw [alignToDword_toNat, W_toNat _ (by omega)]
+      rw [alignToDword_toNat, W_toNat _ (by unfold dataAddr at l2; omega)]
+      unfold dataAddr at l1 l2
+      unfold slotAddr payloadAddr at hslot ⊢
       omega
     rw [e]
     exact ctx.lanes j
-  · rw [regs .x13 (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨4, by decide, fixedLevel_4, rfl⟩)))))]
-    exact ctx.sigLen
+  · rw [regs .x13 (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr rfl))))))]; exact ctx.sigLen
+
+/-- The values of chains `k` and later are still their disclosed values. -/
+def PayloadFrom (s : MachineState) (payload : List Bool) (k : ℕ) : Prop :=
+  ∀ j, k ≤ j → j < 28 → MemBits s (slotW j) (ofBits 192 (payload.drop (192 * j)))
 
 /-- Chain `k`'s slot represents `v`. -/
 def Holds (s : MachineState) (k : ℕ) {w : ℕ} (v : BitVec w) : Prop := MemBits s (slotW k) v
 
-end OptimalOTS.RiscvUpperProgram
+end OptimalOTS.Riscv2Program

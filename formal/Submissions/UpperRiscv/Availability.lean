@@ -61,9 +61,10 @@ private theorem uniform_miss_count (hidx : idxBits ≤ hashBits)
         (((2 ^ hashBits : ℕ) : ℝ≥0∞)⁻¹ * a) := by
   have hv : (Finset.univ.filter fun w : BitVec hashBits => idxOf w ∈ validSet).card =
       numValid * 2 ^ (hashBits - idxBits) := by
-    have h := Analysis.card_idxOfOut_mem hidx (validSet)
-      (fun n hn => mem_validSet_lt hn)
-    convert h using 1 <;> simp [Analysis.idxOfOut, idxOf, numValid]
+    have h := Analysis.card_idxOfOut_mem hidx (validSet) (fun n hn => mem_validSet_lt hn)
+    convert h using 2
+    · exact Finset.filter_congr_decidable _ _ _
+    · rw [numValid]
   have hn : (Finset.univ.filter fun w : BitVec hashBits => ¬ idxOf w ∈ validSet).card =
       2 ^ hashBits - numValid * 2 ^ (hashBits - idxBits) :=
     card_filter_not_bitVec _ hv
@@ -160,40 +161,71 @@ private theorem bernoulli_reciprocal {p : ℝ} (hp : 0 ≤ p) (hp1 : p ≤ 1) (k
   rw [le_div_iff₀ hd]
   simpa only [mul_comm] using hprod k
 
-/-- A block of 8192 trials fails with probability at most one half.
+/-- A block of 8192 trials fails with probability at most `0.493`.
 
 The reciprocal bound alone is too weak here: applied to the whole block it only yields
 `1 / (1 + 8192 * 729 / 2 ^ 23)`, which exceeds one half. Applying it to 128 trials and then
-raising to the 64th power keeps the compounding, and `(8481920 / 8388608) ^ 64 > 2`. -/
-private theorem miss_block : miss ^ 8192 ≤ 1 / 2 := by
+raising to the 64th power keeps the compounding: `(8388608 / 8481920) ^ 64 ≈ 0.4926`. -/
+private theorem miss_block : miss ^ 8192 ≤ 493 / 1000 := by
   refine (pow_le_pow_left' miss_le 8192).trans ?_
   have h128 := bernoulli_reciprocal (p := (729 : ℝ) / 8388608) (by norm_num) (by norm_num) 128
   have hbase : (1 : ℝ) - 729 / 8388608 = 8387879 / 8388608 := by norm_num
   have hden : 1 + ((128 : ℕ) : ℝ) * (729 / 8388608) = 8481920 / 8388608 := by norm_num
   rw [hbase, hden, one_div_div] at h128
   have hnn : (0 : ℝ) ≤ ((8387879 : ℝ) / 8388608) ^ 128 := by positivity
-  have h : ((8387879 : ℝ) / 8388608) ^ 8192 ≤ 1 / 2 := by
+  have h : ((8387879 : ℝ) / 8388608) ^ 8192 ≤ 493 / 1000 := by
     calc ((8387879 : ℝ) / 8388608) ^ 8192
         = (((8387879 : ℝ) / 8388608) ^ 128) ^ 64 := by rw [← pow_mul]
       _ ≤ ((8388608 : ℝ) / 8481920) ^ 64 := pow_le_pow_left₀ hnn h128 64
-      _ ≤ 1 / 2 := by
-          rw [div_pow, div_le_iff₀ (by positivity)]
+      _ ≤ 493 / 1000 := by
+          rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
           norm_num
   have h' := ENNReal.ofReal_le_ofReal h
   rw [ENNReal.ofReal_pow (by norm_num)] at h'
   have hb : ENNReal.ofReal ((8387879 : ℝ) / 8388608) = (8387879 / 8388608 : ℝ≥0∞) := by
     norm_num [ENNReal.ofReal_div_of_pos]
-  have hh : ENNReal.ofReal ((1 : ℝ) / 2) = (1 / 2 : ℝ≥0∞) := by
+  have hh : ENNReal.ofReal ((493 : ℝ) / 1000) = (493 / 1000 : ℝ≥0∞) := by
     norm_num [ENNReal.ofReal_div_of_pos]
   rwa [hb, hh] at h'
 
-/-- The full signing budget contains 128 blocks, each with failure at most one half. -/
-theorem miss_trials_le : miss ^ trials ≤ 1 / 2 ^ 128 := by
-  change miss ^ (8192 * 128) ≤ 1 / 2 ^ 128
+/-- The full signing budget contains 128 blocks; `0.493 ^ 128 < 2 ^ (-129)` leaves room for the
+bad records. -/
+theorem miss_trials_le : miss ^ trials ≤ 1 / 2 ^ 129 := by
+  change miss ^ (8192 * 128) ≤ 1 / 2 ^ 129
   rw [pow_mul]
-  calc
-    (miss ^ 8192) ^ 128 ≤ (1 / 2 : ℝ≥0∞) ^ 128 := pow_le_pow_left' miss_block _
-    _ = 1 / 2 ^ 128 := by simp only [one_div, ENNReal.inv_pow]
+  refine (pow_le_pow_left' miss_block 128).trans ?_
+  have h : ((493 : ℝ) / 1000) ^ 128 ≤ 1 / 2 ^ 129 := by
+    rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
+    norm_num
+  have h' := ENNReal.ofReal_le_ofReal h
+  rw [ENNReal.ofReal_pow (by norm_num)] at h'
+  have hb : ENNReal.ofReal ((493 : ℝ) / 1000) = (493 / 1000 : ℝ≥0∞) := by
+    norm_num [ENNReal.ofReal_div_of_pos]
+  have hh : ENNReal.ofReal ((1 : ℝ) / 2 ^ 129) = (1 / 2 ^ 129 : ℝ≥0∞) := by
+    rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_one,
+      ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat]
+  rwa [hb, hh] at h'
+
+/-- The bad records weigh less than `2 ^ (-129)`. -/
+theorem δ_le : δ ≤ 1 / 2 ^ 129 := by
+  have h0 : (2 : ℝ≥0∞) ^ 63 ≠ 0 := by simp
+  have ht : (2 : ℝ≥0∞) ^ 63 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
+  have e : ε₁ = ((2 : ℝ≥0∞) ^ 63)⁻¹ * ((2 : ℝ≥0∞) ^ 129)⁻¹ := by
+    rw [ε₁, show (2 : ℝ≥0∞) ^ 192 = 2 ^ 63 * 2 ^ 129 by rw [← pow_add],
+      ENNReal.mul_inv (Or.inl h0) (Or.inl ht)]
+  rw [δ, e, one_div]
+  calc 2 * (897 * 897) * (((2 : ℝ≥0∞) ^ 63)⁻¹ * ((2 : ℝ≥0∞) ^ 129)⁻¹)
+      = (2 * (897 * 897) * ((2 : ℝ≥0∞) ^ 63)⁻¹) * ((2 : ℝ≥0∞) ^ 129)⁻¹ := by ring
+    _ ≤ 1 * ((2 : ℝ≥0∞) ^ 129)⁻¹ := by
+        refine mul_le_mul' ?_ le_rfl
+        rw [← div_eq_mul_inv, ENNReal.div_le_iff h0 ht]
+        exact_mod_cast (by norm_num : (2 * (897 * 897) : ℕ) ≤ 1 * 2 ^ 63)
+    _ = ((2 : ℝ≥0∞) ^ 129)⁻¹ := one_mul _
+
+theorem half_add_half : (1 / 2 ^ 129 : ℝ≥0∞) + 1 / 2 ^ 129 = 1 / 2 ^ 128 := by
+  rw [one_div, one_div, show (2 : ℝ≥0∞) ^ 129 = 2 * 2 ^ 128 by rw [pow_succ'],
+    ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), ← add_mul, ENNReal.inv_two_add_inv_two,
+    one_mul]
 
 /-- Signing has the same failure probability for every message and every fresh index cache. -/
 theorem sign_failure (x : forestScheme.graph.Assignment) (m : Message)
@@ -212,7 +244,9 @@ theorem signingFailure_strong :
     let kg ← forestScheme.keygen
     let σ ← forestScheme.sign kg.2 (message kg.1)
     pure σ.isNone) ≤ _
-  rw [probTrue_eq_E_run, run_bind, E_bind, E_run_keygen_forest]
+  rw [probTrue_eq_E_run, run_bind, E_bind]
+  refine (E_run_keygen_forest _ fun a => E_le_one _ fun p => ?_).trans ?_
+  · split_ifs <;> simp
   simp only [run_bind, E_bind, run_pure, E_pure]
   have hs : ∀ ξ : Rec,
       E (run (forestScheme.sign (graph.evalRec ξ) (message (pkOf ξ))) (kc ξ))
@@ -220,8 +254,9 @@ theorem signingFailure_strong :
     intro ξ
     exact sign_failure _ _ _ (fun η => kc_enc ξ _)
   simp_rw [hs]
-  rw [← Finset.sum_mul, sum_w, one_mul]
-  exact miss_trials_le
+  simp only [mul_add, Finset.sum_add_distrib]
+  rw [← Finset.sum_mul, sum_w, one_mul, ← half_add_half]
+  exact add_le_add miss_trials_le (sum_w_ind_not_distinctRec_le.trans δ_le)
 
 end OptimalOTS.Forest.Availability
 

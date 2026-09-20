@@ -5,7 +5,7 @@ import Submissions.UpperRiscv.GScheme
 /-!
 # Reconstruction and verification under the lazy random oracle
 
-Support-level descriptions of the runs of `Graph.reconstruct`, `index` and `GScheme.verify`:
+Support-level descriptions of the runs of `Graph.reconstruct`, `packIndex` and `GScheme.verify`:
 whatever the oracle answers, the final cache contains the answers to every query made, and the
 computed assignment satisfies the reconstruction equations with respect to that cache.
 
@@ -425,11 +425,11 @@ end Dag.Graph
 
 /-- The index query records its answer in the cache. -/
 theorem index_support (m : Message) (η : Nonce) (c : Cache) :
-    ∀ p ∈ support (run (index m η) c),
+    ∀ p ∈ support (run (packIndex m η) c),
       Cache.Sub c p.2 ∧ ∃ w, p.2 ⟨msgBits + nonceBits, m ++ η⟩ = some w ∧
-        p.1 = (w.setWidth idxBits).toNat := by
+        p.1 = pack w := by
   intro p hp
-  unfold index at hp
+  unfold packIndex at hp
   rw [run_map, support_map, Set.mem_image] at hp
   obtain ⟨⟨w, c'⟩, hw, rfl⟩ := hp
   obtain ⟨hsub, hc'⟩ := hash_support _ c _ hw
@@ -443,7 +443,7 @@ theorem verify_support (S : GScheme) (pk : PublicKey) (m : Message)
     ∀ p ∈ support (run (S.verify pk m σ) c),
       Cache.Sub c p.2 ∧ (p.1 = true →
         ∃ w, p.2 ⟨msgBits + nonceBits, m ++ σ.1⟩ = some w ∧
-          ∃ hi : (w.setWidth idxBits).toNat ∈ validSet,
+          ∃ hi : pack w ∈ validSet,
             σ.2.length = S.graph.revealBits (S.sets ⟨_, hi⟩) ∧
             ∃ y : S.graph.Assignment,
               S.graph.ReconEqs p.2 (S.sets ⟨_, hi⟩) (S.graph.decode (S.sets ⟨_, hi⟩) σ.2) y ∧
@@ -455,7 +455,7 @@ theorem verify_support (S : GScheme) (pk : PublicKey) (m : Message)
   obtain ⟨⟨i, c₁⟩, hi₁, hp⟩ := hp
   obtain ⟨hsub₁, w, hw, rfl⟩ := index_support m σ.1 c ⟨i, c₁⟩ hi₁
   dsimp only at hp hw
-  by_cases hi : (w.setWidth idxBits).toNat ∈ validSet
+  by_cases hi : pack w ∈ validSet
   · rw [dif_pos hi] at hp
     by_cases hlen : σ.2.length = S.graph.revealBits (S.sets ⟨_, hi⟩)
     · rw [if_pos hlen, run_bind, support_bind] at hp

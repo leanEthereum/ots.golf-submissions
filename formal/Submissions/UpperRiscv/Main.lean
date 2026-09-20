@@ -3,13 +3,13 @@ import Submissions.UpperRiscv.Assembly
 /-!
 # Security of the concrete scheme
 
-`forestScheme_secure`: the flat forest satisfies `GScheme.Secure`, the
+`forestScheme_secure`: the bare-chain forest satisfies `GScheme.Secure`, the
 127-bit strong unforgeability requirement of `OptimalOTS.Dag`, and every signature verifies
-in `170` compressions (`forestScheme_verifyCost`).
+in `256` compressions (`forestScheme_verifyCost`).
 
-For a budget `B ≤ 2 ^ 127` the bound `probTrue ≤ 2 ε (B - 492) = (B - 492) / 2 ^ 127 < B / 2 ^ 127`
-of `Forest.main_bound` applies; for larger budgets the requirement holds trivially since
-probabilities are at most one.
+For a budget `B ≤ 2 ^ 127` the bound `probTrue ≤ 2 ε (B - 907) + 2 δ` of `Forest.main_bound`
+applies, and `2 δ = 4 · 897² · 2⁻¹⁹² < 907 · 2⁻¹²⁷` makes it smaller than `B / 2 ^ 127`; for larger
+budgets the requirement holds trivially since probabilities are at most one.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -35,14 +35,39 @@ theorem kappa_eq : κ = ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
   rw [ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), ← mul_assoc,
     ENNReal.mul_inv_cancel (by simp) (by simp), one_mul]
 
-theorem kappa_mul_lt {B : ℕ} (h492 : 492 ≤ B) :
-    κ * ((B - 492 : ℕ) : ℝ≥0∞) < (B : ℝ≥0∞) / 2 ^ securityBits := by
-  rw [kappa_eq]
-  show _ < (B : ℝ≥0∞) / 2 ^ 127
-  rw [ENNReal.div_eq_inv_mul]
-  refine ENNReal.mul_lt_mul_right (ENNReal.inv_ne_zero.2 (ENNReal.pow_ne_top ENNReal.ofNat_ne_top))
-    (ENNReal.inv_ne_top.2 (by simp)) ?_
-  exact_mod_cast Nat.sub_lt (by omega) (by norm_num)
+/-- The bad records cost less than the keygen budget saves. -/
+theorem two_δ_lt : 2 * δ < 907 * κ := by
+  have h0 : (2 : ℝ≥0∞) ^ 65 ≠ 0 := by simp
+  have ht : (2 : ℝ≥0∞) ^ 65 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
+  have h0' : ((2 : ℝ≥0∞) ^ 127)⁻¹ ≠ 0 := ENNReal.inv_ne_zero.2 (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)
+  have ht' : ((2 : ℝ≥0∞) ^ 127)⁻¹ ≠ ⊤ := ENNReal.inv_ne_top.2 (by simp)
+  have e : ε₁ = ((2 : ℝ≥0∞) ^ 65)⁻¹ * ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
+    rw [ε₁, show (2 : ℝ≥0∞) ^ 192 = 2 ^ 65 * 2 ^ 127 by rw [← pow_add],
+      ENNReal.mul_inv (Or.inl h0) (Or.inl ht)]
+  rw [kappa_eq, δ, e]
+  calc 2 * (2 * (897 * 897) * (((2 : ℝ≥0∞) ^ 65)⁻¹ * ((2 : ℝ≥0∞) ^ 127)⁻¹))
+      = ((2 : ℝ≥0∞) ^ 127)⁻¹ * (2 * (2 * (897 * 897)) * ((2 : ℝ≥0∞) ^ 65)⁻¹) := by ring
+    _ < ((2 : ℝ≥0∞) ^ 127)⁻¹ * 907 := by
+        refine ENNReal.mul_lt_mul_right h0' ht' ?_
+        rw [← div_eq_mul_inv, ENNReal.div_lt_iff (Or.inl h0) (Or.inl ht)]
+        exact_mod_cast (by norm_num : (2 * (2 * (897 * 897)) : ℕ) < 907 * 2 ^ 65)
+    _ = 907 * ((2 : ℝ≥0∞) ^ 127)⁻¹ := mul_comm _ _
+
+theorem kappa_mul_lt {B : ℕ} (h907 : 907 ≤ B) :
+    κ * ((B - 907 : ℕ) : ℝ≥0∞) + 2 * δ < (B : ℝ≥0∞) / 2 ^ securityBits := by
+  have hfin : κ * ((B - 907 : ℕ) : ℝ≥0∞) ≠ ⊤ := by
+    rw [kappa_eq]
+    exact ENNReal.mul_ne_top (ENNReal.inv_ne_top.2 (by simp)) (ENNReal.natCast_ne_top _)
+  calc κ * ((B - 907 : ℕ) : ℝ≥0∞) + 2 * δ
+      < κ * ((B - 907 : ℕ) : ℝ≥0∞) + 907 * κ := ENNReal.add_lt_add_left hfin two_δ_lt
+    _ = κ * (((B - 907 : ℕ) : ℝ≥0∞) + 907) := by ring
+    _ = κ * (B : ℝ≥0∞) := by
+        congr 1
+        exact_mod_cast Nat.sub_add_cancel h907
+    _ = (B : ℝ≥0∞) / 2 ^ securityBits := by
+        rw [kappa_eq]
+        show _ = (B : ℝ≥0∞) / 2 ^ 127
+        rw [ENNReal.div_eq_inv_mul]
 
 theorem one_lt_div {B : ℕ} (h : 2 ^ 127 < B) : (1 : ℝ≥0∞) < (B : ℝ≥0∞) / 2 ^ securityBits := by
   show (1 : ℝ≥0∞) < (B : ℝ≥0∞) / 2 ^ 127
