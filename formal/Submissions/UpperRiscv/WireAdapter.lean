@@ -108,8 +108,14 @@ theorem rejectsOversized (n : ℕ) (h : S.RejectsOversized n) :
   have hc := canonical pk m bits accepted
   exact h pk m (decode bits) (by simpa only [hc] using hsize) accepted
 
+theorem verifyCost (c : ℕ) (h : S.VerifyCostAtMost c) : (scheme S decode).VerifyCostAtMost c :=
+  fun pk m bits => h pk m (decode bits)
+
 include inverse canonical in
-theorem admissible (h : S.Admissible (1 / 2 ^ signingFailureBits)) :
+/-- Admissibility transfers; the verification budget (a core requirement since the cap on
+`verifyBudget`) comes from the typed scheme's own verification-cost bound. -/
+theorem admissible (h : S.Admissible (1 / 2 ^ signingFailureBits)) (c : ℕ)
+    (hc : S.VerifyCostAtMost c) (hle : c ≤ verifyBudget) :
     (scheme S decode).Admissible where
   correct := correct S decode inverse h.correct
   verifyDeterministic := fun pk m bits => h.verifyDeterministic pk m (decode bits)
@@ -118,8 +124,6 @@ theorem admissible (h : S.Admissible (1 / 2 ^ signingFailureBits)) :
   rejectsOversized := rejectsOversized S decode canonical maxSignatureBits h.rejectsOversized
   keygenCost := h.keygenCost
   signCost := fun sk m => AlgorithmCosts.CostAtMost.map (h.signCost sk m) _
-
-theorem verifyCost (c : ℕ) (h : S.VerifyCostAtMost c) : (scheme S decode).VerifyCostAtMost c :=
-  fun pk m bits => h pk m (decode bits)
+  verifyCost := OracleAlgorithm.Scheme.VerifyCostAtMost.mono _ (verifyCost S decode c hc) hle
 
 end OptimalOTS.WireAdapter

@@ -5,9 +5,9 @@ import Submissions.UpperRiscv.Digits
 /-!
 # Accepted indices
 
-The index is the 128-bit number packing the 28 chain digits: five-bit digits for the first
-sixteen chains (bits `5 k, …, 5 k + 4`), four-bit digits for the other twelve (bits
-`80 + 4 (k - 16), …`). An index is accepted when its digits sum to `target = 215`. The accepted
+The index is the 128-bit number packing the 28 chain digits: for `p < 12`, a five-bit digit for
+chain `2p` and a four-bit digit for chain `2p + 1` (bits `9p, …, 9p + 8`), then five-bit digits
+for chains `24 … 27`. An index is accepted when its digits sum to `target = 215`. The accepted
 indices are counted exactly by `compW wid 28 215`; there are more than `712 * 2 ^ 105` of them,
 the exact threshold at which the signing loop still fails with probability at most `2 ^ -128`.
 
@@ -22,8 +22,9 @@ open OptimalOTS.Dag
 /-- The digit sum of every accepted index. -/
 def target : ℕ := 215
 
-/-- Digit widths: five bits for the first sixteen chains, four for the next twelve, none beyond. -/
-def wid (k : ℕ) : ℕ := if k < 16 then 5 else if k < 28 then 4 else 0
+/-- Digit widths: chains `2p` and `2p + 1` (`p < 12`) form a pair of a five-bit and a four-bit
+digit; chains `24 … 27` are five-bit; none beyond. -/
+def wid (k : ℕ) : ℕ := if k < 24 then (if k % 2 = 0 then 5 else 4) else if k < 28 then 5 else 0
 
 /-- Position of digit `k` in the packed index. -/
 abbrev pos : ℕ → ℕ := posW wid
@@ -38,7 +39,7 @@ theorem pos_of_le {k : ℕ} (hk : 28 ≤ k) : pos k = 128 := by
     · show posW wid (k + 1) = 128
       have := ih (by omega)
       rw [posW_succ, show posW wid k = 128 from this]
-      simp [wid, show ¬ k < 16 by omega, show ¬ k < 28 by omega]
+      simp [wid, show ¬ k < 24 by omega, show ¬ k < 28 by omega]
     · rw [← h]; exact pos_28
 
 /-- Digit `k` of `i`. -/
@@ -166,14 +167,13 @@ theorem numValid_avail : 712 * 2 ^ 105 ≤ numValid := by
 /-! ## The machine's reading of the digits -/
 
 /-- The answer is read as 29 cells in bit order, each some unread low bits (`jw k`) below digit
-`k` (`wid k` bits). Words 0 and 1 of the answer hold digits `0 … 15`, two per 16-bit lane:
-`junk₂ ‖ d ‖ d' ‖ junk₄`. Word 2 holds digits `16 … 27`, three per lane:
-`junk₂ ‖ d ‖ d' ‖ d'' ‖ junk₂`. Word 3 is unread. The junk of a cell also absorbs the trailing
-junk of the lane before it, and cell 28 is the unread rest. -/
+`k` (`wid k` bits). Lane `p` (16 bits) of words 0–2 holds the pair of chains `2p` and `2p + 1`:
+`junk₂ ‖ d₂ₚ ‖ junk₃ ‖ d₂ₚ₊₁ ‖ junk₂`; lane `12 + s` of word 3 holds chain `24 + s`:
+`junk₂ ‖ d ‖ junk₉`. The junk of a cell also absorbs the trailing junk of the lane before it,
+and cell 28 is the unread rest. -/
 def jw (k : ℕ) : ℕ :=
-  if k = 0 then 2 else if k < 16 then (if k % 2 = 0 then 6 else 0)
-  else if k = 16 then 6 else if k < 28 then (if (k - 16) % 3 = 0 then 4 else 0)
-  else if k = 28 then 66 else 0
+  if k = 0 then 2 else if k < 24 then (if k % 2 = 0 then 4 else 3)
+  else if k = 24 then 4 else if k < 28 then 11 else if k = 28 then 9 else 0
 
 /-- Cell widths. -/
 def cw (k : ℕ) : ℕ := jw k + wid k
