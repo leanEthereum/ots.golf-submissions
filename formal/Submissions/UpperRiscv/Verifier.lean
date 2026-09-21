@@ -4,7 +4,7 @@ import Submissions.UpperRiscv.RootPhase
 # Exact refinement of the machine image
 
 The image observes exactly the certified raw-signature verifier, preserving every oracle query,
-and every run, accepting or rejecting, costs at most `cycleBound = 436` cycles: 61 for the index
+and every run, accepting or rejecting, costs at most `cycleBound = 430` cycles: 55 for the index
 phase, `4 + (field + 1)` per chain (355 in all, since the fields sum to 215), and 20 for the root
 and the decision.
 -/
@@ -57,7 +57,7 @@ theorem directVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
 
 theorem image_code : image.code = verifier := rfl
 
-theorem verifier_length : verifier.length = 896 := by decide +kernel
+theorem verifier_length : verifier.length = 890 := by decide +kernel
 
 theorem image_valid : image.Valid := by
   refine ⟨?_, ?_, ?_⟩
@@ -71,7 +71,7 @@ theorem image_valid : image.Valid := by
     exact List.all_eq_true.mp checked
 
 /-- The certified cycle bound on every execution. -/
-def cycleBound : ℕ := 436
+def cycleBound : ℕ := 430
 
 theorem order_eq : order = chainsFrom 0 ++ [rc, rh] := by
   rw [← chainsFrom_zero]
@@ -106,7 +106,7 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   have e : verifier = indexPhase ++ (chains ++ (root ++ decision)) := by
     simp only [verifier, List.append_assoc]
   rw [e] at located
-  rw [directVerify_unfold, show cycleBound = (355 + 20) + 61 from rfl]
+  rw [directVerify_unfold, show cycleBound = (355 + 20) + 55 from rfl]
   apply indexPhase_refines pk m bits (chains ++ (root ++ decision)) 827 1337
     (fun answer => acceptedTail pk bits answer) _ (by norm_num) located
     (by rw [indexPhase_length]; norm_num)
@@ -124,8 +124,8 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
     rfl
   have located2 : Riscv.CodeAt s s.pc (blocksFrom 0 ++ (root ++ decision)) := by
     have h := located.append_right (first := indexPhase)
-    have hp : (Riscv.initialState image pk m bits).pc + BitVec.ofNat 64 (4 * 67) =
-        W (blockStart 0) := by rw [pc0, blockStart_zero, show indexLength = 67 from indexPhase_length]; decide
+    have hp : (Riscv.initialState image pk m bits).pc + BitVec.ofNat 64 (4 * 61) =
+        W (blockStart 0) := by rw [pc0, blockStart_zero, show indexLength = 61 from indexPhase_length]; decide
     rw [indexPhase_length, blocks_eq, hp] at h
     rw [afterIndex_pc]
     exact h.code_eq (afterIndex_code pk m bits answer)

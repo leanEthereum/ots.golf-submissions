@@ -1,4 +1,5 @@
 import OptimalOTS.RiscvMachine
+import Submissions.UpperRiscv.Valid
 
 /-!
 # The RV64IM image of the bare-chain verifier
@@ -6,11 +7,12 @@ import OptimalOTS.RiscvMachine
 1. **Index.** Save the public key and hash the 384 bits `message ‖ nonce` as the loader placed
    them, with the message in the low bits, to the data base; reject unless the signature has
    5504 bits.
-2. **Lanes.** Field `k` is byte `k` of the answer, masked to 5 bits (`k < 16`) or 4 bits
-   (`16 ≤ k < 28`); bytes 28–31 are ignored. Eight lane words hold `4 · field` in 16-bit lanes;
-   their sum is checked against `4 · 215` with one multiplication; `jumpBase - 4 · field` is
-   stored for every chain in the 64 bytes below the signature region (the public key and the
-   message have been consumed).
+2. **Lanes.** Chain `k` reads byte `slotOf k` of the answer, masked to 5 bits (`k < 16`) or
+   4 bits (`16 ≤ k < 28`); the last four chains take the even bytes 24, 26, 28, 30, and the odd
+   bytes 25, 27, 29, 31 are ignored. Seven lane words hold `4 · field` in 16-bit lanes; their sum
+   is checked against `4 · 215` with one multiplication; `jumpBase - 4 · field` is stored for
+   every chain in the 56 bytes below the signature region (the public key and the message have
+   been consumed).
 3. **Chains.** Chain `k`'s 192-bit value sits at `sig + 16 + 24 k`; chains run from 0 up to 27,
    hashing the value at its slot with the 32-byte answer written eight bytes below the slot
    (`x12 = x10 - 8`): the high 192 bits of the answer land on the slot and feed the next step,
@@ -49,17 +51,17 @@ def sigBits : ℕ := 5504
 def indexPrefix : Code :=
   [.LD .x30 .x10 0, .LD .x31 .x10 8, .ADDI .x11 .x0 512, .LUI .x12 0x200, .ADDI .x5 .x0 1]
 
-def lengthCheck : Code := [.LD .x6 .x12 (BitVec.ofNat 12 72), .BEQ .x13 .x6 16] ++ reject
+def lengthCheck : Code := [.LD .x6 .x12 (BitVec.ofNat 12 64), .BEQ .x13 .x6 16] ++ reject
 
-/-- The four index words, the three masks, the lane multiplier and the broadcast jump base. -/
+/-- The four index words, the two masks, the lane multiplier and the broadcast jump base. -/
 def loadWords : Code :=
   [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
-   .LD .x24 .x12 32, .LD .x25 .x12 40, .LD .x1 .x12 48, .LD .x2 .x12 56, .LD .x3 .x12 64]
+   .LD .x24 .x12 32, .LD .x25 .x12 40, .LD .x2 .x12 48, .LD .x3 .x12 56]
 
 /-- The offset of lane word `(w, i)` in the lane area, which starts at `laneBase`. -/
 def laneOff (w i : ℕ) : ℕ := 8 * (2 * w + i)
 
-/-- The lane area: eight words below the signature region, over the consumed public key,
+/-- The lane area: seven words below the signature region, over the consumed public key,
 message and nonce. -/
 def laneBase : ℕ := 0x3FFFF8
 
@@ -69,7 +71,7 @@ def hashBase : ℕ := 0x400000
 
 def srcReg (w : ℕ) : Reg := match w with | 0 => .x20 | 1 => .x21 | 2 => .x22 | _ => .x23
 
-def maskReg (w : ℕ) : Reg := if w < 2 then .x24 else if w = 2 then .x25 else .x1
+def maskReg (w : ℕ) : Reg := if w < 2 then .x24 else .x25
 
 /-- Lane word `(w, i)`: fields `8 w + 2 l + i` (bytes of index word `w`), times four, in the 16-bit
 lanes `l`. -/
@@ -79,7 +81,7 @@ def laneWord (w i : ℕ) : Code :=
   [.AND dst dst (maskReg w)] ++ (if w = 0 ∧ i = 0 then [] else [.ADD .x27 .x27 .x26]) ++
   [.SUB .x26 .x3 dst, .SD .x10 .x26 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - hashBase))]
 
-def lanes : Code := (List.range 8).flatMap fun j => laneWord (j / 2) (j % 2)
+def lanes : Code := (List.range 7).flatMap fun j => laneWord (j / 2) (j % 2)
 
 def sumCheck : Code :=
   [.MUL .x27 .x27 .x2, .SRLI .x27 .x27 48, .XORI .x27 .x27 (BitVec.ofNat 12 (4 * target)),
@@ -97,8 +99,10 @@ def indexLength : ℕ := indexPhase.length
 
 def imm12 (z : ℤ) : BitVec 12 := BitVec.ofInt 12 z
 
-/-- The offset of the halfword of chain `k` in the lane area. -/
-def laneHalf (k : ℕ) : ℕ := laneOff (k / 8) (k % 2) + 2 * (k % 8 / 2)
+/-- The offset of the halfword of chain `k` in the lane area: chain `k` sits in slot `slotOf k`,
+which is lane `slotOf k % 8 / 2` of lane word `(slotOf k / 8, slotOf k % 2)`. -/
+def laneHalf (k : ℕ) : ℕ :=
+  laneOff (slotOf k / 8) (slotOf k % 2) + 2 * (slotOf k % 8 / 2)
 
 /-- The answer buffer of chain `k`, eight bytes below its slot `0x400040 + 24 k`. -/
 def outAddr (k : ℕ) : ℕ := 0x400038 + 24 * k
@@ -141,8 +145,7 @@ def wordBytes (v : ℕ) : List (BitVec 8) := (List.range 8).map fun j => BitVec.
 
 def dataImage : List (BitVec 8) :=
   List.replicate 32 0 ++ wordBytes (broadcast 0x7C) ++ wordBytes (broadcast 0x3C) ++
-    wordBytes 0x003C003C ++ wordBytes 0x0001000100010001 ++ wordBytes (broadcast jumpBase) ++
-    wordBytes sigBits
+    wordBytes 0x0001000100010001 ++ wordBytes (broadcast jumpBase) ++ wordBytes sigBits
 
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 

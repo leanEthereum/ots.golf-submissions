@@ -3,7 +3,7 @@ import Submissions.UpperRiscv.ChainContext
 /-!
 # The lane words of the index phase
 
-Each of the eight lane words is one shift, one mask, an accumulation into `x27`, a subtraction
+Each of the seven lane words is one shift, one mask, an accumulation into `x27`, a subtraction
 from the broadcast jump base and a store (`laneWord_effect`). Together they leave in `x27` the
 sum of the lane words and in memory the dispatch halfwords (`lanesUpTo_effect`).
 -/
@@ -109,7 +109,7 @@ theorem laneWord_ready (a : MachineState) (w i : ℕ) (hw : w < 4) (hi : i < 2)
   exact dword_ok _ (by unfold laneWordAddr laneBase; omega) (by unfold laneWordAddr laneBase; omega)
     (by unfold laneWordAddr laneBase; omega)
 
-/-! ## All eight lane words -/
+/-! ## All seven lane words -/
 
 /-- Lane word `j` of the state's index words. -/
 def laneOf (a : MachineState) (j : ℕ) : Word :=
@@ -123,7 +123,7 @@ def laneSum (a : MachineState) : ℕ → Word
 /-- The first `n` lane words. -/
 def lanesUpTo (n : ℕ) : Code := (List.range n).flatMap fun j => laneWord (j / 2) (j % 2)
 
-theorem lanes_eq : lanes = lanesUpTo 8 := rfl
+theorem lanes_eq : lanes = lanesUpTo 7 := rfl
 
 theorem lanesUpTo_succ (n : ℕ) : lanesUpTo (n + 1) = lanesUpTo n ++ laneWord (n / 2) (n % 2) := by
   simp [lanesUpTo, List.range_succ, List.flatMap_append]
@@ -141,7 +141,7 @@ theorem laneWordAddr_ne (i j : ℕ) (hi : i < 8) (hj : j < 8) (h : i ≠ j) :
     (by unfold laneWordAddr; omega)
 
 theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
-    ∀ n, n ≤ 8 → Riscv.LinearReady a (lanesUpTo n) ∧
+    ∀ n, n ≤ 7 → Riscv.LinearReady a (lanesUpTo n) ∧
       LanesEffect a ((lanesUpTo n).foldl execInstrBr a) n := by
   intro n
   induction n with

@@ -3,10 +3,11 @@ import Submissions.UpperRiscv.IndexLanes
 /-!
 # The arithmetic of the index check
 
-The index answer is held in four words. The sum of the eight lane words has four lanes, each the
-sum of eight fields times four; its top lane after the broadcast multiplication is four times the
-field sum of the answer (`top_laneSum`), which the sum check compares with `4 · 216`. Each stored
-lane holds `jumpBase - 4 · field` (`lane_halfword`).
+The index answer is held in four words. The sum of the seven lane words has four lanes, each the
+sum of the fields of its slots times four; its top lane after the broadcast multiplication is four
+times the field sum of the answer (`top_laneSum`), which the sum check compares with `4 · 215`.
+The eighth lane word `(3, 1)` would carry only the width-zero slots `25, 27, 29, 31`, so it is not
+emitted. Each stored lane holds `jumpBase - 4 · field` (`lane_halfword`).
 -/
 
 namespace OptimalOTS.Riscv2Program
@@ -18,6 +19,17 @@ open RiscvZkvm.Rv64
 def fld (u p b : ℕ) : ℕ := u / 2 ^ p % 2 ^ b
 
 theorem wid_le (k : ℕ) : wid k ≤ 5 := by unfold wid; split_ifs <;> omega
+
+/-- The four slots of the omitted lane word `(3, 1)`. -/
+theorem wid_25 : wid 25 = 0 := by decide
+
+theorem wid_27 : wid 27 = 0 := by decide
+
+theorem wid_29 : wid 29 = 0 := by decide
+
+theorem wid_31 : wid 31 = 0 := by decide
+
+theorem fld_dead (u p : ℕ) : fld u p 0 = 0 := by simp [fld]
 
 theorem fld_le (u p b : ℕ) (hb : b ≤ 5) : fld u p b ≤ 31 := by
   have h1 : u / 2 ^ p % 2 ^ b < 2 ^ b := Nat.mod_lt _ (by positivity)
@@ -38,17 +50,17 @@ theorem laneNat_le (u w i : ℕ) : laneNat u w i ≤ 124 * (1 + 2 ^ 16 + 2 ^ 32 
   have := fld_le u (48 + 8 * i) _ (wid_le (8 * w + 6 + i))
   omega
 
-/-- The mask registers hold the three masks. -/
+/-- The mask registers hold the two masks. -/
 def MasksLoaded (a : MachineState) : Prop := ∀ w, w < 4 → a.getReg (maskReg w) = W (maskNat w)
 
-theorem laneOf_toNat (a : MachineState) (hm : MasksLoaded a) (j : ℕ) (hj : j < 8) :
+theorem laneOf_toNat (a : MachineState) (hm : MasksLoaded a) (j : ℕ) (hj : j < 7) :
     (laneOf a j).toNat = laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2) := by
   unfold laneOf
   rw [hm (j / 2) (by omega)]
-  exact laneValue_toNat _ _ _ (by omega) (Nat.mod_lt _ (by norm_num))
+  exact laneValue_toNat _ _ _ (by omega) (Nat.mod_lt _ (by norm_num)) (by omega)
 
 theorem laneSum_toNat (a : MachineState) (hm : MasksLoaded a) :
-    ∀ n, n ≤ 8 → (laneSum a n).toNat =
+    ∀ n, n ≤ 7 → (laneSum a n).toNat =
       ∑ j ∈ Finset.range n, laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2) := by
   intro n
   induction n with
@@ -93,13 +105,19 @@ theorem laneTotal_le (u : ℕ → ℕ) (l : ℕ) : laneTotal u l ≤ 1000 := by
 /-- The word values of a state. -/
 def wordsOf (a : MachineState) (w : ℕ) : ℕ := (a.getReg (srcReg w)).toNat
 
+/-- The seven emitted lane words already carry every nonzero slot: the missing word `(3, 1)`
+contributes only width-zero fields. -/
 theorem laneSum_lanes (a : MachineState) :
-    ∑ j ∈ Finset.range 8, laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2) =
+    ∑ j ∈ Finset.range 7, laneNat (a.getReg (srcReg (j / 2))).toNat (j / 2) (j % 2) =
       laneTotal (wordsOf a) 0 + 2 ^ 16 * laneTotal (wordsOf a) 1 +
       2 ^ 32 * laneTotal (wordsOf a) 2 + 2 ^ 48 * laneTotal (wordsOf a) 3 := by
   simp only [Finset.sum_range_succ, Finset.sum_range_zero, laneNat_eq, laneTotal, wordsOf]
-  norm_num
-  ring
+  -- `simp only` runs without the default simprocs, so the slot indices of the expanded sums are
+  -- still `8 * 3 + 2 * 0 + 1` and the like, and the width lemmas of the four dead slots cannot
+  -- match them. `norm_num` does run the simprocs and iterates, so handing it those lemmas
+  -- reduces the indices and rewrites the dead fields in one pass.
+  norm_num [wid_25, wid_27, wid_29, wid_31, fld_dead]
+  all_goals ring
 
 /-- The field sum of the answer, over all 32 bytes (the last four have width zero). -/
 theorem laneTotals_sum (u : ℕ → ℕ) :
@@ -111,9 +129,9 @@ theorem laneTotals_sum (u : ℕ → ℕ) :
 
 /-- The top lane of the lane sum is four times the field sum. -/
 theorem top_laneSum (a : MachineState) (hm : MasksLoaded a) :
-    ((laneSum a 8).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
+    ((laneSum a 7).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
       4 * ∑ k ∈ Finset.range 32, fld (wordsOf a (k / 8)) (8 * (k % 8)) (wid k) := by
-  rw [laneSum_toNat a hm 8 le_rfl, laneSum_lanes, topLane _ _ _ _ (laneTotal_le _ _)
+  rw [laneSum_toNat a hm 7 le_rfl, laneSum_lanes, topLane _ _ _ _ (laneTotal_le _ _)
     (laneTotal_le _ _) (laneTotal_le _ _) (laneTotal_le _ _), laneTotals_sum]
 
 /-! ## The fields of the answer -/
@@ -138,31 +156,22 @@ theorem fld_word (answer : BitVec hashBits) (k : ℕ) (hk : k < 32) :
     show 64 * (k / 8) + 8 * (k % 8) = 8 * k by omega]
   rfl
 
-theorem byteDigit_high (answer : BitVec hashBits) (k : ℕ) (hk : 28 ≤ k) : byteDigit answer k = 0 := by
-  unfold byteDigit wid
-  rw [if_neg (by omega), if_neg (by omega), pow_zero, Nat.mod_one]
-
-theorem field_sum (answer : BitVec hashBits) :
-    ∑ k ∈ Finset.range 32, byteDigit answer k = ∑ k ∈ Finset.range 28, byteDigit answer k := by
-  rw [show (32 : ℕ) = 28 + 4 from rfl, Finset.sum_range_add,
-    Finset.sum_eq_zero fun k _ => byteDigit_high answer (28 + k) (by omega), add_zero]
-
 /-- The words of the answer are in the index registers. -/
 def WordsLoaded (a : MachineState) (answer : BitVec hashBits) : Prop :=
   ∀ w, w < 4 → a.getReg (srcReg w) = wordOf answer w
 
 theorem top_laneSum_answer (a : MachineState) (hm : MasksLoaded a) (answer : BitVec hashBits)
     (hw : WordsLoaded a answer) :
-    ((laneSum a 8).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
-      4 * ∑ k ∈ Finset.range 28, byteDigit answer k := by
-  rw [top_laneSum a hm, ← field_sum]
+    ((laneSum a 7).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
+      4 * ∑ k ∈ Finset.range 32, byteDigit answer k := by
+  rw [top_laneSum a hm]
   refine congrArg (4 * ·) (Finset.sum_congr rfl fun k hk => ?_)
   rw [Finset.mem_range] at hk
   rw [wordsOf, hw _ (by omega), fld_word answer k hk]
 
-/-- The accepted indices are those with field sum `216`. -/
+/-- The accepted indices are those with field sum `215`. -/
 theorem accepted_iff (answer : BitVec hashBits) :
-    Accepted (pack answer) ↔ ∑ k ∈ Finset.range 28, byteDigit answer k = 215 := by
+    Accepted (pack answer) ↔ ∑ k ∈ Finset.range 32, byteDigit answer k = 215 := by
   unfold Accepted
   rw [Finset.sum_congr rfl fun k hk => digit_pack answer (Finset.mem_range.mp hk)]
   rfl

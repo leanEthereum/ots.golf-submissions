@@ -37,9 +37,20 @@ def tops (x : graph.Assignment) (k : Fin 28) : BitVec 256 := (x (cv k 31).fin).c
 /-- The address of the dispatch halfword of chain `k`. -/
 def laneAddr (k : ℕ) : ℕ := laneBase + laneHalf k
 
+/-- Chain `k`'s halfword is an even offset inside the 56 bytes of the seven lane words. The one
+place that reduces `laneHalf`, so that every other site keeps it as an atom. -/
+theorem laneHalf_bounds (k : ℕ) (hk : k < 28) : laneHalf k ≤ 54 ∧ laneHalf k % 2 = 0 := by
+  unfold laneHalf laneOff slotOf; omega
+
 theorem laneAddr_bounds (k : ℕ) (hk : k < 28) :
     laneBase ≤ laneAddr k ∧ laneAddr k + 2 ≤ laneBase + 64 ∧ laneAddr k % 2 = 0 := by
-  unfold laneAddr laneHalf laneOff laneBase; omega
+  obtain ⟨hle, heven⟩ := laneHalf_bounds k hk
+  unfold laneAddr laneBase
+  omega
+
+/-- Chain `k`'s slot lies in one of the seven emitted lane words. -/
+theorem laneIdx_lt (k : ℕ) (hk : k < 28) : 2 * (slotOf k / 8) + slotOf k % 2 < 7 := by
+  unfold slotOf; omega
 
 theorem outAddr_eq (k : ℕ) : outAddr k = slotAddr k - 8 := by
   unfold outAddr slotAddr payloadAddr; omega

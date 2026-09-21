@@ -49,13 +49,19 @@ theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
 
 /-- A chain's table has room for its hash steps. -/
 theorem levels_ge (k : Fin 28) : 32 - RiscvUpperForest.ForestVerifier.pos index k ≤ levels k := by
-  have hp : RiscvUpperForest.ForestVerifier.pos index k = 31 - digit index.val k := Forest.fixedPositions_val index k
-  have hd := digit_lt index.val k
-  unfold levels wid at *
+  have hp : RiscvUpperForest.ForestVerifier.pos index k = 31 - digit index.val (slotOf k.val) :=
+    Forest.fixedPositions_val index k
+  have hd := digit_lt index.val (slotOf k.val)
+  rw [wid_slotOf k.isLt] at hd
+  unfold levels
   by_cases hk : k.val < 16
-  · rw [if_pos hk]; omega
+  · rw [if_pos hk]
+    rw [if_pos hk] at hd
+    norm_num at hd
+    omega
   · rw [if_neg hk]
-    rw [if_neg hk, if_pos k.isLt] at hd
+    rw [if_neg hk] at hd
+    norm_num at hd
     omega
 
 /-- The code from the landing point: the remaining hash steps. -/

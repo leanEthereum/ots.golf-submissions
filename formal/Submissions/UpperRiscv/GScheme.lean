@@ -5,8 +5,9 @@ import Submissions.UpperRiscv.Valid
 
 The paper scheme of `OptimalOTS.Dag` accepts an index when it is below `numCuts`. The
 scheme of this root reads its index as `pack` of the 256-bit answer to `H(message ‖ nonce)` (the
-low bits of the first 28 bytes, packed) and accepts it when it lies in `validSet` (its 28 digits
-sum to `target`), so that the machine reads the chain positions directly from the answer bytes.
+low bits of the 28 byte slots of nonzero width, packed) and accepts it when it lies in `validSet`
+(its digits sum to `target`), so that the machine reads the chain positions directly from the
+answer bytes.
 Everything else (graph, key generation, signing loop, verification, strong-forgery experiment)
 is the paper's definition verbatim.
 -/

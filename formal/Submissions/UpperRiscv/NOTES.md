@@ -1,3 +1,43 @@
+# upper-riscv: 430 cycles — one lane word for the last four chains
+
+## Idea
+
+Chain `k` took its digit from byte `k` of the 256-bit index answer, so the 28 chains occupied
+bytes 0–27 and index word 3 (bytes 24–31) carried only four live fields. Extracting them needed
+*two* lane words — `(3, 0)` for bytes 24, 26 and `(3, 1)` for bytes 25, 27 — each with two dead
+lanes, plus a third mask constant `0x003C003C` to zero those lanes.
+
+Move the digits of the last four chains to bytes 24, 26, 28 and 30. All four are then even, so
+the single lane word `(3, 0)` (`SLLI 2`) carries them in its four lanes, masked by the ordinary
+broadcast `0x3C` already in `x25` (chains 24–27 all have width 4). Lane words drop from eight to
+seven (`4 + 6·5 = 34` instead of `4 + 7·5 = 39`) and `loadWords` drops the `0x003C003C` load.
+Seven is the floor: each chain needs its own 16-bit dispatch halfword, so `28 / 4 = 7`.
+
+## Proof
+
+The digit machinery is re-indexed by *byte slot* rather than by chain: `wid` has 32 slots, four
+of them (25, 27, 29, 31) of width zero, and chain `k` reads slot `slotOf k = k + (k - 24)`. The
+widths are unchanged as a multiset (16 fives and 12 fours, `Σ wid = 128`), so `compW`, `numValid`,
+`target = 215` and the whole availability chain come out identical, and zero-width slots are free
+in both `compW` and `posW`. `PackFiber.lean`/`PackCount.lean` keep their shape verbatim — `jw`,
+`bw`, `junk`, `unpack` are byte-indexed and the chain↔byte map is still the identity — with `28`
+replaced by `32` throughout. On the lane side `laneNat u 3 1` is identically zero because its four
+slots have width zero, so dropping that lane word changes no arithmetic. The cost lands in
+`FixedChoice.lean`: `fixedDigits i k = digit i (slotOf k)` and `fixedDigits_sum` needs
+`Σ_{k < 28} digit i (slotOf k) = Σ_{k < 32} digit i k` (`Valid.sum_split_slots`), with
+`fixedDigits_injective` covering the four skipped slots by `digit_eq_zero_odd`.
+
+The jump arithmetic moves with the shorter index phase: `indexLength` drops from 67 to 61, so
+every `tableEnd` shifts down 24 bytes and the `JALR` immediates run over `[-1608, 1512]`, still
+inside 12-bit signed, so `jumpBase = 6088` is unchanged. The lane area is 56 bytes,
+`[0x3FFFF8, 0x400030)`, which no longer reaches into the signature region at all.
+
+## Cost
+
+`55 (index) + 355 (chains) + 20 (root and decision) = 430`, image length 890, data image 72 bytes.
+
+---
+
 # upper-riscv: 436 cycles — the public key in the index query
 
 ## Idea

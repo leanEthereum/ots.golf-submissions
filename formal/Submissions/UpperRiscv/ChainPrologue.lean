@@ -35,18 +35,22 @@ theorem W_sub8 (a : ℕ) (ha : 8 ≤ a) (hlt : a < 2 ^ 62) :
   omega
 
 theorem laneHalf_lt (k : ℕ) (hk : k < 28) : laneHalf k < 2048 := by
-  unfold laneHalf laneOff; omega
+  have h := (laneHalf_bounds k hk).1
+  omega
 
 theorem lane_offset (k : ℕ) (hk : k < 28) :
     W (slotAddr k - 8) + signExtend12 (imm12 ((laneBase + laneHalf k : ℤ) - outAddr k)) =
       W (laneAddr k) := by
   have hs := slot_bounds k hk
-  rw [W_add_imm _ _ (by simp only [laneBase, laneHalf, laneOff, outAddr]; omega)
-    (by simp only [laneBase, laneHalf, laneOff, outAddr]; omega)
-    (by simp only [laneBase, laneHalf, laneOff, outAddr, slotAddr, payloadAddr]; omega)
+  -- `laneHalf k` cancels as an atom: only its upper bound is needed, and `laneHalf_bounds`
+  -- supplies it, so no goal here reduces `slotOf` or its divisions.
+  have hh := (laneHalf_bounds k hk).1
+  rw [W_add_imm _ _ (by simp only [laneBase, outAddr]; omega)
+    (by simp only [laneBase, outAddr]; omega)
+    (by simp only [laneBase, outAddr, slotAddr, payloadAddr]; omega)
     (by unfold slotAddr payloadAddr; omega)]
   congr 1
-  simp only [laneBase, laneHalf, laneOff, outAddr, slotAddr, payloadAddr, laneAddr]
+  simp only [laneBase, outAddr, slotAddr, payloadAddr, laneAddr]
   omega
 
 /-- The first prologue instruction moves the input pointer onto the slot. -/

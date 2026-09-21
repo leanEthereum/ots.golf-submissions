@@ -3,7 +3,8 @@ import Submissions.UpperRiscv.Valid
 /-!
 # The fibers of `pack`
 
-`pack` reads the low `wid k` bits of byte `k` of an answer. The unread bits (`junk`) form
+`pack` reads the low `wid k` bits of byte `k` of an answer (four of the 32 slots have width
+zero, so 28 bytes are read). The unread bits (`junk`) form
 another 128-bit number, and `y ↦ (pack y, junk y)` is a bijection: every packed index has exactly
 `2 ^ 128` answers (`card_pack_mem`).
 -/
@@ -29,14 +30,15 @@ theorem posW_bw_of_le {k : ℕ} (hk : 32 ≤ k) : posW bw k = 256 := by
     · rw [posW_succ, ih (by omega)]; simp [bw, show ¬ k < 32 by omega]
     · rw [← h]; exact posW_bw_32
 
+theorem wid_le_eight (k : ℕ) : wid k ≤ 8 := by unfold wid; split_ifs <;> omega
+
 theorem wid_add_jw {k : ℕ} (hk : k < 32) : wid k + jw k = 8 := by
-  simp only [wid, jw, hk, if_true]
-  split_ifs <;> omega
+  have h8 := wid_le_eight k
+  simp only [jw, if_pos hk]
+  omega
 
 theorem wid_of_ge {k : ℕ} (hk : 32 ≤ k) : wid k = 0 := by
-  simp [wid, show ¬ k < 16 by omega, show ¬ k < 28 by omega]
-
-theorem wid_le_eight (k : ℕ) : wid k ≤ 8 := by unfold wid; split_ifs <;> omega
+  simp [wid, show ¬ k < 16 by omega, show ¬ k < 24 by omega, show ¬ k < 32 by omega]
 
 /-- Byte `k` of an answer. -/
 def byteOf (y : BitVec hashBits) (k : ℕ) : ℕ := digitW bw y.toNat k
@@ -90,7 +92,7 @@ theorem unpack_digit_lt {i j : ℕ} (hi : i < 2 ^ 128) (hj : j < 2 ^ 128) (k : �
       _ ≤ 2 ^ wid k * 2 ^ jw k := Nat.mul_le_mul_left _ h2
       _ = 2 ^ 8 := by rw [← pow_add, wid_add_jw hk]
   · have h1 : digit i k = 0 :=
-      digitW_eq_zero_of_lt wid (n := 28) (by show i < 2 ^ pos 28; rw [pos_28]; exact hi) (by omega)
+      digitW_eq_zero_of_lt wid (n := 32) (by show i < 2 ^ pos 32; rw [pos_32]; exact hi) (by omega)
     have h2 : digitW jw j k = 0 :=
       digitW_eq_zero_of_lt jw (n := 32) (by rw [posW_jw_32]; exact hj) (by omega)
     simp [bw, hk, h1, h2]
@@ -118,13 +120,13 @@ theorem pack_unpack {i j : ℕ} (hi : i < 2 ^ 128) (hj : j < 2 ^ 128) : pack (un
     · rw [byteDigit_eq _ hk, byteOf_unpack hi hj hk, Nat.add_mul_mod_self_left,
         Nat.mod_eq_of_lt (digit_lt i k)]
     · have h1 : digit i k = 0 :=
-        digitW_eq_zero_of_lt wid (n := 28) (by show i < 2 ^ pos 28; rw [pos_28]; exact hi) (by omega)
+        digitW_eq_zero_of_lt wid (n := 32) (by show i < 2 ^ pos 32; rw [pos_32]; exact hi) (by omega)
       rw [h1]
       unfold byteDigit
       rw [wid_of_ge (by omega)]
       simp [Nat.mod_one]
   rw [show byteDigit (unpack i j) = digit i from funext e]
-  exact ofDigits_digit i 28 (by rw [pos_28]; exact hi)
+  exact ofDigits_digit i 32 (by rw [pos_32]; exact hi)
 
 theorem junk_unpack {i j : ℕ} (hi : i < 2 ^ 128) (hj : j < 2 ^ 128) : junk (unpack i j) = j := by
   unfold junk
@@ -152,14 +154,9 @@ theorem unpack_pack_junk (y : BitVec hashBits) : unpack (pack y) (junk y) = y :=
     by_cases hk : k < 32
     · rw [show digitW jw (junk y) k = byteOf y k / 2 ^ wid k from
           digitW_ofDigitsW jw _ (junk_digit_lt y) 32 k hk]
-      by_cases hk' : k < 28
-      · rw [digit_pack y hk', byteDigit_eq y hk]
-        exact Nat.mod_add_div _ _
-      · have h1 : digit (pack y) k = 0 :=
-          digitW_eq_zero_of_lt wid (n := 28) (pack_lt_pos y) (by omega)
-        rw [h1, show wid k = 0 by simp [wid, show ¬ k < 16 by omega, hk']]
-        simp
-    · have h1 : digit (pack y) k = 0 := digitW_eq_zero_of_lt wid (n := 28) (pack_lt_pos y) (by omega)
+      rw [digit_pack y hk, byteDigit_eq y hk]
+      exact Nat.mod_add_div _ _
+    · have h1 : digit (pack y) k = 0 := digitW_eq_zero_of_lt wid (n := 32) (pack_lt_pos y) (by omega)
       have h2 : digitW jw (junk y) k = 0 :=
         digitW_eq_zero_of_lt jw (n := 32) (by rw [posW_jw_32]; exact junk_lt y) (by omega)
       have hb : byteOf y k < 1 := by
