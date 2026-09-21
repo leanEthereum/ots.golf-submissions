@@ -39,7 +39,7 @@ def laneAddr (k : ℕ) : ℕ := laneBase + laneHalf k
 
 theorem laneAddr_bounds (k : ℕ) (hk : k < 28) :
     laneBase ≤ laneAddr k ∧ laneAddr k + 2 ≤ laneBase + 64 ∧ laneAddr k % 2 = 0 := by
-  unfold laneAddr laneHalf laneOff laneBase; omega
+  unfold laneAddr laneHalf laneOff laneOfChain laneIdx laneBase; split_ifs <;> omega
 
 theorem outAddr_eq (k : ℕ) : outAddr k = slotAddr k - 8 := by
   unfold outAddr slotAddr payloadAddr; omega

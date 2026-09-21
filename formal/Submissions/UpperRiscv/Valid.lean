@@ -11,7 +11,8 @@ sixteen chains (bits `5 k, …, 5 k + 4`), four-bit digits for the other twelve 
 indices are counted exactly by `compW wid 28 215`; there are more than `712 * 2 ^ 105` of them,
 the exact threshold at which the signing loop still fails with probability at most `2 ^ -128`.
 
-The machine reads digit `k` from byte `k` of the 256-bit index answer; `pack` is that reading.
+The machine reads digit `k` from bits `fieldPos k, …` of the 256-bit index answer; `pack` is
+that reading.
 -/
 
 namespace OptimalOTS
@@ -164,24 +165,41 @@ theorem numValid_avail : 712 * 2 ^ 105 ≤ numValid := by
 
 /-! ## The machine's reading of the digits -/
 
-/-- Digit `k` as the machine reads it: the low `wid k` bits of byte `k` of the index answer. -/
-def byteDigit (y : BitVec hashBits) (k : ℕ) : ℕ := y.toNat / 2 ^ (8 * k) % 2 ^ wid k
+/-- The answer is read as 29 cells in bit order, each some unread low bits (`jw k`) below digit
+`k` (`wid k` bits). Words 0 and 1 of the answer hold digits `0 … 15`, two per 16-bit lane:
+`junk₂ ‖ d ‖ d' ‖ junk₄`. Word 2 holds digits `16 … 27`, three per lane:
+`junk₂ ‖ d ‖ d' ‖ d'' ‖ junk₂`. Word 3 is unread. The junk of a cell also absorbs the trailing
+junk of the lane before it, and cell 28 is the unread rest. -/
+def jw (k : ℕ) : ℕ :=
+  if k = 0 then 2 else if k < 16 then (if k % 2 = 0 then 6 else 0)
+  else if k = 16 then 6 else if k < 28 then (if (k - 16) % 3 = 0 then 4 else 0)
+  else if k = 28 then 66 else 0
 
-theorem byteDigit_lt (y : BitVec hashBits) (k : ℕ) : byteDigit y k < 2 ^ wid k :=
+/-- Cell widths. -/
+def cw (k : ℕ) : ℕ := jw k + wid k
+
+/-- The bit position of digit `k` in the answer. -/
+def fieldPos (k : ℕ) : ℕ := posW cw k + jw k
+
+/-- Digit `k` as the machine reads it: the `wid k` bits of the index answer from `fieldPos k`. -/
+def fieldDigit (y : BitVec hashBits) (k : ℕ) : ℕ := y.toNat / 2 ^ fieldPos k % 2 ^ wid k
+
+theorem fieldDigit_lt (y : BitVec hashBits) (k : ℕ) : fieldDigit y k < 2 ^ wid k :=
   Nat.mod_lt _ (by positivity)
 
 /-- The packed index of an answer. -/
-def pack (y : BitVec hashBits) : ℕ := ofDigits (byteDigit y) 28
+def pack (y : BitVec hashBits) : ℕ := ofDigits (fieldDigit y) 28
 
 theorem pack_lt (y : BitVec hashBits) : pack y < 2 ^ idxBits := by
   rw [idxBits_eq]
-  exact ofDigits_lt _ (byteDigit_lt y) 28
+  exact ofDigits_lt _ (fieldDigit_lt y) 28
 
-theorem digit_pack (y : BitVec hashBits) {k : ℕ} (hk : k < 28) : digit (pack y) k = byteDigit y k :=
-  digit_ofDigits _ (byteDigit_lt y) 28 k hk
+theorem digit_pack (y : BitVec hashBits) {k : ℕ} (hk : k < 28) :
+    digit (pack y) k = fieldDigit y k :=
+  digit_ofDigits _ (fieldDigit_lt y) 28 k hk
 
 theorem pack_lt_pos (y : BitVec hashBits) : pack y < 2 ^ pos 28 :=
-  ofDigits_lt _ (byteDigit_lt y) 28
+  ofDigits_lt _ (fieldDigit_lt y) 28
 
 theorem pack_lt' (y : BitVec hashBits) : pack y < 2 ^ 128 := by
   rw [← pos_28]; exact pack_lt_pos y

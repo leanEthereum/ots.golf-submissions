@@ -6,11 +6,12 @@ import OptimalOTS.RiscvMachine
 1. **Index.** Save the public key and hash the 384 bits `message ‖ nonce` as the loader placed
    them, with the message in the low bits, to the data base; reject unless the signature has
    5504 bits.
-2. **Lanes.** Field `k` is byte `k` of the answer, masked to 5 bits (`k < 16`) or 4 bits
-   (`16 ≤ k < 28`); bytes 28–31 are ignored. Eight lane words hold `4 · field` in 16-bit lanes;
-   their sum is checked against `4 · 215` with one multiplication; `jumpBase - 4 · field` is
-   stored for every chain in the 64 bytes below the signature region (the public key and the
-   message have been consumed).
+2. **Lanes.** The 28 fields sit in the 16-bit lanes of the first three answer words: two per
+   lane in words 0 and 1 (five bits each, at lane bits 2 and 7) and three per lane in word 2
+   (four bits each, at lane bits 2, 6 and 10), so that after at most one shift a single mask
+   leaves `4 · field` in every lane. Seven lane words hold these; their sum is checked against
+   `4 · 215` with one multiplication; `jumpBase - 4 · field` is stored for every chain in the 56
+   bytes below the signature region (the public key and the message have been consumed).
 3. **Chains.** Chain `k`'s 192-bit value sits at `sig + 16 + 24 k`; chains run from 0 up to 27,
    hashing the value at its slot with the 32-byte answer written eight bytes below the slot
    (`x12 = x10 - 8`): the high 192 bits of the answer land on the slot and feed the next step,
@@ -51,35 +52,50 @@ def indexPrefix : Code :=
 
 def lengthCheck : Code := [.LD .x6 .x12 (BitVec.ofNat 12 72), .BEQ .x13 .x6 16] ++ reject
 
-/-- The four index words, the three masks, the lane multiplier and the broadcast jump base. -/
+/-- The three index words, the two masks, the lane multiplier and the broadcast jump base. -/
 def loadWords : Code :=
-  [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
-   .LD .x24 .x12 32, .LD .x25 .x12 40, .LD .x1 .x12 48, .LD .x2 .x12 56, .LD .x3 .x12 64]
+  [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16,
+   .LD .x24 .x12 32, .LD .x25 .x12 40, .LD .x2 .x12 56, .LD .x3 .x12 64]
 
-/-- The offset of lane word `(w, i)` in the lane area, which starts at `laneBase`. -/
-def laneOff (w i : ℕ) : ℕ := 8 * (2 * w + i)
-
-/-- The lane area: eight words below the signature region, over the consumed public key,
-message and nonce. -/
+/-- The lane area: seven words below the signature region, over the consumed public key and
+message. -/
 def laneBase : ℕ := 0x3FFFF8
 
 /-- The public-key pointer: the input of the 512-bit index query `pk ‖ message ‖ nonce` and the
 store base of the lane area (`x10` through the index phase). -/
 def hashBase : ℕ := 0x400000
 
-def srcReg (w : ℕ) : Reg := match w with | 0 => .x20 | 1 => .x21 | 2 => .x22 | _ => .x23
+/-- The register of index word `w`. -/
+def wordReg (w : ℕ) : Reg := match w with | 0 => .x20 | 1 => .x21 | _ => .x22
 
-def maskReg (w : ℕ) : Reg := if w < 2 then .x24 else if w = 2 then .x25 else .x1
+/-- The index word of lane word `g`: word 0 for the first two lane words, word 1 for the next
+two, word 2 for the last three. -/
+def wordIdx (g : ℕ) : ℕ := if g < 2 then 0 else if g < 4 then 1 else 2
 
-/-- Lane word `(w, i)`: fields `8 w + 2 l + i` (bytes of index word `w`), times four, in the 16-bit
-lanes `l`. -/
-def laneWord (w i : ℕ) : Code :=
-  let dst : Reg := if w = 0 ∧ i = 0 then .x27 else .x26
-  (if i = 0 then [.SLLI dst (srcReg w) 2] else [.SRLI dst (srcReg w) 6]) ++
-  [.AND dst dst (maskReg w)] ++ (if w = 0 ∧ i = 0 then [] else [.ADD .x27 .x27 .x26]) ++
-  [.SUB .x26 .x3 dst, .SD .x10 .x26 (BitVec.ofInt 12 ((laneBase + laneOff w i : ℤ) - hashBase))]
+/-- The right shift of lane word `g`, which brings its fields to bits `2 …` of every lane. -/
+def shiftOf (g : ℕ) : ℕ :=
+  if g = 1 ∨ g = 3 then 5 else if g = 5 then 4 else if g = 6 then 8 else 0
 
-def lanes : Code := (List.range 8).flatMap fun j => laneWord (j / 2) (j % 2)
+/-- The field width of lane word `g`. -/
+def widthOf (g : ℕ) : ℕ := if g < 4 then 5 else 4
+
+def srcReg (g : ℕ) : Reg := wordReg (wordIdx g)
+
+def maskReg (g : ℕ) : Reg := if g < 4 then .x24 else .x25
+
+/-- The offset of lane word `g` in the lane area, which starts at `laneBase`. -/
+def laneOff (g : ℕ) : ℕ := 8 * g
+
+/-- Lane word `g`: four fields of its index word, times four, in the 16-bit lanes — at most one
+shift, a mask, the accumulation, the subtraction from the broadcast jump base and the store. -/
+def laneWord (g : ℕ) : Code :=
+  let dst : Reg := if g = 0 then .x27 else .x26
+  (if shiftOf g = 0 then [.AND dst (srcReg g) (maskReg g)]
+   else [.SRLI dst (srcReg g) (BitVec.ofNat 6 (shiftOf g)), .AND dst dst (maskReg g)]) ++
+  (if g = 0 then [] else [.ADD .x27 .x27 .x26]) ++
+  [.SUB .x26 .x3 dst, .SD .x10 .x26 (BitVec.ofInt 12 ((laneBase + laneOff g : ℤ) - hashBase))]
+
+def lanes : Code := (List.range 7).flatMap laneWord
 
 def sumCheck : Code :=
   [.MUL .x27 .x27 .x2, .SRLI .x27 .x27 48, .XORI .x27 .x27 (BitVec.ofNat 12 (4 * target)),
@@ -97,8 +113,15 @@ def indexLength : ℕ := indexPhase.length
 
 def imm12 (z : ℤ) : BitVec 12 := BitVec.ofInt 12 z
 
+/-- The lane word holding chain `k`'s field: chains `0 … 15` alternate between the two lane
+words of their index word, chains `16 … 27` cycle through the three lane words of word 2. -/
+def laneOfChain (k : ℕ) : ℕ := if k < 16 then 2 * (k / 8) + k % 2 else 4 + (k - 16) % 3
+
+/-- The lane of chain `k` within its lane word. -/
+def laneIdx (k : ℕ) : ℕ := if k < 16 then k % 8 / 2 else (k - 16) / 3
+
 /-- The offset of the halfword of chain `k` in the lane area. -/
-def laneHalf (k : ℕ) : ℕ := laneOff (k / 8) (k % 2) + 2 * (k % 8 / 2)
+def laneHalf (k : ℕ) : ℕ := laneOff (laneOfChain k) + 2 * laneIdx k
 
 /-- The answer buffer of chain `k`, eight bytes below its slot `0x400040 + 24 k`. -/
 def outAddr (k : ℕ) : ℕ := 0x400038 + 24 * k

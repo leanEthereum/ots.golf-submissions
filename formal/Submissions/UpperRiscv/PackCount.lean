@@ -11,9 +11,9 @@ theorem card_pack_mem (A : Finset ℕ) (hA : ∀ n ∈ A, n < 2 ^ 128) :
     (Finset.univ.filter fun y : BitVec hashBits => pack y ∈ A).card = A.card * 2 ^ 128 := by
   have hj : ∀ y, junk y < 2 ^ 128 := junk_lt
   have hpu : ∀ i j, i < 2 ^ 128 → j < 2 ^ 128 → pack (unpack i j) = i :=
-    fun i j hi hj => pack_unpack hi hj
+    fun i j hi _ => pack_unpack j hi
   have hju : ∀ i j, i < 2 ^ 128 → j < 2 ^ 128 → junk (unpack i j) = j :=
-    fun i j hi hj => junk_unpack hi hj
+    fun i j _ hj => junk_unpack i hj
   generalize hM : (2 : ℕ) ^ 128 = M at hA hj hpu hju ⊢
   rw [← Finset.card_range M, ← Finset.card_product]
   refine Finset.card_nbij' (fun y => (pack y, junk y)) (fun x => unpack x.1 x.2) ?_ ?_ ?_ ?_

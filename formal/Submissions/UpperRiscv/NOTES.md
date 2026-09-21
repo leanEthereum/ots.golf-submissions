@@ -1,3 +1,88 @@
+# upper-riscv: 426 cycles — three fields per lane
+
+## Idea
+
+The 436-cycle image spends 61 cycles on the index phase, 39 of them on eight lane words: for
+every lane word one shift, one mask, one accumulation, one subtraction from the broadcast jump
+base and one store, because each field is the low bits of one *byte* of the answer and has to be
+moved to bits `2 … 6` of a 16-bit lane (`SLLI 2` for the even bytes, `SRLI 6` for the odd ones)
+before the mask can leave `4 · field` there.
+
+The fields are the scheme's to place. Put them where the mask wants them: two five-bit fields per
+16-bit lane of answer words 0 and 1, at lane bits `2` and `7`, and three four-bit fields per lane
+of word 2, at lane bits `2`, `6` and `10`. Then the first extraction pass of every word is a bare
+`AND` (its fields already sit at bit 2), and the other passes are one `SRLI` each (by 5, or by 4
+and 8) followed by the `AND`. The 28 fields fill seven lane words instead of eight, and the third
+mask and the fourth index word are not loaded.
+
+- **Lanes 39 → 31.** Seven lane words: extraction `1 + 2 + 1 + 2 + 1 + 2 + 2 = 11` (was 16),
+  seven `SUB`, seven `SD`, six `ADD` (each −1).
+- **Loads 9 → 7.** Three index words and two masks (−2).
+- Nothing else moves: the chains (355), the root and the decision (20), the prefix, the length
+  check, the sum check and the setup are the 436 image's. `61 − 10 = 51`.
+
+The scheme's index is still the 128-bit packing of the 28 digits and the acceptance is still
+`Σ digit = 215`; only `pack`'s reading of the answer changes, so the security proof, the
+availability table and the chain graph are untouched.
+
+## Proof
+
+- `Valid.lean`: `fieldPos k` gives the bit of digit `k` in the answer through a cell
+  decomposition — 29 cells in bit order, each some unread bits (`jw k`) below digit `k` — and
+  `fieldDigit` replaces `byteDigit`. `pack`, `pack_lt`, `digit_pack` keep their statements.
+- `PackFiber.lean`: the fibre bijection `y ↦ (pack y, junk y)` is the byte proof with the cell
+  widths `cw = jw + wid` in place of 8 and the digit on top of the junk instead of below it; the
+  cell arithmetic is `Nat.mod_mul_right_div_self`. `PackCount.lean` is unchanged but for two
+  argument lists.
+- `Program.lean`: `laneWord g` for `g < 7` (`wordIdx`, `shiftOf`, `widthOf`, the two mask
+  registers), seven loads, and chain `k`'s halfword at `laneOfChain k`/`laneIdx k`.
+- `Lanes.lean`, `IndexLanes.lean`, `IndexArith.lean`: the lane arithmetic over lane words `g`
+  rather than pairs `(w, i)`; `laneFld_word` identifies lane `laneIdx k` of lane word
+  `laneOfChain k` with `fieldDigit answer k` by `fieldPos_eq`/`wid_eq` (28 kernel-decided
+  cases), and `field_sum` reindexes the 7 × 4 lane fields to the 28 digits by expansion.
+- `IndexPhase.lean`: the load effect on seven registers, `lanesUpTo 7`, `afterIndex_lanes`
+  through `laneFld_word`, `indexPhase.length = 57`, `mainBlock.length = 41`, refinement at 51.
+- `ChainContext.lean`, `ChainPrologue.lean`: `laneHalf k ≤ 54`, the lane area is 56 bytes.
+- `Verifier.lean`: `cycleBound = 426`, image length 886; `jumpBase = 6088` still puts every
+  `JALR` immediate in range (feasible window `[5537, 6512]` for the shorter code).
+
+## Cost
+
+`51 (index) + 355 (chains) + 20 (root and decision) = 426`, image length 886.
+
+## What did not work
+
+- **The `+1` hash per chain (28 cycles) is forced by the layout, not by security.** Every chain
+  writes its 256-bit answer at `slot − 8`, so 64 bits spill into the previous slot's tail, and
+  the 5440-bit root input deliberately reads those spill bytes. A chain with digit 0 that made no
+  hash would leave its spill bytes holding whatever its neighbour left — the previous top's high
+  64 bits, or payload — so the root input would depend on the neighbour's digit, which a fixed
+  DAG cannot express. Every chain must hash at least once. The way out, 32-byte slots hashed in
+  place (`x10 = x12`, no spill), caps the payload at 21 chains, and 21 chains need target 460:
+  `4 · 21 + 460 = 544` chain cycles against 355. Dead.
+- **No width profile beats `5n + target = 355`.** Over all `n ≤ 28` and all splits of the 128
+  index bits (exhaustive two-value profiles and 20 000 random profiles), the minimal admissible
+  `5n + target` is 355, attained only by `16 × 5 + 12 × 4` at target 215; 214 fails at
+  `657 · 2^105 < 712 · 2^105`. Fewer chains do not pay for themselves even after crediting a
+  smaller root and fewer lane words: `n = 27` needs target 232 (438 in all), `n = 26` target 249 (449).
+  The threshold is `p ≥ 1 − exp(−(128 ln 2 − ln(1 − 2⁻⁷)) / 2²⁰) ≈ 8.4617 · 10⁻⁵`.
+- **The `SUB` per lane word stays.** The halfword must carry the jump base: `JALR`'s immediate
+  reaches `±2048` and the tables sit above `0x1000`, so `x28` has to be `base − 4 · field`, and
+  no single RV64IM instruction both masks the junk bits and adds a base. Flipping the digit
+  convention to store `4 · (31 − field)` does not help for the same reason.
+- **Summing the digits without the `ADD`s** (masking the raw words and folding bytes with one
+  `MUL`) costs the same 11 cycles as the accumulation plus the sum check.
+
+## What is left
+
+- The 81 cycles outside the chains: prefix 5, index hash 1, length check 2, loads 7, lanes 31,
+  sum check 4, setup 1, root 2 + 11, decision 7. The two cycles of the length check need the
+  verifier specified on odd-length queries (see the 437 notes).
+- A lane word is `≥ 3` cycles (mask, subtract, store) plus the shift and the accumulation; seven
+  are needed for 28 halfwords. Four `LHU` targets per stored word is the ceiling of this dispatch.
+
+---
+
 # upper-riscv: 436 cycles — the public key in the index query
 
 ## Idea
