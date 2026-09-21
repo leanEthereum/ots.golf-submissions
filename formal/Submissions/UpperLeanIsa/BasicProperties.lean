@@ -83,7 +83,7 @@ theorem deterministic_rootFold (xs : List Word) (cv : BitVec 256) :
   induction xs generalizing cv with
   | nil => exact deterministic_pure _
   | cons x xs ih =>
-    have h : Deterministic (absorb cv x) := deterministic_hash _
+    have h : Deterministic (absorb xs.length cv x) := deterministic_hash _
     exact deterministic_bind h ih
 
 theorem verify_deterministic : scheme.VerifyDeterministic := by

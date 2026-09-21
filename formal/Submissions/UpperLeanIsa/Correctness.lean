@@ -16,7 +16,8 @@ def chainValue (f : HashTable) (i j : ℕ) : ℕ → Word → Word
 
 def rootValueFold (f : HashTable) : List Word → BitVec 256 → BitVec 256
   | [], cv => cv
-  | x :: xs, cv => rootValueFold f xs (f ⟨896, LeanIsa.hashInput cv (x.setWidth 512) 2⟩)
+  | x :: xs, cv => rootValueFold f xs
+      (f ⟨896, LeanIsa.hashInput cv (x.setWidth 512) (BitVec.ofNat 128 (2 + xs.length))⟩)
 
 def rootValue (f : HashTable) (xs : Words) : PublicKey :=
   (rootValueFold f (List.ofFn xs) 0).extractLsb' 0 128
@@ -64,10 +65,12 @@ theorem fixed_rootFold (f : HashTable) (xs : List Word) (cv : BitVec 256) :
   | nil => rfl
   | cons x xs ih =>
     rw [rootFold, simulateQ_bind]
-    rw [show simulateQ (unifFwdAnswerImpl f) (absorb cv x) =
-      (pure (f ⟨896, LeanIsa.hashInput cv (x.setWidth 512) 2⟩) : ProbComp (BitVec 256)) from
+    rw [show simulateQ (unifFwdAnswerImpl f) (absorb xs.length cv x) =
+      (pure (f ⟨896, LeanIsa.hashInput cv (x.setWidth 512) (BitVec.ofNat 128 (2 + xs.length))⟩) :
+        ProbComp (BitVec 256)) from
         fixed_hash f _]
-    change (pure (f ⟨896, LeanIsa.hashInput cv (x.setWidth 512) 2⟩ : BitVec 256) >>= fun y =>
+    change (pure (f ⟨896, LeanIsa.hashInput cv (x.setWidth 512)
+      (BitVec.ofNat 128 (2 + xs.length))⟩ : BitVec 256) >>= fun y =>
       simulateQ (unifFwdAnswerImpl f) (rootFold xs y)) = _
     rw [pure_bind]
     exact ih _

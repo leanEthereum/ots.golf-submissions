@@ -5,8 +5,8 @@ Probability bounds for these events remain separate obligations. -/
 
 namespace OptimalOTS.LeanIsaBaseline
 
-def absorbValue (f : HashTable) (cv : BitVec 256) (x : Word) : BitVec 256 :=
-  f ⟨896, LeanIsa.hashInput cv (x.setWidth 512) 2⟩
+def absorbValue (f : HashTable) (remaining : ℕ) (cv : BitVec 256) (x : Word) : BitVec 256 :=
+  f ⟨896, LeanIsa.hashInput cv (x.setWidth 512) (BitVec.ofNat 128 (2 + remaining))⟩
 
 /-- A mismatching absorption input with the same output as the honest path.
 Only the last absorption compares truncated outputs; internal ones compare all 256 bits.
@@ -15,10 +15,10 @@ def RootSecondPreimage (f : HashTable) :
     List Word → BitVec 256 → List Word → BitVec 256 → Prop
   | [x], cv, [y], dv =>
       (cv ≠ dv ∨ x ≠ y) ∧
-        (absorbValue f cv x).extractLsb' 0 128 = (absorbValue f dv y).extractLsb' 0 128
+        (absorbValue f 0 cv x).extractLsb' 0 128 = (absorbValue f 0 dv y).extractLsb' 0 128
   | x :: xs, cv, y :: ys, dv =>
-      ((cv ≠ dv ∨ x ≠ y) ∧ absorbValue f cv x = absorbValue f dv y) ∨
-        RootSecondPreimage f xs (absorbValue f cv x) ys (absorbValue f dv y)
+      ((cv ≠ dv ∨ x ≠ y) ∧ absorbValue f xs.length cv x = absorbValue f ys.length dv y) ∨
+        RootSecondPreimage f xs (absorbValue f xs.length cv x) ys (absorbValue f ys.length dv y)
   | _, _, _, _ => False
 
 /-- Matching roots for different nonempty inputs force a concrete second-preimage
@@ -45,9 +45,9 @@ theorem root_match (f : HashTable) (xs ys : List Word) (cv dv : BitVec 256)
           refine ⟨?_, h⟩
           tauto
         | cons z zs =>
-          change ((cv ≠ dv ∨ x ≠ y) ∧ absorbValue f cv x = absorbValue f dv y) ∨
-            RootSecondPreimage f (z :: zs) (absorbValue f cv x) ys (absorbValue f dv y)
-          rcases ih ys (absorbValue f cv x) (absorbValue f dv y) ht (by simp) h with
+          change ((cv ≠ dv ∨ x ≠ y) ∧ absorbValue f (z :: zs).length cv x = absorbValue f ys.length dv y) ∨
+            RootSecondPreimage f (z :: zs) (absorbValue f (z :: zs).length cv x) ys (absorbValue f ys.length dv y)
+          rcases ih ys (absorbValue f (z :: zs).length cv x) (absorbValue f ys.length dv y) ht (by simp) h with
             ⟨hcv, hxs⟩ | hc
           · left
             exact ⟨by tauto, hcv⟩

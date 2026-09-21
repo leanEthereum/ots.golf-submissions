@@ -10,7 +10,7 @@ verification advances it through positions `digit .. 254` to the endpoint.
 Each chain query uses the leanISA input format: a zero chaining value, a 512-bit block
 containing the 128-bit value, chain identifier, position and a zero cell, and metadata
 1. Its low 128 output bits become the next value. Root absorption folds the 34
-endpoints with metadata 2 and retains the full 256-bit state between calls, finally
+endpoints with distinct metadata 35 down to 2 and retains the full 256-bit state between calls, finally
 truncating to the 128-bit public key. Every call costs two model compressions.
 
 ## Checked results
@@ -37,6 +37,30 @@ The second-preimage inputs are restricted to the actual reconstructed paths:
 existence of a collision somewhere in the entire oracle table would not give a
 useful probability bound.
 
+`QueryLayout.lean` proves that equal honest query inputs have the same position,
+even across different records. `Records.lean` gives independent coordinates for
+sources and full hash outputs, together with the programmed cache.
+`RecordSemantics.lean` proves that any table respecting this cache reproduces
+all chain values, signed words, endpoints, and the public key.
+
+`TargetBound.lean` derives adaptive target-output bounds from a cache potential.
+`SecondPreimages.lean` specializes this to the tagged chain/root queries. A query
+matches at most one position; its target set has at most 2^128 full answers and
+it costs two compressions. The resulting rate is 2^-129 per compression.
+
+`Resampling.lean` partitions records by the information at a signing cut. It
+exposes all root answers, each cut word, and subsequent chain answers; this may
+reveal extra data, which is safe for an upper bound on adversarial success.
+`Exposure.lean` proves that this information determines the exposed oracle cache
+and that the remaining hidden cache is disjoint. `HiddenCharges.lean` resamples
+one hidden input coordinate to bound a fixed query, without a union factor over
+chain positions. `HiddenBound.lean` lifts this to adaptive computations using the
+same 2^-129 per-compression rate. `Coupling.lean` combines that bound with identical-
+until-bad to replace hidden programmed answers by fresh answers for a whole public
+fiber and any bounded payoff.
+
+These are checked ingredients, not yet the full security theorem.
+
 ## Remaining proof work
 
 Do not infer a security certificate from the checksum theorem. It excludes simple
@@ -49,9 +73,8 @@ The remaining gap is probabilistic, not checksum arithmetic. In particular:
 
 1. Relate the real cached experiment to independently sampled chain records,
    preserving the adversary's views before and after its adaptive signing request.
-   Chain identifiers and positions distinguish honest chain queries, but repeated
-   root inputs still need to be handled because root metadata does not include
-   the absorption index.
+   Distinct chain/root position tags now guarantee pairwise distinct honest inputs
+   for every record. No bad-record collision allowance is needed for this step.
 2. Translate the structural witnesses into queries on the real experiment's
    transcript. The fixed-table support characterization proves correctness; it
    does not preserve the probability weights needed for security.
@@ -80,3 +103,19 @@ needs its own proof; substituting it does not preserve the old certificate.
 The local leanVM checkout's current branch is RISC-V work. Its older `origin/main`
 contains leanISA signature code, but the XMSS instance has different key/signature
 sizes and budgets. It is implementation inspiration, not a ready competition proof.
+
+## Elaboration notes
+
+Use explicit classical deciders for existential searches over the finite record
+space. An inferred executable decider may enumerate a function space of astronomical
+size while Lean checks definitional equality. Keep finite-set membership lemmas
+generic in the element type before specializing them to records (`finiteFiber`).
+Do not unfold a concrete `Finset.univ` of records or 256-bit words to prove a counting
+identity. Normalize scalar exponents separately from finite-set expressions.
+
+The prospective final accounting can allow separate hidden-input and output-match
+charges before and after signing: four charges at 2^-129 on the remaining budget.
+To obtain the required strict 127-bit bound, prove and subtract the positive cost
+already spent on key generation. This is a proposed assembly strategy, not a checked
+experiment bound. The stage transitions must still preserve the relevant cache and
+public-data invariants, including queries made before the signing request.

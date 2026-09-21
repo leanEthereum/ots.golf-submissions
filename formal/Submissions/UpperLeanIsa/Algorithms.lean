@@ -34,15 +34,15 @@ def chain (i j : ℕ) : ℕ → Word → OracleComp Spec Word
     let y ← chainStep i j x
     chain i (j + 1) n y
 
-/-- Root absorption has metadata 2, distinct from the chain domain's metadata 1.
-The complete 256-bit chaining value is carried between absorptions. -/
-def absorb (cv : BitVec 256) (x : Word) : OracleComp Spec (BitVec 256) :=
-  hash (LeanIsa.hashInput cv (x.setWidth 512) 2)
+/-- Root absorption includes the number of remaining words in its metadata.
+The 34 root positions use tags 35 down to 2; chain steps use tag 1. -/
+def absorb (remaining : ℕ) (cv : BitVec 256) (x : Word) : OracleComp Spec (BitVec 256) :=
+  hash (LeanIsa.hashInput cv (x.setWidth 512) (BitVec.ofNat 128 (2 + remaining)))
 
 def rootFold : List Word → BitVec 256 → OracleComp Spec (BitVec 256)
   | [], cv => pure cv
   | x :: xs, cv => do
-    let next ← absorb cv x
+    let next ← absorb xs.length cv x
     rootFold xs next
 
 def root (xs : Words) : OracleComp Spec PublicKey :=

@@ -71,9 +71,9 @@ theorem cost_rootFold (xs : List Word) (cv : BitVec 256) :
   induction xs generalizing cv with
   | nil => exact cost_pure _ _
   | cons x xs ih =>
-    have hquery : CostAtMost (absorb cv x) 2 := cost_hash _
+    have hquery : CostAtMost (absorb xs.length cv x) 2 := cost_hash _
     have h := cost_bind hquery (fun next => ih next)
-    change CostAtMost (absorb cv x >>= fun next => rootFold xs next) (2 * (xs.length + 1))
+    change CostAtMost (absorb xs.length cv x >>= fun next => rootFold xs next) (2 * (xs.length + 1))
     convert h using 1
     omega
 
