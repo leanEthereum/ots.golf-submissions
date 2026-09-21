@@ -3,10 +3,11 @@ import Submissions.UpperRiscv.IndexLanes
 /-!
 # The arithmetic of the index check
 
-The index answer is held in three words. The sum of the seven lane words has four lanes, each the
-sum of seven fields times four; its top lane after the broadcast multiplication is four times the
-field sum of the answer (`top_laneSum`), which the sum check compares with `4 · 215`. Each stored
-lane holds `jumpBase - 4 · field` (`lane_halfword`).
+The index answer is held in four words. The sum of the four masked words has four lanes, each
+`4 · (fine fields) + 1024 · (coarse fields)`; the fold brings the coarse part down, and the top lane
+after the broadcast multiplication is four times the field sum of the answer (`top_fold_answer`),
+which the sum check compares with `4 · 215`. Each stored lane holds
+`base − (4 · dA + 1024 · dB)` (`lane_halfword`).
 -/
 
 namespace OptimalOTS.Riscv2Program
@@ -16,102 +17,131 @@ open RiscvZkvm.Rv64
 
 theorem wid_le (k : ℕ) : wid k ≤ 5 := by unfold wid; split_ifs <;> omega
 
-theorem widthOf_le (g : ℕ) : widthOf g ≤ 5 := by unfold widthOf; split_ifs <;> omega
+theorem fld_lt (u p b : ℕ) : fld u p b < 2 ^ b := Nat.mod_lt _ (by positivity)
 
-theorem fld_le (u p b : ℕ) (hb : b ≤ 5) : fld u p b ≤ 31 := by
-  have h1 : u / 2 ^ p % 2 ^ b < 2 ^ b := Nat.mod_lt _ (by positivity)
-  have h2 : 2 ^ b ≤ 2 ^ 5 := Nat.pow_le_pow_right (by norm_num) hb
-  unfold fld; omega
+theorem fineFld_le (u l : ℕ) : fineFld u l ≤ 31 := by
+  have := fld_lt u (16 * l + 2) 5; unfold fineFld; omega
 
-theorem laneFld_le (u g l : ℕ) : laneFld u g l ≤ 31 := fld_le _ _ _ (widthOf_le _)
+theorem coarseFld_le (u l : ℕ) : coarseFld u l ≤ 15 := by
+  have := fld_lt u (16 * l + 10) 4; unfold coarseFld; omega
 
-theorem laneNat_le (u g : ℕ) : laneNat u g ≤ 124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) := by
+theorem coarseOf_le (g u l : ℕ) : coarseOf g u l ≤ 15 := by
+  unfold coarseOf; split_ifs
+  · exact coarseFld_le u l
+  · omega
+
+/-- One lane of a masked word is below `15485`. -/
+theorem laneEntry_le (g u l : ℕ) : 4 * fineFld u l + 1024 * coarseOf g u l ≤ 15484 := by
+  have := fineFld_le u l; have := coarseOf_le g u l; omega
+
+theorem laneNat_le (u g : ℕ) : laneNat u g ≤ 15484 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) := by
   unfold laneNat
-  have := laneFld_le u g 0
-  have := laneFld_le u g 1
-  have := laneFld_le u g 2
-  have := laneFld_le u g 3
+  have := laneEntry_le g u 0
+  have := laneEntry_le g u 1
+  have := laneEntry_le g u 2
+  have := laneEntry_le g u 3
   omega
 
 /-- The mask registers hold the two masks. -/
-def MasksLoaded (a : MachineState) : Prop := ∀ g, g < 7 → a.getReg (maskReg g) = W (maskNat g)
+def MasksLoaded (a : MachineState) : Prop := ∀ g, g < 4 → a.getReg (maskReg g) = W (maskNat g)
 
-theorem laneOf_toNat (a : MachineState) (hm : MasksLoaded a) (g : ℕ) (hg : g < 7) :
-    (laneOf a g).toNat = laneNat (a.getReg (srcReg g)).toNat g := by
+theorem laneOf_toNat (a : MachineState) (hm : MasksLoaded a) (g : ℕ) (hg : g < 4) :
+    (laneOf a g).toNat = laneNat (a.getReg (wordReg g)).toNat g := by
   unfold laneOf
   rw [hm g hg]
-  exact laneValue_toNat _ _ hg
+  exact laneValue_toNat _ _
 
 theorem laneSum_toNat (a : MachineState) (hm : MasksLoaded a) :
-    ∀ n, n ≤ 7 → (laneSum a n).toNat =
-      ∑ g ∈ Finset.range n, laneNat (a.getReg (srcReg g)).toNat g := by
+    ∀ n, n ≤ 4 → (laneSum a n).toNat =
+      ∑ g ∈ Finset.range n, laneNat (a.getReg (wordReg g)).toNat g := by
   intro n
   induction n with
   | zero => intro _; rfl
   | succ n ih =>
     intro hn
-    have hb : ∀ n, ∑ g ∈ Finset.range n, laneNat (a.getReg (srcReg g)).toNat g ≤
-        n * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by
+    have hb : ∀ n, ∑ g ∈ Finset.range n, laneNat (a.getReg (wordReg g)).toNat g ≤
+        n * (15484 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by
       intro n
-      calc ∑ g ∈ Finset.range n, laneNat (a.getReg (srcReg g)).toNat g
-          ≤ ∑ _g ∈ Finset.range n, 124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) :=
+      calc ∑ g ∈ Finset.range n, laneNat (a.getReg (wordReg g)).toNat g
+          ≤ ∑ _g ∈ Finset.range n, 15484 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) :=
             Finset.sum_le_sum fun g _ => laneNat_le _ _
-        _ = n * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by simp
+        _ = n * (15484 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by simp
     rw [laneSum, BitVec.toNat_add, ih (by omega), laneOf_toNat a hm n (by omega),
       Finset.sum_range_succ, Nat.mod_eq_of_lt]
     have h1 := hb n
-    have h2 := laneNat_le (a.getReg (srcReg n)).toNat n
-    have : n * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) + 124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) <
-        2 ^ 64 := by
-      have : n * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) ≤
-          6 * (124 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) :=
-        Nat.mul_le_mul_right _ (by omega)
-      omega
+    have h2 := laneNat_le (a.getReg (wordReg n)).toNat n
+    have : n * (15484 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) ≤
+        3 * (15484 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) :=
+      Nat.mul_le_mul_right _ (by omega)
     omega
 
 /-- The word values of a state. -/
-def wordsOf (a : MachineState) (w : ℕ) : ℕ := (a.getReg (wordReg w)).toNat
+def wordsOf (a : MachineState) (g : ℕ) : ℕ := (a.getReg (wordReg g)).toNat
 
-/-- Lane `l` of the lane sum, for the word values `u`. -/
-def laneTotal (u : ℕ → ℕ) (l : ℕ) : ℕ := ∑ g ∈ Finset.range 7, 4 * laneFld (u (wordIdx g)) g l
+/-- The fine fields of lane `l` over the four words, and the coarse fields over the three pair
+words. -/
+def fineTotal (u : ℕ → ℕ) (l : ℕ) : ℕ := ∑ g ∈ Finset.range 4, fineFld (u g) l
 
-theorem laneTotal_le (u : ℕ → ℕ) (l : ℕ) : laneTotal u l ≤ 1000 := by
-  unfold laneTotal
+def coarseTotal (u : ℕ → ℕ) (l : ℕ) : ℕ := ∑ g ∈ Finset.range 3, coarseFld (u g) l
+
+theorem fineTotal_lt (u : ℕ → ℕ) (l : ℕ) : fineTotal u l < 128 := by
+  unfold fineTotal
   simp only [Finset.sum_range_succ, Finset.sum_range_zero]
-  have := laneFld_le (u (wordIdx 0)) 0 l
-  have := laneFld_le (u (wordIdx 1)) 1 l
-  have := laneFld_le (u (wordIdx 2)) 2 l
-  have := laneFld_le (u (wordIdx 3)) 3 l
-  have := laneFld_le (u (wordIdx 4)) 4 l
-  have := laneFld_le (u (wordIdx 5)) 5 l
-  have := laneFld_le (u (wordIdx 6)) 6 l
+  have := fineFld_le (u 0) l; have := fineFld_le (u 1) l
+  have := fineFld_le (u 2) l; have := fineFld_le (u 3) l
   omega
 
-theorem laneSum_lanes (a : MachineState) :
-    ∑ g ∈ Finset.range 7, laneNat (a.getReg (srcReg g)).toNat g =
-      laneTotal (wordsOf a) 0 + 2 ^ 16 * laneTotal (wordsOf a) 1 +
-      2 ^ 32 * laneTotal (wordsOf a) 2 + 2 ^ 48 * laneTotal (wordsOf a) 3 := by
-  simp only [Finset.sum_range_succ, Finset.sum_range_zero, laneNat, laneTotal, wordsOf, srcReg]
+theorem coarseTotal_lt (u : ℕ → ℕ) (l : ℕ) : coarseTotal u l < 48 := by
+  unfold coarseTotal
+  simp only [Finset.sum_range_succ, Finset.sum_range_zero]
+  have := coarseFld_le (u 0) l; have := coarseFld_le (u 1) l; have := coarseFld_le (u 2) l
+  omega
+
+/-- The lane sum is the pre-fold value of the fine and coarse totals. -/
+theorem laneSum_lanes (u : ℕ → ℕ) :
+    ∑ g ∈ Finset.range 4, laneNat (u g) g =
+      preFold (fineTotal u 0) (fineTotal u 1) (fineTotal u 2) (fineTotal u 3)
+        (coarseTotal u 0) (coarseTotal u 1) (coarseTotal u 2) (coarseTotal u 3) := by
+  simp only [Finset.sum_range_succ, Finset.sum_range_zero, laneNat, preFold, fineTotal,
+    coarseTotal, coarseOf, ↓reduceIte, show (3 : ℕ) < 3 ↔ False by simp,
+    show (0 : ℕ) < 3 by norm_num, show (1 : ℕ) < 3 by norm_num, show (2 : ℕ) < 3 by norm_num]
   ring
 
-/-- The lane totals sum to four times the sum of all lane fields. -/
-theorem laneTotals_sum (u : ℕ → ℕ) :
-    laneTotal u 0 + laneTotal u 1 + laneTotal u 2 + laneTotal u 3 =
-      4 * ∑ g ∈ Finset.range 7, ∑ l ∈ Finset.range 4, laneFld (u (wordIdx g)) g l := by
-  simp only [laneTotal, Finset.sum_range_succ, Finset.sum_range_zero]
-  ring
+theorem broadcast_toNat (B : ℕ) (hB : B < 2 ^ 16) :
+    (W (broadcast B)).toNat = broadcast B := by
+  apply W_toNat
+  unfold broadcast
+  omega
 
-/-- The top lane of the lane sum is four times the sum of the lane fields. -/
-theorem top_laneSum (a : MachineState) (hm : MasksLoaded a) :
-    ((laneSum a 7).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
-      4 * ∑ g ∈ Finset.range 7, ∑ l ∈ Finset.range 4, laneFld (wordsOf a (wordIdx g)) g l := by
-  rw [laneSum_toNat a hm 7 le_rfl, laneSum_lanes, topLane _ _ _ _ (laneTotal_le _ _)
-    (laneTotal_le _ _) (laneTotal_le _ _) (laneTotal_le _ _), laneTotals_sum]
+/-- The fold of the lane sum, lane by lane. -/
+theorem fold_laneSum (a : MachineState) (hm : MasksLoaded a) (hfm : a.getReg .x1 = W (broadcast foldMask)) :
+    (foldValue (laneSum a 4) (a.getReg .x1)).toNat =
+      4 * (fineTotal (wordsOf a) 0 + coarseTotal (wordsOf a) 0) +
+      2 ^ 16 * (4 * (fineTotal (wordsOf a) 1 + coarseTotal (wordsOf a) 1)) +
+      2 ^ 32 * (4 * (fineTotal (wordsOf a) 2 + coarseTotal (wordsOf a) 2)) +
+      2 ^ 48 * (4 * (fineTotal (wordsOf a) 3 + coarseTotal (wordsOf a) 3)) := by
+  have hL : (laneSum a 4).toNat = preFold (fineTotal (wordsOf a) 0) (fineTotal (wordsOf a) 1)
+      (fineTotal (wordsOf a) 2) (fineTotal (wordsOf a) 3) (coarseTotal (wordsOf a) 0)
+      (coarseTotal (wordsOf a) 1) (coarseTotal (wordsOf a) 2) (coarseTotal (wordsOf a) 3) := by
+    rw [laneSum_toNat a hm 4 le_rfl]
+    exact laneSum_lanes (wordsOf a)
+  have f0 := fineTotal_lt (wordsOf a) 0; have f1 := fineTotal_lt (wordsOf a) 1
+  have f2 := fineTotal_lt (wordsOf a) 2; have f3 := fineTotal_lt (wordsOf a) 3
+  have c0 := coarseTotal_lt (wordsOf a) 0; have c1 := coarseTotal_lt (wordsOf a) 1
+  have c2 := coarseTotal_lt (wordsOf a) 2; have c3 := coarseTotal_lt (wordsOf a) 3
+  have hfold := fold_toNat _ _ _ _ _ _ _ _ f0 f1 f2 f3 c0 c1 c2 c3
+  have hmask : (W (broadcast foldMask)).toNat = broadcast foldMask :=
+    broadcast_toNat _ (by norm_num [foldMask])
+  unfold foldValue
+  rw [BitVec.toNat_add, BitVec.toNat_and, BitVec.toNat_and, BitVec.toNat_ushiftRight,
+    Nat.shiftRight_eq_div_pow, hfm, hmask, hL, hfold, Nat.mod_eq_of_lt]
+  unfold preFold at *
+  omega
 
 /-! ## The fields of the answer -/
 
-/-- Word `w` of the index answer. -/
-def wordOf (answer : BitVec hashBits) (w : ℕ) : Word := answer.extractLsb' (64 * w) 64
+/-- Word `g` of the index answer. -/
+def wordOf (answer : BitVec hashBits) (g : ℕ) : Word := answer.extractLsb' (64 * g) 64
 
 theorem fld_extract (answer : BitVec hashBits) (w p b : ℕ) (hpb : p + b ≤ 64) :
     fld (wordOf answer w).toNat p b = answer.toNat / 2 ^ (64 * w + p) % 2 ^ b := by
@@ -123,67 +153,101 @@ theorem fld_extract (answer : BitVec hashBits) (w p b : ℕ) (hpb : p + b ≤ 64
     Nat.mod_mul_right_div_self, Nat.mod_mod_of_dvd _ (pow_dvd_pow 2 (by omega)),
     Nat.div_div_eq_div_mul, ← pow_add]
 
-/-- Digit `k` of the answer is the field of lane `laneIdx k` of lane word `laneOfChain k`. -/
-theorem fieldPos_eq (k : ℕ) (hk : k < 28) :
-    fieldPos k = 64 * wordIdx (laneOfChain k) + (16 * laneIdx k + 2 + shiftOf (laneOfChain k)) := by
-  interval_cases k <;> decide
+/-- The chain whose digit is the fine field of lane `l` of word `g`. -/
+def fineChain (g l : ℕ) : ℕ := if g < 3 then 2 * (4 * g + l) else 24 + l
 
-theorem wid_eq (k : ℕ) (hk : k < 28) : wid k = widthOf (laneOfChain k) := by
-  interval_cases k <;> decide
+/-- The chain whose digit is the coarse field of lane `l` of pair word `g`. -/
+def coarseChain (g l : ℕ) : ℕ := 2 * (4 * g + l) + 1
 
-theorem laneOfChain_lt (k : ℕ) (hk : k < 28) : laneOfChain k < 7 := by
-  unfold laneOfChain; split_ifs <;> omega
+theorem fieldPos_fine (g l : ℕ) (hg : g < 4) (hl : l < 4) :
+    fieldPos (fineChain g l) = 64 * g + (16 * l + 2) ∧ wid (fineChain g l) = 5 := by
+  interval_cases g <;> interval_cases l <;> decide
 
-theorem laneIdx_lt (k : ℕ) (hk : k < 28) : laneIdx k < 4 := by
-  unfold laneIdx; split_ifs <;> omega
+theorem fieldPos_coarse (g l : ℕ) (hg : g < 3) (hl : l < 4) :
+    fieldPos (coarseChain g l) = 64 * g + (16 * l + 10) ∧ wid (coarseChain g l) = 4 := by
+  interval_cases g <;> interval_cases l <;> decide
 
-theorem wordIdx_lt (g : ℕ) : wordIdx g < 3 := by
-  unfold wordIdx; split_ifs <;> omega
+/-- The fine field of lane `l` of word `g` is the digit of chain `fineChain g l`. -/
+theorem fine_word (answer : BitVec hashBits) (g l : ℕ) (hg : g < 4) (hl : l < 4) :
+    fineFld (wordOf answer g).toNat l = fieldDigit answer (fineChain g l) := by
+  obtain ⟨hp, hw⟩ := fieldPos_fine g l hg hl
+  unfold fineFld fieldDigit
+  rw [fld_extract _ _ _ _ (by omega), hp, hw]
 
-theorem lane_fits (g l : ℕ) (hl : l < 4) : 16 * l + 2 + shiftOf g + widthOf g ≤ 64 := by
-  unfold shiftOf widthOf; split_ifs <;> omega
-
-/-- The lane fields of the words are the digits of the answer. -/
-theorem laneFld_word (answer : BitVec hashBits) (k : ℕ) (hk : k < 28) :
-    laneFld (wordOf answer (wordIdx (laneOfChain k))).toNat (laneOfChain k) (laneIdx k) =
-      fieldDigit answer k := by
-  unfold laneFld fieldDigit
-  rw [fld_extract _ _ _ _ (lane_fits _ _ (laneIdx_lt k hk)), fieldPos_eq k hk, wid_eq k hk]
-
-/-- The lane fields sum to the digit sum of the answer. -/
-theorem field_sum (answer : BitVec hashBits) :
-    ∑ g ∈ Finset.range 7, ∑ l ∈ Finset.range 4, laneFld (wordOf answer (wordIdx g)).toNat g l =
-      ∑ k ∈ Finset.range 28, fieldDigit answer k := by
-  simp only [Finset.sum_range_succ, Finset.sum_range_zero]
-  rw [← laneFld_word answer 0 (by norm_num), ← laneFld_word answer 1 (by norm_num),
-    ← laneFld_word answer 2 (by norm_num), ← laneFld_word answer 3 (by norm_num),
-    ← laneFld_word answer 4 (by norm_num), ← laneFld_word answer 5 (by norm_num),
-    ← laneFld_word answer 6 (by norm_num), ← laneFld_word answer 7 (by norm_num),
-    ← laneFld_word answer 8 (by norm_num), ← laneFld_word answer 9 (by norm_num),
-    ← laneFld_word answer 10 (by norm_num), ← laneFld_word answer 11 (by norm_num),
-    ← laneFld_word answer 12 (by norm_num), ← laneFld_word answer 13 (by norm_num),
-    ← laneFld_word answer 14 (by norm_num), ← laneFld_word answer 15 (by norm_num),
-    ← laneFld_word answer 16 (by norm_num), ← laneFld_word answer 17 (by norm_num),
-    ← laneFld_word answer 18 (by norm_num), ← laneFld_word answer 19 (by norm_num),
-    ← laneFld_word answer 20 (by norm_num), ← laneFld_word answer 21 (by norm_num),
-    ← laneFld_word answer 22 (by norm_num), ← laneFld_word answer 23 (by norm_num),
-    ← laneFld_word answer 24 (by norm_num), ← laneFld_word answer 25 (by norm_num),
-    ← laneFld_word answer 26 (by norm_num), ← laneFld_word answer 27 (by norm_num)]
-  simp only [laneOfChain, laneIdx, wordIdx, Nat.reduceLT, Nat.reduceDiv, Nat.reduceMod,
-    Nat.reduceMul, Nat.reduceAdd, Nat.reduceSub, ↓reduceIte]
-  ring
+theorem coarse_word (answer : BitVec hashBits) (g l : ℕ) (hg : g < 3) (hl : l < 4) :
+    coarseFld (wordOf answer g).toNat l = fieldDigit answer (coarseChain g l) := by
+  obtain ⟨hp, hw⟩ := fieldPos_coarse g l hg hl
+  unfold coarseFld fieldDigit
+  rw [fld_extract _ _ _ _ (by omega), hp, hw]
 
 /-- The words of the answer are in the index registers. -/
 def WordsLoaded (a : MachineState) (answer : BitVec hashBits) : Prop :=
-  ∀ w, w < 3 → a.getReg (wordReg w) = wordOf answer w
+  ∀ g, g < 4 → a.getReg (wordReg g) = wordOf answer g
 
-theorem top_laneSum_answer (a : MachineState) (hm : MasksLoaded a) (answer : BitVec hashBits)
-    (hw : WordsLoaded a answer) :
-    ((laneSum a 7).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
+/-- The lane totals sum to the digit sum of the answer. -/
+theorem field_sum (answer : BitVec hashBits) :
+    ∑ l ∈ Finset.range 4, (fineTotal (fun g => (wordOf answer g).toNat) l +
+        coarseTotal (fun g => (wordOf answer g).toNat) l) =
+      ∑ k ∈ Finset.range 28, fieldDigit answer k := by
+  have f := fine_word answer
+  have c := coarse_word answer
+  simp only [fineTotal, coarseTotal, Finset.sum_range_succ, Finset.sum_range_zero]
+  rw [f 0 0 (by norm_num) (by norm_num),
+    f 0 1 (by norm_num) (by norm_num),
+    f 0 2 (by norm_num) (by norm_num),
+    f 0 3 (by norm_num) (by norm_num),
+    f 1 0 (by norm_num) (by norm_num),
+    f 1 1 (by norm_num) (by norm_num),
+    f 1 2 (by norm_num) (by norm_num),
+    f 1 3 (by norm_num) (by norm_num),
+    f 2 0 (by norm_num) (by norm_num),
+    f 2 1 (by norm_num) (by norm_num),
+    f 2 2 (by norm_num) (by norm_num),
+    f 2 3 (by norm_num) (by norm_num),
+    f 3 0 (by norm_num) (by norm_num),
+    f 3 1 (by norm_num) (by norm_num),
+    f 3 2 (by norm_num) (by norm_num),
+    f 3 3 (by norm_num) (by norm_num),
+    c 0 0 (by norm_num) (by norm_num),
+    c 0 1 (by norm_num) (by norm_num),
+    c 0 2 (by norm_num) (by norm_num),
+    c 0 3 (by norm_num) (by norm_num),
+    c 1 0 (by norm_num) (by norm_num),
+    c 1 1 (by norm_num) (by norm_num),
+    c 1 2 (by norm_num) (by norm_num),
+    c 1 3 (by norm_num) (by norm_num),
+    c 2 0 (by norm_num) (by norm_num),
+    c 2 1 (by norm_num) (by norm_num),
+    c 2 2 (by norm_num) (by norm_num),
+    c 2 3 (by norm_num) (by norm_num)]
+  simp only [fineChain, coarseChain]
+  norm_num
+  ring
+
+/-- The top lane of the folded lane sum is four times the digit sum. -/
+theorem top_fold_answer (a : MachineState) (hm : MasksLoaded a) (answer : BitVec hashBits)
+    (hw : WordsLoaded a answer) (hfm : a.getReg .x1 = W (broadcast foldMask)) :
+    ((foldValue (laneSum a 4) (a.getReg .x1)).toNat * broadcast 1) % 2 ^ 64 / 2 ^ 48 =
       4 * ∑ k ∈ Finset.range 28, fieldDigit answer k := by
-  rw [top_laneSum a hm, ← field_sum]
-  refine congrArg (4 * ·) (Finset.sum_congr rfl fun g _ => Finset.sum_congr rfl fun l _ => ?_)
-  rw [wordsOf, hw _ (wordIdx_lt g)]
+  rw [fold_laneSum a hm hfm]
+  have hf : ∀ l, fineTotal (wordsOf a) l = fineTotal (fun g => (wordOf answer g).toNat) l := by
+    intro l
+    unfold fineTotal
+    refine Finset.sum_congr rfl fun g hg => ?_
+    rw [wordsOf, hw g (Finset.mem_range.mp hg)]
+  have hc : ∀ l, coarseTotal (wordsOf a) l = coarseTotal (fun g => (wordOf answer g).toNat) l := by
+    intro l
+    unfold coarseTotal
+    refine Finset.sum_congr rfl fun g hg => ?_
+    rw [wordsOf, hw g (by have := Finset.mem_range.mp hg; omega)]
+  have bound : ∀ l, 4 * (fineTotal (wordsOf a) l + coarseTotal (wordsOf a) l) ≤ 1000 := by
+    intro l
+    have := fineTotal_lt (wordsOf a) l
+    have := coarseTotal_lt (wordsOf a) l
+    omega
+  rw [topLane _ _ _ _ (bound 0) (bound 1) (bound 2) (bound 3), ← field_sum answer]
+  simp only [Finset.sum_range_succ, Finset.sum_range_zero, hf, hc]
+  ring
 
 /-- The accepted indices are those with field sum `215`. -/
 theorem accepted_iff (answer : BitVec hashBits) :
@@ -194,34 +258,31 @@ theorem accepted_iff (answer : BitVec hashBits) :
 
 /-! ## The stored lanes -/
 
-theorem broadcast_toNat (B : ℕ) (hB : B < 2 ^ 16) :
-    (W (broadcast B)).toNat = broadcast B := by
-  apply W_toNat
-  unfold broadcast
-  omega
-
 theorem lane_extract (x0 x1 x2 x3 l : ℕ) (h0 : x0 < 2 ^ 16) (h1 : x1 < 2 ^ 16) (h2 : x2 < 2 ^ 16)
     (h3 : x3 < 2 ^ 16) (hl : l < 4) :
     (x0 + 2 ^ 16 * x1 + 2 ^ 32 * x2 + 2 ^ 48 * x3) / 2 ^ (16 * l) % 2 ^ 16 =
       [x0, x1, x2, x3].getD l 0 := by
   interval_cases l <;> simp <;> omega
 
-/-- Lane `l` of `broadcast B - lane word` is `B - 4 · field`. -/
-theorem lane_halfword (B u g l : ℕ) (hB1 : 124 ≤ B) (hB2 : B < 2 ^ 16) (hl : l < 4) (L : Word)
+/-- Lane `l` of `broadcast B - lane word` is `B - (4 · dA + 1024 · dB)`. -/
+theorem lane_halfword (B u g l : ℕ) (hB1 : 15484 ≤ B) (hB2 : B < 2 ^ 16) (hl : l < 4) (L : Word)
     (hL : L.toNat = laneNat u g) :
-    (W (broadcast B) - L).toNat / 2 ^ (16 * l) % 2 ^ 16 = B - 4 * laneFld u g l := by
-  have n0 := laneFld_le u g 0
-  have n1 := laneFld_le u g 1
-  have n2 := laneFld_le u g 2
-  have n3 := laneFld_le u g 3
+    (W (broadcast B) - L).toNat / 2 ^ (16 * l) % 2 ^ 16 =
+      B - (4 * fineFld u l + 1024 * coarseOf g u l) := by
+  have n0 := laneEntry_le g u 0
+  have n1 := laneEntry_le g u 1
+  have n2 := laneEntry_le g u 2
+  have n3 := laneEntry_le g u 3
   have hle : L ≤ W (broadcast B) := by
     rw [BitVec.le_def, hL, broadcast_toNat B hB2]
     unfold laneNat broadcast
     omega
   rw [BitVec.toNat_sub_of_le hle, hL, broadcast_toNat B hB2]
   have e : broadcast B - laneNat u g =
-      (B - 4 * laneFld u g 0) + 2 ^ 16 * (B - 4 * laneFld u g 1) +
-      2 ^ 32 * (B - 4 * laneFld u g 2) + 2 ^ 48 * (B - 4 * laneFld u g 3) := by
+      (B - (4 * fineFld u 0 + 1024 * coarseOf g u 0)) +
+      2 ^ 16 * (B - (4 * fineFld u 1 + 1024 * coarseOf g u 1)) +
+      2 ^ 32 * (B - (4 * fineFld u 2 + 1024 * coarseOf g u 2)) +
+      2 ^ 48 * (B - (4 * fineFld u 3 + 1024 * coarseOf g u 3)) := by
     unfold broadcast laneNat; omega
   rw [e, lane_extract _ _ _ _ l (by omega) (by omega) (by omega) (by omega) hl]
   interval_cases l <;> rfl

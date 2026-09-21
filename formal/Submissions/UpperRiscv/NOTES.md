@@ -1,3 +1,118 @@
+# upper-riscv: 394 cycles — paired dispatch
+
+## Idea
+
+The 426-cycle image pays five fixed cycles per chain: a four-instruction prologue (advance the
+input pointer, point the answer buffer, load the dispatch halfword, jump) and the `+1` hash that
+the memory layout forces. The prologue exists because each chain's disclosed position is a
+separate jump. Two chains can share one jump if the code the jump lands in already knows *both*
+positions — and it can, if the code is replicated: one copy of the block per value of the second
+chain's digit.
+
+So block `q < 12` serves the pair of chains `2q` (a five-bit digit `dA`) and `2q + 1` (a four-bit
+digit `dB`). The two digits sit in one 16-bit lane of the index answer, at lane bits `2 … 6` and
+`10 … 13`, so a single mask leaves `4 · dA + 1024 · dB` in the lane and the stored halfword
+`base − 4 dA − 1024 dB` is a complete dispatch address: `1024 dB` selects one of sixteen
+64-instruction *copies* of the pair's block (laid out with `dB` decreasing), `4 dA` selects the
+hash step inside the copy's 32-step table for chain `2q`. A copy is
+
+```
+32 × ECALL            chain 2q, entered at step 31 − dA        dA + 1 cycles
+ADDI x10, 24; ADDI x12, x10, −8   move to chain 2q + 1          2
+(dB + 1) × ECALL      chain 2q + 1, all of it                   dB + 1
+prologue (q + 1)      the next block's prologue, replicated     4
+(25 − dB) × nop       padding to 64 instructions                —
+```
+
+so a pair costs `8 + dA + dB` cycles against `10 + dA + dB` for two single blocks. The four
+copies of a lane word's four pairs are interleaved at 256-instruction strides, which is what makes
+the *same* broadcast base serve all four lanes of the word: lane `l` of lane word `g` lands at
+`copyStart (4g + l) dB + 4 · (31 − dA) = laneBaseOf g − (4 dA + 1024 dB) + jumpImm q`. The
+twelve four-bit digits of the `16 × 5 + 12 × 4` profile are exactly the twelve coarse digits;
+the remaining four five-bit chains `24 … 27` keep single 32-step tables (blocks `12 … 15`).
+
+The index phase shrinks as well: four lane words (one per answer word, mask `0x3C7C` for the
+three pair words, `0x7C` for the singles word) instead of seven, and one 4-instruction *fold*
+`(a &&& m) + ((a >>> 8) &&& m)` with `m = 0x1FC` broadcast, which adds the coarse sums (lane bits
+`10 …`, each `< 48`) onto the fine sums (lane bits `2 …`, each `< 128`) so that every lane holds
+`4 · (Σ dA + Σ dB)` and the one-`MUL` top-lane sum check is unchanged.
+
+- **Chains 355 → 331.** Twelve pairs at `6 + (dA + 1) + (dB + 1)`, four singles at `4 + (d + 1)`:
+  `72 + 16 + 243`.
+- **Index 51 → 43.** Loads 7 → 11 (four words, two masks, the fold mask, the `MUL` constant,
+  three bases), lanes 31 → 15, fold +4.
+- Root and decision 20, unchanged. `43 + 331 + 20 = 394`.
+
+## Proof
+
+- `Valid.lean`: `wid k` is 5 for even `k < 24` and for `24 … 27`, 4 for odd `k < 24`; `jw k`
+  places digit `2p` at lane bit 2 and digit `2p + 1` at lane bit 10 of lane `p % 4` of word
+  `p / 4`, and digit `24 + l` at lane bit 2 of lane `l` of word 3 (`fieldPos_fine`,
+  `fieldPos_coarse`). `numValid_avail` is re-decided for the new digit order; the count is a
+  permutation of the 426 profile's, so the availability bound is the same.
+- `Program.lean`: the layout (`copyStart`, `singleTableStart`, `landing0`, `laneBaseOf`,
+  `jumpImm`), `laneWord g` with `baseReg g`, `fold`, `prologue q`, `switch`, `copyCode q dB`,
+  `groupCode`, `pairsCode`, `singleBlock`; 12494 instructions and a 104-byte data image.
+- `Lanes.lean`: the mask arithmetic lane by lane (`and_maskPair`, `and_maskSingle`,
+  `and_maskFold`) and `fold_toNat`. One `omega` over all eight fields of a word does not
+  terminate in useful time; the per-field lemmas `lane*_fine`/`lane*_coarse`/`lane*_fold` and a
+  `ring` finish do.
+- `IndexLanes.lean`, `IndexArith.lean`: `lanesUpTo 4`, `foldValue`, `top_fold_answer`,
+  `lane_halfword` (a lane of `broadcast B − laneWord` is `B − (4 dA + 1024 dB)`), `fine_word`/
+  `coarse_word` identifying the lane fields with `fieldDigit`.
+- `IndexPhase.lean`: eleven loads, `mainBlock = loadWords ++ lanes ++ fold ++ sumOps` (33
+  instructions), `afterIndex_lanes` giving `Ctx.lanes` for the 16 blocks, `indexPhase.length = 49`,
+  refinement at 43 cycles.
+- `ChainContext.lean`: `dispatch index q = 4 · digit (firstChain q) + 1024 · coarseDigit index q`;
+  `Ctx` now also carries the location of the whole image (`Ctx.code`), since a pair block has
+  to find its copy in `pairsCode` from the disclosed digits rather than from the code it was
+  entered on.
+- `ChainPrologue.lean`: `jump_target` for the sixteen blocks, with the `JALR` immediates decided
+  in range.
+- `ChainBlock.lean`: `copy_located`/`single_located` peel the selected copy or table out of
+  `verifier` with `drop_flatMap_fixed` (dropping whole 64-, 256- and 4096-instruction blocks of
+  the nested `flatMap`s); `table_refines` runs a chain from its landing step; `pair_refines` is
+  prologue, chain `2q`, `switch_refines`, chain `2q + 1`; `single_refines` is prologue and chain.
+- `ChainPhase.lean`: induction over the 16 blocks; `blocksCost 0 = 331` through
+  `stepsFrom 0 = 243` (`fixedPositions_sum`).
+- `Verifier.lean`: `cycleBound = 394`, `verifier.length = 12494` and admissibility by
+  `decide +kernel` (about ten seconds). `Solution.lean`: `image_size` is `4 · 12494 + 104 = 50080`.
+
+## Cost
+
+`43 (index) + 331 (chains) + 20 (root and decision) = 394`, image length 12494 (50080 bytes).
+
+## What did not work
+
+- **Pairs of two five-bit digits.** The second digit needs one copy per value: 32 copies of a
+  64-instruction block for each of 14 pairs is 28672 instructions, and the dispatch halfword is
+  16 bits: every landing address must be below `2^16 + 2047`, so the copies of all pairs have to
+  fit in about 64 KB of code. Sixteen copies for twelve pairs (12288 instructions, 48 KB) fit;
+  32 copies for fourteen do not. The `16 × 5 + 12 × 4` profile happens to have exactly twelve
+  four-bit digits, one coarse digit per pair.
+- **Fourteen pairs of `5 + 4`** (a 126-bit index) would remove the four single blocks, but the
+  profile fails the availability count at target 215 and the targets that would still win.
+- **Three chains per block** needs copies indexed by two digits (`2^9` copies at least): far
+  beyond the halfword's reach.
+- **192-bit chain values and 28 chains are pinned by alignment.** The HASH output pointer must be
+  8-byte aligned and a chain's answer is written eight bytes below its slot, so slots are 24 bytes
+  apart and the 5504-bit signature (`128 + 28 · 192`) is what the memory layout can hold; a
+  different value width would need a different slot geometry and re-doing the spill argument of
+  the 426 notes.
+- **The switch (2 cycles per pair) stays.** The second chain's input pointer and answer buffer
+  both move by 24 bytes; no single instruction moves both, and the hash call reads them from
+  `x10`/`x12` only.
+
+## What is left
+
+- 81 − 8 = 73 fixed cycles outside the chains: prefix 5, index hash 1, length check 2, loads 11,
+  lanes 15, fold 4, sum check 4, setup 1, root 2 + 11, decision 7; plus 8 per pair and 4 per single.
+- The image is at 48 KB of a 64 KB dispatch window. A denser copy layout (the 25 − dB nops are
+  dead) would leave room for two more coarse bits on a few pairs, but the chain profile is pinned by
+  the availability count.
+
+---
+
 # upper-riscv: 426 cycles — three fields per lane
 
 ## Idea

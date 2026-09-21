@@ -62,12 +62,12 @@ theorem lo_of_answer {s : MachineState} {k : ℕ} {y : BitVec 256}
 
 /-! ## Invariant within a chain -/
 
-/-- Machine facts holding before the hash step of level `t` of chain `k`. -/
+/-- Machine facts holding before the hash step of level `t` of chain `k`. The level `t` only
+indexes the invariant; the program counter is tracked by the located code. -/
 structure StepInv (s : MachineState) (x : graph.Assignment) (k : Fin 28) (t : ℕ) : Prop where
   ctx : Ctx s index pk
   input : s.getReg .x10 = slotW k
   out : s.getReg .x12 = W (slotAddr k - 8)
-  pc : s.pc = W (tableEnd k - 4 * (32 - t))
   payload : PayloadFrom s payload (k.val + 1)
   done : 1 ≤ k.val → MemBits s (W regionAddr) (lowCat (topFun (tops x)) (k.val - 1))
 
@@ -202,7 +202,6 @@ theorem step_refines (k : Fin 28) (t : Fin 32)
   have hs := slot_bounds k k.isLt
   have hsn : 0x400040 ≤ slotAddr k ∧ slotAddr k + 24 ≤ 0x400040 + 24 * 28 ∧ slotAddr k % 8 = 0 := by
     unfold payloadAddr at hs; exact hs
-  have ht := tableEnd_bounds k k.isLt
   have fetch : s.code s.pc = some .ECALL := located.head
   have valid : Riscv.hashArgumentsValid s = true := by
     have r1 : isValidOutputRange (slotW k) 24 = true :=
@@ -251,14 +250,9 @@ theorem step_refines (k : Fin 28) (t : Fin 32)
     rw [inv.out] at h
     exact h
   apply continuation u y ?_ answer uLocated (fuel - 1) (by omega)
-  refine ⟨inv.ctx.frame k k.isLt (fun r _ => uRegs r) frame,
-    by rw [uRegs]; exact inv.input, by rw [uRegs]; exact inv.out, ?_,
+  refine ⟨inv.ctx.frame k k.isLt (fun r _ => uRegs r) frame uCode,
+    by rw [uRegs]; exact inv.input, by rw [uRegs]; exact inv.out,
     payloadFrom_frame payload k.isLt frame inv.payload, ?_⟩
-  · have e4 : (4 : Word) = W 4 := rfl
-    rw [uPc, inv.pc, e4, W_add]
-    congr 1
-    have := t.isLt
-    omega
   · intro hk1
     have e : lowCat (topFun (tops (tripleUpdate x k t v y))) (k.val - 1) =
         lowCat (topFun (tops x)) (k.val - 1) := by

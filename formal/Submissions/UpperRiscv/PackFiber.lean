@@ -6,7 +6,7 @@ import Submissions.UpperRiscv.Valid
 `pack` reads `wid k` bits of an answer from bit `fieldPos k`. The answer is a sequence of 29
 cells (`cw`) in bit order, each some unread low bits (`jw k`) below digit `k`; the unread bits
 form another 128-bit number, and `y ↦ (pack y, junk y)` is a bijection: every packed index has
-exactly `2 ^ 128` answers (`card_pack_mem`).
+exactly `2 ^ 128` answers (`card_pack_mem`, in `PackCount.lean`).
 -/
 
 namespace OptimalOTS
@@ -16,11 +16,11 @@ theorem posW_cw_29 : posW cw 29 = 256 := by decide
 theorem posW_jw_29 : posW jw 29 = 128 := by decide
 
 theorem jw_of_ge {k : ℕ} (hk : 29 ≤ k) : jw k = 0 := by
-  simp [jw, show k ≠ 0 by omega, show ¬ k < 16 by omega, show k ≠ 16 by omega,
+  simp [jw, show k ≠ 0 by omega, show ¬ k < 24 by omega, show k ≠ 24 by omega,
     show ¬ k < 28 by omega, show k ≠ 28 by omega]
 
 theorem wid_of_ge {k : ℕ} (hk : 28 ≤ k) : wid k = 0 := by
-  simp [wid, show ¬ k < 16 by omega, show ¬ k < 28 by omega]
+  simp [wid, show ¬ k < 24 by omega, show ¬ k < 28 by omega]
 
 theorem cw_of_ge {k : ℕ} (hk : 29 ≤ k) : cw k = 0 := by
   unfold cw

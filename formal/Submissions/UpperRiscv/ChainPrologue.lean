@@ -1,11 +1,12 @@
 import Submissions.UpperRiscv.ChainContext
 
 /-!
-# The prologue of a chain block
+# The prologue of a block, the switch of a pair, and the jump
 
-Chain `k`'s prologue moves the input pointer to its slot, points the answer buffer eight bytes
-below it, loads its jump target from the dispatch halfwords and jumps to the hash step of its
-disclosed position.
+Block `q`'s prologue moves the input pointer to the slot of its first chain, points the answer
+buffer eight bytes below it, loads its dispatch halfword and jumps to the hash step of the first
+chain's disclosed position in the copy selected by the second chain's digit. Between the two chains
+of a pair, the switch moves both pointers to the next slot.
 -/
 
 namespace OptimalOTS.Riscv2Program
@@ -14,16 +15,17 @@ open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
 
 /-- The three straight-line instructions of the prologue. -/
-def prologueLinear (k : ℕ) : Code :=
-  [.ADDI .x10 .x10 (if k = 0 then 64 else 24), .ADDI .x12 .x10 (imm12 (-8)),
-   .LHU .x28 .x12 (imm12 ((laneBase + laneHalf k : ℤ) - outAddr k))]
+def prologueLinear (q : ℕ) : Code :=
+  [.ADDI .x10 .x10 (if q = 0 then 64 else 24), .ADDI .x12 .x10 (imm12 (-8)),
+   .LHU .x28 .x12 (imm12 ((laneAddr q : ℤ) - outAddr (firstChain q)))]
 
-theorem chainPrologue_parts (k : ℕ) :
-    chainPrologue k = prologueLinear k ++
-      [.JALR .x0 .x28 (imm12 ((tableEnd k : ℤ) - 4 - jumpBase))] := by
-  simp [chainPrologue, prologueLinear]
+theorem prologue_parts (q : ℕ) :
+    prologue q = prologueLinear q ++ [.JALR .x0 .x28 (imm12 (jumpImm q))] := by
+  simp [prologue, prologueLinear]
 
-theorem prologueLinear_length (k : ℕ) : (prologueLinear k).length = 3 := rfl
+theorem prologueLinear_length (q : ℕ) : (prologueLinear q).length = 3 := rfl
+
+theorem prologue_length (q : ℕ) : (prologue q).length = 4 := rfl
 
 theorem signExtend_minus8 : signExtend12 (imm12 (-8)) = BitVec.ofInt 64 (-8) :=
   signExtend12_imm (-8) (by norm_num) (by norm_num)
@@ -34,38 +36,35 @@ theorem W_sub8 (a : ℕ) (ha : 8 ≤ a) (hlt : a < 2 ^ 62) :
   congr 1
   omega
 
-theorem laneHalf_le (k : ℕ) (hk : k < 28) : laneHalf k ≤ 54 := by
-  unfold laneHalf laneOff laneOfChain laneIdx; split_ifs <;> omega
-
-theorem laneHalf_lt (k : ℕ) (hk : k < 28) : laneHalf k < 2048 := by
-  have := laneHalf_le k hk; omega
-
-theorem lane_offset (k : ℕ) (hk : k < 28) :
-    W (slotAddr k - 8) + signExtend12 (imm12 ((laneBase + laneHalf k : ℤ) - outAddr k)) =
-      W (laneAddr k) := by
-  have hs := slot_bounds k hk
-  have hh := laneHalf_le k hk
-  rw [W_add_imm _ _ (by simp only [laneBase, outAddr]; omega)
-    (by simp only [laneBase, outAddr]; omega)
-    (by simp only [laneBase, outAddr, slotAddr, payloadAddr]; omega)
+theorem lane_offset (q : ℕ) (hq : q < 16) :
+    W (slotAddr (firstChain q) - 8) +
+      signExtend12 (imm12 ((laneAddr q : ℤ) - outAddr (firstChain q))) = W (laneAddr q) := by
+  have hk := firstChain_lt q hq
+  have hs := slot_bounds (firstChain q) hk
+  have hl := laneAddr_bounds q hq
+  rw [W_add_imm _ _ (by simp only [laneBase, outAddr] at hl ⊢; omega)
+    (by simp only [laneBase, outAddr] at hl ⊢; omega)
+    (by simp only [laneBase, outAddr, slotAddr, payloadAddr] at hl hs ⊢; omega)
     (by unfold slotAddr payloadAddr; omega)]
   congr 1
-  simp only [laneBase, outAddr, slotAddr, payloadAddr, laneAddr]
+  simp only [laneBase, outAddr, slotAddr, payloadAddr] at hl hs ⊢
   omega
 
 /-- The first prologue instruction moves the input pointer onto the slot. -/
-theorem prologue_step0 (a : MachineState) (k : ℕ) (hk : k < 28)
-    (slot : a.getReg .x10 = W (prevInput k)) :
-    a.getReg .x10 + signExtend12 (if k = 0 then (64 : BitVec 12) else 24) = slotW k := by
-  have hs := slot_bounds k hk
+theorem prologue_step0 (a : MachineState) (q : ℕ) (hq : q < 16)
+    (slot : a.getReg .x10 = W (prevInput (firstChain q))) :
+    a.getReg .x10 + signExtend12 (if q = 0 then (64 : BitVec 12) else 24) = slotW (firstChain q) := by
+  have hk := firstChain_lt q hq
+  have hs := slot_bounds (firstChain q) hk
   rw [slot]
   unfold prevInput
-  by_cases hk0 : k = 0
-  · rw [if_pos hk0, if_pos hk0, show (64 : BitVec 12) = BitVec.ofNat 12 64 from rfl,
-      signExtend12_nat _ (by norm_num), W_add]
-    subst hk0
+  by_cases hq0 : q = 0
+  · have hk0 : firstChain q = 0 := (firstChain_eq_zero q).mpr hq0
+    rw [if_pos hq0, if_pos hk0, show (64 : BitVec 12) = BitVec.ofNat 12 64 from rfl,
+      signExtend12_nat _ (by norm_num), W_add, hk0]
     rfl
-  · rw [if_neg hk0, if_neg hk0, show (24 : BitVec 12) = BitVec.ofNat 12 24 from rfl,
+  · have hk0 : firstChain q ≠ 0 := fun h => hq0 ((firstChain_eq_zero q).mp h)
+    rw [if_neg hq0, if_neg hk0, show (24 : BitVec 12) = BitVec.ofNat 12 24 from rfl,
       signExtend12_nat _ (by norm_num), W_add]
     show W _ = W _
     congr 1
@@ -73,36 +72,36 @@ theorem prologue_step0 (a : MachineState) (k : ℕ) (hk : k < 28)
     omega
 
 /-- The effect of the straight-line prologue. -/
-structure PrologueEffect (a b : MachineState) (k : ℕ) : Prop where
-  input : b.getReg .x10 = slotW k
-  out : b.getReg .x12 = W (slotAddr k - 8)
-  target : b.getReg .x28 = (a.getHalfword (W (laneAddr k))).zeroExtend 64
+structure PrologueEffect (a b : MachineState) (q : ℕ) : Prop where
+  input : b.getReg .x10 = slotW (firstChain q)
+  out : b.getReg .x12 = W (slotAddr (firstChain q) - 8)
+  target : b.getReg .x28 = (a.getHalfword (W (laneAddr q))).zeroExtend 64
   regs : ∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → b.getReg r = a.getReg r
   mem : ∀ addr, b.getMem addr = a.getMem addr
   pc : b.pc = a.pc + 12
   code : b.code = a.code
 
-theorem prologueLinear_effect (a : MachineState) (k : ℕ) (hk : k < 28)
-    (slot : a.getReg .x10 = W (prevInput k)) :
-    PrologueEffect a ((prologueLinear k).foldl execInstrBr a) k := by
-  have hs := slot_bounds k hk
-  have step0 := prologue_step0 a k hk slot
-  have s8 : slotW k + signExtend12 (imm12 (-8)) = W (slotAddr k - 8) :=
+theorem prologueLinear_effect (a : MachineState) (q : ℕ) (hq : q < 16)
+    (slot : a.getReg .x10 = W (prevInput (firstChain q))) :
+    PrologueEffect a ((prologueLinear q).foldl execInstrBr a) q := by
+  have hk := firstChain_lt q hq
+  have hs := slot_bounds (firstChain q) hk
+  have step0 := prologue_step0 a q hq slot
+  have s8 : slotW (firstChain q) + signExtend12 (imm12 (-8)) = W (slotAddr (firstChain q) - 8) :=
     W_sub8 _ (by unfold slotAddr payloadAddr; omega) (by unfold slotAddr payloadAddr; omega)
-  have lane := lane_offset k hk
+  have lane := lane_offset q hq
   simp only [prologueLinear, List.foldl_cons, List.foldl_nil]
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
-    simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, false_and,
+    simp only [ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true,
       if_false, show ¬ (Reg.x10 = Reg.x28) by decide, show ¬ (Reg.x10 = Reg.x12) by decide,
       step0]
   · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
-    simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, false_and,
+    simp only [ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true,
       if_false, show ¬ (Reg.x12 = Reg.x28) by decide, show ¬ (Reg.x12 = Reg.x10) by decide,
       step0, s8]
-  · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite, MachineState.getMem_setPC,
-      MachineState.getMem_setReg]
-    simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, false_and,
+  · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
+    simp only [ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true,
       if_false, show ¬ (Reg.x12 = Reg.x10) by decide, step0, s8, lane]
     rfl
   · intro r h10 h12 h28
@@ -114,19 +113,74 @@ theorem prologueLinear_effect (a : MachineState) (k : ℕ) (hk : k < 28)
     simp only [BitVec.add_assoc]; rfl
   · simp [execInstrBr]
 
-theorem prologueLinear_ready (a : MachineState) (k : ℕ) (hk : k < 28)
-    (slot : a.getReg .x10 = W (prevInput k)) : Riscv.LinearReady a (prologueLinear k) := by
-  have hl := laneAddr_bounds k hk
-  have hs := slot_bounds k hk
-  have step0 := prologue_step0 a k hk slot
-  have s8 : slotW k + signExtend12 (imm12 (-8)) = W (slotAddr k - 8) :=
+theorem prologueLinear_ready (a : MachineState) (q : ℕ) (hq : q < 16)
+    (slot : a.getReg .x10 = W (prevInput (firstChain q))) :
+    Riscv.LinearReady a (prologueLinear q) := by
+  have hk := firstChain_lt q hq
+  have hl := laneAddr_bounds q hq
+  have hs := slot_bounds (firstChain q) hk
+  have step0 := prologue_step0 a q hq slot
+  have s8 : slotW (firstChain q) + signExtend12 (imm12 (-8)) = W (slotAddr (firstChain q) - 8) :=
     W_sub8 _ (by unfold slotAddr payloadAddr; omega) (by unfold slotAddr payloadAddr; omega)
   refine ⟨rfl, trivial, rfl, trivial, rfl, ?_, trivial⟩
   show isValidHalfwordAccess (_ + _) = true
   simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
-  simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, false_and,
-    if_false, show ¬ (Reg.x12 = Reg.x10) by decide, step0, s8, lane_offset k hk]
+  simp only [ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true,
+    if_false, show ¬ (Reg.x12 = Reg.x10) by decide, step0, s8, lane_offset q hq]
   exact half_ok _ (by unfold laneBase at hl; omega) (by unfold laneBase at hl; omega) hl.2.2
+
+/-! ## The switch -/
+
+/-- The effect of the switch before chain `k` of a pair. -/
+structure SwitchEffect (a b : MachineState) (k : ℕ) : Prop where
+  input : b.getReg .x10 = slotW k
+  out : b.getReg .x12 = W (slotAddr k - 8)
+  regs : ∀ r, r ≠ .x10 → r ≠ .x12 → b.getReg r = a.getReg r
+  mem : ∀ addr, b.getMem addr = a.getMem addr
+  pc : b.pc = a.pc + 8
+  code : b.code = a.code
+
+theorem switch_length : switch.length = 2 := rfl
+
+theorem switch_step0 (a : MachineState) (k : ℕ) (hk : k < 28) (hk0 : k ≠ 0)
+    (slot : a.getReg .x10 = W (prevInput k)) :
+    a.getReg .x10 + signExtend12 (24 : BitVec 12) = slotW k := by
+  have hs := slot_bounds k hk
+  rw [slot]
+  unfold prevInput
+  rw [if_neg hk0, show (24 : BitVec 12) = BitVec.ofNat 12 24 from rfl,
+    signExtend12_nat _ (by norm_num), W_add]
+  show W _ = W _
+  congr 1
+  unfold slotAddr payloadAddr at hs ⊢
+  omega
+
+theorem switch_effect (a : MachineState) (k : ℕ) (hk : k < 28) (hk0 : k ≠ 0)
+    (slot : a.getReg .x10 = W (prevInput k)) :
+    SwitchEffect a (switch.foldl execInstrBr a) k := by
+  have hs := slot_bounds k hk
+  have step0 := switch_step0 a k hk hk0 slot
+  have s8 : slotW k + signExtend12 (imm12 (-8)) = W (slotAddr k - 8) :=
+    W_sub8 _ (by unfold slotAddr payloadAddr; omega) (by unfold slotAddr payloadAddr; omega)
+  simp only [switch, List.foldl_cons, List.foldl_nil]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
+    simp only [ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true,
+      if_false, show ¬ (Reg.x10 = Reg.x12) by decide, step0]
+  · simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
+    simp only [ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true,
+      if_false, show ¬ (Reg.x12 = Reg.x10) by decide, step0, s8]
+  · intro r h10 h12
+    simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
+    simp [h10, h12]
+  · intro addr
+    simp [execInstrBr]
+  · show a.pc + 4 + 4 = a.pc + 8
+    simp only [BitVec.add_assoc]; rfl
+  · simp [execInstrBr]
+
+theorem switch_ready (a : MachineState) : Riscv.LinearReady a switch := by
+  simp [switch, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
 /-! ## The jump -/
 
@@ -144,40 +198,46 @@ theorem and_not_one_of_even (a : Word) (h : a.toNat % 2 = 0) : a &&& ~~~(1#64) =
     decide
   · simp [hi0, hi]
 
-theorem jump_offset_range : ∀ k : Fin 28,
-    -2048 ≤ ((tableEnd k : ℤ) - 4 - jumpBase) ∧ ((tableEnd k : ℤ) - 4 - jumpBase) < 2048 := by
-  decide
+theorem jump_offset_range' : ∀ q : Fin 16, -2048 ≤ jumpImm q ∧ jumpImm q < 2048 := by
+  decide +kernel
 
-theorem tableEnd_bounds' : ∀ k : Fin 28, 4096 ≤ tableEnd k ∧ tableEnd k < 10000 := by
-  decide
+theorem jump_offset_range (q : ℕ) (hq : q < 16) : -2048 ≤ jumpImm q ∧ jumpImm q < 2048 :=
+  jump_offset_range' ⟨q, hq⟩
 
-theorem tableEnd_bounds (k : ℕ) (hk : k < 28) : 4096 ≤ tableEnd k ∧ tableEnd k < 10000 :=
-  tableEnd_bounds' ⟨k, hk⟩
+theorem landing0_bounds' : ∀ q : Fin 16, 16000 ≤ landing0 q ∧ landing0 q < 60000 := by
+  decide +kernel
 
-theorem tableEnd_mod (k : ℕ) : tableEnd k % 4 = 0 := by
-  unfold tableEnd; omega
+theorem landing0_bounds (q : ℕ) (hq : q < 16) : 16000 ≤ landing0 q ∧ landing0 q < 60000 :=
+  landing0_bounds' ⟨q, hq⟩
 
-theorem jumpBase_bounds : 5000 ≤ jumpBase ∧ jumpBase < 9000 := by unfold jumpBase; omega
+theorem landing0_mod' : ∀ q : Fin 16, landing0 q % 4 = 0 := by decide +kernel
 
-/-- The computed jump lands on the hash step of position `p` of chain `k`'s table. -/
-theorem jump_target (k : ℕ) (hk : k < 28) (p : ℕ) (hp : p ≤ 31) (v : Word)
-    (hv : v.toNat = jumpBase - 4 * (31 - p)) :
-    (v + signExtend12 (imm12 ((tableEnd k : ℤ) - 4 - jumpBase))) &&& ~~~(1#64) =
-      W (tableEnd k - 4 * (32 - p)) := by
-  obtain ⟨r1, r2⟩ := jump_offset_range ⟨k, hk⟩
-  have hj := jumpBase_bounds
-  have ht := tableEnd_bounds k hk
-  have hm := tableEnd_mod k
-  have hv' : v = W (jumpBase - 4 * (31 - p)) := by
+theorem landing0_mod (q : ℕ) (hq : q < 16) : landing0 q % 4 = 0 := landing0_mod' ⟨q, hq⟩
+
+theorem laneBaseOf_bounds (g : ℕ) : 15484 ≤ laneBaseOf g ∧ laneBaseOf g < 2 ^ 16 := by
+  unfold laneBaseOf; split_ifs <;> norm_num
+
+/-- The computed jump lands on `landing0 q` less the dispatch value. -/
+theorem jump_target (index : Idx) (q : ℕ) (hq : q < 16) (v : Word)
+    (hv : v.toNat = laneBaseOf (laneGroup q) - dispatch index q) :
+    (v + signExtend12 (imm12 (jumpImm q))) &&& ~~~(1#64) = W (landing0 q - dispatch index q) := by
+  obtain ⟨r1, r2⟩ := jump_offset_range q hq
+  have hb := laneBaseOf_bounds (laneGroup q)
+  have hl := landing0_bounds q hq
+  have hm := landing0_mod q hq
+  have hd := dispatch_le index q
+  have hv' : v = W (laneBaseOf (laneGroup q) - dispatch index q) := by
     apply BitVec.eq_of_toNat_eq
     rw [hv, W_toNat _ (by omega)]
-  rw [hv', W_add_imm _ _ r1 r2 (by omega) (by omega)]
-  have e : (((jumpBase - 4 * (31 - p) : ℕ) : ℤ) + ((tableEnd k : ℤ) - 4 - jumpBase)).toNat =
-      tableEnd k - 4 * (32 - p) := by
+  rw [hv', W_add_imm _ _ r1 r2 (by unfold jumpImm at *; omega) (by omega)]
+  have e : (((laneBaseOf (laneGroup q) - dispatch index q : ℕ) : ℤ) + jumpImm q).toNat =
+      landing0 q - dispatch index q := by
+    unfold jumpImm at *
     omega
   rw [e]
   apply and_not_one_of_even
   rw [W_toNat _ (by omega)]
+  unfold dispatch at *
   omega
 
 theorem jalr_transition (s : MachineState) (i : BitVec 12)
