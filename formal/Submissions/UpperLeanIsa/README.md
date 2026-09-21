@@ -13,14 +13,20 @@ Checked in Lean against core `2d900ae486930689af01a6963d58c574cf17e5f7`:
 - Distinct messages have incomparable checksum encodings.
 - Signatures have exactly 4,352 bits; oversized raw signatures are rejected.
 - Signing never fails, and verification is deterministic.
+- Encoding and decoding round-trip in both directions, with no alternative encoding
+  of the same signature words.
+- Perfect correctness holds under the shared cached random oracle, for every
+  public-key-dependent message choice. All eight `scheme.Admissible` fields are proved.
 - Key generation and verification each cost at most 17,408 compressions; signing
   costs at most 17,340. All three fit the current 2²⁰ budgets on every oracle path.
+- A structural forgery theorem covers both new-message and same-message forgeries:
+  acceptance of a different pair requires a hidden chain word or a second preimage
+  along the evaluated chain/root paths. This theorem does not bound their probability.
 
 The compression bounds are algorithm bounds, **not leanISA cycle scores**.
 
 Still required:
 
-- Perfect correctness under the cached random oracle, including wire decoding.
 - The contract's strong-unforgeability theorem. Its 127-bit target has not yet been proved
   for this construction; the parameters remain provisional until that proof is complete.
 - Concrete leanISA bytecode and an honest memory-filling strategy.
@@ -31,7 +37,7 @@ Build the current modules with the updated trusted core's Lean project and this 
 available at `formal/Submissions/UpperLeanIsa`:
 
 ```sh
-lake build Submissions.UpperLeanIsa.BasicProperties
+lake build Submissions.UpperLeanIsa.RootBinding
 ```
 
 `Checksum.lean` adapts the namespace and module header of VCVio's

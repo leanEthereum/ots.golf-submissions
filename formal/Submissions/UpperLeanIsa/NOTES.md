@@ -20,6 +20,23 @@ truncating to the 128-bit public key. Every call costs two model compressions.
 required verification cap. `BasicProperties.lean` proves the signature-size bound,
 oversized rejection, zero signing failure and deterministic verification.
 
+`Wire.lean` proves both serialization round trips. `Correctness.lean` first proves
+correctness for every fixed oracle answer table, then uses VCVio's cached-oracle
+support characterization to transfer it to the protected random-oracle experiment.
+This proves perfect correctness even when the message depends on the public key,
+and completes `scheme.Admissible`. The fixed-table lemmas also characterize
+verification on arbitrary raw inputs, not just signatures produced by the signer.
+
+`ForgeryStructure.lean` extracts chain second preimages or an honest word before
+the signed cut, conditional on reconstruction matching the honest endpoint vector.
+`RootBinding.lean` removes that condition by extracting a root second preimage when
+the vectors differ. Its internal comparisons use all 256 hash-output bits; only
+the final root comparison uses the 128 public-key bits. The combined theorem is
+`accepted_forgery_event`. It covers a different signature at the same message too.
+The second-preimage inputs are restricted to the actual reconstructed paths:
+existence of a collision somewhere in the entire oracle table would not give a
+useful probability bound.
+
 ## Remaining proof work
 
 Do not infer a security certificate from the checksum theorem. It excludes simple
@@ -27,6 +44,27 @@ chain-advancing attacks but does not bound oracle attacks. A full proof must acc
 for guessing hidden chain inputs, matching chain outputs, root collisions, adaptive
 message choice, and strong forgeries on the already signed message. Only that proof
 can justify the tentative 128-bit chain values under the exact cost-normalized target.
+
+The remaining gap is probabilistic, not checksum arithmetic. In particular:
+
+1. Relate the real cached experiment to independently sampled chain records,
+   preserving the adversary's views before and after its adaptive signing request.
+   Chain identifiers and positions distinguish honest chain queries, but repeated
+   root inputs still need to be handled because root metadata does not include
+   the absorption index.
+2. Translate the structural witnesses into queries on the real experiment's
+   transcript. The fixed-table support characterization proves correctness; it
+   does not preserve the probability weights needed for security.
+3. Bound hidden-word hits and targeted second preimages, including prior queries,
+   cache hits, root compression, and the final verifier's queries. Charge them to
+   `CostAtMost (experiment scheme adversary) B`, then establish the strict
+   `B / 2^127` inequality.
+
+VCVio's `RandomOracle.ProbeEps` supplies a single-hidden-target hit bound, and
+`RandomOracle.DeferredSampling` supplies probability manipulations. Neither is
+an instantiated WOTS reduction. The pinned `HashSig.SLHDSA.Security` explicitly
+packages primitives without a complete unforgeability theorem; do not replace
+the missing competition proof with an assumed primitive-security hypothesis.
 
 For the bytecode, prefer bounded control flow with every hint constrained. The
 protected cycle bound quantifies over all committed images and uncached answer
