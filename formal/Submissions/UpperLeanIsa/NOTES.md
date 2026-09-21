@@ -59,6 +59,11 @@ same 2^-129 per-compression rate. `Coupling.lean` combines that bound with ident
 until-bad to replace hidden programmed answers by fresh answers for a whole public
 fiber and any bounded payoff.
 
+`Replay.lean` proves exact cached executions for the chains and signing. It allows
+any cache extending the honest record, including one extended by adversarial queries.
+Signing produces the recorded cut signature and leaves the cache unchanged. The
+signature is also proved to depend only on the post-signing public data.
+
 These are checked ingredients, not yet the full security theorem.
 
 ## Remaining proof work

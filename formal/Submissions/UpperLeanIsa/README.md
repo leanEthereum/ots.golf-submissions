@@ -34,6 +34,8 @@ Checked in Lean against core `2d900ae486930689af01a6963d58c574cf17e5f7`:
   into the contract's full security experiment.
 - Programmed records reproduce the algorithm's chain values, signed words, and
   public key. Distributional equivalence to honest key generation remains to prove.
+- Signing against any cache extending the honest record returns its recorded
+  signature and leaves the cache unchanged, for every chosen message.
 
 The compression bounds are algorithm bounds, **not leanISA cycle scores**.
 
@@ -49,7 +51,7 @@ Build the current modules with the updated trusted core's Lean project and this 
 available at `formal/Submissions/UpperLeanIsa`:
 
 ```sh
-lake build Submissions.UpperLeanIsa.Coupling
+lake build Submissions.UpperLeanIsa.Replay
 ```
 
 `Checksum.lean` adapts the namespace and module header of VCVio's
