@@ -1,3 +1,5 @@
+> **Work in progress:** This branch targets 377 cycles. The mixed-width oracle algorithm is certified, but the assembly refinement is unfinished. Inherited 393-cycle machine exports below are not a certificate for this branch. See NOTES.md.
+
 # RISC-V upper bound: 393 cycles
 
 A certified RV64IM verifier for a bare-chain forest one-time signature: every execution,

@@ -23,12 +23,12 @@ attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.setsName Forest.fixedChoice Forest.fixedPositions Forest.fixedDigits
 
 /-- The nodes of chain `k`, in topological order. -/
-def chainNodes (k : Fin 28) : List Name :=
+def chainNodes (k : Fin 32) : List Name :=
   src k :: (List.finRange 32).flatMap (fun t => [ci k t, ch k t, cv k t])
 
 /-- Topological order: the chains one after the other, then the root. -/
 def order : List Name :=
-  (List.finRange 28).flatMap chainNodes ++ [rc, rh]
+  (List.finRange 32).flatMap chainNodes ++ [rc, rh]
 
 set_option maxRecDepth 100000 in
 theorem order_fin : order.map Name.fin = List.finRange N := by decide +kernel
@@ -96,7 +96,7 @@ def verify (pk : PublicKey) (m : Message) (bits : List Bool) :
   if hi : i ∈ validSet then
     let A := Forest.setsName ⟨i, hi⟩
     if (bits.drop 128).length = graph.revealBits (fins A) then
-      let y ← reconstruct A (bits.drop 128)
+      let y ← reconstruct A (Payload.permute (bits.drop 128))
       return decide ((y rh.fin).setWidth 128 = pk)
     else return false
   else return false
@@ -106,6 +106,7 @@ theorem verify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     verify pk m bits = Wire.scheme.verify pk m bits := by
   change verify pk m bits = Forest.forestScheme.verify pk m (Wire.decode bits)
   unfold verify GScheme.verify Wire.decode
+  simp only [Payload.length_permute]
   apply congrArg (fun f => packIndex (emsg m pk) (ofBits 128 (bits.take 128)) >>= f)
   funext i
   by_cases hi : i ∈ validSet
@@ -120,13 +121,13 @@ theorem verify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     · rfl
   · rw [dif_neg hi, dif_neg hi]
 
-/-- Whether a node supplies one of the 28 signature values. -/
-def disclosed (positions : Fin 28 → Fin 32) : Name → Bool
+/-- Whether a node supplies one of the 32 signature values. -/
+def disclosed (positions : Fin 32 → Fin 32) : Name → Bool
   | .ci k t => decide (positions k = t)
   | _ => false
 
 /-- Whether a node is computed from earlier nodes rather than read from the signature. -/
-def evaluated (positions : Fin 28 → Fin 32) : Name → Bool
+def evaluated (positions : Fin 32 → Fin 32) : Name → Bool
   | .src _ => false
   | .ci k t => decide ((positions k).val < t.val)
   | .ch k t | .cv k t => decide ((positions k).val ≤ t.val)
@@ -154,7 +155,7 @@ private theorem evaluated_child {A : Finset Name} {n p : Name} (hc : child n = s
 theorem evaluated_eq (i : Idx) (n : Name) :
     evaluated (fixedPositions i) n = true ↔ Evaluated (Forest.setsName i) n := by
   rw [Forest.setsName]
-  have chain (k : Fin 28) (t : Fin 32) :
+  have chain (k : Fin 32) (t : Fin 32) :
       Evaluated (cutOf (fixedChoice i)) (ch k t) ↔ (fixedPositions i k).val ≤ t.val := by
     rw [evaluated_ch_iff]
     simp only [fixedChoice]

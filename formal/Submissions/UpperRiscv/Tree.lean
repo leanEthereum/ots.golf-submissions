@@ -331,18 +331,9 @@ theorem child_hashOf {a h : Name} (hh : hashOf a = some h) :
   | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hh
 
 theorem hashOf_isSome_iff (a : Name) :
-    (hashOf a).isSome ↔ a.len = 192 ∧ (∀ k, a ≠ src k) ∧ ∀ k, a ≠ ci k 0 := by
-  cases a with
-  | ci k t =>
-    simp only [hashOf, Name.len, true_and, ne_eq, reduceCtorEq, not_false_eq_true, forall_const,
-      Name.ci.injEq]
-    split_ifs with h0
-    · simp only [Option.isSome_none, Bool.false_eq_true, false_iff, not_forall, not_not]
-      exact ⟨k, rfl, Fin.ext h0⟩
-    · simp only [Option.isSome_some, true_iff]
-      rintro k' ⟨-, rfl⟩
-      exact h0 rfl
-  | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf, Name.len]
+    (hashOf a).isSome ↔ ∃ k t, a = ci k t ∧ t.val ≠ 0 := by
+  cases a <;> simp only [hashOf]
+  all_goals try simp
 
 theorem len_of_hashOf {a p : Name} (hp : hashOf a = some p) : p.len = 256 := by
   cases a with
@@ -373,9 +364,9 @@ theorem IsCut.rh_not_mem {A : Finset Name} (h : IsCut A) : rh ∉ A := by
   obtain ⟨_, _, h'⟩ := h.values rh hm
   cases h'
 
-theorem IsCut.len_eq {A : Finset Name} (h : IsCut A) {n : Name} (hn : n ∈ A) : n.len = 192 := by
-  obtain ⟨_, _, rfl⟩ := h.values n hn
-  rfl
+theorem IsCut.len_le {A : Finset Name} (h : IsCut A) {n : Name} (hn : n ∈ A) : n.len ≤ 192 := by
+  obtain ⟨k, _, rfl⟩ := h.values n hn
+  exact chainBits_le k
 
 theorem above_hashOf {a h : Name} (hh : hashOf a = some h) : Above a h := by
   obtain ⟨v, hv, hva⟩ := child_hashOf hh

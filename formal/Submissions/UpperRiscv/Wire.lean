@@ -16,7 +16,7 @@ open OptimalOTS.Dag
 attribute [local irreducible] validSet numValid
 
 def decode (bits : List Bool) : Signature :=
-  (ofBits 128 (bits.take 128), bits.drop 128)
+  (ofBits 128 (bits.take 128), Payload.permute (bits.drop 128))
 
 theorem decode_encode (σ : Signature) :
     decode (AlgorithmAdapter.encodeSignature σ) = σ := by
@@ -28,8 +28,8 @@ theorem decode_encode (σ : Signature) :
 
 theorem encode_decode (bits : List Bool) (hlen : 128 ≤ bits.length) :
     AlgorithmAdapter.encodeSignature (decode bits) = bits := by
-  change toBits (ofBits 128 (bits.take 128)) ++ bits.drop 128 = bits
-  rw [toBits_ofBits _ (by simp [hlen]), List.take_append_drop]
+  change toBits (ofBits 128 (bits.take 128)) ++ Payload.permute (Payload.permute (bits.drop 128)) = bits
+  rw [Payload.permute_permute, toBits_ofBits _ (by simp [hlen]), List.take_append_drop]
 
 theorem reveal_positive (i : Idx) :
     0 < Forest.forestScheme.graph.revealBits (Forest.forestScheme.sets i) := by
@@ -62,7 +62,8 @@ theorem canonical (pk : PublicKey) (m : Message) (bits : List Bool)
     RiscvUpperForest.scheme.encodeSignature (decode bits) = bits := by
   have positive := accepted_payload_positive pk m (decode bits) accepted
   have hlen : 128 ≤ bits.length := by
-    change 0 < (bits.drop 128).length at positive
+    change 0 < (Payload.permute (bits.drop 128)).length at positive
+    rw [Payload.length_permute] at positive
     rw [List.length_drop] at positive
     omega
   exact encode_decode bits hlen
@@ -74,13 +75,13 @@ theorem secure : scheme.Secure :=
 
 theorem admissible : scheme.Admissible :=
   WireAdapter.admissible RiscvUpperForest.scheme decode decode_encode canonical
-    RiscvUpperForest.admissible 255 RiscvUpperForest.cost (by decide)
+    RiscvUpperForest.admissible 206 RiscvUpperForest.cost (by decide)
 
-theorem cost : scheme.VerifyCostAtMost 255 :=
-  WireAdapter.verifyCost RiscvUpperForest.scheme decode 255 RiscvUpperForest.cost
+theorem cost : scheme.VerifyCostAtMost 206 :=
+  WireAdapter.verifyCost RiscvUpperForest.scheme decode 206 RiscvUpperForest.cost
 
 /-- A complete OTS certificate on its transmitted signature bits. -/
-theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 255 := ⟨admissible, secure, cost⟩
+theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 206 := ⟨admissible, secure, cost⟩
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.Wire.certificate' depends on axioms: [propext, Classical.choice, Quot.sound]

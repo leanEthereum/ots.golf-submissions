@@ -4,11 +4,11 @@ import Submissions.UpperRiscv.Count
 /-!
 # Disclosure sets of the bare-chain forest
 
-A disclosure set is described by a *choice* `c : Fin 28 → Fin 32`: for every chain `k` the
+A disclosure set is described by a *choice* `c : Fin 32 → Fin 32`: for every chain `k` the
 position `c k ∈ {0, …, 31}` of the revealed chain input `ci k (c k)` (`0` reveals the input
 `ci k 0`, whose value is the source `z_k`). `cutOf c` is always a cut (`isCut_cutOf`), the choice
 is determined by the set (`cutOf_injective`), and its reconstruction cost is
-`Σ (32 - c k) + 11` (`cost_cutOf`). `FixedChoice.lean` instantiates this with the digits of the
+`Σ (32 - c k) + 13` (`cost_cutOf`). `FixedChoice.lean` instantiates this with the digits of the
 index.
 -/
 
@@ -29,17 +29,17 @@ namespace Forest
 open Name
 
 /-- The revealed node of chain `k` at position `p`. -/
-def chainNode (k : Fin 28) (p : Fin 32) : Name := ci k p
+def chainNode (k : Fin 32) (p : Fin 32) : Name := ci k p
 
 /-- A choice of disclosure set: one position per chain. -/
-abbrev Choice := Fin 28 → Fin 32
+abbrev Choice := Fin 32 → Fin 32
 
 /-- The disclosure set of a choice. -/
 def cutOf (c : Choice) : Finset Name := Finset.univ.image fun k => chainNode k (c k)
 
 /-! ### Membership in a disclosure set -/
 
-theorem chainNode_len (k : Fin 28) (p : Fin 32) : (chainNode k p).len = 192 := rfl
+theorem chainNode_len (k : Fin 32) (p : Fin 32) : (chainNode k p).len = chainBits k := rfl
 
 theorem chainNode_injective (c : Choice) : Function.Injective (fun k => chainNode k (c k)) := by
   intro k l equal
@@ -51,7 +51,7 @@ theorem mem_cutOf_iff (c : Choice) (n : Name) :
   unfold cutOf
   simp only [Finset.mem_image, Finset.mem_univ, true_and]
 
-theorem ci_mem_cutOf_iff (c : Choice) (k : Fin 28) (t : Fin 32) :
+theorem ci_mem_cutOf_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
     ci k t ∈ cutOf c ↔ c k = t := by
   rw [mem_cutOf_iff]
   constructor
@@ -67,13 +67,13 @@ theorem mem_cutOf_ci {c : Choice} {n : Name} (hn : n ∈ cutOf c) : ∃ k t, n =
   obtain ⟨k, rfl⟩ := hn
   exact ⟨k, c k, rfl⟩
 
-theorem src_not_mem_cutOf (c : Choice) (k : Fin 28) : src k ∉ cutOf c := by
+theorem src_not_mem_cutOf (c : Choice) (k : Fin 32) : src k ∉ cutOf c := by
   intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
-theorem ch_not_mem_cutOf (c : Choice) (k : Fin 28) (t : Fin 32) : ch k t ∉ cutOf c := by
+theorem ch_not_mem_cutOf (c : Choice) (k : Fin 32) (t : Fin 32) : ch k t ∉ cutOf c := by
   intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
-theorem cv_not_mem_cutOf (c : Choice) (k : Fin 28) (t : Fin 32) : cv k t ∉ cutOf c := by
+theorem cv_not_mem_cutOf (c : Choice) (k : Fin 32) (t : Fin 32) : cv k t ∉ cutOf c := by
   intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
 theorem rc_not_mem_cutOf (c : Choice) : rc ∉ cutOf c := by
@@ -82,7 +82,7 @@ theorem rc_not_mem_cutOf (c : Choice) : rc ∉ cutOf c := by
 theorem rh_not_mem_cutOf (c : Choice) : rh ∉ cutOf c := by
   intro h; obtain ⟨_, _, h'⟩ := mem_cutOf_ci h; cases h'
 
-theorem card_cutOf (c : Choice) : (cutOf c).card = 28 := by
+theorem card_cutOf (c : Choice) : (cutOf c).card = 32 := by
   unfold cutOf
   rw [Finset.card_image_of_injective _ (chainNode_injective c), Finset.card_univ,
     Fintype.card_fin]
@@ -117,7 +117,7 @@ theorem evaluated_rh (c : Choice) : Evaluated (cutOf c) rh :=
 theorem evaluated_rc (c : Choice) : Evaluated (cutOf c) rc :=
   evaluated_of_child rfl (rc_not_mem_cutOf c) (evaluated_rh c)
 
-theorem evaluated_ch_iff (c : Choice) (k : Fin 28) (t : Fin 32) :
+theorem evaluated_ch_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
     Evaluated (cutOf c) (ch k t) ↔ (c k).val ≤ t.val := by
   unfold Evaluated
   simp only [above_iff_mem_ancSet, ancSet, Finset.forall_mem_union, Finset.forall_mem_image,
@@ -135,7 +135,7 @@ theorem evaluated_ch_iff (c : Choice) (k : Fin 28) (t : Fin 32) :
 
 /-- The input of a chain hash is evaluated exactly when it lies strictly above the revealed
 position. -/
-theorem evaluated_ci_iff (c : Choice) (k : Fin 28) (t : Fin 32) :
+theorem evaluated_ci_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
     Evaluated (cutOf c) (ci k t) ↔ (c k).val < t.val := by
   constructor
   · intro h
@@ -149,12 +149,12 @@ theorem evaluated_ci_iff (c : Choice) (k : Fin 28) (t : Fin 32) :
     rw [this] at h
     exact lt_irrefl _ h
 
-theorem child_cv_of_lt (k : Fin 28) (t : Fin 32) (ht : t.val < 31) :
+theorem child_cv_of_lt (k : Fin 32) (t : Fin 32) (ht : t.val < 31) :
     child (cv k t) = some (ci k ⟨t.val + 1, by omega⟩) := by
   simp only [Name.child]
   rw [dif_neg (by omega)]
 
-theorem child_cv_of_eq (k : Fin 28) (t : Fin 32) (ht : t.val = 31) :
+theorem child_cv_of_eq (k : Fin 32) (t : Fin 32) (ht : t.val = 31) :
     child (cv k t) = some rc := by
   simp only [Name.child]
   rw [dif_pos ht]
@@ -180,9 +180,18 @@ theorem sum_fin32_ge (v : ℕ) : ∑ t : Fin 32, (if v ≤ t.val then 1 else 0) 
     omega
   rw [this, Nat.card_Ico]
 
-/-- The reconstruction cost of a disclosure set: the chain steps and the 11-block root. -/
+/-- Every cut reveals eight 192-bit and twenty-four 160-bit states. -/
+theorem reveal_cutOf (c : Choice) : ∑ n ∈ cutOf c, n.len = 5376 := by
+  unfold cutOf
+  rw [Finset.sum_image]
+  · change ∑ k : Fin 32, chainBits k = 5376
+    decide +kernel
+  · intro a _ b _ h
+    exact chainNode_injective c h
+
+/-- The reconstruction cost of a disclosure set: the chain steps and the 13-block root. -/
 theorem cost_cutOf (c : Choice) :
-    ∑ n ∈ evaluatedSet (cutOf c), n.cost = (∑ k, (32 - (c k).val)) + 11 := by
+    ∑ n ∈ evaluatedSet (cutOf c), n.cost = (∑ k, (32 - (c k).val)) + 13 := by
   have h_ch : ∑ k, ∑ t, (if Evaluated (cutOf c) (ch k t) then 1 else 0) =
       ∑ k, (32 - (c k).val) := by
     simp only [evaluated_ch_iff]

@@ -209,18 +209,18 @@ theorem miss_trials_le : miss ^ trials ≤ (882 / 1000 : ℝ≥0∞) / 2 ^ 128 :
 
 /-- The bad records weigh less than `2 ^ (-135)`. -/
 theorem δ_le : δ ≤ 1 / 2 ^ 135 := by
-  have h0 : (2 : ℝ≥0∞) ^ 57 ≠ 0 := by simp
-  have ht : (2 : ℝ≥0∞) ^ 57 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
-  have e : ε₁ = ((2 : ℝ≥0∞) ^ 57)⁻¹ * ((2 : ℝ≥0∞) ^ 135)⁻¹ := by
-    rw [ε₁, show (2 : ℝ≥0∞) ^ 192 = 2 ^ 57 * 2 ^ 135 by rw [← pow_add],
+  have h0 : (2 : ℝ≥0∞) ^ 25 ≠ 0 := by simp
+  have ht : (2 : ℝ≥0∞) ^ 25 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
+  have e : ε₁ = ((2 : ℝ≥0∞) ^ 25)⁻¹ * ((2 : ℝ≥0∞) ^ 135)⁻¹ := by
+    rw [ε₁, show (2 : ℝ≥0∞) ^ 160 = 2 ^ 25 * 2 ^ 135 by rw [← pow_add],
       ENNReal.mul_inv (Or.inl h0) (Or.inl ht)]
   rw [δ, e, one_div]
-  calc 2 * (897 * 897) * (((2 : ℝ≥0∞) ^ 57)⁻¹ * ((2 : ℝ≥0∞) ^ 135)⁻¹)
-      = (2 * (897 * 897) * ((2 : ℝ≥0∞) ^ 57)⁻¹) * ((2 : ℝ≥0∞) ^ 135)⁻¹ := by ring
+  calc 2 * (1025 * 1025) * (((2 : ℝ≥0∞) ^ 25)⁻¹ * ((2 : ℝ≥0∞) ^ 135)⁻¹)
+      = (2 * (1025 * 1025) * ((2 : ℝ≥0∞) ^ 25)⁻¹) * ((2 : ℝ≥0∞) ^ 135)⁻¹ := by ring
     _ ≤ 1 * ((2 : ℝ≥0∞) ^ 135)⁻¹ := by
         refine mul_le_mul' ?_ le_rfl
         rw [← div_eq_mul_inv, ENNReal.div_le_iff h0 ht]
-        exact_mod_cast (by norm_num : (2 * (897 * 897) : ℕ) ≤ 1 * 2 ^ 57)
+        exact_mod_cast (by norm_num : (2 * (1025 * 1025) : ℕ) ≤ 1 * 2 ^ 25)
     _ = ((2 : ℝ≥0∞) ^ 135)⁻¹ := one_mul _
 
 /-- The two failure terms fit the allowance. -/
@@ -250,7 +250,7 @@ theorem sign_failure (x : forestScheme.graph.Assignment) (m : Message)
       (fun p => if p.1.isNone then 1 else 0) = miss ^ trials := by
   rw [sign_eq_map, run_map, E_map]
   simp only [Option.isNone_map]
-  exact loop_failure (emsg m (forestScheme.publicKey x)) _ ∅ c (by norm_num [nonceBits, idxBits, numCuts, trials, idxCost, blockCost, signBudget, msgBits, blockBits]) (fun η _ => hfresh η)
+  exact loop_failure (emsg m (forestScheme.publicKey x)) _ ∅ c (by norm_num [nonceBits, idxBits, numCuts, trials, idxCost, blockCost, signBudget, msgBits, pkBits, blockBits]) (fun η _ => hfresh η)
 
 /-- Failure remains bounded even when the message is chosen after seeing the public key. -/
 theorem signingFailure_strong :

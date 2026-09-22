@@ -44,18 +44,20 @@ def val (ξ : Rec) (n : Name) : BitVec n.len := (graph.evalRec ξ n.fin).cast (g
 
 /-! ### Auxiliary cast lemmas -/
 
-theorem trunc_cast {n m : ℕ} (h : n = m) (x : BitVec n) : trunc (x.cast h) = trunc x := by
+theorem trunc_cast (k : Fin 32) {n m : ℕ} (h : n = m) (x : BitVec n) : trunc k (x.cast h) = trunc k x := by
   subst h; rfl
 
-theorem trunc_eq_self (x : BitVec 192) : trunc x = x := by
+theorem trunc_eq_self (k : Fin 32) (x : BitVec (chainBits k)) : trunc k x = x := by
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
   simp [trunc, BitVec.getLsbD_extractLsb', hi]
 
-theorem trunc_trunc {n : ℕ} (x : BitVec n) : trunc (trunc x) = trunc x := trunc_eq_self _
+theorem trunc_trunc (k : Fin 32) {n : ℕ} (x : BitVec n) : trunc k (trunc k x) = trunc k x := trunc_eq_self k _
 
-/-- On a hash output, `trunc` is the high 192 bits. -/
-theorem trunc_256 (x : BitVec 256) : trunc x = x.extractLsb' 64 192 := rfl
+/-- On a hash output, `trunc k` is the high 192 bits. -/
+theorem trunc_256 (k : Fin 32) (x : BitVec 256) : trunc k x = x.extractLsb' 64 (chainBits k) := by
+  unfold trunc
+  rw [Nat.min_eq_left (by have := chainBits_le k; omega)]
 
 theorem cast_cast_eq {n m : ℕ} (h₁ : n = m) (h₂ : m = n) (x : BitVec n) :
     (x.cast h₁).cast h₂ = x := by
@@ -68,46 +70,46 @@ theorem evalRec_apply_fin (ξ : Rec) (n : Name) :
   have := Graph.evalRec_apply graph ξ n.fin
   rwa [graph_kind_fin] at this
 
-theorem trunc_evalRec (ξ : Rec) (n : Name) : trunc (graph.evalRec ξ n.fin) = trunc (val ξ n) := by
+theorem trunc_evalRec (k : Fin 32) (ξ : Rec) (n : Name) : trunc k (graph.evalRec ξ n.fin) = trunc k (val ξ n) := by
   unfold val
-  exact (trunc_cast _ _).symm
+  exact (trunc_cast k _ _).symm
 
-theorem val_src (ξ : Rec) (k : Fin 28) : val ξ (src k) = (ξ.1 (src k).fin).cast (graph_len_fin _) := by
+theorem val_src (ξ : Rec) (k : Fin 32) : val ξ (src k) = (ξ.1 (src k).fin).cast (graph_len_fin _) := by
   unfold val
   rw [evalRec_apply_fin]
   rfl
 
 /-- Truncation loses nothing on a value of 192 bits. -/
-theorem trunc_injective_of_len {w : ℕ} (hw : w = 192) :
-    Function.Injective (trunc : BitVec w → BitVec 192) := by
+theorem trunc_injective_of_len (k : Fin 32) {w : ℕ} (hw : w = chainBits k) :
+    Function.Injective (trunc k : BitVec w → BitVec (chainBits k)) := by
   subst hw
   intro x y e
   rwa [trunc_eq_self, trunc_eq_self] at e
 
 /-- The input of the chain hash `ch k t`: the high 192 bits of the value of `prev k t`. -/
-theorem val_ci (ξ : Rec) (k : Fin 28) (t : Fin 32) :
-    val ξ (ci k t) = trunc (val ξ (prev k t)) := by
+theorem val_ci (ξ : Rec) (k : Fin 32) (t : Fin 32) :
+    val ξ (ci k t) = trunc k (val ξ (prev k t)) := by
   unfold val
   rw [evalRec_apply_fin]
   simp only [kindOf, NodeKind.value]
   refine (cast_cast_eq _ _ _).trans ?_
-  show trunc (graph.evalRec ξ (prev k t).fin) = _
+  show trunc k (graph.evalRec ξ (prev k t).fin) = _
   rw [trunc_evalRec]
   rfl
 
-theorem val_ch (ξ : Rec) (k : Fin 28) (t : Fin 32) : val ξ (ch k t) = ξ.2 (ch k t).fin := by
+theorem val_ch (ξ : Rec) (k : Fin 32) (t : Fin 32) : val ξ (ch k t) = ξ.2 (ch k t).fin := by
   unfold val
   rw [evalRec_apply_fin]
   simp only [kindOf, NodeKind.value]
   exact cast_cast_eq _ _ _
 
-theorem trunc_val_ch (ξ : Rec) (k : Fin 28) (t : Fin 32) :
-    trunc (graph.evalRec ξ (ch k t).fin) = trunc (ξ.2 (ch k t).fin) := by
+theorem trunc_val_ch (ξ : Rec) (k : Fin 32) (t : Fin 32) :
+    trunc k (graph.evalRec ξ (ch k t).fin) = trunc k (ξ.2 (ch k t).fin) := by
   rw [trunc_evalRec, val_ch]
   rfl
 
 /-- The value node of a level carries the full hash output. -/
-theorem val_cv (ξ : Rec) (k : Fin 28) (t : Fin 32) : val ξ (cv k t) = ξ.2 (ch k t).fin := by
+theorem val_cv (ξ : Rec) (k : Fin 32) (t : Fin 32) : val ξ (cv k t) = ξ.2 (ch k t).fin := by
   apply BitVec.eq_of_toNat_eq
   unfold val
   rw [evalRec_apply_fin]
@@ -117,21 +119,21 @@ theorem val_cv (ξ : Rec) (k : Fin 28) (t : Fin 32) : val ξ (cv k t) = ξ.2 (ch
   rw [h]
   rfl
 
-theorem trunc_val_cv (ξ : Rec) (k : Fin 28) (t : Fin 32) :
-    trunc (graph.evalRec ξ (cv k t).fin) = trunc (ξ.2 (ch k t).fin) := by
+theorem trunc_val_cv (ξ : Rec) (k : Fin 32) (t : Fin 32) :
+    trunc k (graph.evalRec ξ (cv k t).fin) = trunc k (ξ.2 (ch k t).fin) := by
   rw [trunc_evalRec, val_cv]
   rfl
 
 /-- The first chain input reads the source. -/
-theorem val_ci_zero (ξ : Rec) (k : Fin 28) (t : Fin 32) (ht : t.val = 0) :
+theorem val_ci_zero (ξ : Rec) (k : Fin 32) (t : Fin 32) (ht : t.val = 0) :
     val ξ (ci k t) = val ξ (src k) := by
   have e : prev k t = src k := by simp [Name.prev, ht]
   rw [val_ci, e]
-  exact trunc_eq_self _
+  exact trunc_eq_self k _
 
 /-- A later chain input reads the previous chain hash. -/
-theorem val_ci_succ (ξ : Rec) (k : Fin 28) (t : Fin 32) (ht : ¬ t.val = 0) :
-    val ξ (ci k t) = trunc (ξ.2 (ch k ⟨t.val - 1, by omega⟩).fin) := by
+theorem val_ci_succ (ξ : Rec) (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 0) :
+    val ξ (ci k t) = trunc k (ξ.2 (ch k ⟨t.val - 1, by omega⟩).fin) := by
   have e : prev k t = cv k ⟨t.val - 1, by omega⟩ := by simp [Name.prev, ht]
   rw [val_ci, e, val_cv]
   rfl
@@ -177,18 +179,20 @@ theorem child_hashParent {h p : Name} (hp : hashParent h = some p) : child p = s
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   all_goals rfl
 
-/-- The input of a hash node has length 192 (chains) or 5440 (root). -/
+/-- The input of a hash node has length 192 (chains) or 6272 (root). -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 192 ∨ p.len = 5440 := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;>
-    simp [Name.len]
+    p.len = 160 ∨ p.len = 192 ∨ p.len = 6272 := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
+  · rename_i k t
+    rcases chainBits_cases k with hk | hk <;> simp [Name.len, hk]
+  · simp [Name.len]
 
-/-- The input of a hash node never has the length of an index query. -/
+/-- Key generation and indexing use disjoint input lengths. -/
 theorem len_hashParent_ne_enc {h p : Name} (hp : hashParent h = some p) :
     p.len ≠ emsgBits + nonceBits := by
   have e : emsgBits + nonceBits = 512 := rfl
   rw [e]
-  rcases len_hashParent_cases hp with e | e <;> omega
+  rcases len_hashParent_cases hp with e | e | e <;> omega
 
 /-- The keygen point of the hash node `h` with parent `p`: the bare input of `h`. The hash node
 is not written next to the input (the oracle has no labels, the scheme no headers). -/
@@ -423,11 +427,15 @@ theorem fHid_isSome_some_iff (A : Finset Name) (ξ : Rec) (q : Query) :
 
 /-! ## The event `Spr` -/
 
+/-- A 192-bit slice committed by the root, for each chain in execution order. -/
+def rootSlice (k : Fin 32) (w : BitVec 256) : BitVec 192 :=
+  if k.val < 8 then lo192 w else w.extractLsb' 64 192
+
 /-- `sim ξ h w`: the answer `w` agrees with the honest output of the hash node `h` on the bits the
 graph consumes: the high 192 bits along a chain, the low 192 bits at a chain top (read by the root
 input) and the public-key prefix at the root. -/
 def sim (ξ : Rec) : Name → BitVec 256 → Prop
-  | ch k t, w => if t.val = 31 then lo192 w = lo192 (ξ.2 (ch k t).fin) else trunc w = trunc (ξ.2 (ch k t).fin)
+  | ch k t, w => if t.val = 31 then rootSlice k w = rootSlice k (ξ.2 (ch k t).fin) else trunc k w = trunc k (ξ.2 (ch k t).fin)
   | rh, w => trunc128 w = trunc128 (ξ.2 rh.fin)
   | _, _ => False
 
@@ -437,16 +445,16 @@ theorem sim_self (ξ : Rec) (h : Name) (hh : (hashParent h).isSome) : sim ξ h (
   · split_ifs <;> rfl
   · rfl
 
-theorem sim_ch_of_lt {ξ : Rec} {k : Fin 28} {t : Fin 32} (ht : t.val ≠ 31) {w : BitVec 256}
-    (hs : sim ξ (ch k t) w) : trunc w = trunc (ξ.2 (ch k t).fin) := by
+theorem sim_ch_of_lt {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : t.val ≠ 31) {w : BitVec 256}
+    (hs : sim ξ (ch k t) w) : trunc k w = trunc k (ξ.2 (ch k t).fin) := by
   simpa [sim, ht] using hs
 
-theorem sim_ch_top {ξ : Rec} {k : Fin 28} {t : Fin 32} (ht : t.val = 31) {w : BitVec 256}
-    (hs : sim ξ (ch k t) w) : lo192 w = lo192 (ξ.2 (ch k t).fin) := by
+theorem sim_ch_top {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : t.val = 31) {w : BitVec 256}
+    (hs : sim ξ (ch k t) w) : rootSlice k w = rootSlice k (ξ.2 (ch k t).fin) := by
   simpa [sim, ht] using hs
 
-theorem sim_ch_of_trunc {ξ : Rec} {k : Fin 28} {t : Fin 32} (ht : t.val ≠ 31) {w : BitVec 256}
-    (hs : trunc w = trunc (ξ.2 (ch k t).fin)) : sim ξ (ch k t) w := by
+theorem sim_ch_of_trunc {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : t.val ≠ 31) {w : BitVec 256}
+    (hs : trunc k w = trunc k (ξ.2 (ch k t).fin)) : sim ξ (ch k t) w := by
   simpa [sim, ht] using hs
 
 theorem sim_rh_iff (ξ : Rec) (w : BitVec 256) : sim ξ rh w ↔ trunc128 w = trunc128 (ξ.2 rh.fin) :=
@@ -565,45 +573,59 @@ theorem card_filter_trunc128_le (a : BitVec 128) :
     (Finset.univ.filter fun w : BitVec 256 => trunc128 w = a).card ≤ 2 ^ 128 :=
   card_filter_setWidth_le 128 (by norm_num) a
 
-/-- At most `2 ^ 64` values of `256` bits have a given high 192 bits. -/
-theorem card_filter_trunc_le' (a : BitVec 192) :
-    (Finset.univ.filter fun w : BitVec 256 => trunc w = a).card ≤ 2 ^ 64 := by
-  have key : (Finset.univ.filter fun w : BitVec 256 => trunc w = a).card ≤
-      (Finset.univ : Finset (BitVec 64)).card := by
-    refine Finset.card_le_card_of_injOn (fun w => w.setWidth 64)
+/-- Fixing the middle 160 bits leaves at most 96 unconstrained bits. This also
+bounds the wider chain slices. -/
+theorem card_filter_trunc_le' (k : Fin 32) (a : BitVec (chainBits k)) :
+    (Finset.univ.filter fun w : BitVec 256 => trunc k w = a).card ≤ 2 ^ 96 := by
+  have key : (Finset.univ.filter fun w : BitVec 256 => trunc k w = a).card ≤
+      (Finset.univ : Finset (BitVec 96)).card := by
+    refine Finset.card_le_card_of_injOn
+      (fun w => w.extractLsb' 224 32 ++ w.setWidth 64)
       (fun _ _ => Finset.mem_univ _) ?_
     intro w hw w' hw' e
     rw [Finset.mem_coe, Finset.mem_filter] at hw hw'
-    have hlow : ∀ i, i < 64 → w.getLsbD i = w'.getLsbD i := by
-      intro i hi
-      have := congrArg (fun x : BitVec 64 => x.getLsbD i) e
-      simpa [BitVec.getLsbD_setWidth, hi] using this
-    have hhigh : ∀ i, 64 ≤ i → i < 256 → w.getLsbD i = w'.getLsbD i := by
-      intro i hi1 hi2
-      have := congrArg (fun x : BitVec 192 => x.getLsbD (i - 64)) (hw.2.trans hw'.2.symm)
-      have h1 : i - 64 < 192 := by omega
-      have h2 : 64 + (i - 64) = i := by omega
-      simpa [trunc, BitVec.getLsbD_extractLsb', h1, h2] using this
     apply BitVec.eq_of_getLsbD_eq
-    intro i hi2
-    by_cases hi : i < 64
-    · exact hlow i hi
-    · exact hhigh i (by omega) hi2
-  rw [Finset.card_univ, Fintype.card_bitVec] at key
-  exact key
+    intro i hi
+    by_cases hlo : i < 64
+    · have h := congrArg (fun x : BitVec 96 => x.getLsbD i) e
+      simpa only [BitVec.getLsbD_append, hlo, if_true, BitVec.getLsbD_setWidth, decide_true, Bool.true_and] using h
+    · by_cases hmid : i < 224
+      · have h := congrArg (fun x : BitVec (chainBits k) => x.getLsbD (i - 64))
+          (hw.2.trans hw'.2.symm)
+        have h1 : i - 64 < chainBits k := by have := chainBits_ge k; omega
+        have h2 : 64 + (i - 64) = i := by omega
+        simpa [trunc_256, BitVec.getLsbD_extractLsb', h1, h2] using h
+      · have h := congrArg (fun x : BitVec 96 => x.getLsbD (i - 160)) e
+        have h1 : ¬ i - 160 < 64 := by omega
+        have h2 : i - 160 - 64 < 32 := by omega
+        have h3 : 224 + (i - 160 - 64) = i := by omega
+        simpa only [BitVec.getLsbD_append, h1, if_false, BitVec.getLsbD_extractLsb', h2, decide_true, Bool.true_and, h3] using h
+  simpa using key
 
-/-- At most `2 ^ 64` values of `256` bits simulate a chain hash node. -/
+/-- The root slice determines at least the chain slice's 160 bits. -/
+theorem card_filter_rootSlice_le (k : Fin 32) (a : BitVec 192) :
+    (Finset.univ.filter fun w : BitVec 256 => rootSlice k w = a).card ≤ 2 ^ 96 := by
+  by_cases hk : k.val < 8
+  · simpa [rootSlice, hk] using (card_filter_lo192_le' a).trans (show 2 ^ 64 ≤ 2 ^ 96 by norm_num)
+  · refine le_trans (Finset.card_le_card fun w hw => ?_)
+      (card_filter_trunc_le' k (a.setWidth (chainBits k)))
+    simp only [Finset.mem_filter] at hw ⊢
+    refine ⟨hw.1, ?_⟩
+    have h := congrArg (fun x : BitVec 192 => x.setWidth (chainBits k)) hw.2
+    simp only [rootSlice, hk, if_false] at h
+    rw [← h, trunc_256]
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    have hi' : i < 192 := by have := chainBits_le k; omega
+    simp [BitVec.getLsbD_setWidth, BitVec.getLsbD_extractLsb', hi, hi']
+
 theorem card_filter_sim_le' (ξ : Rec) (h : Name) (hh : h ≠ rh) :
-    (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 64 := by
+    (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 96 := by
   cases h with
   | ch k t =>
     by_cases ht : t.val = 31
-    · refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_lo192_le' (lo192 (ξ.2 (ch k t).fin)))
-      rw [Finset.mem_filter] at hw ⊢
-      exact ⟨hw.1, sim_ch_top ht hw.2⟩
-    · refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_trunc_le' (trunc (ξ.2 (ch k t).fin)))
-      rw [Finset.mem_filter] at hw ⊢
-      exact ⟨hw.1, sim_ch_of_lt ht hw.2⟩
+    · simpa [sim, ht] using card_filter_rootSlice_le k (rootSlice k (ξ.2 (ch k t).fin))
+    · simpa [sim, ht] using card_filter_trunc_le' k (trunc k (ξ.2 (ch k t).fin))
   | rh => exact absurd rfl hh
   | src _ | ci _ _ | cv _ _ | rc =>
     rw [Finset.card_eq_zero.2 (Finset.filter_eq_empty_iff.2 fun w _ hs => by simpa [sim] using hs)]
@@ -612,7 +634,7 @@ theorem card_filter_sim_le' (ξ : Rec) (h : Name) (hh : h ≠ rh) :
 /-- The hash nodes. -/
 def hashNodes : Finset Name := Finset.univ.filter fun h => (hashParent h).isSome
 
-theorem card_hashNodes : hashNodes.card = 897 := by
+theorem card_hashNodes : hashNodes.card = 1025 := by
   unfold hashNodes
   rw [Finset.card_filter, Name.sum_eq]
   simp only [hashParent, Option.isSome_some, Option.isSome_none, Bool.false_eq_true, if_true,
@@ -625,10 +647,11 @@ theorem mem_hashNodes {h : Name} : h ∈ hashNodes ↔ (hashParent h).isSome := 
 
 attribute [irreducible] hashNodes
 
-theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 5440) :
+theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 6272) :
     h = rh := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
-  · simp [Name.len] at hl
+  · simp [Name.len, chainBits] at hl
+    split_ifs at hl <;> contradiction
   · rfl
 
 /-- The answers simulating some hash node whose input has length `n`. -/
@@ -637,7 +660,7 @@ def simSet (ξ : Rec) (n : ℕ) : Finset (BitVec 256) :=
 
 /-- At most `2 ^ 128` answers simulate some hash node of a given input length. -/
 theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := by
-  by_cases hn : n = 5440
+  by_cases hn : n = 6272
   · subst hn
     refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_trunc128_le (trunc128 (ξ.2 rh.fin)))
     rw [simSet, Finset.mem_filter] at hw
@@ -658,7 +681,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
       exact hn hl.symm
     refine (Finset.card_le_card hsub).trans ((Finset.card_biUnion_le).trans ?_)
     calc ∑ h ∈ hashNodes, (Finset.univ.filter fun w : BitVec 256 => sim ξ h w ∧ h ≠ rh).card
-        ≤ ∑ _h ∈ hashNodes, 2 ^ 64 := by
+        ≤ ∑ _h ∈ hashNodes, 2 ^ 96 := by
           refine Finset.sum_le_sum fun h _ => ?_
           by_cases hh : h = rh
           · subst hh
@@ -669,7 +692,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
           · refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_sim_le' ξ h hh)
             rw [Finset.mem_filter] at hw ⊢
             exact ⟨hw.1, hw.2.1⟩
-      _ = 897 * 2 ^ 64 := by rw [Finset.sum_const, card_hashNodes, smul_eq_mul]
+      _ = 1025 * 2 ^ 96 := by rw [Finset.sum_const, card_hashNodes, smul_eq_mul]
       _ ≤ 2 ^ 128 := by norm_num
 
 theorem inv_card_bitVec_mul_two_pow : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * ((2 ^ 128 : ℕ) : ℝ≥0∞) = ε := by
@@ -735,29 +758,29 @@ def deps : Name → Finset Name
   | rc => Finset.univ.image fun k => ch k 31
   | rh => {rh}
 
-theorem deps_ci_zero (k : Fin 28) (t : Fin 32) (ht : t.val = 0) : deps (ci k t) = {src k} := by
+theorem deps_ci_zero (k : Fin 32) (t : Fin 32) (ht : t.val = 0) : deps (ci k t) = {src k} := by
   simp only [deps, dif_pos ht]
 
-theorem deps_ci_succ (k : Fin 28) (t : Fin 32) (ht : ¬ t.val = 0) :
+theorem deps_ci_succ (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 0) :
     deps (ci k t) = {ch k ⟨t.val - 1, by omega⟩} := by
   simp only [deps, dif_neg ht]
 
-theorem child_src_ci (k : Fin 28) (t : Fin 32) (ht : t.val = 0) : child (src k) = some (ci k t) := by
+theorem child_src_ci (k : Fin 32) (t : Fin 32) (ht : t.val = 0) : child (src k) = some (ci k t) := by
   have e : t = 0 := Fin.ext ht
   subst e
   rfl
 
-theorem child_cv_ci (k : Fin 28) (t : Fin 32) (ht : ¬ t.val = 0) :
+theorem child_cv_ci (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 0) :
     child (cv k ⟨t.val - 1, by omega⟩) = some (ci k t) := by
   simp only [Name.child]
   rw [dif_neg (by omega)]
   simp only [Option.some.injEq, Name.ci.injEq, true_and, Fin.ext_iff]
   omega
 
-theorem child_cv_31 (k : Fin 28) : child (cv k 31) = some rc := rfl
+theorem child_cv_31 (k : Fin 32) : child (cv k 31) = some rc := rfl
 
 /-- Resample a source. -/
-def updSrc (ξ : Rec) (k : Fin 28) (b : BitVec 192) : Rec :=
+def updSrc (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) : Rec :=
   (Function.update ξ.1 (src k).fin (b.cast (graph_len_fin (src k)).symm), ξ.2)
 
 /-- Resample a hash output. -/
@@ -771,7 +794,7 @@ theorem updHash_snd_ne (ξ : Rec) (s : Name) (b : BitVec 256) {n : Name} (h : n 
   simp only [updHash]
   exact Function.update_of_ne (fun e => h (Name.fin_injective e)) _ _
 
-theorem updSrc_snd (ξ : Rec) (k : Fin 28) (b : BitVec 192) : (updSrc ξ k b).2 = ξ.2 := rfl
+theorem updSrc_snd (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) : (updSrc ξ k b).2 = ξ.2 := rfl
 
 theorem val_updHash_of_not_mem_deps (ξ : Rec) (s : Name) (b : BitVec 256) (n : Name)
     (h : s ∉ deps n) : val (updHash ξ s b) n = val ξ n := by
@@ -799,13 +822,13 @@ theorem val_updHash_of_not_mem_deps (ξ : Rec) (s : Name) (b : BitVec 256) (n : 
     simp only [deps, Finset.mem_singleton] at h
     rw [val_rh, val_rh, updHash_snd_ne _ _ _ (Ne.symm h)]
 
-theorem val_updSrc_src_of_ne (ξ : Rec) (k : Fin 28) (b : BitVec 192) {k' : Fin 28} (h : ¬ k = k') :
+theorem val_updSrc_src_of_ne (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) {k' : Fin 32} (h : ¬ k = k') :
     val (updSrc ξ k b) (src k') = val ξ (src k') := by
   have e : (updSrc ξ k b).1 (src k').fin = ξ.1 (src k').fin :=
     Function.update_of_ne (fun e => h (Name.src.inj (Name.fin_injective e)).symm) _ _
   rw [val_src, val_src, e]
 
-theorem val_updSrc_of_not_mem_deps (ξ : Rec) (k : Fin 28) (b : BitVec 192) (n : Name)
+theorem val_updSrc_of_not_mem_deps (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) (n : Name)
     (h : src k ∉ deps n) : val (updSrc ξ k b) n = val ξ n := by
   cases n with
   | src k' =>
@@ -821,7 +844,7 @@ theorem val_updSrc_of_not_mem_deps (ξ : Rec) (k : Fin 28) (b : BitVec 192) (n :
   | rc => rw [val_rc, val_rc, updSrc_snd]
   | rh => rw [val_rh, val_rh, updSrc_snd]
 
-theorem val_updSrc_self (ξ : Rec) (k : Fin 28) (b : BitVec 192) :
+theorem val_updSrc_self (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) :
     val (updSrc ξ k b) (src k) = b := by
   have e : (updSrc ξ k b).1 (src k).fin = b.cast (graph_len_fin (src k)).symm :=
     Function.update_self _ _ _
@@ -836,7 +859,7 @@ theorem snd_updHash_self (ξ : Rec) (s : Name) (b : BitVec 256) :
     (updHash ξ s b).2 s.fin = b :=
   updHash_snd_self ξ s b
 
-theorem snd_updSrc (ξ : Rec) (k : Fin 28) (b : BitVec 192) : (updSrc ξ k b).2 = ξ.2 := rfl
+theorem snd_updSrc (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) : (updSrc ξ k b).2 = ξ.2 := rfl
 
 /-! ## The coordinate that randomizes the input of a hash node -/
 
@@ -875,7 +898,7 @@ theorem low192_lowCat (c : ℕ → BitVec 256) : ∀ j, (lowCat c j).setWidth 19
   | j + 1 => by
     rw [lowCat, setWidth_cast, BitVec.setWidth_append, dif_pos (by omega), low192_lowCat c j]
 
-theorem low192_rootCat (c : Fin 28 → BitVec 256) : (rootCat c).setWidth 192 = lo192 (c 0) := by
+theorem low192_rootCat (c : Fin 32 → BitVec 256) : (rootCat c).setWidth 192 = lo192 (c 0) := by
   unfold rootCat
   rw [setWidth_cast, BitVec.setWidth_append, dif_pos (by norm_num), low192_lowCat]
   rfl
@@ -899,10 +922,10 @@ theorem card_updHash_rc_le (ξ : Rec) (u : BitVec rc.len) :
   rwa [updHash_snd_self] at e2
 
 /-- A filter whose members all have the same truncation has at most `2 ^ 128` elements. -/
-theorem card_filter_le_of_imp (p : BitVec 256 → Prop) [DecidablePred p] (a : BitVec 192)
-    (hp : ∀ b, p b → trunc b = a) : (Finset.univ.filter p).card ≤ 2 ^ 128 :=
+theorem card_filter_le_of_imp (k : Fin 32) (p : BitVec 256 → Prop) [DecidablePred p] (a : BitVec (chainBits k))
+    (hp : ∀ b, p b → trunc k b = a) : (Finset.univ.filter p).card ≤ 2 ^ 128 :=
   le_trans (Finset.card_le_card fun b hb => Finset.mem_filter.2
-    ⟨Finset.mem_univ _, hp b (Finset.mem_filter.1 hb).2⟩) ((card_filter_trunc_le' a).trans (by norm_num))
+    ⟨Finset.mem_univ _, hp b (Finset.mem_filter.1 hb).2⟩) ((card_filter_trunc_le' k a).trans (by norm_num))
 
 /-- Resampling the coordinate of a hash node makes its input hit any given value with
 probability at most `2 ^ (-128)`: hash coordinates. -/
@@ -915,16 +938,16 @@ theorem card_updHash_input_le {h p : Name} (hp : hashParent h = some p) (ξ : Re
     have ht : ¬ t.val = 0 := fun ht => hs k (by simp [coordOf, ht])
     have e1 : coordOf (ch k t) = ch k ⟨t.val - 1, by omega⟩ := by simp [coordOf, ht]
     rw [e1]
-    refine card_filter_le_of_imp _ u fun b hb => ?_
+    refine card_filter_le_of_imp k _ u fun b hb => ?_
     rw [val_ci_succ _ k t ht, updHash_snd_self] at hb
     exact hb
   · -- `rh`: the low 192 bits of the root input are those of the resampled top of chain `0`
     exact (card_updHash_rc_le ξ u).trans (by norm_num)
 
 /-- Source coordinates. -/
-theorem card_updSrc_input_le {h p : Name} (hp : hashParent h = some p) (ξ : Rec) {k : Fin 28}
+theorem card_updSrc_input_le {h p : Name} (hp : hashParent h = some p) (ξ : Rec) {k : Fin 32}
     (hs : coordOf h = src k) (u : BitVec p.len) :
-    (Finset.univ.filter fun b : BitVec 192 => val (updSrc ξ k b) p = u).card ≤ 1 := by
+    (Finset.univ.filter fun b : BitVec (chainBits k) => val (updSrc ξ k b) p = u).card ≤ 1 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;>
     simp only [coordOf] at hs
   · rename_i k' t

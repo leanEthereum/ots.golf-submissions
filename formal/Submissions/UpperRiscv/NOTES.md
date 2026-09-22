@@ -1,3 +1,31 @@
+# Work in progress: 377-cycle mixed-width candidate
+
+This branch extends dhsorens's 394-cycle construction and the verified 393-cycle
+submission by Alexander Hicks, assisted by GPT-6. It is **not ready for submission**.
+
+The 64-bit-nonce, 375-cycle proposal was rejected after identifying a chosen-message
+collision attack violating the challenge's quantitative security bound. This branch
+retains a 128-bit nonce. It uses 32 chains (eight 192-bit, twenty-four 160-bit),
+a 5/3, 5/3, then fourteen 4/4 digit layout with accepted sum 160, reverse processing
+of packed narrow states, and a REMU horizontal sum. The wire signature remains 5504 bits.
+
+Checked so far: Wire.certificate proves generic admissibility, 127-bit strong
+unforgeability, and a 206-compression bound. ForestVerifier.directVerify_eq proves
+the sequential specification matches the wire verifier. MixedProgram proves its
+15,412 instructions are admitted and its 61,752-byte image fits the image limit.
+The Lean image matches the independently tested Python generator instruction for
+instruction and byte for byte. Axiom checks use only propext, Classical.choice,
+and Quot.sound.
+
+Still required: universal machine refinement and the 377-cycle bound. Candidate,
+Solution, claim.txt, and the old Riscv2Program machine proofs are inherited from
+the 393-cycle baseline and have NOT been ported to the mixed construction. Their
+presence is not a complete certificate for this branch. Do not submit this snapshot.
+
+The preserved notes below describe the previously verified 393-cycle baseline.
+
+---
+
 # upper-riscv: 393-cycle candidate — mask after folding
 
 This extends dhsorens's 394-cycle paired-dispatch construction and its Lean proof.

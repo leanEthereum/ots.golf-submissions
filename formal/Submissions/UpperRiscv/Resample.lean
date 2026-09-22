@@ -39,11 +39,11 @@ theorem sum_w : ∑ ξ : Rec, w = 1 := by
 /-- A set of records closed under resampling the coordinate `s`. -/
 def ClosedAt (S : Finset Rec) (s : Name) : Prop :=
   match s with
-  | src k => ∀ ξ ∈ S, ∀ b : BitVec 192, updSrc ξ k b ∈ S
+  | src k => ∀ ξ ∈ S, ∀ b : BitVec (chainBits k), updSrc ξ k b ∈ S
   | _ => ∀ ξ ∈ S, ∀ b : BitVec 256, updHash ξ s b ∈ S
 
-theorem closedAt_src (S : Finset Rec) (k : Fin 28) :
-    ClosedAt S (src k) ↔ ∀ ξ ∈ S, ∀ b : BitVec 192, updSrc ξ k b ∈ S := Iff.rfl
+theorem closedAt_src (S : Finset Rec) (k : Fin 32) :
+    ClosedAt S (src k) ↔ ∀ ξ ∈ S, ∀ b : BitVec (chainBits k), updSrc ξ k b ∈ S := Iff.rfl
 
 theorem closedAt_of_ne_src (S : Finset Rec) {s : Name} (hs : ∀ k, s ≠ src k) :
     ClosedAt S s ↔ ∀ ξ ∈ S, ∀ b : BitVec 256, updHash ξ s b ∈ S := by
@@ -65,7 +65,7 @@ theorem updHash_updHash (ξ : Rec) (s : Name) (b : BitVec 256) :
     · exact (Function.update_of_ne hi _ _).trans (Function.update_of_ne hi _ _))
 
 /-- Resampling a source is an involution. -/
-theorem updSrc_updSrc (ξ : Rec) (k : Fin 28) (b : BitVec 192) :
+theorem updSrc_updSrc (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) :
     updSrc (updSrc ξ k b) k ((ξ.1 (src k).fin).cast (graph_len_fin _)) = ξ :=
   Prod.ext (funext fun i => by
     show Function.update (Function.update ξ.1 (src k).fin (b.cast _)) (src k).fin
@@ -74,7 +74,7 @@ theorem updSrc_updSrc (ξ : Rec) (k : Fin 28) (b : BitVec 192) :
     · subst hi; exact (Function.update_self ..).trans (bv_cast_cast _ _ _)
     · exact (Function.update_of_ne hi _ _).trans (Function.update_of_ne hi _ _)) rfl
 
-theorem fst_updSrc_self (ξ : Rec) (k : Fin 28) (b : BitVec 192) :
+theorem fst_updSrc_self (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) :
     ((updSrc ξ k b).1 (src k).fin).cast (graph_len_fin _) = b := by
   show (Function.update ξ.1 (src k).fin (b.cast (graph_len_fin (src k)).symm) (src k).fin).cast
     (graph_len_fin (src k)) = b
@@ -114,14 +114,14 @@ theorem sum_updHash (S : Finset Rec) (s : Name) (hs : ∀ k, s ≠ src k)
   rw [← Finset.mul_sum, ← mul_assoc, ENNReal.inv_mul_cancel hc0 hct, one_mul]
 
 /-- Change of variables: resampling a source. -/
-theorem sum_updSrc (S : Finset Rec) (k : Fin 28)
-    (hS : ∀ ξ ∈ S, ∀ b : BitVec 192, updSrc ξ k b ∈ S) (f : Rec → ℝ≥0∞) :
-    ∑ ξ ∈ S, f ξ = ∑ ξ ∈ S, (Fintype.card (BitVec 192) : ℝ≥0∞)⁻¹ * ∑ b, f (updSrc ξ k b) := by
-  have key : ∑ ξ ∈ S, ∑ b, f (updSrc ξ k b) = ∑ ξ ∈ S, ∑ _b : BitVec 192, f ξ := by
+theorem sum_updSrc (S : Finset Rec) (k : Fin 32)
+    (hS : ∀ ξ ∈ S, ∀ b : BitVec (chainBits k), updSrc ξ k b ∈ S) (f : Rec → ℝ≥0∞) :
+    ∑ ξ ∈ S, f ξ = ∑ ξ ∈ S, (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞)⁻¹ * ∑ b, f (updSrc ξ k b) := by
+  have key : ∑ ξ ∈ S, ∑ b, f (updSrc ξ k b) = ∑ ξ ∈ S, ∑ _b : BitVec (chainBits k), f ξ := by
     calc ∑ ξ ∈ S, ∑ b, f (updSrc ξ k b)
-        = ∑ p ∈ S ×ˢ (Finset.univ : Finset (BitVec 192)), f (updSrc p.1 k p.2) :=
+        = ∑ p ∈ S ×ˢ (Finset.univ : Finset (BitVec (chainBits k))), f (updSrc p.1 k p.2) :=
           (Finset.sum_product' S Finset.univ (fun ξ b => f (updSrc ξ k b))).symm
-      _ = ∑ p ∈ S ×ˢ (Finset.univ : Finset (BitVec 192)), f p.1 := by
+      _ = ∑ p ∈ S ×ˢ (Finset.univ : Finset (BitVec (chainBits k))), f p.1 := by
           refine Finset.sum_nbij'
             (fun p => (updSrc p.1 k p.2, (p.1.1 (src k).fin).cast (graph_len_fin _)))
             (fun p => (updSrc p.1 k p.2, (p.1.1 (src k).fin).cast (graph_len_fin _))) ?_ ?_ ?_ ?_ ?_
@@ -137,10 +137,10 @@ theorem sum_updSrc (S : Finset Rec) (k : Fin 28)
             exact Prod.ext (updSrc_updSrc _ _ _) (fst_updSrc_self _ _ _)
           · intro p _
             rfl
-      _ = ∑ ξ ∈ S, ∑ _b : BitVec 192, f ξ :=
+      _ = ∑ ξ ∈ S, ∑ _b : BitVec (chainBits k), f ξ :=
           Finset.sum_product' S Finset.univ (fun ξ _ => f ξ)
-  have hc0 : (Fintype.card (BitVec 192) : ℝ≥0∞) ≠ 0 := by exact_mod_cast Fintype.card_ne_zero
-  have hct : (Fintype.card (BitVec 192) : ℝ≥0∞) ≠ ⊤ := ENNReal.natCast_ne_top _
+  have hc0 : (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞) ≠ 0 := by exact_mod_cast Fintype.card_ne_zero
+  have hct : (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞) ≠ ⊤ := ENNReal.natCast_ne_top _
   rw [← Finset.mul_sum, key]
   simp only [Finset.sum_const, Finset.card_univ, nsmul_eq_mul]
   rw [← Finset.mul_sum, ← mul_assoc, ENNReal.inv_mul_cancel hc0 hct, one_mul]
@@ -154,39 +154,44 @@ theorem inv_card_mul_two_pow : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * 2
   rw [card_bitVec_ennreal, ε, show (2 : ℝ≥0∞) ^ 256 = 2 ^ 128 * 2 ^ 128 by rw [← pow_add],
     ENNReal.mul_inv (Or.inl h0) (Or.inl ht), mul_assoc, ENNReal.inv_mul_cancel h0 ht, mul_one]
 
-/-- `ε₁ = 2 ^ (-192)`: the sharp per-node hit probability. -/
-def ε₁ : ℝ≥0∞ := ((2 : ℝ≥0∞) ^ 192)⁻¹
+/-- `ε₁ = 2 ^ (-160)`: the sharp per-node hit probability. -/
+def ε₁ : ℝ≥0∞ := ((2 : ℝ≥0∞) ^ 160)⁻¹
 
 theorem ε₁_le_ε : ε₁ ≤ ε := by
   unfold ε₁ ε
   exact ENNReal.inv_le_inv.mpr (pow_le_pow_right₀ (by norm_num) (by norm_num))
 
-theorem inv_card_mul_two_pow_64 : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * 2 ^ 64 = ε₁ := by
-  have h0 : (2 : ℝ≥0∞) ^ 64 ≠ 0 := by simp
-  have ht : (2 : ℝ≥0∞) ^ 64 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
-  rw [card_bitVec_ennreal, ε₁, show (2 : ℝ≥0∞) ^ 256 = 2 ^ 192 * 2 ^ 64 by rw [← pow_add],
+theorem inv_source_card_le (k : Fin 32) :
+    (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞)⁻¹ ≤ ε₁ := by
+  rw [card_bitVec_ennreal, ε₁]
+  exact ENNReal.inv_le_inv.mpr (pow_le_pow_right₀ (by norm_num) (chainBits_ge k))
+
+theorem inv_card_mul_two_pow_96 : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * 2 ^ 96 = ε₁ := by
+  have h0 : (2 : ℝ≥0∞) ^ 96 ≠ 0 := by simp
+  have ht : (2 : ℝ≥0∞) ^ 96 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
+  rw [card_bitVec_ennreal, ε₁, show (2 : ℝ≥0∞) ^ 256 = 2 ^ 160 * 2 ^ 96 by rw [← pow_add],
     ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)),
     mul_assoc, ENNReal.inv_mul_cancel h0 ht, mul_one]
 
-/-- A filter whose members all have the same truncation has at most `2 ^ 64` elements. -/
-theorem card_filter_le_of_imp' (p : BitVec 256 → Prop) [DecidablePred p] (a : BitVec 192)
-    (hp : ∀ b, p b → trunc b = a) : (Finset.univ.filter p).card ≤ 2 ^ 64 :=
+/-- A filter whose members all have the same truncation has at most `2 ^ 96` elements. -/
+theorem card_filter_le_of_imp' (k : Fin 32) (p : BitVec 256 → Prop) [DecidablePred p] (a : BitVec (chainBits k))
+    (hp : ∀ b, p b → trunc k b = a) : (Finset.univ.filter p).card ≤ 2 ^ 96 :=
   le_trans (Finset.card_le_card fun b hb => Finset.mem_filter.2
-    ⟨Finset.mem_univ _, hp b (Finset.mem_filter.1 hb).2⟩) (card_filter_trunc_le' a)
+    ⟨Finset.mem_univ _, hp b (Finset.mem_filter.1 hb).2⟩) (card_filter_trunc_le' k a)
 
-/-- The sharp count: at most `2 ^ 64` resamplings of a hash coordinate give a chosen input. -/
+/-- The sharp count: at most `2 ^ 96` resamplings of a hash coordinate give a chosen input. -/
 theorem card_updHash_input_le' {h p : Name} (hp : hashParent h = some p) (ξ : Rec)
     (hs : ∀ k, coordOf h ≠ src k) (u : BitVec p.len) :
-    (Finset.univ.filter fun b : BitVec 256 => val (updHash ξ (coordOf h) b) p = u).card ≤ 2 ^ 64 := by
+    (Finset.univ.filter fun b : BitVec 256 => val (updHash ξ (coordOf h) b) p = u).card ≤ 2 ^ 96 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · rename_i k t
     have ht : ¬ t.val = 0 := fun ht => hs k (by simp [coordOf, ht])
     have e1 : coordOf (ch k t) = ch k ⟨t.val - 1, by omega⟩ := by simp [coordOf, ht]
     rw [e1]
-    refine card_filter_le_of_imp' _ u fun b hb => ?_
+    refine card_filter_le_of_imp' k _ u fun b hb => ?_
     rw [val_ci_succ _ k t ht, updHash_snd_self] at hb
     exact hb
-  · exact card_updHash_rc_le ξ u
+  · exact (card_updHash_rc_le ξ u).trans (by norm_num)
 
 /-- On a set closed under resampling the coordinate of a hash node, its input hits any given
 value with probability at most `ε₁`. -/
@@ -201,12 +206,14 @@ theorem sum_input_eq_le' {h p : Name} (hp : hashParent h = some p) (S : Finset R
     refine Finset.sum_le_sum fun ξ _ => ?_
     rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
     have hle := card_updSrc_input_le hp ξ hk u
-    have hle' : ((Finset.univ.filter fun b : BitVec 192 => val (updSrc ξ k b) p = u).card : ℝ≥0∞)
+    have hle' : ((Finset.univ.filter fun b : BitVec (chainBits k) => val (updSrc ξ k b) p = u).card : ℝ≥0∞)
         ≤ 1 := by exact_mod_cast hle
-    calc (Fintype.card (BitVec 192) : ℝ≥0∞)⁻¹ *
-          (((Finset.univ.filter fun b : BitVec 192 => val (updSrc ξ k b) p = u).card : ℝ≥0∞) * w)
-        ≤ (Fintype.card (BitVec 192) : ℝ≥0∞)⁻¹ * (1 * w) := by gcongr
-      _ = ε₁ * w := by rw [one_mul, card_bitVec_ennreal, ε₁]
+    calc (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞)⁻¹ *
+          (((Finset.univ.filter fun b : BitVec (chainBits k) => val (updSrc ξ k b) p = u).card : ℝ≥0∞) * w)
+        ≤ (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞)⁻¹ * (1 * w) := by gcongr
+      _ ≤ ε₁ * w := by
+        rw [one_mul]
+        exact mul_le_mul' (inv_source_card_le k) le_rfl
   · push Not at hsrc
     rw [closedAt_of_ne_src S hsrc] at hS
     rw [sum_updHash S (coordOf h) hsrc hS (fun ξ => if val ξ p = u then w else 0)]
@@ -214,12 +221,12 @@ theorem sum_input_eq_le' {h p : Name} (hp : hashParent h = some p) (S : Finset R
     rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
     have hle := card_updHash_input_le' hp ξ hsrc u
     have hle' : ((Finset.univ.filter fun b : BitVec 256 =>
-        val (updHash ξ (coordOf h) b) p = u).card : ℝ≥0∞) ≤ 2 ^ 64 := by exact_mod_cast hle
+        val (updHash ξ (coordOf h) b) p = u).card : ℝ≥0∞) ≤ 2 ^ 96 := by exact_mod_cast hle
     calc (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
           (((Finset.univ.filter fun b : BitVec 256 =>
             val (updHash ξ (coordOf h) b) p = u).card : ℝ≥0∞) * w)
-        ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 64 * w) := by gcongr
-      _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_64]
+        ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 96 * w) := by gcongr
+      _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_96]
 
 /-- The same with the coarser `ε`. -/
 theorem sum_input_eq_le {h p : Name} (hp : hashParent h = some p) (S : Finset Rec)
@@ -345,7 +352,7 @@ theorem pkOf_updHash (ξ : Rec) {s : Name} (hs : s ≠ rh) (b : BitVec 256) :
     pkOf (updHash ξ s b) = pkOf ξ := by
   exact congrArg trunc128 (snd_updHash_of_ne ξ s b rh (Ne.symm hs))
 
-theorem pkOf_updSrc (ξ : Rec) (k : Fin 28) (b : BitVec 192) : pkOf (updSrc ξ k b) = pkOf ξ := by
+theorem pkOf_updSrc (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) : pkOf (updSrc ξ k b) = pkOf ξ := by
   unfold pkOf
   rw [snd_updSrc]
 
@@ -381,8 +388,8 @@ theorem revealed_updHash {A : Finset Name} (hA : IsCut A) (ξ : Rec) {s : Name}
   exact evalRec_fin_congr
     (val_updHash_of_not_mem_deps ξ s b a (hs.2.2 a haA))
 
-theorem revealed_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Fin 28}
-    (hs : HiddenCoord A (src k)) (b : BitVec 192) : revealed A (updSrc ξ k b) = revealed A ξ := by
+theorem revealed_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Fin 32}
+    (hs : HiddenCoord A (src k)) (b : BitVec (chainBits k)) : revealed A (updSrc ξ k b) = revealed A ξ := by
   unfold revealed
   apply encode_congr_revealed
   intro v hv
@@ -408,8 +415,8 @@ theorem pointOf_updHash {A : Finset Name} (hA : IsCut A) (ξ : Rec) {s : Name}
   rw [val_updHash_of_not_mem_deps _ _ _ _ (not_mem_deps_of_hiddenCoord hA hs
     (evaluated_or_mem_of_child (child_hashParent hp) he))]
 
-theorem pointOf_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Fin 28}
-    (hs : HiddenCoord A (src k)) (b : BitVec 192) {h p : Name} (hp : hashParent h = some p)
+theorem pointOf_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Fin 32}
+    (hs : HiddenCoord A (src k)) (b : BitVec (chainBits k)) {h p : Name} (hp : hashParent h = some p)
     (he : Evaluated A h) : pointOf (updSrc ξ k b) h p = pointOf ξ h p := by
   unfold pointOf
   rw [val_updSrc_of_not_mem_deps _ _ _ _ (not_mem_deps_of_hiddenCoord hA hs
@@ -457,8 +464,8 @@ theorem fExp_updHash {A : Finset Name} (hA : IsCut A) (ξ : Rec) {s : Name}
   have hne : h ≠ s := fun e => hs.1 (e ▸ (exposed_some_iff A h).mp he)
   exact snd_updHash_of_ne _ _ _ _ hne
 
-theorem fExp_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Fin 28}
-    (hs : HiddenCoord A (src k)) (b : BitVec 192) : fExp (some A) (updSrc ξ k b) = fExp (some A) ξ := by
+theorem fExp_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Fin 32}
+    (hs : HiddenCoord A (src k)) (b : BitVec (chainBits k)) : fExp (some A) (updSrc ξ k b) = fExp (some A) ξ := by
   refine fExp_congr (fun h p hp he => pointOf_updSrc hA ξ hs b hp ((exposed_some_iff A h).mp he))
     fun h _ => rfl
 
@@ -494,8 +501,8 @@ theorem dataOf_updHash {A : Finset Name} (hA : IsCut A) (ξ : Rec) {s : Name}
   simp only [dataOf, pkOf_updHash _ (hiddenCoord_ne_rh hs), revealed_updHash hA _ hs,
     fExp_updHash hA ξ hs]
 
-theorem dataOf_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Fin 28}
-    (hs : HiddenCoord A (src k)) (b : BitVec 192) : dataOf A (updSrc ξ k b) = dataOf A ξ := by
+theorem dataOf_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Fin 32}
+    (hs : HiddenCoord A (src k)) (b : BitVec (chainBits k)) : dataOf A (updSrc ξ k b) = dataOf A ξ := by
   simp only [dataOf, pkOf_updSrc, revealed_updSrc hA _ hs, fExp_updSrc hA ξ hs]
 
 theorem fiberB_closedAt {A : Finset Name} (hA : IsCut A) (d : Data) {s : Name}
@@ -521,15 +528,15 @@ theorem eq_pointOf_iff (ξ : Rec) (h p : Name) (u : BitVec p.len) :
     show _ = (⟨p.len, val ξ p⟩ : Query)
     rw [hv]
 
-theorem card_hashNodes_mul_ε₁_le : (897 : ℝ≥0∞) * ε₁ ≤ ε := by
-  have h0 : (2 : ℝ≥0∞) ^ 64 ≠ 0 := by simp
-  have ht : (2 : ℝ≥0∞) ^ 64 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
-  have e : ε = (2 : ℝ≥0∞) ^ 64 * ε₁ := by
-    rw [ε₁, ε, show (2 : ℝ≥0∞) ^ 192 = 2 ^ 64 * 2 ^ 128 by rw [← pow_add],
+theorem card_hashNodes_mul_ε₁_le : (1025 : ℝ≥0∞) * ε₁ ≤ ε := by
+  have h0 : (2 : ℝ≥0∞) ^ 32 ≠ 0 := by simp
+  have ht : (2 : ℝ≥0∞) ^ 32 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
+  have e : ε = (2 : ℝ≥0∞) ^ 32 * ε₁ := by
+    rw [ε₁, ε, show (2 : ℝ≥0∞) ^ 160 = 2 ^ 32 * 2 ^ 128 by rw [← pow_add],
       ENNReal.mul_inv (Or.inl h0) (Or.inl ht), ← mul_assoc, ENNReal.mul_inv_cancel h0 ht, one_mul]
   rw [e]
   refine mul_le_mul' ?_ le_rfl
-  exact_mod_cast (by norm_num : (897 : ℕ) ≤ 2 ^ 64)
+  exact_mod_cast (by norm_num : (1025 : ℕ) ≤ 2 ^ 32)
 
 /-- A fixed query is the point of at most one node per hash node in expectation: the union bound
 over the hash nodes with the sharp per-node bound `ε₁`. -/
@@ -579,7 +586,7 @@ theorem sum_isPoint_le (S : Finset Rec) (q : Query)
             exact hq ⟨val ξ p, e⟩
           rw [Finset.sum_eq_zero fun ξ _ => if_neg (hz ξ)]
           exact zero_le
-    _ = 897 * ε₁ * ∑ ξ ∈ S, w := by
+    _ = 1025 * ε₁ * ∑ ξ ∈ S, w := by
         rw [Finset.sum_const, card_hashNodes, nsmul_eq_mul, Nat.cast_ofNat, mul_assoc]
     _ ≤ ε * ∑ ξ ∈ S, w := mul_le_mul' card_hashNodes_mul_ε₁_le le_rfl
 
@@ -650,7 +657,7 @@ theorem hits_charge_B {A : Finset Name} (hA : IsCut A) (d : Data) (q : Query) :
           exact zero_le
     _ ≤ ∑ _h ∈ hashNodes, ε₁ * ∑ ξ ∈ fiberB A d, w :=
         Finset.sum_le_sum_of_subset_of_nonneg (Finset.filter_subset _ _) (fun _ _ _ => zero_le)
-    _ = 897 * ε₁ * ∑ ξ ∈ fiberB A d, w := by
+    _ = 1025 * ε₁ * ∑ ξ ∈ fiberB A d, w := by
         rw [Finset.sum_const, card_hashNodes, nsmul_eq_mul, Nat.cast_ofNat, mul_assoc]
     _ ≤ ε * ∑ ξ ∈ fiberB A d, w := mul_le_mul' card_hashNodes_mul_ε₁_le le_rfl
 

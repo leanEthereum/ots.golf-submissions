@@ -1,5 +1,6 @@
 import Submissions.UpperRiscv.TypedScheme
 import Submissions.UpperRiscv.GScheme
+import Submissions.UpperRiscv.Payload
 
 /-!
 Every DAG scheme defines a generic oracle algorithm with the same wire data and oracle programs.
@@ -19,7 +20,7 @@ namespace AlgorithmAdapter
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
 /-- The DAG signature's actual wire contents: nonce bits followed by disclosed bits. -/
-def encodeSignature (σ : Signature) : List Bool := toBits σ.1 ++ σ.2
+def encodeSignature (σ : Signature) : List Bool := toBits σ.1 ++ Payload.permute σ.2
 
 theorem toBits_injective {n : ℕ} : Function.Injective (@toBits n) := by
   intro x y h
@@ -35,7 +36,7 @@ theorem encodeSignature_injective : Function.Injective (@encodeSignature) := by
     simpa [encodeSignature, toBits] using ht
   have hp := toBits_injective hn
   have ht : a.2 = b.2 := by
-    exact List.append_cancel_left (by simpa only [encodeSignature, hn] using h)
+    exact Payload.injective (List.append_cancel_left (by simpa only [encodeSignature, hn] using h))
   exact Prod.ext hp ht
 
 @[simp] theorem length_encodeSignature (σ : Signature) :

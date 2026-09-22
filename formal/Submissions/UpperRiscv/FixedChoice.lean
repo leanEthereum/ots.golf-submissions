@@ -4,7 +4,7 @@ import Submissions.UpperRiscv.Valid
 /-!
 # The digit layout
 
-Reveal one input from each of the 28 chains: chain `k` is revealed at position `31 - d_k`, where
+Reveal one input from each of the 32 chains: chain `k` is revealed at position `31 - d_k`, where
 `d_k` is digit `k` of the accepted index, so that the verifier makes `d_k + 1` hash steps on
 chain `k`. The digits sum to `target`, so every disclosure set is a cut of the same cost, and
 distinct indices give distinct cuts.
@@ -20,7 +20,7 @@ namespace OptimalOTS.Forest
 
 open OptimalOTS.Dag
 
-theorem digit_sum (i : Idx) : ∑ k ∈ Finset.range 28, digit i.val k = target :=
+theorem digit_sum (i : Idx) : ∑ k ∈ Finset.range 32, digit i.val k = target :=
   mem_validSet_accepted i.2
 
 theorem digit_lt_32 (i : ℕ) (k : ℕ) : digit i k < 32 := by
@@ -29,7 +29,7 @@ theorem digit_lt_32 (i : ℕ) (k : ℕ) : digit i k < 32 := by
   omega
 
 /-- The chain digits of an accepted index. -/
-def fixedDigits (i : Idx) (k : Fin 28) : Fin 32 := ⟨digit i.val k, digit_lt_32 _ _⟩
+def fixedDigits (i : Idx) (k : Fin 32) : Fin 32 := ⟨digit i.val k, digit_lt_32 _ _⟩
 
 theorem fixedDigits_sum (i : Idx) : ∑ k, (fixedDigits i k).val = target := by
   rw [← digit_sum i, ← Fin.sum_univ_eq_sum_range]
@@ -38,25 +38,25 @@ theorem fixedDigits_sum (i : Idx) : ∑ k, (fixedDigits i k).val = target := by
 theorem fixedDigits_injective : Function.Injective fixedDigits := by
   intro i j h
   apply Subtype.ext
-  have hi : i.val < 2 ^ pos 28 := by rw [← idxBits_eq]; exact Idx.isLt i
-  have hj : j.val < 2 ^ pos 28 := by rw [← idxBits_eq]; exact Idx.isLt j
-  rw [← ofDigits_digit i.val 28 hi, ← ofDigits_digit j.val 28 hj]
+  have hi : i.val < 2 ^ pos 32 := by rw [← idxBits_eq]; exact Idx.isLt i
+  have hj : j.val < 2 ^ pos 32 := by rw [← idxBits_eq]; exact Idx.isLt j
+  rw [← ofDigits_digit i.val 32 hi, ← ofDigits_digit j.val 32 hj]
   unfold ofDigits
   refine Finset.sum_congr rfl fun k hk => ?_
   have hk' := Finset.mem_range.mp hk
-  have e := congrArg (fun d : Fin 28 → Fin 32 => (d ⟨k, hk'⟩).val) h
+  have e := congrArg (fun d : Fin 32 → Fin 32 => (d ⟨k, hk'⟩).val) h
   simp only [fixedDigits] at e
   rw [e]
 
 /-- The revealed positions: chain `k` at `31 - d_k`. -/
-def fixedPositions (i : Idx) (k : Fin 28) : Fin 32 := Fin.rev (fixedDigits i k)
+def fixedPositions (i : Idx) (k : Fin 32) : Fin 32 := Fin.rev (fixedDigits i k)
 
-theorem fixedPositions_val (i : Idx) (k : Fin 28) :
+theorem fixedPositions_val (i : Idx) (k : Fin 32) :
     (fixedPositions i k).val = 31 - digit i.val k := by
   simp [fixedPositions, fixedDigits, Fin.val_rev]
 
-theorem fixedPositions_sum (i : Idx) : ∑ k, (32 - (fixedPositions i k).val) = target + 28 := by
-  have : ∑ k : Fin 28, (32 - (fixedPositions i k).val) = ∑ k : Fin 28, ((fixedDigits i k).val + 1) := by
+theorem fixedPositions_sum (i : Idx) : ∑ k, (32 - (fixedPositions i k).val) = target + 32 := by
+  have : ∑ k : Fin 32, (32 - (fixedPositions i k).val) = ∑ k : Fin 32, ((fixedDigits i k).val + 1) := by
     refine Finset.sum_congr rfl fun k _ => ?_
     simp only [fixedPositions, Fin.val_rev]
     have := (fixedDigits i k).isLt
@@ -80,13 +80,13 @@ theorem fixedCut_injective : Function.Injective (fun i => cutOf (fixedChoice i))
 
 theorem fixedCut_isCut (i : Idx) : IsCut (cutOf (fixedChoice i)) := isCut_cutOf _
 
-theorem fixedCut_card (i : Idx) : (cutOf (fixedChoice i)).card = 28 := card_cutOf _
+theorem fixedCut_card (i : Idx) : (cutOf (fixedChoice i)).card = 32 := card_cutOf _
 
-/-- Every disclosure set costs `target + 28 + 11 = 254` compressions to reconstruct. -/
+/-- Every disclosure set costs `target + 32 + 13 = 205` compressions to reconstruct. -/
 theorem fixedCut_cost (i : Idx) :
-    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 254 := by
+    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 205 := by
   rw [cost_cutOf]
-  change ∑ k, (32 - (fixedPositions i k).val) + 11 = 254
+  change ∑ k, (32 - (fixedPositions i k).val) + 13 = 205
   rw [fixedPositions_sum]
   rfl
 

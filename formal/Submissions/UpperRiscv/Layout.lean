@@ -14,8 +14,7 @@ open OptimalOTS.Dag
 theorem fixed_revealBits (i : Idx) :
     forestScheme.graph.revealBits (forestScheme.sets i) = 5376 := by
   change graph.revealBits (fins (cutOf (fixedChoice i))) = 5376
-  rw [revealBits_eq, Finset.sum_const_nat (fun n hn => (fixedCut_isCut i).len_eq hn),
-    fixedCut_card]
+  rw [revealBits_eq, reveal_cutOf]
 
 end OptimalOTS.Forest
 
@@ -29,7 +28,7 @@ theorem payload_length_iff (bits : List Bool) (i : Idx) :
     (decode bits).2.length = Forest.forestScheme.graph.revealBits (Forest.forestScheme.sets i) ↔
       bits.length = 5504 := by
   rw [Forest.fixed_revealBits]
-  simp only [decode, List.length_drop]
+  simp only [decode, Payload.length_permute, List.length_drop]
   omega
 
 end OptimalOTS.RiscvUpperForest.Wire

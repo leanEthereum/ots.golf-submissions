@@ -154,7 +154,7 @@ def directVerify (pk : PublicKey) (m : Message) (bits : List Bool) :
   let i ← packIndex (emsg m pk) (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
     if bits.length = 5504 then
-      let y ← directReconstruct ⟨i, hi⟩ (bits.drop 128)
+      let y ← directReconstruct ⟨i, hi⟩ (Payload.permute (bits.drop 128))
       return decide ((y rh.fin).setWidth 128 = pk)
     else return false
   else return false
@@ -169,17 +169,14 @@ theorem directVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
   by_cases hi : i ∈ validSet
   · rw [dif_pos hi, dif_pos hi]
     have hlen := Wire.payload_length_iff bits ⟨i, hi⟩
+    simp only [Wire.decode, Payload.length_permute] at hlen
     change (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) ↔ bits.length = 5504 at hlen
     simp only [hlen, directReconstruct_eq]
   · rw [dif_neg hi, dif_neg hi]
 
 /-- The sequential disclosure cursor advances by one value exactly at disclosed nodes. -/
 theorem consumedBits_value (i : Idx) (n : Name) :
-    consumedBits i n = if disclosed (fixedPositions i) n then 192 else 0 := by
-  unfold consumedBits
-  split_ifs with hd
-  · exact (fixedCut_isCut i).len_eq (by simpa only [setsName] using (disclosed_eq i n).mp hd)
-  · rfl
+    consumedBits i n = if disclosed (fixedPositions i) n then n.len else 0 := rfl
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.ForestVerifier.directVerify_eq' depends on axioms: [propext, Classical.choice, Quot.sound]

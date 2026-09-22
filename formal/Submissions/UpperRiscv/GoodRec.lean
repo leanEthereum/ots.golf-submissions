@@ -6,7 +6,7 @@ import Submissions.UpperRiscv.Resample
 A record is good (`GoodRec`) when its keygen points are pairwise distinct and no honest output
 simulates another hash node with an input of the same length. Both failures are collision events
 on 192 bits between two coordinates of the uniform record; the union bound over the ordered pairs
-of hash nodes gives `δ = 2 · 897² · 2⁻¹⁹²` (`sum_w_not_goodRec_le`).
+of hash nodes gives `δ = 2 · 1025² · 2⁻¹⁹²` (`sum_w_not_goodRec_le`).
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -25,39 +25,41 @@ open Name
 
 /-! ## Generic resampling bounds -/
 
-/-- Resampling a hash coordinate on a closed set: an event with at most `2 ^ 64` good values
+/-- Resampling a hash coordinate on a closed set: an event with at most `2 ^ 96` good values
 of the coordinate has weight at most `ε₁`. -/
 theorem sum_ind_le_of_card_updHash (s : Name) (hs : ∀ k, s ≠ src k) (S : Finset Rec)
     (hS : ∀ ξ ∈ S, ∀ b : BitVec 256, updHash ξ s b ∈ S) (f : Rec → Prop) [DecidablePred f]
-    (hf : ∀ ξ, (Finset.univ.filter fun b : BitVec 256 => f (updHash ξ s b)).card ≤ 2 ^ 64) :
+    (hf : ∀ ξ, (Finset.univ.filter fun b : BitVec 256 => f (updHash ξ s b)).card ≤ 2 ^ 96) :
     ∑ ξ ∈ S, (if f ξ then w else 0) ≤ ε₁ * ∑ ξ ∈ S, w := by
   rw [Finset.mul_sum, sum_updHash S s hs hS (fun ξ => if f ξ then w else 0)]
   refine Finset.sum_le_sum fun ξ _ => ?_
   rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
   have hle' : ((Finset.univ.filter fun b : BitVec 256 => f (updHash ξ s b)).card : ℝ≥0∞) ≤
-      2 ^ 64 := by exact_mod_cast hf ξ
+      2 ^ 96 := by exact_mod_cast hf ξ
   calc (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
         (((Finset.univ.filter fun b : BitVec 256 => f (updHash ξ s b)).card : ℝ≥0∞) * w)
-      ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 64 * w) := by gcongr
-    _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_64]
+      ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 96 * w) := by gcongr
+    _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_96]
 
 /-- Resampling a source on a closed set: an event with at most one good value of the source has
 weight at most `ε₁`. -/
-theorem sum_ind_le_of_card_updSrc (k : Fin 28) (S : Finset Rec)
-    (hS : ∀ ξ ∈ S, ∀ b : BitVec 192, updSrc ξ k b ∈ S) (f : Rec → Prop) [DecidablePred f]
-    (hf : ∀ ξ, (Finset.univ.filter fun b : BitVec 192 => f (updSrc ξ k b)).card ≤ 1) :
+theorem sum_ind_le_of_card_updSrc (k : Fin 32) (S : Finset Rec)
+    (hS : ∀ ξ ∈ S, ∀ b : BitVec (chainBits k), updSrc ξ k b ∈ S) (f : Rec → Prop) [DecidablePred f]
+    (hf : ∀ ξ, (Finset.univ.filter fun b : BitVec (chainBits k) => f (updSrc ξ k b)).card ≤ 1) :
     ∑ ξ ∈ S, (if f ξ then w else 0) ≤ ε₁ * ∑ ξ ∈ S, w := by
   rw [Finset.mul_sum, sum_updSrc S k hS (fun ξ => if f ξ then w else 0)]
   refine Finset.sum_le_sum fun ξ _ => ?_
   rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
-  have hle' : ((Finset.univ.filter fun b : BitVec 192 => f (updSrc ξ k b)).card : ℝ≥0∞) ≤
+  have hle' : ((Finset.univ.filter fun b : BitVec (chainBits k) => f (updSrc ξ k b)).card : ℝ≥0∞) ≤
       1 := by exact_mod_cast hf ξ
-  calc (Fintype.card (BitVec 192) : ℝ≥0∞)⁻¹ *
-        (((Finset.univ.filter fun b : BitVec 192 => f (updSrc ξ k b)).card : ℝ≥0∞) * w)
-      ≤ (Fintype.card (BitVec 192) : ℝ≥0∞)⁻¹ * (1 * w) := by gcongr
-    _ = ε₁ * w := by rw [one_mul, card_bitVec_ennreal, ε₁]
+  calc (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞)⁻¹ *
+        (((Finset.univ.filter fun b : BitVec (chainBits k) => f (updSrc ξ k b)).card : ℝ≥0∞) * w)
+      ≤ (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞)⁻¹ * (1 * w) := by gcongr
+    _ ≤ ε₁ * w := by
+        rw [one_mul]
+        exact mul_le_mul' (inv_source_card_le k) le_rfl
 
-theorem hashNode_ne_src {h p : Name} (hp : hashParent h = some p) (k : Fin 28) : h ≠ src k := by
+theorem hashNode_ne_src {h p : Name} (hp : hashParent h = some p) (k : Fin 32) : h ≠ src k := by
   rintro rfl
   cases hp
 
@@ -129,7 +131,7 @@ theorem card_pair_updHash_le {h p h' p' : Name} (hp : hashParent h = some p)
     (hp' : hashParent h' = some p') (hne : h ≠ h') (ξ : Rec) (hs : ∀ k, coordOf h ≠ src k) :
     (Finset.univ.filter fun b : BitVec 256 =>
       pointOf (updHash ξ (coordOf h) b) h p = pointOf (updHash ξ (coordOf h) b) h' p').card ≤
-      2 ^ 64 := by
+      2 ^ 96 := by
   have hinv : ∀ b, pointOf (updHash ξ (coordOf h) b) h' p' = pointOf ξ h' p' := fun b => by
     unfold pointOf
     rw [val_updHash_of_not_mem_deps _ _ _ _ (coordOf_not_mem_deps hp hp' hne)]
@@ -146,8 +148,8 @@ theorem card_pair_updHash_le {h p h' p' : Name} (hp : hashParent h = some p)
     exact absurd ⟨val (updHash ξ (coordOf h) b) p, (hinv b).symm.trans hb.2.symm⟩ hq
 
 theorem card_pair_updSrc_le {h p h' p' : Name} (hp : hashParent h = some p)
-    (hp' : hashParent h' = some p') (hne : h ≠ h') (ξ : Rec) {k : Fin 28} (hk : coordOf h = src k) :
-    (Finset.univ.filter fun b : BitVec 192 =>
+    (hp' : hashParent h' = some p') (hne : h ≠ h') (ξ : Rec) {k : Fin 32} (hk : coordOf h = src k) :
+    (Finset.univ.filter fun b : BitVec (chainBits k) =>
       pointOf (updSrc ξ k b) h p = pointOf (updSrc ξ k b) h' p').card ≤ 1 := by
   have hinv : ∀ b, pointOf (updSrc ξ k b) h' p' = pointOf ξ h' p' := fun b => by
     unfold pointOf
@@ -180,7 +182,7 @@ theorem sum_pair_le {h p h' p' : Name} (hp : hashParent h = some p)
     rw [sum_w, mul_one]
 
 theorem sum_w_not_distinct_le :
-    ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0) ≤ 897 * 897 * ε₁ := by
+    ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0) ≤ 1025 * 1025 * ε₁ := by
   calc ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0)
       ≤ ∑ ξ : Rec, ∑ h ∈ hashNodes, ∑ h' ∈ hashNodes,
           (if h ≠ h' ∧ pt ξ h = pt ξ h' then w else 0) := by
@@ -213,7 +215,7 @@ theorem sum_w_not_distinct_le :
           by_cases he : pointOf ξ h p = pointOf ξ h' p'
           · rw [if_pos ⟨hne, by rw [pt_eq hp, pt_eq hp', he]⟩, if_pos he]
           · rw [if_neg (fun hc => he (by rw [← pt_eq hp, ← pt_eq hp']; exact hc.2)), if_neg he]
-    _ = 897 * 897 * ε₁ := by
+    _ = 1025 * 1025 * ε₁ := by
         rw [Finset.sum_const, Finset.sum_const, card_hashNodes, nsmul_eq_mul, nsmul_eq_mul,
           Nat.cast_ofNat, ← mul_assoc]
 
@@ -250,7 +252,7 @@ theorem sum_sim_pair_le {h p h' p' : Name} (hp : hashParent h = some p)
   · rw [sum_w, mul_one]
 
 theorem sum_w_not_noOutCollision_le :
-    ∑ ξ : Rec, (if ¬ NoOutCollision ξ then w else 0) ≤ 897 * 897 * ε₁ := by
+    ∑ ξ : Rec, (if ¬ NoOutCollision ξ then w else 0) ≤ 1025 * 1025 * ε₁ := by
   calc ∑ ξ : Rec, (if ¬ NoOutCollision ξ then w else 0)
       ≤ ∑ ξ : Rec, ∑ h ∈ hashNodes, ∑ h' ∈ hashNodes,
           (if h ≠ h' ∧ h ≠ rh ∧ sim ξ h (ξ.2 h'.fin) then w else 0) := by
@@ -286,14 +288,14 @@ theorem sum_w_not_noOutCollision_le :
         by_cases hs : sim ξ h (ξ.2 h'.fin)
         · rw [if_pos ⟨hne, hrh, hs⟩, if_pos hs]
         · rw [if_neg (fun hc => hs hc.2.2), if_neg hs]
-    _ = 897 * 897 * ε₁ := by
+    _ = 1025 * 1025 * ε₁ := by
         rw [Finset.sum_const, Finset.sum_const, card_hashNodes, nsmul_eq_mul, nsmul_eq_mul,
           Nat.cast_ofNat, ← mul_assoc]
 
 /-! ## Good records -/
 
 /-- The weight of the bad records. -/
-def δ : ℝ≥0∞ := 2 * (897 * 897) * ε₁
+def δ : ℝ≥0∞ := 2 * (1025 * 1025) * ε₁
 
 theorem sum_w_not_goodRec_le : ∑ ξ : Rec, (if ¬ GoodRec ξ then w else 0) ≤ δ := by
   calc ∑ ξ : Rec, (if ¬ GoodRec ξ then w else 0)
@@ -309,14 +311,14 @@ theorem sum_w_not_goodRec_le : ∑ ξ : Rec, (if ¬ GoodRec ξ then w else 0) �
           exact le_add_right le_rfl
     _ = ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0) +
           ∑ ξ : Rec, (if ¬ NoOutCollision ξ then w else 0) := Finset.sum_add_distrib
-    _ ≤ 897 * 897 * ε₁ + 897 * 897 * ε₁ := add_le_add sum_w_not_distinct_le sum_w_not_noOutCollision_le
+    _ ≤ 1025 * 1025 * ε₁ + 1025 * 1025 * ε₁ := add_le_add sum_w_not_distinct_le sum_w_not_noOutCollision_le
     _ = δ := by rw [δ]; ring
 
 theorem sum_w_not_distinctRec_le : ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0) ≤ δ := by
   refine sum_w_not_distinct_le.trans ?_
   rw [δ]
-  calc (897 : ℝ≥0∞) * 897 * ε₁ = 1 * (897 * 897) * ε₁ := by ring
-    _ ≤ 2 * (897 * 897) * ε₁ := by gcongr; norm_num
+  calc (1025 : ℝ≥0∞) * 1025 * ε₁ = 1 * (1025 * 1025) * ε₁ := by ring
+    _ ≤ 2 * (1025 * 1025) * ε₁ := by gcongr; norm_num
 
 end Forest
 
