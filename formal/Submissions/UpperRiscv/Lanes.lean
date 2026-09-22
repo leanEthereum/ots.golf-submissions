@@ -6,8 +6,8 @@ import Submissions.UpperRiscv.Valid
 
 A lane word holds four 16-bit lanes. The pair mask leaves `4 · dA + 1024 · dB` in every lane of
 words 0–2, the single mask `4 · d` in every lane of word 3 (`laneValue_toNat`). The four masked
-words are summed without carries; the fold `(a &&& m) + ((a >>> 8) &&& m)` with the mask of
-bits `2 … 8` then leaves `4 · (Σ dA + Σ dB)` in every lane (`fold_toNat`), and the sum of the
+words are summed without carries; the fold `(a + (a >>> 8)) &&& m` with the mask of
+bits `2 … 9` then leaves `4 · (Σ dA + Σ dB)` in every lane (`fold_toNat`), and the sum of the
 four lanes is read from the top lane of a product (`topLane`). Everything reduces to natural
 number arithmetic through `Nat.and_mod_two_pow` and `Nat.and_div_two_pow`.
 -/
@@ -64,10 +64,10 @@ theorem lane2_coarse (x : ℕ) : x / 2 ^ 16 / 2 ^ 16 % 2 ^ 16 / 1024 % 16 = x / 
 theorem lane3_fine (x : ℕ) : x / 2 ^ 16 / 2 ^ 16 / 2 ^ 16 / 4 % 32 = x / 2 ^ 50 % 32 := by omega
 theorem lane3_coarse (x : ℕ) : x / 2 ^ 16 / 2 ^ 16 / 2 ^ 16 / 1024 % 16 = x / 2 ^ 58 % 16 := by
   omega
-theorem lane0_fold (x : ℕ) : x % 2 ^ 16 / 4 % 128 = x / 4 % 128 := by omega
-theorem lane1_fold (x : ℕ) : x / 2 ^ 16 % 2 ^ 16 / 4 % 128 = x / 2 ^ 18 % 128 := by omega
-theorem lane2_fold (x : ℕ) : x / 2 ^ 16 / 2 ^ 16 % 2 ^ 16 / 4 % 128 = x / 2 ^ 34 % 128 := by omega
-theorem lane3_fold (x : ℕ) : x / 2 ^ 16 / 2 ^ 16 / 2 ^ 16 / 4 % 128 = x / 2 ^ 50 % 128 := by omega
+theorem lane0_fold (x : ℕ) : x % 2 ^ 16 / 4 % 256 = x / 4 % 256 := by omega
+theorem lane1_fold (x : ℕ) : x / 2 ^ 16 % 2 ^ 16 / 4 % 256 = x / 2 ^ 18 % 256 := by omega
+theorem lane2_fold (x : ℕ) : x / 2 ^ 16 / 2 ^ 16 % 2 ^ 16 / 4 % 256 = x / 2 ^ 34 % 256 := by omega
+theorem lane3_fold (x : ℕ) : x / 2 ^ 16 / 2 ^ 16 / 2 ^ 16 / 4 % 256 = x / 2 ^ 50 % 256 := by omega
 
 /-- The mask `0x3C7C3C7C3C7C3C7C`, lane by lane. -/
 theorem and_maskPair (x : ℕ) :
@@ -98,17 +98,17 @@ theorem and_maskSingle (x : ℕ) :
   rw [show (2 : ℕ) ^ 5 = 32 by norm_num, lane0_fine, lane1_fine, lane2_fine, lane3_fine]
   ring
 
-/-- The mask `0x01FC01FC01FC01FC` keeps bits `2 … 8` of every lane. -/
+/-- The mask `0x03FC03FC03FC03FC` keeps bits `2 … 9` of every lane. -/
 theorem and_maskFold (x : ℕ) :
     x &&& broadcast foldMask =
-      4 * (x / 4 % 128) + 2 ^ 16 * (4 * (x / 2 ^ 18 % 128)) +
-      2 ^ 32 * (4 * (x / 2 ^ 34 % 128)) + 2 ^ 48 * (4 * (x / 2 ^ 50 % 128)) := by
-  have hb : broadcast foldMask = 4 * (2 ^ 7 - 1) + 2 ^ 16 * (4 * (2 ^ 7 - 1) + 2 ^ 16 *
-      (4 * (2 ^ 7 - 1) + 2 ^ 16 * (4 * (2 ^ 7 - 1)))) := by
+      4 * (x / 4 % 256) + 2 ^ 16 * (4 * (x / 2 ^ 18 % 256)) +
+      2 ^ 32 * (4 * (x / 2 ^ 34 % 256)) + 2 ^ 48 * (4 * (x / 2 ^ 50 % 256)) := by
+  have hb : broadcast foldMask = 4 * (2 ^ 8 - 1) + 2 ^ 16 * (4 * (2 ^ 8 - 1) + 2 ^ 16 *
+      (4 * (2 ^ 8 - 1) + 2 ^ 16 * (4 * (2 ^ 8 - 1)))) := by
     norm_num [broadcast, foldMask]
   rw [hb, and_split _ _ _ (by norm_num), and_split _ _ _ (by norm_num),
     and_split _ _ _ (by norm_num), and_field, and_field, and_field, and_field]
-  rw [show (2 : ℕ) ^ 7 = 128 by norm_num, lane0_fold, lane1_fold, lane2_fold, lane3_fold]
+  rw [show (2 : ℕ) ^ 8 = 256 by norm_num, lane0_fold, lane1_fold, lane2_fold, lane3_fold]
   ring
 
 /-! ## Fields of a word -/
@@ -162,41 +162,60 @@ def preFold (s0 s1 s2 s3 t0 t1 t2 t3 : ℕ) : ℕ :=
   (4 * s0 + 1024 * t0) + 2 ^ 16 * (4 * s1 + 1024 * t1) + 2 ^ 32 * (4 * s2 + 1024 * t2) +
     2 ^ 48 * (4 * s3 + 1024 * t3)
 
-/-- The fold leaves `4 · (s + t)` in every lane, when the fine sums are below `128` and the
-coarse sums below `48`. -/
+theorem lowByte (a b : Nat) (ha : a < 256) :
+    (a+256*b)%256 = a := by
+  rw [Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt ha]
+
+theorem fold_fields (s0 s1 s2 s3 t0 t1 t2 t3 : Nat)
+    (hs0 : s0 < 128) (hs1 : s1 < 128) (hs2 : s2 < 128) (hs3 : s3 < 128)
+    (ht0 : t0 < 48) (ht1 : t1 < 48) (ht2 : t2 < 48) (ht3 : t3 < 48) :
+    let p := (4*s0+1024*t0) + 65536*(4*s1+1024*t1) +
+      4294967296*(4*s2+1024*t2) + 281474976710656*(4*s3+1024*t3)
+    let q := (p+p/256)%18446744073709551616
+    q/4%256 = s0+t0 ∧ q/262144%256 = s1+t1 ∧
+      q/17179869184%256 = s2+t2 ∧ q/1125899906842624%256 = s3+t3 := by
+  dsimp
+  let n := s0+256*t0+65536*s1+16777216*t1+4294967296*s2+
+    1099511627776*t2+281474976710656*s3+72057594037927936*t3
+  have hp : (4*s0+1024*t0) + 65536*(4*s1+1024*t1) +
+      4294967296*(4*s2+1024*t2) + 281474976710656*(4*s3+1024*t3) = 4*n := by
+    dsimp [n]; ring
+  rw [hp]
+  have hn : n/256 = t0+256*s1+65536*t1+16777216*s2+4294967296*t2+
+      1099511627776*s3+281474976710656*t3 := by dsimp [n]; omega
+  have hq : (4*n+4*n/256)/4 = n+n/256 := by omega
+  have hbound : 4*n+4*n/256 < 18446744073709551616 := by dsimp [n]; omega
+  rw [Nat.mod_eq_of_lt hbound]
+  have q0 : n+n/256 = (s0+t0)+256*((t0+s1)+256*((s1+t1)+256*((t1+s2)+
+      256*((s2+t2)+256*((t2+s3)+256*((s3+t3)+256*t3)))))) := by rw [hn]; dsimp [n]; ring
+  have q1 : (n+n/256)/65536 = (s1+t1)+256*((t1+s2)+
+      256*((s2+t2)+256*((t2+s3)+256*((s3+t3)+256*t3)))) := by rw [q0]; omega
+  have q2 : (n+n/256)/4294967296 = (s2+t2)+256*((t2+s3)+256*((s3+t3)+256*t3)) := by
+    rw [q0]; omega
+  have q3 : (n+n/256)/281474976710656 = (s3+t3)+256*t3 := by rw [q0]; omega
+  constructor
+  · rw [hq, q0]; exact lowByte _ _ (by omega)
+  constructor
+  · rw [show (262144:Nat) = 4*65536 by decide, ← Nat.div_div_eq_div_mul, hq, q1]
+    exact lowByte _ _ (by omega)
+  constructor
+  · rw [show (17179869184:Nat) = 4*4294967296 by decide, ← Nat.div_div_eq_div_mul, hq, q2]
+    exact lowByte _ _ (by omega)
+  · rw [show (1125899906842624:Nat) = 4*281474976710656 by decide, ← Nat.div_div_eq_div_mul, hq, q3]
+    exact lowByte _ _ (by omega)
+
+/-- Mask once after addition; low discarded bits cannot carry into retained fields. -/
 theorem fold_toNat (s0 s1 s2 s3 t0 t1 t2 t3 : ℕ)
     (hs0 : s0 < 128) (hs1 : s1 < 128) (hs2 : s2 < 128) (hs3 : s3 < 128)
     (ht0 : t0 < 48) (ht1 : t1 < 48) (ht2 : t2 < 48) (ht3 : t3 < 48) :
-    (preFold s0 s1 s2 s3 t0 t1 t2 t3 &&& broadcast foldMask) +
-      (preFold s0 s1 s2 s3 t0 t1 t2 t3 / 2 ^ 8 &&& broadcast foldMask) =
+    ((preFold s0 s1 s2 s3 t0 t1 t2 t3 + preFold s0 s1 s2 s3 t0 t1 t2 t3 / 2 ^ 8) % 2 ^ 64
+        &&& broadcast foldMask) =
       4 * (s0 + t0) + 2 ^ 16 * (4 * (s1 + t1)) + 2 ^ 32 * (4 * (s2 + t2)) +
         2 ^ 48 * (4 * (s3 + t3)) := by
-  rw [and_maskFold, and_maskFold]
-  unfold preFold
-  generalize hP : (4 * s0 + 1024 * t0) + 2 ^ 16 * (4 * s1 + 1024 * t1) +
-    2 ^ 32 * (4 * s2 + 1024 * t2) + 2 ^ 48 * (4 * s3 + 1024 * t3) = P
-  have f0 : P / 4 % 128 = s0 := by omega
-  have f1 : P / 2 ^ 18 % 128 = s1 := by omega
-  have f2 : P / 2 ^ 34 % 128 = s2 := by omega
-  have f3 : P / 2 ^ 50 % 128 = s3 := by omega
-  have c0 : P / 2 ^ 8 / 4 % 128 = t0 := by rw [Nat.div_div_eq_div_mul]; omega
-  have c1 : P / 2 ^ 8 / 2 ^ 18 % 128 = t1 := by rw [Nat.div_div_eq_div_mul]; omega
-  -- the two high coarse lanes: peel the low lanes off first
-  have hlow : P = 2 ^ 32 * ((4 * s2 + 1024 * t2) + 2 ^ 16 * (4 * s3 + 1024 * t3)) +
-      ((4 * s0 + 1024 * t0) + 2 ^ 16 * (4 * s1 + 1024 * t1)) := by rw [← hP]; ring
-  have hsmall : (4 * s0 + 1024 * t0) + 2 ^ 16 * (4 * s1 + 1024 * t1) < 2 ^ 32 := by omega
-  have hdiv : P / 2 ^ 32 = (4 * s2 + 1024 * t2) + 2 ^ 16 * (4 * s3 + 1024 * t3) := by
-    rw [hlow, Nat.mul_add_div (by positivity), Nat.div_eq_of_lt hsmall, Nat.add_zero]
-  have c2 : P / 2 ^ 8 / 2 ^ 34 % 128 = t2 := by
-    rw [Nat.div_div_eq_div_mul, show (2 : ℕ) ^ 8 * 2 ^ 34 = 2 ^ 32 * 2 ^ 10 by norm_num,
-      ← Nat.div_div_eq_div_mul, hdiv]
-    omega
-  have c3 : P / 2 ^ 8 / 2 ^ 50 % 128 = t3 := by
-    rw [Nat.div_div_eq_div_mul, show (2 : ℕ) ^ 8 * 2 ^ 50 = 2 ^ 32 * 2 ^ 26 by norm_num,
-      ← Nat.div_div_eq_div_mul, hdiv]
-    omega
-  rw [f0, f1, f2, f3, c0, c1, c2, c3]
-  ring
+  obtain ⟨h0, h1, h2, h3⟩ := fold_fields s0 s1 s2 s3 t0 t1 t2 t3 hs0 hs1 hs2 hs3 ht0 ht1 ht2 ht3
+  rw [and_maskFold]
+  norm_num [preFold] at *
+  rw [h0, h1, h2, h3]
 
 /-- The pre-fold value fits in a word. -/
 theorem preFold_lt (s0 s1 s2 s3 t0 t1 t2 t3 : ℕ)

@@ -1,3 +1,42 @@
+# upper-riscv: 393-cycle candidate — mask after folding
+
+This extends dhsorens's 394-cycle paired-dispatch construction and its Lean proof.
+The scheme, hash queries, signature format, digit profile, and security argument
+are unchanged. The fold becomes `SRLI; ADD; AND` instead of
+`SRLI; AND; AND; ADD`, using broadcast mask `0x03fc` instead of `0x01fc`.
+
+For fine sums s<128 and coarse sums t<48, write the packed input as P=4N,
+where N's bytes alternate the s and t values. Dividing P+P/256 by four gives
+N+N/256. Adjacent byte sums are below 256, so selecting alternating bytes
+recovers s+t with no interfering carry. `fold_fields` and `fold_toNat` establish
+this in Lean. Index cost falls 43 to 42; total becomes 42+331+20=393.
+The image has 12493 instructions and 104 data bytes, totaling 50076 bytes.
+
+Development checks: the standalone arithmetic lemma compiles with only propext
+and Quot.sound. A Python instruction interpreter agrees with a separate verifier
+on complete oracle transcripts and decisions for 5626 cases, including each invalid
+length through 5505 and an oversized input. It also checks 786432 local carry
+cases and 100000 random packed words. The candidate image generated in Python
+matches all instructions and data exported from the Lean Program definition.
+These tests do not replace the full certificate or comparator replay.
+
+The official verifier could not start locally: no configured bounded work
+filesystem, and this host has systemd 255 rather than the documented >=257.
+The complete local build of Submissions.UpperRiscv.Solution passed, including
+the certificate axiom guard (propext, Classical.choice, Quot.sound), and the
+source-policy check passed. Comparator replay and the production resource/isolation
+check remain outstanding. Do not interpret this infrastructure failure as a proof rejection.
+
+What did not work: omega alone on the full expanded modulo expression was not
+sufficient; expressing the sum as base-256 digits exposes the no-carry invariant.
+Lowering target 215 to 214 also fails the current availability count.
+Next: wider/dense dispatch and cheaper pointer management, with their full setup
+costs counted. The historical notes below describe the inherited construction.
+
+Assisted by: GPT-6
+
+---
+
 # upper-riscv: 394 cycles — paired dispatch
 
 ## Idea

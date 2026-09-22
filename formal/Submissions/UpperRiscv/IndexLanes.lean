@@ -185,7 +185,7 @@ theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
 /-! ## The fold -/
 
 /-- The machine's fold of the lane sum with the fold mask `m`. -/
-def foldValue (x m : Word) : Word := (x &&& m) + ((x >>> 8) &&& m)
+def foldValue (x m : Word) : Word := (x + (x >>> 8)) &&& m
 
 structure FoldEffect (a b : MachineState) : Prop where
   acc : b.getReg .x27 = foldValue (a.getReg .x27) (a.getReg .x1)

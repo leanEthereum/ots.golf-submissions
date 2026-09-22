@@ -76,7 +76,7 @@ def outAddr (k : ℕ) : ℕ := 0x400038 + 24 * k
 /-! ## Code layout -/
 
 /-- The length of the index phase. -/
-def indexLength : ℕ := 49
+def indexLength : ℕ := 48
 
 /-- The code address of the first copy: after the index phase and block 0's prologue. -/
 def copiesStart : ℕ := 4096 + 4 * (indexLength + 4)
@@ -131,7 +131,7 @@ def laneWord (g : ℕ) : Code :=
 def lanes : Code := (List.range 4).flatMap laneWord
 
 /-- Bring the coarse fields down onto the fine ones: every lane then holds `4 · (dA + dB)`. -/
-def fold : Code := [.SRLI .x26 .x27 8, .AND .x26 .x26 .x1, .AND .x27 .x27 .x1, .ADD .x27 .x27 .x26]
+def fold : Code := [.SRLI .x26 .x27 8, .ADD .x27 .x27 .x26, .AND .x27 .x27 .x1]
 
 def sumCheck : Code :=
   [.MUL .x27 .x27 .x2, .SRLI .x27 .x27 48, .XORI .x27 .x27 (BitVec.ofNat 12 (4 * target)),
@@ -194,10 +194,10 @@ def broadcast (v : ℕ) : ℕ := v + v * 2 ^ 16 + v * 2 ^ 32 + v * 2 ^ 48
 def wordBytes (v : ℕ) : List (BitVec 8) := (List.range 8).map fun j => BitVec.ofNat 8 (v / 2 ^ (8 * j))
 
 /-- The pair mask keeps lane bits `2 … 6` and `10 … 13`; the single mask bits `2 … 6`; the fold
-mask bits `2 … 8`. -/
+mask bits `2 … 9`. -/
 def pairMask : ℕ := 0x3C7C
 def singleMask : ℕ := 0x7C
-def foldMask : ℕ := 0x1FC
+def foldMask : ℕ := 0x3FC
 
 def dataImage : List (BitVec 8) :=
   List.replicate 32 0 ++ wordBytes (broadcast pairMask) ++ wordBytes (broadcast singleMask) ++

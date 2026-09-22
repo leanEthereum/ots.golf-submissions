@@ -101,16 +101,16 @@ theorem pairsCode_length : pairsCode.length = 12288 := by
   rw [List.length_flatMap]
   simp [groupCode_length]
 
-theorem indexPhase_length' : (indexPhase ++ prologue 0).length = 53 := by decide
+theorem indexPhase_length' : (indexPhase ++ prologue 0).length = 52 := by decide
 
-theorem verifier_drop_53 : verifier.drop 53 = pairsCode ++ (singlesCode ++ (root ++ decision)) := by
+theorem verifier_drop_52 : verifier.drop 52 = pairsCode ++ (singlesCode ++ (root ++ decision)) := by
   have : verifier = (indexPhase ++ prologue 0) ++ (pairsCode ++ (singlesCode ++ (root ++ decision))) := by
     simp [verifier]
   rw [this, List.drop_left' indexPhase_length']
 
 /-- The code address of copy `dB` of pair `q`, as an offset into the image. -/
 theorem copyStart_eq (q dB : ℕ) :
-    copyStart q dB = 4096 + 4 * (53 + (4096 * (q / 4) + (256 * (15 - dB) + 64 * (q % 4)))) := by
+    copyStart q dB = 4096 + 4 * (52 + (4096 * (q / 4) + (256 * (15 - dB) + 64 * (q % 4)))) := by
   unfold copyStart copiesStart indexLength; omega
 
 theorem pairsCode_drop (g r : ℕ) (hg : g < 3) (hr : r < 4096) :
@@ -151,19 +151,19 @@ theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifi
   have hc16 : c < 16 := by omega
   have hqe : 4 * g + j = q := by omega
   have hdBe : 15 - c = dB := by omega
-  have e : verifier.drop (53 + (4096 * g + (256 * c + 64 * j))) =
+  have e : verifier.drop (52 + (4096 * g + (256 * c + 64 * j))) =
       copyCode q dB ++ (((List.range' (j + 1) (4 - (j + 1))).flatMap
           fun j => copyCode (4 * g + j) (15 - c)) ++
         ((List.range' (c + 1) (16 - (c + 1))).flatMap
           fun c => (List.range 4).flatMap fun j => copyCode (4 * g + j) (15 - c)) ++
         ((List.range' (g + 1) (3 - (g + 1))).flatMap groupCode ++
           (singlesCode ++ (root ++ decision)))) := by
-    rw [← List.drop_drop, verifier_drop_53, List.drop_append_of_le_length (by
+    rw [← List.drop_drop, verifier_drop_52, List.drop_append_of_le_length (by
       rw [pairsCode_length]; omega),
       pairsCode_drop g _ hg3 (by omega), groupCode_drop g c _ hc16 (by omega),
       innerCode_drop g c j hc16 hj4, hqe, hdBe]
     simp only [List.append_assoc]
-  have h := CodeAt.drop global (53 + (4096 * g + (256 * c + 64 * j)))
+  have h := CodeAt.drop global (52 + (4096 * g + (256 * c + 64 * j)))
   rw [e] at h
   rw [copyStart_eq q dB, ← W_add]
   exact ⟨_, h⟩
@@ -171,7 +171,7 @@ theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifi
 /-- The tail of single block `s'`: the next prologue, or the root and the decision. -/
 def singleTail (s' : ℕ) : Code := if s' < 3 then prologue (13 + s') else root ++ decision
 
-theorem singlesStart_eq : singlesStart = 4096 + 4 * (53 + 12288) := by
+theorem singlesStart_eq : singlesStart = 4096 + 4 * (52 + 12288) := by
   unfold singlesStart copiesStart indexLength; omega
 
 /-- The table of single block `12 + s'` is located at `singleTableStart s'`, followed by its
@@ -180,20 +180,20 @@ theorem single_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) veri
     (hs : s' < 4) :
     ∃ rest, Riscv.CodeAt s (W (singleTableStart s'))
       (List.replicate 32 .ECALL ++ (singleTail s' ++ rest)) := by
-  have e0 : verifier.drop (53 + 12288) = singlesCode ++ (root ++ decision) := by
-    rw [← List.drop_drop, verifier_drop_53, List.drop_append_of_le_length (by
+  have e0 : verifier.drop (52 + 12288) = singlesCode ++ (root ++ decision) := by
+    rw [← List.drop_drop, verifier_drop_52, List.drop_append_of_le_length (by
       rw [pairsCode_length]), List.drop_eq_nil_of_le (by rw [pairsCode_length]), List.nil_append]
-  have hs' : singleTableStart s' = 4096 + 4 * (53 + 12288 + 36 * s') := by
+  have hs' : singleTableStart s' = 4096 + 4 * (52 + 12288 + 36 * s') := by
     unfold singleTableStart; rw [singlesStart_eq]; ring
   have key : (singlesCode ++ (root ++ decision)).drop (36 * s') =
       List.replicate 32 .ECALL ++ (singleTail s' ++
         (singlesCode ++ (root ++ decision)).drop (36 * s' + 32 + (singleTail s').length)) := by
     interval_cases s' <;> decide +kernel
-  have e : verifier.drop (53 + 12288 + 36 * s') =
+  have e : verifier.drop (52 + 12288 + 36 * s') =
       List.replicate 32 .ECALL ++ (singleTail s' ++
         (singlesCode ++ (root ++ decision)).drop (36 * s' + 32 + (singleTail s').length)) := by
     rw [← List.drop_drop, e0, key]
-  have h := CodeAt.drop global (53 + 12288 + 36 * s')
+  have h := CodeAt.drop global (52 + 12288 + 36 * s')
   rw [e] at h
   rw [hs', ← W_add]
   exact ⟨_, h⟩

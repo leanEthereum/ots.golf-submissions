@@ -133,10 +133,9 @@ theorem fold_laneSum (a : MachineState) (hm : MasksLoaded a) (hfm : a.getReg .x1
   have hmask : (W (broadcast foldMask)).toNat = broadcast foldMask :=
     broadcast_toNat _ (by norm_num [foldMask])
   unfold foldValue
-  rw [BitVec.toNat_add, BitVec.toNat_and, BitVec.toNat_and, BitVec.toNat_ushiftRight,
-    Nat.shiftRight_eq_div_pow, hfm, hmask, hL, hfold, Nat.mod_eq_of_lt]
-  unfold preFold at *
-  omega
+  rw [BitVec.toNat_and, BitVec.toNat_add, BitVec.toNat_ushiftRight,
+    Nat.shiftRight_eq_div_pow, hfm, hmask, hL]
+  exact hfold
 
 /-! ## The fields of the answer -/
 
