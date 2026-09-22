@@ -107,7 +107,7 @@ theorem CodeAt.initial (image : Image) (pk : PublicKey) (m : Message)
 /-- The straight-line instruction subset used by the verifier. -/
 def linearInstruction : Instr → Bool
   | .ADDI .. | .LUI .. | .LD .. | .SD .. | .SH .. | .LHU .. | .ADD .. | .SUB .. | .MUL ..
-  | .XOR .. | .XORI .. | .AND .. | .OR .. | .SLTU .. | .SLTIU .. | .SLLI .. | .SRLI .. => true
+  | .REMU .. | .XOR .. | .XORI .. | .AND .. | .OR .. | .SLTU .. | .SLTIU .. | .SLLI .. | .SRLI .. => true
   | _ => false
 
 /-- The memory checks imposed by the fixed machine on these instructions. -/

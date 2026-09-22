@@ -1,7 +1,8 @@
-# Work in progress: 377-cycle mixed-width candidate
+# 377-cycle mixed-width candidate
 
 This branch extends dhsorens's 394-cycle construction and the verified 393-cycle
-submission by Alexander Hicks, assisted by GPT-6. It is **not ready for submission**.
+submission by Alexander Hicks, assisted by GPT-6. The complete certificate now checks
+locally in the pinned Lean compiler. Official service validation is pending.
 
 The 64-bit-nonce, 375-cycle proposal was rejected after identifying a chosen-message
 collision attack violating the challenge's quantitative security bound. This branch
@@ -17,10 +18,43 @@ The Lean image matches the independently tested Python generator instruction for
 instruction and byte for byte. Axiom checks use only propext, Classical.choice,
 and Quot.sound.
 
-Still required: universal machine refinement and the 377-cycle bound. Candidate,
-Solution, claim.txt, and the old Riscv2Program machine proofs are inherited from
-the 393-cycle baseline and have NOT been ported to the mixed construction. Their
-presence is not a complete certificate for this branch. Do not submit this snapshot.
+`MixedVerifier.image_refines` now proves the complete machine's exact oracle computation
+and 377-cycle bound on every public key, message and raw signature. `Candidate.machineCertificate`
+bundles that theorem with the algorithm's admissibility and security proofs; `Solution`
+exports it at claim 377 and proves the image-size bound. Axiom checks permit only
+propext, Classical.choice and Quot.sound. Obsolete baseline execution modules have
+been removed; shared baseline machine lemmas remain.
+
+The local official wrapper stops before proof checking because this host lacks the
+required dedicated work filesystem of at most 64 GiB. No isolation requirement was
+disabled. The service must perform its comparator, kernel replay and resource checks.
+
+The proved accounting is 42 index cycles, 192 chain hashes, 64 pointer instructions,
+24 narrow-state redirects, 32 dispatch instructions, one length change, and 22 root/
+decision cycles. The 377 variant reduces charged hash work from 255 to 206 blocks,
+while increasing ordinary instructions from 138 to 171. No physical-hardware or
+zkVM wall-time speedup has been measured.
+
+REMU by 65535 sums four bounded 16-bit lanes because 2^16 is congruent to one modulo
+65535. The mixed digit layout needs two masks before adding the shifted coarse fields;
+remainder saves the instruction that this extra mask consumes. Two 5/3 pairs keep
+replicated code within the range reachable by a halfword load plus signed JALR offset.
+All-four-bit digits allow a lower accepted target but exceed this cheap dispatch layout.
+
+The root layout includes two full boundary tops to preserve unread packed data at the
+wide/narrow boundary. An earlier 376-cycle placement corrupted four input bytes; full
+oracle-transcript comparison exposed it. The narrower nonce-64 variant saves two
+redirects but fails the security requirement: chosen-message collisions exceed the
+allowed bound by at least 7.28 times at the analysed query budget. Do not revive that
+375 claim without a changed construction and a new security argument.
+
+Further directions: improve dispatch encoding, prove stronger freshness/availability
+bounds to permit different widths, or redesign the index coding. The bounded parameter
+search and instruction experiments do not establish global optimality. Concrete hardware
+charges REMU latency and instruction-cache effects; a zkVM charges its actual arithmetic,
+memory and hash-precompile traces. The abstract one-cycle instruction model omits those
+weights. Fewer hashes are the most portable potential gain; replicated code and REMU
+need measurement on the intended implementation.
 
 The preserved notes below describe the previously verified 393-cycle baseline.
 

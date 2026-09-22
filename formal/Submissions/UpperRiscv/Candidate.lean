@@ -1,6 +1,6 @@
 import OptimalOTS.Riscv
 import Submissions.UpperRiscv.Wire
-import Submissions.UpperRiscv.Verifier
+import Submissions.UpperRiscv.MixedVerifier
 
 /-! The proved OTS specification and its RV64IM implementation. -/
 
@@ -10,7 +10,7 @@ open OracleComp
 
 noncomputable def submission : Riscv.Submission where
   scheme := Wire.scheme
-  image := Riscv2Program.image
+  image := RiscvMixedProgram.image
   fuel := fun _ _ _ => 1337
 
 theorem submission_scheme : submission.scheme = Wire.scheme := rfl
@@ -26,20 +26,19 @@ theorem submission_secure : submission.scheme.Secure := by
 /-- The machine's complete oracle computation is the certified verifier on every input, so
 every execution terminates within the fixed fuel and issues exactly the specified queries. -/
 theorem submission_implements : submission.Implements := by
-  refine ⟨Riscv2Program.image_valid, fun pk m bits => ?_⟩
-  change Riscv.observe 1337 (Riscv.initialState Riscv2Program.image pk m bits) =
+  refine ⟨RiscvMixedProgram.image_valid, fun pk m bits => ?_⟩
+  change Riscv.observe 1337 (Riscv.initialState RiscvMixedProgram.image pk m bits) =
     some <$> Wire.scheme.verify pk m bits
-  rw [(Riscv2Program.image_refines pk m bits).1, ForestVerifier.directVerify_eq]
+  rw [(RiscvMixedProgram.image_refines pk m bits).1, ForestVerifier.directVerify_eq]
 
-/-- Every run, accepting or rejecting, executes at most 393 cycles: one per executed
-instruction and eleven for the 5440-bit root hash, with the chain steps charged by the path
-taken through the pair copies and the single tables. -/
-theorem submission_cycles : submission.CyclesAtMost 393 := by
+/-- Every accepting or rejecting run costs at most 377 cycles: 42 for index processing,
+313 for all chain blocks, and 22 for the root and decision. -/
+theorem submission_cycles : submission.CyclesAtMost 377 := by
   intro pk m bits b cycles completed
-  exact (Riscv2Program.image_refines pk m bits).2 b cycles completed
+  exact (RiscvMixedProgram.image_refines pk m bits).2 b cycles completed
 
-/-- Every requirement of a scored RISC-V submission, at 393 cycles. -/
-theorem machineCertificate : submission.Certificate 393 :=
+/-- Every requirement of a scored RISC-V submission, at 377 cycles. -/
+theorem machineCertificate : submission.Certificate 377 :=
   ⟨submission_admissible, submission_secure, submission_implements, submission_cycles⟩
 
 /--

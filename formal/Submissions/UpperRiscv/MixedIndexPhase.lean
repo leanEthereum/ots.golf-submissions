@@ -1,14 +1,17 @@
-import Submissions.UpperRiscv.IndexArith
+import Submissions.UpperRiscv.MixedDispatchArith
+import Submissions.UpperRiscv.MixedContext
 
 /-!
 # The index phase
 
 The machine saves the public key, hashes `pk ‖ message ‖ nonce`, rejects wrong lengths, builds
-the four lane words, folds and rejects unless the fields sum to `215`, and sets the chain input
+the four lane words, folds and rejects unless the fields sum to `160`, and sets the chain input
 length: the state `afterIndex` then satisfies the chain-phase invariant.
 -/
 
-namespace OptimalOTS.Riscv2Program
+namespace OptimalOTS.RiscvMixedProgram
+
+open Riscv2Program
 
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 OracleComp
@@ -19,8 +22,8 @@ theorem dataImage_length : dataImage.length = 104 := by decide
 
 /-- The nine constant words of the data image, after the 32-byte answer buffer. -/
 def dataWord (j : ℕ) : ℕ :=
-  [broadcast pairMask, broadcast singleMask, broadcast foldMask, broadcast 1, 0, 5504,
-    broadcast (laneBaseOf 0), broadcast (laneBaseOf 1), broadcast (laneBaseOf 2)].getD j 0
+  [firstMask, broadcast 0x1e3c, broadcast 0x1fc, 65535, 0, 5504,
+    baseWord 0, baseWord 1, baseWord 2].getD j 0
 
 theorem dataImage_word (j : ℕ) (hj : j < 9) :
     bytesToWordLE ((dataImage.drop (8 * (4 + j))).take 8) = W (dataWord j) := by
@@ -206,7 +209,7 @@ def S3 : MachineState := lenBlock.foldl execInstrBr (S2 pk m bits answer)
 def S4 : MachineState := (S3 pk m bits answer).setPC ((S3 pk m bits answer).pc + 16)
 
 def sumOps : Code :=
-  [.MUL .x27 .x27 .x2, .SRLI .x27 .x27 48, .XORI .x27 .x27 (BitVec.ofNat 12 (4 * target))]
+  [.REMU .x27 .x27 .x2, .XORI .x27 .x27 (BitVec.ofNat 12 (4 * target))]
 
 theorem sumCheck_parts : sumCheck = sumOps ++ ([.BEQ .x27 .x0 16] ++ reject) := rfl
 
@@ -292,13 +295,13 @@ structure LoadEffect (a b : MachineState) : Prop where
   x21 : b.getReg .x21 = wordOf answer 1
   x22 : b.getReg .x22 = wordOf answer 2
   x23 : b.getReg .x23 = wordOf answer 3
-  x24 : b.getReg .x24 = W (broadcast pairMask)
-  x25 : b.getReg .x25 = W (broadcast singleMask)
-  x1 : b.getReg .x1 = W (broadcast foldMask)
-  x2 : b.getReg .x2 = W (broadcast 1)
-  x3 : b.getReg .x3 = W (broadcast (laneBaseOf 0))
-  x4 : b.getReg .x4 = W (broadcast (laneBaseOf 1))
-  x7 : b.getReg .x7 = W (broadcast (laneBaseOf 2))
+  x24 : b.getReg .x24 = W (firstMask)
+  x25 : b.getReg .x25 = W (broadcast 0x1e3c)
+  x1 : b.getReg .x1 = W (broadcast 0x1fc)
+  x2 : b.getReg .x2 = W (65535)
+  x3 : b.getReg .x3 = W (baseWord 0)
+  x4 : b.getReg .x4 = W (baseWord 1)
+  x7 : b.getReg .x7 = W (baseWord 2)
   regs : ∀ r, r ≠ .x20 → r ≠ .x21 → r ≠ .x22 → r ≠ .x23 → r ≠ .x24 → r ≠ .x25 → r ≠ .x1 →
     r ≠ .x2 → r ≠ .x3 → r ≠ .x4 → r ≠ .x7 → b.getReg r = a.getReg r
   mem : ∀ addr, b.getMem addr = a.getMem addr
@@ -397,13 +400,13 @@ theorem S45_words : WordsLoaded (S45 pk m bits answer) answer := by
   · exact LE.x23
 
 theorem S45_bases (g : ℕ) (hg : g < 4) :
-    (S45 pk m bits answer).getReg (baseReg g) = W (broadcast (laneBaseOf g)) := by
+    (S45 pk m bits answer).getReg (baseReg g) = W (baseWord g) := by
   have LE := loadWords_effect pk m bits answer
   interval_cases g
   · exact LE.x3
   · exact LE.x4
   · exact LE.x7
-  · exact LE.x7
+  · rw [baseWord_last]; exact LE.x7
 
 theorem lanes_effect :
     Riscv.LinearReady (S45 pk m bits answer) lanes ∧
@@ -420,16 +423,16 @@ theorem mainBlock_ready : Riscv.LinearReady (S4 pk m bits answer) mainBlock := b
     (fold_ready _)).append ?_
   simp [sumOps, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
-theorem S46_x1 : (S46 pk m bits answer).getReg .x1 = W (broadcast foldMask) := by
+theorem S46_x1 : (S46 pk m bits answer).getReg .x1 = W (broadcast 0x1fc) := by
   rw [(lanes_effect pk m bits answer).2.regs .x1 (by decide) (by decide)]
   exact (loadWords_effect pk m bits answer).x1
 
 theorem S5_x27 : (S5 pk m bits answer).getReg .x27 =
-    ((foldValue (laneSum (S45 pk m bits answer) 4) ((S45 pk m bits answer).getReg .x1) *
-      W (broadcast 1)) >>> 48) ^^^ signExtend12 (BitVec.ofNat 12 (4 * target)) := by
+    (rv64_remu (foldValue (laneSum (S45 pk m bits answer) 4) ((S45 pk m bits answer).getReg .x1))
+      (W 65535)) ^^^ signExtend12 (BitVec.ofNat 12 (4 * target)) := by
   have L := (lanes_effect pk m bits answer).2
   have F := fold_effect' pk m bits answer
-  have x2 : (S47 pk m bits answer).getReg .x2 = W (broadcast 1) := by
+  have x2 : (S47 pk m bits answer).getReg .x2 = W (65535) := by
     rw [F.regs .x2 (by decide) (by decide), L.regs .x2 (by decide) (by decide)]
     exact (loadWords_effect pk m bits answer).x2
   have x1 : (S46 pk m bits answer).getReg .x1 = (S45 pk m bits answer).getReg .x1 :=
@@ -458,22 +461,21 @@ theorem sum_iff : (S5 pk m bits answer).getReg .x27 = (S5 pk m bits answer).getR
     Accepted (pack answer) := by
   rw [S5_x27, accepted_iff, show (S5 pk m bits answer).getReg .x0 = 0#64 from rfl,
     BitVec.xor_eq_zero_iff]
-  have e864 : signExtend12 (BitVec.ofNat 12 (4 * target)) = W 860 := by decide
-  have top := top_fold_answer (S45 pk m bits answer) (S45_masks pk m bits answer) answer
-    (S45_words pk m bits answer) (by
-      rw [← S46_x1 pk m bits answer]
-      exact ((lanes_effect pk m bits answer).2.regs .x1 (by decide) (by decide)).symm)
-  rw [e864]
+  have e640 : signExtend12 (BitVec.ofNat 12 (4 * target)) = W 640 := by decide
+  have total := remainder_fold_answer (S45 pk m bits answer) (S45_masks pk m bits answer) answer
+    (S45_words pk m bits answer) (loadWords_effect pk m bits answer).x1
+  rw [e640]
+  have e : ∀ x : Word, (rv64_remu x (W 65535)).toNat = x.toNat % 65535 := by
+    intro x
+    simp [rv64_remu, W, BitVec.toNat_umod]
   constructor
   · intro h
     have hn := congrArg BitVec.toNat h
-    rw [BitVec.toNat_ushiftRight, BitVec.toNat_mul, broadcast_toNat 1 (by norm_num),
-      Nat.shiftRight_eq_div_pow, top, W_toNat _ (by norm_num)] at hn
+    rw [e, total, W_toNat _ (by norm_num)] at hn
     omega
   · intro h
     apply BitVec.eq_of_toNat_eq
-    rw [BitVec.toNat_ushiftRight, BitVec.toNat_mul, broadcast_toNat 1 (by norm_num),
-      Nat.shiftRight_eq_div_pow, top, W_toNat _ (by norm_num), h]
+    rw [e, total, W_toNat _ (by norm_num), h]
 
 theorem S6_regs (r : Reg) : (S6 pk m bits answer).getReg r = (S5 pk m bits answer).getReg r := by
   simp [S6]
@@ -545,30 +547,6 @@ theorem afterIndex_frame (addr : Word)
 def acceptedIdx (hi : Accepted (pack answer)) : Idx :=
   ⟨pack answer, mem_validSet.mpr ⟨pack_lt answer, hi⟩⟩
 
-theorem afterIndex_payloadFrom :
-    PayloadFrom (afterIndex pk m bits answer) (bits.drop 128) 0 := by
-  intro j _ hj
-  have h0 := initialState_signature image pk m bits image_data_length
-  have h := memBits_extract (start := 128 + 192 * j) (len := 192) h0 (by omega) (by omega)
-  rw [ofBits_extract _ (by omega), ofBits_drop_take _ (by omega)] at h
-  rw [List.drop_drop]
-  have e : Riscv.signatureBase + BitVec.ofNat 64 ((128 + 192 * j) / 8) = slotW j := by
-    rw [show Riscv.signatureBase = W 0x400030 from rfl, W_add]
-    show W _ = W (slotAddr j)
-    unfold slotAddr payloadAddr
-    congr 1
-    omega
-  rw [e] at h
-  apply memBits_of_word_frame _ _ _ _ h
-  intro i hi
-  have ha : (alignToDword (slotW j + BitVec.ofNat 64 (i / 8))).toNat =
-      (slotAddr j + i / 8) / 8 * 8 := by
-    rw [alignToDword_toNat, W_add, W_toNat _ (by unfold slotAddr payloadAddr; omega)]
-  apply afterIndex_frame
-  rw [ha]
-  exact ⟨Or.inr (by unfold slotAddr payloadAddr dataAddr; omega),
-    Or.inr (by unfold slotAddr payloadAddr laneBase; omega)⟩
-
 theorem afterIndex_x13 (hlen : bits.length = 5504) :
     (afterIndex pk m bits answer).getReg .x13 = W 5504 := by
   rw [afterIndex_prefixReg _ _ _ _ .x13 (by decide) (by decide) (by decide) (by decide)
@@ -576,49 +554,37 @@ theorem afterIndex_x13 (hlen : bits.length = 5504) :
   rfl
 
 theorem laneGroup_lt (q : ℕ) (hq : q < 16) : laneGroup q < 4 := by
-  unfold laneGroup; split_ifs <;> omega
+  unfold laneGroup; omega
 
-theorem laneIdx_lt (q : ℕ) (hq : q < 16) : laneIdx q < 4 := by
-  unfold laneIdx; split_ifs <;> omega
+theorem laneIdx_lt (q : ℕ) (_hq : q < 16) : laneIdx q < 4 := by
+  unfold laneIdx; omega
 
-theorem fineChain_lane (q : ℕ) (hq : q < 16) : fineChain (laneGroup q) (laneIdx q) = firstChain q := by
-  unfold fineChain laneGroup laneIdx firstChain
-  split_ifs <;> omega
+theorem fineChain_lane (q : ℕ) (_hq : q < 16) : fineChain (laneGroup q) (laneIdx q) = firstChain q := by
+  unfold fineChain laneGroup laneIdx firstChain; omega
 
-theorem coarseChain_lane (q : ℕ) (hq : q < 12) : coarseChain (laneGroup q) (laneIdx q) = 2 * q + 1 := by
-  unfold coarseChain laneGroup laneIdx
-  rw [if_pos hq, if_pos hq]
-  omega
+theorem coarseChain_lane (q : ℕ) (_hq : q < 16) : coarseChain (laneGroup q) (laneIdx q) = 2*q+1 := by
+  unfold coarseChain laneGroup laneIdx; omega
 
-theorem laneBaseOf_ge (g : ℕ) : 15484 ≤ laneBaseOf g ∧ laneBaseOf g < 2 ^ 16 := by
-  unfold laneBaseOf; split_ifs <;> norm_num
-
-/-- The lane halfwords hold the dispatch values of the accepted index. -/
+/-- The stored halfwords hold the dispatch values for all sixteen chain pairs. -/
 theorem afterIndex_lanes (hi : Accepted (pack answer)) (q : Fin 16) :
     ((afterIndex pk m bits answer).getHalfword (W (laneAddr q))).toNat =
-      laneBaseOf (laneGroup q) - dispatch (acceptedIdx answer hi) q := by
+      baseLane q - dispatch (acceptedIdx answer hi) q := by
   have L := (lanes_effect pk m bits answer).2
   have hq := q.isLt
   have hg := laneGroup_lt q hq
   have hl := laneIdx_lt q hq
-  have hfc := firstChain_lt q hq
-  have addr : laneAddr q = laneWordAddr (laneGroup q) + 2 * laneIdx q := rfl
+  have addr : laneAddr q = laneWordAddr (laneGroup q) + 2*laneIdx q := by
+    unfold laneAddr laneWordAddr laneGroup laneIdx; omega
   rw [addr, getHalfword_lane _ _ _ (by unfold laneWordAddr laneBase; omega) hl
     (by unfold laneWordAddr laneBase; omega), afterIndex_mem, L.stored _ hg,
-    S45_bases pk m bits answer _ hg]
-  have hB := laneBaseOf_ge (laneGroup q)
-  rw [lane_halfword _ _ _ _ hB.1 hB.2 hl _ (laneOf_toNat _ (S45_masks pk m bits answer) _ hg),
-    S45_words pk m bits answer _ hg, fine_word answer _ _ hg hl, fineChain_lane q hq]
-  unfold dispatch coarseDigit coarseOf
-  have hd : ∀ k, k < 28 → digit (acceptedIdx answer hi).val k = fieldDigit answer k :=
-    fun k hk => digit_pack answer hk
-  rw [hd _ hfc]
-  by_cases h12 : q.val < 12
-  · have hg3 : laneGroup q < 3 := by unfold laneGroup; rw [if_pos h12]; omega
-    rw [if_pos hg3, if_pos h12, coarse_word answer _ _ hg3 hl, coarseChain_lane q h12,
-      hd _ (by omega)]
-  · have hg3 : ¬ laneGroup q < 3 := by unfold laneGroup; rw [if_neg h12]; omega
-    rw [if_neg hg3, if_neg h12]
+    S45_bases pk m bits answer _ hg,
+    lane_halfword _ _ _ hg hl _ (laneOf_toNat _ (S45_masks pk m bits answer) _ hg),
+    S45_words pk m bits answer _ hg, fine_word answer _ _ hg hl, fineChain_lane q hq,
+    coarse_word answer _ _ hg hl, coarseChain_lane q hq]
+  have eq : 4*laneGroup q+laneIdx q = q := by unfold laneGroup laneIdx; omega
+  rw [eq]
+  unfold dispatch coarseDigit firstChain acceptedIdx
+  rw [digit_pack answer (by omega : 2*q.val < 32), digit_pack answer (by omega : 2*q.val+1 < 32)]
 
 theorem afterIndex_ctx (hi : Accepted (pack answer)) (hlen : bits.length = 5504)
     (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier) :
@@ -631,7 +597,7 @@ theorem afterIndex_ctx (hi : Accepted (pack answer)) (hlen : bits.length = 5504)
     rcases hr with rfl | rfl | rfl <;>
       exact afterIndex_prefixReg _ _ _ _ _ (by decide) (by decide) (by decide) (by decide)
         (by decide)
-  refine ⟨?_, ?_, ?_, r11, afterIndex_lanes pk m bits answer hi,
+  refine ⟨?_, ?_, ?_, afterIndex_lanes pk m bits answer hi,
     afterIndex_x13 pk m bits answer hlen, located.code_eq (afterIndex_code pk m bits answer)⟩
   · rw [pre .x30 (Or.inl rfl), P.x30]
   · rw [pre .x31 (Or.inr (Or.inl rfl)), P.x31]
@@ -684,7 +650,7 @@ theorem beq_refines (s : MachineState) (r r' : Reg) (fuel : ℕ) (tail : Code)
 theorem indexPhase_parts : indexPhase = indexPrefix ++ ([.ECALL] ++ (lenBlock ++
     ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++ ([.BEQ .x27 .x0 16] ++ reject ++
       setup))))) := by
-  simp only [indexPhase, lengthCheck_parts, sumCheck_parts, mainBlock, List.append_assoc]
+  simp only [indexPhase, lengthCheck_parts, sumCheck_parts, mainBlock, lanes, lanesUpTo, setup, List.append_assoc]
 
 theorem indexPhase_length : indexPhase.length = 48 := by decide
 
@@ -821,9 +787,9 @@ theorem afterIndex_pc (answer : BitVec hashBits) :
       BitVec.ofNat 64 (4 * lenBlock.length) := Riscv.linear_fold_pc _ _ lenReady
   have e6 : (S2 pk m bits answer).pc = (afterPrefix pk m bits).pc + 4 := rfl
   rw [e1, e2, e3, e4, e5, e6, (prefix_effect pk m bits).pc, mainBlock_length]
-  simp only [setup, lenBlock, List.length_cons, List.length_nil, blockZero, indexLength]
+  simp only [setup, lenBlock, List.length_cons, List.length_nil, blockZero]
   decide
 
 end Refine
 
-end OptimalOTS.Riscv2Program
+end OptimalOTS.RiscvMixedProgram

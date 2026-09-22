@@ -1,19 +1,11 @@
-import Submissions.UpperRiscv.RootPhase
+import Submissions.UpperRiscv.MixedPhase
 
-/-!
-# Exact refinement of the machine image
-
-The image observes exactly the certified raw-signature verifier, preserving every oracle query,
-and every run, accepting or rejecting, costs at most `cycleBound = 393` cycles: 42 for the index
-phase, `6 + (dA + 1) + (dB + 1)` per pair block and `4 + (d + 1)` per single block (331 in all,
-since the digits sum to 215), and 20 for the root and the decision.
--/
-
-namespace OptimalOTS.Riscv2Program
+namespace OptimalOTS.RiscvMixedProgram
 
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
 open scoped Classical
+open Riscv2Program
 
 set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
@@ -27,7 +19,7 @@ noncomputable def acceptedTail (pk : PublicKey) (bits : List Bool)
     (answer : BitVec hashBits) : OracleComp Spec (Option Bool) :=
   some <$> (if hi : pack answer ∈ validSet then
       if bits.length = 5504 then (do
-        let y ← directReconstruct ⟨_, hi⟩ (bits.drop 128)
+        let y ← directReconstruct ⟨_, hi⟩ (Payload.permute (bits.drop 128))
         return decide ((y rh.fin).setWidth 128 = pk))
       else return false
     else return false)
@@ -57,21 +49,8 @@ theorem directVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
 
 theorem image_code : image.code = verifier := rfl
 
-theorem verifier_length : verifier.length = 12493 := by decide +kernel
-
-theorem image_valid : image.Valid := by
-  refine ⟨?_, ?_, ?_⟩
-  · change verifier.length ≤ 262144
-    rw [verifier_length]
-    norm_num
-  · change dataImage.length ≤ 1048576
-    rw [dataImage_length]
-    norm_num
-  · have checked : verifier.all Riscv.admittedInstruction = true := by decide +kernel
-    exact List.all_eq_true.mp checked
-
 /-- The certified cycle bound on every execution. -/
-def cycleBound : ℕ := 393
+def cycleBound : ℕ := 377
 
 theorem order_eq : order = chainsFrom 0 ++ [rc, rh] := by
   rw [← chainsFrom_zero]
@@ -81,7 +60,7 @@ theorem order_eq : order = chainsFrom 0 ++ [rc, rh] := by
 theorem acceptedTail_eq (pk : PublicKey) (bits : List Bool) (answer : BitVec hashBits)
     (hi : Accepted (pack answer)) (hlen : bits.length = 5504) :
     acceptedTail pk bits answer =
-      runNodes' (acceptedIdx answer hi) (bits.drop 128) order (fun _ => 0) 0 >>= fun r =>
+      runNodes' (acceptedIdx answer hi) (Payload.permute (bits.drop 128)) order (fun _ => 0) 0 >>= fun r =>
         pure (some (@decide ((r.1 rh.fin).setWidth 128 = pk) (Classical.propDecidable _))) := by
   have hi' : pack answer ∈ validSet := (acceptedIdx answer hi).2
   unfold acceptedTail
@@ -104,12 +83,11 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   have global : Riscv.CodeAt (Riscv.initialState image pk m bits) (W 4096) verifier := by
     rw [pc0] at located
     exact located
-  have e : verifier = indexPhase ++ (prologue 0 ++ (pairsCode ++ (singlesCode ++
-      (root ++ decision)))) := by
+  have e : verifier = indexPhase ++ (prologue 0 ++ (List.range 8).flatMap groupCode) := by
     simp only [verifier, List.append_assoc]
   rw [e] at located
-  rw [directVerify_unfold, show cycleBound = (331 + 20) + 42 from rfl]
-  apply indexPhase_refines pk m bits _ 342 1337
+  rw [directVerify_unfold, show cycleBound = (313 + 22) + 42 from rfl]
+  apply indexPhase_refines pk m bits _ 324 1337
     (fun answer => acceptedTail pk bits answer) _ (by norm_num) located
     (by rw [indexPhase_length]; norm_num)
   intro answer hi hlen left hleft
@@ -117,13 +95,7 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   simp only [bind_assoc]
   set index := acceptedIdx answer hi
   set s := afterIndex pk m bits answer
-  obtain ⟨r11, r10⟩ := afterIndex_setupRegs pk m bits answer
-  have inv : ChainsInv index (bits.drop 128) pk s (fun _ => 0) 0 := by
-    refine ⟨afterIndex_ctx pk m bits answer hi hlen global, ?_, fun h => absurd h (by norm_num),
-      afterIndex_payloadFrom pk m bits answer,
-      fun h => absurd h (by norm_num), fun h => absurd h (by norm_num)⟩
-    rw [r10]
-    rfl
+  have inv := initial_chains pk m bits answer hi hlen global (fun _ => 0)
   have located2 : ∃ junk, Riscv.CodeAt s s.pc (blockCodeAt 0 ++ junk) := by
     have h := located.append_right (first := indexPhase)
     have hp : (Riscv.initialState image pk m bits).pc + BitVec.ofNat 64 (4 * 48) =
@@ -133,15 +105,17 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
     rw [← afterIndex_pc pk m bits answer] at h'
     exact ⟨_, h'⟩
   rw [← blocksCost_zero index]
-  refine blocksFrom_refines index (bits.drop 128) pk _ 20 11 ?_ 16 0 rfl
+  refine blocks_refines index (bits.drop 128) pk _ 22 11
+    (by rw [List.length_drop, hlen]) ?_ 16 0 rfl
     (by norm_num) s (fun _ => 0) left inv located2 (by rw [blocksCost_zero]; omega)
   intro u y invU locatedU left2 hleft2
-  exact rootDecision_refines index (bits.drop 128) pk u y left2 invU locatedU hleft2
+  exact rootDecision_refines index (Payload.permute (bits.drop 128)) pk u y left2
+    (final_root index (bits.drop 128) pk invU) locatedU hleft2
 
 /--
-info: 'OptimalOTS.Riscv2Program.image_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'OptimalOTS.RiscvMixedProgram.image_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in
 #print axioms image_refines
 
-end OptimalOTS.Riscv2Program
+end OptimalOTS.RiscvMixedProgram

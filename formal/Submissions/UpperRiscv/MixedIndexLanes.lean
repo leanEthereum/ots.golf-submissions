@@ -1,4 +1,5 @@
-import Submissions.UpperRiscv.ChainContext
+import Submissions.UpperRiscv.MachineFacts
+import Submissions.UpperRiscv.MixedProgram
 
 /-!
 # The lane words and the fold of the index phase
@@ -9,7 +10,9 @@ masked words and in memory the dispatch halfwords (`lanesUpTo_effect`). The fold
 coarse fields onto the fine ones (`fold_effect`).
 -/
 
-namespace OptimalOTS.Riscv2Program
+namespace OptimalOTS.RiscvMixedProgram
+
+open Riscv2Program
 
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64
@@ -116,6 +119,8 @@ def laneSum (a : MachineState) : ℕ → Word
 /-- The first `n` lane words. -/
 def lanesUpTo (n : ℕ) : Code := (List.range n).flatMap laneWord
 
+def lanes : Code := lanesUpTo 4
+
 theorem lanes_eq : lanes = lanesUpTo 4 := rfl
 
 theorem lanesUpTo_succ (n : ℕ) : lanesUpTo (n + 1) = lanesUpTo n ++ laneWord n := by
@@ -185,7 +190,7 @@ theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
 /-! ## The fold -/
 
 /-- The machine's fold of the lane sum with the fold mask `m`. -/
-def foldValue (x m : Word) : Word := (x + (x >>> 8)) &&& m
+def foldValue (x m : Word) : Word := ((x >>> 7) &&& m) + (x &&& m)
 
 structure FoldEffect (a b : MachineState) : Prop where
   acc : b.getReg .x27 = foldValue (a.getReg .x27) (a.getReg .x1)
@@ -199,7 +204,7 @@ theorem fold_effect (a : MachineState) : FoldEffect a (fold.foldl execInstrBr a)
   refine ⟨?_, ?_, ?_⟩
   · simp only [fold, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite, foldValue]
-    simp
+    simp [BitVec.add_comm]
   · intro r h26 h27
     simp only [fold, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
@@ -207,4 +212,4 @@ theorem fold_effect (a : MachineState) : FoldEffect a (fold.foldl execInstrBr a)
   · intro addr
     simp [fold, execInstrBr]
 
-end OptimalOTS.Riscv2Program
+end OptimalOTS.RiscvMixedProgram
