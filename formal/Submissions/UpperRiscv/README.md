@@ -1,49 +1,32 @@
-# RISC-V upper bound: 377-cycle mixed-width candidate
+# RISC-V upper bound: 372-cycle dense-dispatch candidate
 
-The complete Lean certificate proves correctness, signing availability, resource limits,
-127-bit strong security, exact machine refinement on every raw input, and a worst-case
-377-cycle bound. Official service validation is pending.
+The candidate extends the verified 377-cycle mixed-width construction. It uses
+thirty-two four-bit index digits with accepted sum 157, executes 189 chain hashes,
+and packs up to three pair bodies into a 128-instruction dispatch row. The signature
+still occupies 5504 bits, including a 128-bit nonce, eight 192-bit chain states and
+twenty-four 160-bit states.
 
-The candidate retains a 128-bit nonce and uses 32 hash chains: eight with 192-bit states
-and twenty-four with 160-bit states. Its signature occupies exactly 5504 bits. The index
-has digit widths `[5,3,5,3]` followed by 28 four-bit digits and accepts digit sum 160.
-Verification executes `32 + 160 = 192` chain hashes. The root input has 6272 bits,
-so the complete oracle algorithm costs at most 206 compressions.
+The coarse digit still selects a row with a 512-byte stride. Bodies start at row
+offsets 0, 40 and 80 instructions; the final body may occupy 48 instructions. This
+reduces code size enough to use the all-four-bit digit profile with halfword loads
+and signed-immediate JALR dispatch. A shared digit mask removes one load, and the
+bounded fine/coarse sums permit a single mask after the shifted addition, removing
+one AND. REMU 65535 still performs the horizontal sum.
 
-The machine processes the wide states forwards and expands the packed narrow states
-backwards. Each narrow chain's first hash reads its packed input; a pointer update then
-selects the expanded slot for its remaining hashes. Completed hash outputs form the root
-input directly: seven low 192-bit slices, two full tops, and twenty-three high 192-bit
-slices. This layout avoids a separate root-copy pass while preserving unread inputs.
+The proved bound is 40 cycles for index processing, 310 for all chain blocks and 22
+for the root and decision. The image contains 12338 instructions and 104 data bytes:
+49456 bytes. Hash work is 203 compressions; ordinary instructions contribute 169 cycles.
 
-Scalar 16-bit lanes encode two digits and their dispatch address. A `REMU` by 65535
-sums four bounded lanes. Halfword loads and `JALR` dispatch into replicated hash sequences.
-The executed cost is 42 for index processing, 313 for all chain blocks, and 22 for the
-root and decision. The image contains 15,412 instructions and 104 data bytes: 61,752 bytes.
+**Validation:** the full exported 372-cycle certificate and image-size theorem pass
+the pinned Lean build (8900 jobs), with only the three permitted axioms. Independent
+tests cover 6706 transcript cases, seven pinned-machine fixtures and exact image
+equality. The PR requests official hosted validation; see `NOTES.md` for the local
+production-wrapper infrastructure limitation.
 
-| Files | Proof responsibility |
-|---|---|
-| `Names`, `Tree`, `Cuts`, `FixedChoice`, `Scheme`, `Valid` | Mixed-width graph, digit layout, cuts and accepted-index count |
-| `Values`, `Events`, `Resample`, `GoodRec`, `Availability`, `Main`, `Wire` | Security, signing availability, resource limits and raw signature algorithm |
-| `Payload`, `ForestVerifier`, `ForestVerifierProof`, `Reader` | Wire permutation and sequential oracle interpreter |
-| `MixedProgram` | Concrete admitted machine image and image-size bound |
-| `MixedLanes`, `MixedIndexArith`, `MixedIndexPhase`, `MixedDispatchArith` | Index query, rejection branches, REMU sum and dispatch words |
-| `MixedLayout`, `MixedMemory`, `MixedPayload`, `MixedRootMemory` | Packed inputs, reverse writes and exact root serialization |
-| `MixedChainStart`, `MixedChainSteps`, `MixedPrepare`, `MixedChain` | Chain entry, arbitrary oracle answers and remaining hash steps |
-| `MixedCode`, `MixedJump`, `MixedDispatch`, `MixedLanding` | Packed jump targets and replicated instruction locations |
-| `MixedPair`, `MixedPhase`, `MixedRoot`, `MixedVerifier` | Complete execution composition and cycle accounting |
-| `Candidate`, `Solution` | Public submission, 377-cycle certificate and image-size theorem |
+The proof remains in the `Mixed*.lean` modules, with security and availability in the
+shared graph/wire modules. `MixedProgram` defines the image; `MixedLanes` proves the
+single-mask fold; `MixedCode` locates the packed bodies; `MixedVerifier`, `Candidate`
+and `Solution` connect execution to the certified wire algorithm and export the claim.
 
-This extends dhsorens's paired-dispatch construction and Alexander Hicks's verified
-393-cycle submission, assisted by GPT-6. See `NOTES.md` for the design tradeoffs and
-rejected nonce-64 proposal. Rules: [ots.golf/rules](https://ots.golf/rules).
-
-For official validation, from the repository root:
-
-```sh
-python3 /path/to/current-contract/verifier/verify.py upper-riscv \
-  --source . --trusted /path/to/current-contract
-```
-
-Development uses trusted core `1bd23e523bae3bb49188acea055e3c93c6eca70b`.
-Local Lean checks do not replace the service verdict.
+See `NOTES.md` for layout details, validation and attribution.
+Rules: [ots.golf/rules](https://ots.golf/rules).

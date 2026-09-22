@@ -8,7 +8,7 @@ open OptimalOTS.Dag
 open Forest Forest.Name
 
 abbrev target : ℕ := OptimalOTS.target
-def blockZero : ℕ := 4096 + 4*48
+def blockZero : ℕ := 4096 + 4*46
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q
@@ -29,8 +29,6 @@ theorem coarseDigit_lt (index : Idx) (q : ℕ) : coarseDigit index q < 16 := by
   have h := digit_lt index.val (2*q+1)
   have : 2 ^ wid (2*q+1) ≤ 16 := by
     unfold wid
-    have : (2*q+1)%2 = 1 := by omega
-    simp only [this, Nat.one_ne_zero, ↓reduceIte]
     split_ifs <;> norm_num
   unfold coarseDigit; omega
 

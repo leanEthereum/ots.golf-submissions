@@ -5,8 +5,7 @@ import Submissions.UpperRiscv.Digits
 /-!
 # Accepted indices
 
-The index packs 32 chain digits into 128 bits: two pairs of five- and three-bit digits,
-then fourteen pairs of four-bit digits. An index is accepted when its digits sum to 160.
+The index packs 32 chain digits into 128 bits: sixteen pairs of four-bit digits. An index is accepted when its digits sum to 157.
 The accepted indices exceed the availability threshold `712 * 2 ^ 105`.
 
 The machine reads digit `k` from bits `fieldPos k, …` of the 256-bit index answer; `pack` is
@@ -18,10 +17,10 @@ namespace OptimalOTS
 open OptimalOTS.Dag
 
 /-- The digit sum of every accepted index. -/
-def target : ℕ := 160
+def target : ℕ := 157
 
-/-- Two 5/3-bit pairs followed by fourteen 4/4-bit pairs. -/
-def wid (k : ℕ) : ℕ := if k < 4 then (if k % 2 = 0 then 5 else 3) else if k < 32 then 4 else 0
+/-- Thirty-two four-bit digits. -/
+def wid (k : ℕ) : ℕ := if k < 32 then 4 else 0
 
 /-- Position of digit `k` in the packed index. -/
 abbrev pos : ℕ → ℕ := posW wid
@@ -157,8 +156,8 @@ theorem card_validSet : (validSet).card = Forest.compW wid 32 target := by
 `712 / 2 ^ 23`, which is what the `2 ^ 20` signing trials need. -/
 theorem numValid_avail : 712 * 2 ^ 105 ≤ numValid := by
   rw [numValid, card_validSet]
-  show 712 * 2 ^ 105 ≤ Forest.compW wid 32 160
-  rw [← Forest.compTableW_getD wid 160 32 160 le_rfl]
+  show 712 * 2 ^ 105 ≤ Forest.compW wid 32 157
+  rw [← Forest.compTableW_getD wid 157 32 157 le_rfl]
   decide +kernel
 
 /-! ## The machine's reading of the digits -/
@@ -167,7 +166,7 @@ theorem numValid_avail : 712 * 2 ^ 105 ≤ numValid := by
 with the fine digit at bit 2 and the coarse digit at bit 9. Cell 32 is trailing junk. -/
 def jw (k : ℕ) : ℕ :=
   if k = 0 then 2 else if k < 32 then
-    (if k % 2 = 1 then (if k < 4 then 2 else 3) else (if k ≤ 4 then 6 else 5))
+    (if k % 2 = 1 then 3 else 5)
   else if k = 32 then 3 else 0
 
 /-- Cell widths. -/

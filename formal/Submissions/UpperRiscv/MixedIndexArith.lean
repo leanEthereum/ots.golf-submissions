@@ -22,15 +22,15 @@ theorem wid_le (k : ℕ) : wid k ≤ 5 := by unfold wid; split_ifs <;> omega
 
 theorem fld_lt (u p b : ℕ) : fld u p b < 2 ^ b := Nat.mod_lt _ (by positivity)
 
-theorem fineFld_le (g u l : ℕ) : fineFld g u l ≤ 31 := by
+theorem fineFld_le (g u l : ℕ) : fineFld g u l ≤ 15 := by
   have h := fld_lt u (16*l+2) (fineBits g l)
-  have hw : 2 ^ fineBits g l ≤ 32 := by unfold fineBits; split_ifs <;> norm_num
+  have hw : 2 ^ fineBits g l ≤ 16 := by norm_num [fineBits]
   unfold fineFld
   omega
 
 theorem coarseFld_le (g u l : ℕ) : coarseFld g u l ≤ 15 := by
   have h := fld_lt u (16*l+9) (coarseBits g l)
-  have hw : 2 ^ coarseBits g l ≤ 16 := by unfold coarseBits; split_ifs <;> norm_num
+  have hw : 2 ^ coarseBits g l ≤ 16 := by norm_num [coarseBits]
   unfold coarseFld
   omega
 
@@ -88,7 +88,7 @@ def fineTotal (u : ℕ → ℕ) (l : ℕ) : ℕ := ∑ g ∈ Finset.range 4, fin
 
 def coarseTotal (u : ℕ → ℕ) (l : ℕ) : ℕ := ∑ g ∈ Finset.range 4, coarseFld g (u g) l
 
-theorem fineTotal_lt (u : ℕ → ℕ) (l : ℕ) : fineTotal u l < 128 := by
+theorem fineTotal_lt (u : ℕ → ℕ) (l : ℕ) : fineTotal u l < 64 := by
   unfold fineTotal
   simp only [Finset.sum_range_succ, Finset.sum_range_zero]
   have := fineFld_le 0 (u 0) l; have := fineFld_le 1 (u 1) l
@@ -135,10 +135,9 @@ theorem fold_laneSum (a : MachineState) (hm : MasksLoaded a) (hfm : a.getReg .x1
   have hmask : (W (broadcast 0x1fc)).toNat = broadcast 0x1fc :=
     broadcast_toNat _ (by norm_num)
   unfold foldValue
-  rw [BitVec.toNat_add, BitVec.toNat_and, BitVec.toNat_and, BitVec.toNat_ushiftRight,
-    Nat.shiftRight_eq_div_pow, hfm, hmask, hL, hfold]
-  apply Nat.mod_eq_of_lt
-  omega
+  rw [BitVec.toNat_and, BitVec.toNat_add, BitVec.toNat_ushiftRight,
+    Nat.shiftRight_eq_div_pow, hfm, hmask, hL]
+  exact hfold
 
 /-- Word `g` of the index answer. -/
 def wordOf (answer : BitVec hashBits) (g : ℕ) : Word := answer.extractLsb' (64 * g) 64
@@ -172,13 +171,13 @@ theorem fine_word (answer : BitVec hashBits) (g l : ℕ) (hg : g < 4) (hl : l < 
     fineFld g (wordOf answer g).toNat l = fieldDigit answer (fineChain g l) := by
   obtain ⟨hp, hw⟩ := fieldPos_fine g l hg hl
   unfold fineFld fieldDigit
-  rw [fld_extract _ _ _ _ (by unfold fineBits; split_ifs <;> omega), hp, hw]
+  rw [fld_extract _ _ _ _ (by unfold fineBits; omega), hp, hw]
 
 theorem coarse_word (answer : BitVec hashBits) (g l : ℕ) (hg : g < 4) (hl : l < 4) :
     coarseFld g (wordOf answer g).toNat l = fieldDigit answer (coarseChain g l) := by
   obtain ⟨hp, hw⟩ := fieldPos_coarse g l hg hl
   unfold coarseFld fieldDigit
-  rw [fld_extract _ _ _ _ (by unfold coarseBits; split_ifs <;> omega), hp, hw]
+  rw [fld_extract _ _ _ _ (by unfold coarseBits; omega), hp, hw]
 
 /-- The words of the answer are in the index registers. -/
 def WordsLoaded (a : MachineState) (answer : BitVec hashBits) : Prop :=
@@ -250,7 +249,7 @@ theorem remainder_fold_answer (a : MachineState) (hm : MasksLoaded a) (answer : 
   ring
 
 theorem accepted_iff (answer : BitVec hashBits) :
-    Accepted (pack answer) ↔ ∑ k ∈ Finset.range 32, fieldDigit answer k = 160 := by
+    Accepted (pack answer) ↔ ∑ k ∈ Finset.range 32, fieldDigit answer k = 157 := by
   unfold Accepted
   rw [Finset.sum_congr rfl fun k hk => digit_pack answer (Finset.mem_range.mp hk)]
   rfl

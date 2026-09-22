@@ -25,20 +25,14 @@ theorem fineDigit_lt (index : Idx) (q : ℕ) (hq : q < 16) :
     digit index.val (2*q) < 2^fineWidth q := by
   have h := digit_lt index.val (2*q)
   have he : wid (2*q) = fineWidth q := by
-    unfold wid fineWidth
-    have : (2*q)%2 = 0 := by omega
-    simp only [this, if_true]
-    split_ifs <;> omega
+    simp [wid, fineWidth, show 2*q < 32 by omega]
   rw [he] at h; exact h
 
 theorem coarseDigit_lt_copies (index : Idx) (q : ℕ) (hq : q < 16) :
     coarseDigit index q < copies q := by
   have h := digit_lt index.val (2*q+1)
   have he : 2^wid (2*q+1) = copies q := by
-    unfold wid copies
-    have : (2*q+1)%2 = 1 := by omega
-    simp only [this, Nat.one_ne_zero, if_false]
-    split_ifs <;> norm_num <;> omega
+    simp [wid, copies, show 2*q+1 < 32 by omega]
   rw [he] at h; exact h
 
 /-- The packed subtraction selects the coarse copy and the fine table entry. -/
@@ -56,7 +50,7 @@ theorem pair_landing (index : Idx) (q : ℕ) (hq : q < 16) :
 
 /-- Hash work is fixed by the accepted digit sum. -/
 theorem all_chain_hashes (index : Idx) :
-    ∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k) = 192 := by
+    ∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k) = 189 := by
   exact fixedPositions_sum index
 
 /-- Chain work plus all pointer updates, dispatches, redirects, and the one length change. -/
@@ -64,11 +58,11 @@ def chainsCost (index : Idx) : ℕ :=
   (∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k)) +
     2*32 + 2*16 + (∑ k : Fin 32, earlyHash k) + 1
 
-theorem chainsCost_eq (index : Idx) : chainsCost index = 313 := by
+theorem chainsCost_eq (index : Idx) : chainsCost index = 310 := by
   have he : ∑ k : Fin 32, earlyHash k = 24 := by decide +kernel
   rw [chainsCost, all_chain_hashes, he]
 
-theorem totalCost (index : Idx) : 42+chainsCost index+22 = 377 := by
+theorem totalCost (index : Idx) : 40+chainsCost index+22 = 372 := by
   rw [chainsCost_eq]
 
 end OptimalOTS.RiscvMixedProgram

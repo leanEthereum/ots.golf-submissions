@@ -74,7 +74,7 @@ theorem landing_located (index : Idx) (s : MachineState)
     List.drop_replicate, hRemain, hSecond, ← right_previous q, W_add] at h
   have addr : copyStart q d+4*off = landing0 q-dispatch index q := (pair_landing index q q.isLt).symm
   rw [addr] at h
-  refine ⟨List.replicate (64-(copyBody q d).length) nop, ?_⟩
+  refine ⟨List.replicate (copyCapacity q-(copyBody q d).length) nop, ?_⟩
   simpa only [copyBody, List.append_assoc] using h
 
 end OptimalOTS.RiscvMixedProgram

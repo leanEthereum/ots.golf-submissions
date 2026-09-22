@@ -32,7 +32,7 @@ theorem wordReg_ne (g : ℕ) : wordReg g ≠ .x26 ∧ wordReg g ≠ .x27 ∧ wor
   unfold wordReg; split <;> decide
 
 theorem maskReg_ne (g : ℕ) : maskReg g ≠ .x26 ∧ maskReg g ≠ .x27 ∧ maskReg g ≠ .x10 := by
-  unfold maskReg; split_ifs <;> decide
+  unfold maskReg; decide
 
 theorem baseReg_ne (g : ℕ) : baseReg g ≠ .x26 ∧ baseReg g ≠ .x27 ∧ baseReg g ≠ .x10 := by
   unfold baseReg; split <;> decide
@@ -190,7 +190,7 @@ theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
 /-! ## The fold -/
 
 /-- The machine's fold of the lane sum with the fold mask `m`. -/
-def foldValue (x m : Word) : Word := ((x >>> 7) &&& m) + (x &&& m)
+def foldValue (x m : Word) : Word := (x + (x >>> 7)) &&& m
 
 structure FoldEffect (a b : MachineState) : Prop where
   acc : b.getReg .x27 = foldValue (a.getReg .x27) (a.getReg .x1)
