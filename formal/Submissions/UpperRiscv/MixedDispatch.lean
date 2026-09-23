@@ -19,10 +19,10 @@ theorem lane_access' : ∀ q : Fin 16, isValidHalfwordAccess (W (laneAddr q)) = 
 
 theorem dispatch_refines (index : Idx) (wire : List Bool) (pk : PublicKey)
     (q : Fin 16) (k : Fin 32) (hk : k.val = 2*q.val) (s : MachineState) (x : graph.Assignment)
-    (inv : HashInv index wire pk s x k (slot k)) (tail : Code)
+    (inv : HashInv index wire pk s x k (work k)) (tail : Code)
     (located : Riscv.CodeAt s s.pc (dispatchCode q ++ tail))
     (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : 2 ≤ fuel)
-    (continuation : ∀ u, HashInv index wire pk u x k (slot k) → u.mem=s.mem →
+    (continuation : ∀ u, HashInv index wire pk u x k (work k) → u.mem=s.mem →
       u.pc = W (landing0 q-dispatch index q) → Riscv.Refines (fuel-2) u Q c) :
     Riscv.Refines fuel s Q (2+c) := by
   let front : Code := [.LHU .x28 .x12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q)))]
@@ -37,8 +37,8 @@ theorem dispatch_refines (index : Idx) (wire : List Bool) (pk : PublicKey)
   have aregs : ∀ r, r ≠ .x28 → a.getReg r = s.getReg r := by
     intro r hr
     simp [ha, front, execInstrBr, getReg_setReg_ite, hr]
-  have ainput : a.getReg .x10 = W (slot k) := by rw [aregs .x10 (by decide)]; exact inv.input
-  have ainv := HashInv.frame index wire pk inv (slot k) ainput inv.inputRange
+  have ainput : a.getReg .x10 = W (work k) := by rw [aregs .x10 (by decide)]; exact inv.input
+  have ainv := HashInv.frame index wire pk inv (work k) ainput inv.inputRange
     (fun r _ h28 => aregs r h28) (by rfl) acode
   have av : (a.getReg .x28).toNat = baseLane q-dispatch index q := by
     simp only [ha, front, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
@@ -55,8 +55,8 @@ theorem dispatch_refines (index : Idx) (wire : List Bool) (pk : PublicKey)
     exact code.append_right.code_eq acode
   have transition := jalr_transition a (imm12 (jumpImm q)) aloc.head
   rw [target] at transition
-  have binv : HashInv index wire pk (a.setPC (W (landing0 q-dispatch index q))) x k (slot k) := by
-    apply HashInv.frame index wire pk (t := a.setPC (W (landing0 q-dispatch index q))) ainv (slot k) ainput inv.inputRange
+  have binv : HashInv index wire pk (a.setPC (W (landing0 q-dispatch index q))) x k (work k) := by
+    apply HashInv.frame index wire pk (t := a.setPC (W (landing0 q-dispatch index q))) ainv (work k) ainput inv.inputRange
       (fun r _ _ => rfl) rfl rfl
   rw [show fuel = front.length+((fuel-2)+1) by simp [front]; omega,
     show 2+c = front.length+(c+1) by simp [front]; omega]

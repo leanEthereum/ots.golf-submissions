@@ -7,7 +7,7 @@ import Submissions.UpperRiscv.Adapter
 
 Key generation makes no 512-bit index query. For any message chosen from the public key,
 the signer therefore tries fresh, distinct nonce queries. Each trial fails with probability
-`miss = 1 - numValid / 2 ^ 128 ≤ 8387858 / 8388608`, and the `2^20` trials give failure at most
+`miss = 1 - numValid / 2 ^ 128 ≤ 8387896 / 8388608`, and the `2^20` trials give failure at most
 `2^-128`.
 -/
 
@@ -29,18 +29,18 @@ def miss : ℝ≥0∞ :=
 theorem miss_eq : miss = ((2 ^ 256 - numValid * 2 ^ 128 : ℕ) : ℝ≥0∞) / 2 ^ 256 := by
   rw [miss, div_eq_mul_inv, Nat.cast_pow, Nat.cast_ofNat]
 
-/-- At least `750 * 2 ^ 105` of the `2 ^ 128` indices are accepted. -/
-theorem miss_le : miss ≤ 8387858 / 8388608 := by
-  have hN : 750 * 2 ^ 233 ≤ numValid * 2 ^ 128 :=
-    calc 750 * 2 ^ 233 = (750 * 2 ^ 105) * 2 ^ 128 := by norm_num
+/-- At least `729 * 2 ^ 105` of the `2 ^ 128` indices are accepted. -/
+theorem miss_le : miss ≤ 8387896 / 8388608 := by
+  have hN : 712 * 2 ^ 233 ≤ numValid * 2 ^ 128 :=
+    calc 712 * 2 ^ 233 = (712 * 2 ^ 105) * 2 ^ 128 := by norm_num
       _ ≤ _ := Nat.mul_le_mul_right _ numValid_avail
-  have ha : 2 ^ 256 - numValid * 2 ^ 128 ≤ 8387858 * 2 ^ 233 := by
+  have ha : 2 ^ 256 - numValid * 2 ^ 128 ≤ 8387896 * 2 ^ 233 := by
     have h := Nat.sub_le_sub_left hN (2 ^ 256)
-    have e : 2 ^ 256 - 750 * 2 ^ 233 = 8387858 * 2 ^ 233 := by norm_num
+    have e : 2 ^ 256 - 712 * 2 ^ 233 = 8387896 * 2 ^ 233 := by norm_num
     omega
   calc miss = ((2 ^ 256 - numValid * 2 ^ 128 : ℕ) : ℝ≥0∞) / 2 ^ 256 := miss_eq
-    _ ≤ ((8387858 * 2 ^ 233 : ℕ) : ℝ≥0∞) / 2 ^ 256 := ENNReal.div_le_div_right (Nat.cast_le.mpr ha) _
-    _ = 8387858 / 8388608 := by
+    _ ≤ ((8387896 * 2 ^ 233 : ℕ) : ℝ≥0∞) / 2 ^ 256 := ENNReal.div_le_div_right (Nat.cast_le.mpr ha) _
+    _ = 8387896 / 8388608 := by
       rw [ENNReal.div_eq_div_iff (by norm_num) (by finiteness) (by norm_num) (by finiteness)]
       norm_num
 
@@ -161,80 +161,80 @@ private theorem bernoulli_reciprocal {p : ℝ} (hp : 0 ≤ p) (hp1 : p ≤ 1) (k
   rw [le_div_iff₀ hd]
   simpa only [mul_comm] using hprod k
 
-/-- A block of 8192 trials fails with probability at most `0.482`.
+/-- A block of 8192 trials fails with probability at most `0.4995`.
 
 The reciprocal bound `(1 - p)^k ≤ 1 / (1 + k p)` loses `ln 2` per doubling if applied to a whole
 block; applying it to 32 trials and raising to the 256th power keeps the compounding:
-`(8388608 / 8412608) ^ 256 ≈ 0.48125`. -/
-private theorem miss_block : miss ^ 8192 ≤ 4820 / 10000 := by
+`(8388608 / 8411392) ^ 256 ≈ 0.49939`. -/
+private theorem miss_block : miss ^ 8192 ≤ 4995 / 10000 := by
   refine (pow_le_pow_left' miss_le 8192).trans ?_
-  have h32 := bernoulli_reciprocal (p := (750 : ℝ) / 8388608) (by norm_num) (by norm_num) 32
-  have hbase : (1 : ℝ) - 750 / 8388608 = 8387858 / 8388608 := by norm_num
-  have hden : 1 + ((32 : ℕ) : ℝ) * (750 / 8388608) = 8412608 / 8388608 := by norm_num
+  have h32 := bernoulli_reciprocal (p := (712 : ℝ) / 8388608) (by norm_num) (by norm_num) 32
+  have hbase : (1 : ℝ) - 712 / 8388608 = 8387896 / 8388608 := by norm_num
+  have hden : 1 + ((32 : ℕ) : ℝ) * (712 / 8388608) = 8411392 / 8388608 := by norm_num
   rw [hbase, hden, one_div_div] at h32
-  have hnn : (0 : ℝ) ≤ ((8387858 : ℝ) / 8388608) ^ 32 := by positivity
-  have h : ((8387858 : ℝ) / 8388608) ^ 8192 ≤ 4820 / 10000 := by
-    calc ((8387858 : ℝ) / 8388608) ^ 8192
-        = (((8387858 : ℝ) / 8388608) ^ 32) ^ 256 := by rw [← pow_mul]
-      _ ≤ ((8388608 : ℝ) / 8412608) ^ 256 := pow_le_pow_left₀ hnn h32 256
-      _ ≤ 4820 / 10000 := by
+  have hnn : (0 : ℝ) ≤ ((8387896 : ℝ) / 8388608) ^ 32 := by positivity
+  have h : ((8387896 : ℝ) / 8388608) ^ 8192 ≤ 4995 / 10000 := by
+    calc ((8387896 : ℝ) / 8388608) ^ 8192
+        = (((8387896 : ℝ) / 8388608) ^ 32) ^ 256 := by rw [← pow_mul]
+      _ ≤ ((8388608 : ℝ) / 8411392) ^ 256 := pow_le_pow_left₀ hnn h32 256
+      _ ≤ 4995 / 10000 := by
           rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
           norm_num
   have h' := ENNReal.ofReal_le_ofReal h
   rw [ENNReal.ofReal_pow (by norm_num)] at h'
-  have hb : ENNReal.ofReal ((8387858 : ℝ) / 8388608) = (8387858 / 8388608 : ℝ≥0∞) := by
+  have hb : ENNReal.ofReal ((8387896 : ℝ) / 8388608) = (8387896 / 8388608 : ℝ≥0∞) := by
     rw [ENNReal.ofReal_div_of_pos (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat]
-  have hh : ENNReal.ofReal ((4820 : ℝ) / 10000) = (4820 / 10000 : ℝ≥0∞) := by
+  have hh : ENNReal.ofReal ((4995 : ℝ) / 10000) = (4995 / 10000 : ℝ≥0∞) := by
     rw [ENNReal.ofReal_div_of_pos (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat]
   rwa [hb, hh] at h'
 
-/-- The full signing budget contains 128 blocks; `0.482 ^ 128 < 0.740 · 2 ^ (-128)` leaves room
+/-- The full signing budget contains 128 blocks; `0.4995 ^ 128 < 0.882 · 2 ^ (-128)` leaves room
 for the bad records. -/
-theorem miss_trials_le : miss ^ trials ≤ (740 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
-  change miss ^ (8192 * 128) ≤ (740 / 1000 : ℝ≥0∞) / 2 ^ 128
+theorem miss_trials_le : miss ^ trials ≤ (882 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
+  change miss ^ (8192 * 128) ≤ (882 / 1000 : ℝ≥0∞) / 2 ^ 128
   rw [pow_mul]
   refine (pow_le_pow_left' miss_block 128).trans ?_
-  have h : ((4820 : ℝ) / 10000) ^ 128 ≤ (740 / 1000) / 2 ^ 128 := by
+  have h : ((4995 : ℝ) / 10000) ^ 128 ≤ (882 / 1000) / 2 ^ 128 := by
     rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
     norm_num
   have h' := ENNReal.ofReal_le_ofReal h
   rw [ENNReal.ofReal_pow (by norm_num)] at h'
-  have hb : ENNReal.ofReal ((4820 : ℝ) / 10000) = (4820 / 10000 : ℝ≥0∞) := by
+  have hb : ENNReal.ofReal ((4995 : ℝ) / 10000) = (4995 / 10000 : ℝ≥0∞) := by
     rw [ENNReal.ofReal_div_of_pos (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat]
-  have hh : ENNReal.ofReal (((740 : ℝ) / 1000) / 2 ^ 128) = (740 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
+  have hh : ENNReal.ofReal (((882 : ℝ) / 1000) / 2 ^ 128) = (882 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
     rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_div_of_pos (by positivity),
       ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat,
       ENNReal.ofReal_ofNat]
   rwa [hb, hh] at h'
 
-/-- The bad records weigh less than `2 ^ (-130)`. -/
-theorem δ_le : δ ≤ 1 / 2 ^ 130 := by
-  have h0 : (2 : ℝ≥0∞) ^ 22 ≠ 0 := by simp
-  have ht : (2 : ℝ≥0∞) ^ 22 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
-  have e : ε₁ = ((2 : ℝ≥0∞) ^ 22)⁻¹ * ((2 : ℝ≥0∞) ^ 130)⁻¹ := by
-    rw [ε₁, show (2 : ℝ≥0∞) ^ 152 = 2 ^ 22 * 2 ^ 130 by rw [← pow_add],
+/-- The bad records weigh less than `2 ^ (-135)`. -/
+theorem δ_le : δ ≤ 1 / 2 ^ 135 := by
+  have h0 : (2 : ℝ≥0∞) ^ 25 ≠ 0 := by simp
+  have ht : (2 : ℝ≥0∞) ^ 25 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
+  have e : ε₁ = ((2 : ℝ≥0∞) ^ 25)⁻¹ * ((2 : ℝ≥0∞) ^ 135)⁻¹ := by
+    rw [ε₁, show (2 : ℝ≥0∞) ^ 160 = 2 ^ 25 * 2 ^ 135 by rw [← pow_add],
       ENNReal.mul_inv (Or.inl h0) (Or.inl ht)]
   rw [δ, e, one_div]
-  calc 2 * (1025 * 1025) * (((2 : ℝ≥0∞) ^ 22)⁻¹ * ((2 : ℝ≥0∞) ^ 130)⁻¹)
-      = (2 * (1025 * 1025) * ((2 : ℝ≥0∞) ^ 22)⁻¹) * ((2 : ℝ≥0∞) ^ 130)⁻¹ := by ring
-    _ ≤ 1 * ((2 : ℝ≥0∞) ^ 130)⁻¹ := by
+  calc 2 * (1025 * 1025) * (((2 : ℝ≥0∞) ^ 25)⁻¹ * ((2 : ℝ≥0∞) ^ 135)⁻¹)
+      = (2 * (1025 * 1025) * ((2 : ℝ≥0∞) ^ 25)⁻¹) * ((2 : ℝ≥0∞) ^ 135)⁻¹ := by ring
+    _ ≤ 1 * ((2 : ℝ≥0∞) ^ 135)⁻¹ := by
         refine mul_le_mul' ?_ le_rfl
         rw [← div_eq_mul_inv, ENNReal.div_le_iff h0 ht]
-        exact_mod_cast (by norm_num : (2 * (1025 * 1025) : ℕ) ≤ 1 * 2 ^ 22)
-    _ = ((2 : ℝ≥0∞) ^ 130)⁻¹ := one_mul _
+        exact_mod_cast (by norm_num : (2 * (1025 * 1025) : ℕ) ≤ 1 * 2 ^ 25)
+    _ = ((2 : ℝ≥0∞) ^ 135)⁻¹ := one_mul _
 
 /-- The two failure terms fit the allowance. -/
-theorem sum_le_allowance : (740 / 1000 : ℝ≥0∞) / 2 ^ 128 + 1 / 2 ^ 130 ≤ 1 / 2 ^ 128 := by
-  have h : ((740 : ℝ) / 1000) / 2 ^ 128 + 1 / 2 ^ 130 ≤ 1 / 2 ^ 128 := by
+theorem sum_le_allowance : (882 / 1000 : ℝ≥0∞) / 2 ^ 128 + 1 / 2 ^ 135 ≤ 1 / 2 ^ 128 := by
+  have h : ((882 : ℝ) / 1000) / 2 ^ 128 + 1 / 2 ^ 135 ≤ 1 / 2 ^ 128 := by
     rw [div_add_div _ _ (by positivity) (by positivity), div_le_div_iff₀ (by positivity) (by positivity)]
     norm_num
   have h' := ENNReal.ofReal_le_ofReal h
   rw [ENNReal.ofReal_add (by positivity) (by positivity)] at h'
-  have e1 : ENNReal.ofReal (((740 : ℝ) / 1000) / 2 ^ 128) = (740 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
+  have e1 : ENNReal.ofReal (((882 : ℝ) / 1000) / 2 ^ 128) = (882 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
     rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_div_of_pos (by positivity),
       ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat,
       ENNReal.ofReal_ofNat]
-  have e2 : ENNReal.ofReal ((1 : ℝ) / 2 ^ 130) = (1 / 2 ^ 130 : ℝ≥0∞) := by
+  have e2 : ENNReal.ofReal ((1 : ℝ) / 2 ^ 135) = (1 / 2 ^ 135 : ℝ≥0∞) := by
     rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_one,
       ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat]
   have e3 : ENNReal.ofReal ((1 : ℝ) / 2 ^ 128) = (1 / 2 ^ 128 : ℝ≥0∞) := by

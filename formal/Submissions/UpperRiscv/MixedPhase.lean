@@ -58,9 +58,9 @@ theorem sum_pairs (f : Fin 32 → ℕ) :
   simp only [Nat.add_assoc]
   rfl
 
-theorem blocksCost_zero : blocksCost index 0 = 303 := by
+theorem blocksCost_zero : blocksCost index 0 = 299 := by
   have overhead : ∑ q : Fin 16,
-      ((lengthSetup q).length+6+earlyHash (leftChain q)+earlyHash (rightChain q)) = 114 := by
+      ((lengthSetup q).length+6+earlyHash (leftChain q)+earlyHash (rightChain q)) = 110 := by
     decide +kernel
   have hashes : (∑ q : Fin 16, (32-RiscvUpperForest.ForestVerifier.pos index (leftChain q))) +
       (∑ q : Fin 16, (32-RiscvUpperForest.ForestVerifier.pos index (rightChain q))) = 189 := by

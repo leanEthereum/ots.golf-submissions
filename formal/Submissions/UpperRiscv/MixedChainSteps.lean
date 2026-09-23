@@ -73,26 +73,24 @@ theorem step_refines (k : Fin 32) (t : Fin 32) (base : ℕ)
   apply continuation (Riscv.writeHash s y) y (HashInv.writeHash index wire pk inv t v y) answer
     (located.tail.code_eq (writeHash_code s y)) (fuel-1) (by omega)
 
-/-- What the expanded slot holds before level t, or the full output after level 31. -/
+/-- What the working address holds before level t, or the full output after level 31. -/
 def HoldsAt (s : MachineState) (x : graph.Assignment) (k : Fin 32) (t : ℕ) : Prop :=
   if h : t < 32 then
-    MemBits s (W (slot k))
+    MemBits s (W (work k))
       ((Forest.trunc k (x (prev k ⟨t,h⟩).fin)).cast (graph_len_fin (ci k ⟨t,h⟩)).symm)
   else MemBits s (W (outAddr k)) (tops x k)
 
 theorem prev_succ (k : Fin 32) (t : Fin 32) (ht : t.val < 31) :
     prev k ⟨t.val+1, by omega⟩ = cv k t := by simp [prev]
 
-/-- A full answer represents the next state at its expanded address. -/
+/-- A full answer represents the next state at the chain's working address. -/
 theorem holds_of_memAnswer {u : MachineState} (k : Fin 32) {y : BitVec 256}
-    (answer : MemBits u (W (outAddr k)) y) : MemBits u (W (slot k)) (Forest.trunc k y) := by
-  have b := slot_bounds k
-  have h := memBits_extract (start := 64) (len := chainBits k) answer (by decide)
-    (by have := chainBits_le k; omega)
-  rw [show (64:ℕ)/8=8 by decide, W_add,
-    show outAddr k+8=slot k by unfold outAddr; omega] at h
+    (answer : MemBits u (W (outAddr k)) y) : MemBits u (W (work k)) (Forest.trunc k y) := by
+  have h := memBits_extract (start := truncOff k) (len := chainBits k) answer
+    (truncOff_mod8 k) (truncOff_add_le k)
+  rw [W_add, ← work_eq' k] at h
   unfold Forest.trunc
-  rw [Nat.min_eq_left (by have := chainBits_le k; omega : 64 ≤ 256-chainBits k)]
+  rw [Nat.min_eq_left (by have := truncOff_add_le k; omega : truncOff k ≤ 256-chainBits k)]
   exact h
 
 theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Fin 32} {t : Fin 32}
@@ -120,12 +118,12 @@ theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Fin 32} {t :
 theorem steps_refines (k : Fin 32) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest' cursor : ℕ)
     (continuation : ∀ (u : MachineState) (y : graph.Assignment),
-      HashInv index wire pk u y k (slot k) → MemBits u (W (outAddr k)) (tops y k) →
+      HashInv index wire pk u y k (work k) → MemBits u (W (outAddr k)) (tops y k) →
       Riscv.CodeAt u u.pc tail →
       ∀ left, rest' ≤ left → Riscv.Refines left u (K (y, cursor)) c) :
     ∀ (n t : ℕ), 32 - t = n → t ≤ 32 → RiscvUpperForest.ForestVerifier.pos index k < t →
     ∀ (s : MachineState) (x : graph.Assignment) (fuel : ℕ),
-      HashInv index wire pk s x k (slot k) → HoldsAt s x k t →
+      HashInv index wire pk s x k (work k) → HoldsAt s x k t →
       Riscv.CodeAt s s.pc (List.replicate (32 - t) .ECALL ++ tail) →
       (32 - t) + rest' ≤ fuel →
       Riscv.Refines fuel s
@@ -155,7 +153,7 @@ theorem steps_refines (k : Fin 32) (tail : Code)
     rw [show 32 - (t + 1) + 1 + c = 1 + (32 - (t + 1) + c) by omega]
     unfold HoldsAt at held
     rw [dif_pos ht'] at held
-    apply step_refines index wire pk k ⟨t, ht'⟩ (slot k)
+    apply step_refines index wire pk k ⟨t, ht'⟩ (work k)
       (tail := List.replicate (32 - (t + 1)) .ECALL ++ tail)
       (fun r => runNodes' index (Payload.permute wire) ((List.range' (t + 1) (32 - (t + 1))).flatMap (tripleN k))
         r.1 r.2 >>= K)

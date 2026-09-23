@@ -32,7 +32,7 @@ theorem Ctx.writeHash {s : MachineState} {index : Idx} {pk : PublicKey}
 
 /-- Each admitted chain input costs one oracle compression, at either state width. -/
 theorem chain_blockCost (k : Fin 32) : blockCost (chainBits k) = 1 := by
-  rcases chainBits_cases k with h | h | h <;> rw [h] <;> decide
+  rcases chainBits_cases k with h | h <;> rw [h] <;> decide
 
 /-- A chain hash is valid for the packed initial input as well as the expanded state. -/
 theorem chain_hashValid (s : MachineState) (k : Fin 32) (base : ℕ)

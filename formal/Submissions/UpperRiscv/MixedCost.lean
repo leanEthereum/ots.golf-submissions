@@ -10,7 +10,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-def earlyHash (k : ℕ) : ℕ := if narrow k then 1 else 0
+def earlyHash (k : ℕ) : ℕ := if expands k then 1 else 0
 
 theorem earlyHash_cases (k : ℕ) : earlyHash k = 0 ∨ earlyHash k = 1 := by
   unfold earlyHash; split_ifs <;> simp
@@ -53,16 +53,16 @@ theorem all_chain_hashes (index : Idx) :
     ∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k) = 189 := by
   exact fixedPositions_sum index
 
-/-- Chain work plus all pointer updates, dispatches, redirects, and the two length changes. -/
+/-- Chain work plus all pointer updates, dispatches, redirects, and the one length change. -/
 def chainsCost (index : Idx) : ℕ :=
   (∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k)) +
-    2*32 + 2*16 + (∑ k : Fin 32, earlyHash k) + 2
+    2*32 + 2*16 + (∑ k : Fin 32, earlyHash k) + 1
 
-theorem chainsCost_eq (index : Idx) : chainsCost index = 303 := by
-  have he : ∑ k : Fin 32, earlyHash k = 16 := by decide +kernel
+theorem chainsCost_eq (index : Idx) : chainsCost index = 299 := by
+  have he : ∑ k : Fin 32, earlyHash k = 13 := by decide +kernel
   rw [chainsCost, all_chain_hashes, he]
 
-theorem totalCost (index : Idx) : 40+chainsCost index+21 = 364 := by
+theorem totalCost (index : Idx) : 40+chainsCost index+23 = 362 := by
   rw [chainsCost_eq]
 
 end OptimalOTS.RiscvMixedProgram

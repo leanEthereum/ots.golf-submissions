@@ -6,7 +6,7 @@ import Submissions.UpperRiscv.Digits
 # Accepted indices
 
 The index packs 32 chain digits into 128 bits: sixteen pairs of four-bit digits. An index is accepted when its digits sum to 157.
-The accepted indices exceed the availability threshold `750 * 2 ^ 105`.
+The accepted indices exceed the availability threshold `712 * 2 ^ 105`.
 
 The machine reads digit `k` from bits `fieldPos k, …` of the 256-bit index answer; `pack` is
 that reading.
@@ -153,10 +153,10 @@ theorem card_validSet : (validSet).card = Forest.compW wid 32 target := by
     rw [digit_indexOf]
 
 /-- The availability threshold: a fresh index is accepted with probability at least
-`750 / 2 ^ 23`, which leaves the `2 ^ 20` signing trials room for the bad records. -/
-theorem numValid_avail : 750 * 2 ^ 105 ≤ numValid := by
+`712 / 2 ^ 23`, which is what the `2 ^ 20` signing trials need. -/
+theorem numValid_avail : 712 * 2 ^ 105 ≤ numValid := by
   rw [numValid, card_validSet]
-  show 750 * 2 ^ 105 ≤ Forest.compW wid 32 157
+  show 712 * 2 ^ 105 ≤ Forest.compW wid 32 157
   rw [← Forest.compTableW_getD wid 157 32 157 le_rfl]
   decide +kernel
 

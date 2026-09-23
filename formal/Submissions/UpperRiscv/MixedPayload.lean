@@ -8,8 +8,10 @@ open Riscv2Program
 open Forest
 
 theorem cursor_contained (k : Fin 32) : cursor k + chainBits k ≤ 5376 := by
-  have := k.isLt
-  unfold cursor chainBits; split_ifs <;> omega
+  have h := Payload.graphUnit_add k k.isLt
+  rw [chainBits_units k]
+  unfold cursor
+  omega
 
 /-- The payload adapter presents exactly the wire block used by each chain. -/
 theorem permute_read (bits : List Bool) (hlen : bits.length = 5376) (k : Fin 32) :
@@ -45,6 +47,6 @@ theorem afterIndex_payloadFrom (pk : PublicKey) (m : Message) (bits : List Bool)
   intro i hi
   apply afterIndex_frame
   rw [alignToDword_toNat, W_add, W_toNat _ (by rw [wireSlot_eq]; omega), wireSlot_eq]
-  refine ⟨Or.inr ?_, Or.inl ?_⟩ <;> simp only [dataAddr, laneBase] <;> omega
+  constructor <;> right <;> simp only [dataAddr, laneBase] <;> omega
 
 end OptimalOTS.RiscvMixedProgram
