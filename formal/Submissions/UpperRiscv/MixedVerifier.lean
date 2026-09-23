@@ -50,7 +50,7 @@ theorem directVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
 theorem image_code : image.code = verifier := rfl
 
 /-- The certified cycle bound on every execution. -/
-def cycleBound : ℕ := 362
+def cycleBound : ℕ := 360
 
 theorem order_eq : order = chainsFrom 0 ++ [rc, rh] := by
   rw [← chainsFrom_zero]
@@ -86,8 +86,8 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   have e : verifier = indexPhase ++ (prologue 0 ++ (List.range 6).flatMap groupCode) := by
     simp only [verifier, List.append_assoc]
   rw [e] at located
-  rw [directVerify_unfold, show cycleBound = (299 + 23) + 40 from rfl]
-  apply indexPhase_refines pk m bits _ 320 1337
+  rw [directVerify_unfold, show cycleBound = (299 + 21) + 40 from rfl]
+  apply indexPhase_refines pk m bits _ 321 1337
     (fun answer => acceptedTail pk bits answer) _ (by norm_num) located
     (by rw [indexPhase_length]; norm_num)
   intro answer hi hlen left hleft
@@ -105,7 +105,7 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
     rw [← afterIndex_pc pk m bits answer] at h'
     exact ⟨_, h'⟩
   rw [← blocksCost_zero index]
-  refine blocks_refines index (bits.drop 128) pk _ 23 11
+  refine blocks_refines index (bits.drop 128) pk _ 21 11
     (by rw [List.length_drop, hlen]) ?_ 16 0 rfl
     (by norm_num) s (fun _ => 0) left inv located2 (by rw [blocksCost_zero]; omega)
   intro u y invU locatedU left2 hleft2

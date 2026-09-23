@@ -4,15 +4,16 @@ import Submissions.UpperRiscv.Semantics
 /-!
 # The mixed-width chain graph
 
-There are 32 chains of 32 hash steps, indexed in execution order. The first 24 chains carry
-160-bit states, the last eight 192-bit states. Every hash returns 256 bits; the next state is the
-slice starting at bit `truncOff k`, the offset of the chain's state inside its 32-byte answer
-buffer: 64 for the thirteen chains that expand their wire value into a separate buffer, and 0,
-32, 64 or 96 for the chains hashed in place in the signature. A source is already state-width.
+There are 32 chains of 32 hash steps. Chains 0–3 carry 160-bit states, chains 4–19
+carry 152-bit states and chains 20–31 carry 192-bit states. Chains are indexed in
+execution order, which is also the order of their 24-byte working cells; sixteen of
+the wire values already sit on that grid and need no expansion, and four more (chains
+7, 11, 15, 19) are hashed in place five bytes above their cells. Every hash returns
+256 bits; the next state is the slice starting at bit `truncOff k`: bit 64, or bit 104
+for the four chains hashed in place above their cells. A source is already state-width.
 
-The root input is 7424 bits: the answers of the 32 chains in memory order, all 256 bits of
-twenty of them and the high 192 bits of the other twelve (`rootCat`). Every chain's high 192
-bits are among them. The three key-generation input lengths 160, 192, and 7424 differ from the
+The root commits to the low 192 bits of all 32 tops, in cell order, for 6144 bits
+(`rootCat`). The key-generation input lengths 152, 160, 192 and 6144 differ from the
 512-bit index input.
 -/
 
@@ -29,31 +30,34 @@ open OptimalOTS.Dag
 namespace Forest
 
 /-- Width of chain states, indexed in execution order. -/
-def chainBits (k : Fin 32) : ℕ := if k.val < 24 then 160 else 192
+def chainBits (k : Fin 32) : ℕ :=
+  if k.val < 4 then 160 else if k.val < 20 then 152 else 192
 
-theorem chainBits_cases (k : Fin 32) : chainBits k = 192 ∨ chainBits k = 160 := by
+theorem chainBits_cases (k : Fin 32) :
+    chainBits k = 160 ∨ chainBits k = 152 ∨ chainBits k = 192 := by
   unfold chainBits; split_ifs <;> simp
 
-theorem chainBits_ge (k : Fin 32) : 160 ≤ chainBits k := by
-  rcases chainBits_cases k with h | h <;> omega
+theorem chainBits_ge (k : Fin 32) : 152 ≤ chainBits k := by
+  rcases chainBits_cases k with h | h | h <;> omega
 
 theorem chainBits_le (k : Fin 32) : chainBits k ≤ 192 := by
-  rcases chainBits_cases k with h | h <;> omega
+  rcases chainBits_cases k with h | h | h <;> omega
 
 /-- Bit offset of a chain's next state inside a 256-bit answer: the answer is written eight
-bytes below the state of an expanding chain (0–12), and `j` bytes below the wire value of a chain
-hashed in place, `j = 12` (13–19, 21), `4` (20), `0` (22, 24–30) or `8` (23, 31). -/
+bytes below the state, except for chains 7, 11, 15 and 19, which are hashed in place and whose
+answer starts thirteen bytes below it. -/
 def truncOff (k : Fin 32) : ℕ :=
-  if k.val = 20 then 32 else if k.val = 22 ∨ (24 ≤ k.val ∧ k.val ≤ 30) then 0
-  else if 13 ≤ k.val ∧ k.val ≤ 21 then 96 else 64
+  if k.val = 7 ∨ k.val = 11 ∨ k.val = 15 ∨ k.val = 19 then 104 else 64
 
-theorem truncOff_add_le (k : Fin 32) : truncOff k + chainBits k ≤ 256 := by
-  unfold truncOff chainBits
-  split_ifs <;> omega
+theorem truncOff_add_le' : ∀ k : Fin 32, truncOff k + chainBits k ≤ 256 := by
+  decide +kernel
 
-theorem truncOff_mod8 (k : Fin 32) : truncOff k % 8 = 0 := by
-  unfold truncOff
-  split_ifs <;> decide
+theorem truncOff_add_le (k : Fin 32) : truncOff k + chainBits k ≤ 256 := truncOff_add_le' k
+
+theorem truncOff_mod8' : ∀ k : Fin 32, truncOff k % 8 = 0 := by
+  decide +kernel
+
+theorem truncOff_mod8 (k : Fin 32) : truncOff k % 8 = 0 := truncOff_mod8' k
 
 /-- Node names. -/
 inductive Name where
@@ -91,13 +95,13 @@ def len : Name → ℕ
   | ci k _ => chainBits k
   | ch _ _ => 256
   | cv _ _ => 256
-  | rc => 7424
+  | rc => 6144
   | rh => 256
 
-/-- Query cost of a node: one compression for every chain hash, fifteen for the root. -/
+/-- Query cost of a node: one compression for every chain hash, thirteen for the root. -/
 def cost : Name → ℕ
   | ch _ _ => 1
-  | rh => 15
+  | rh => 12
   | _ => 0
 
 /-- The value node feeding the chain input `ci k t`: the source for `t = 0`, else `cv k (t-1)`. -/
@@ -230,115 +234,10 @@ def lowCat (c : ℕ → BitVec 256) : (j : ℕ) → BitVec (192 * (j + 1))
 /-- The chain tops as a function on naturals. -/
 def topFun (c : Fin 32 → BitVec 256) (j : ℕ) : BitVec 256 := if h : j < 32 then c ⟨j, h⟩ else 0
 
-/-- High 192-bit slices in execution order, the first slice in the highest bits. -/
-def highCat (c : ℕ → BitVec 256) : (j : ℕ) → BitVec (192 * (j + 1))
-  | 0 => (c 0).extractLsb' 64 192
-  | j + 1 => (highCat c j ++ (c (j + 1)).extractLsb' 64 192).cast (by omega)
-
-/-- The chains in the memory order of the root input, lowest address first. -/
-def rootChain (i : ℕ) : Fin 32 :=
-  [31, 24, 13, 25, 14, 26, 15, 27, 16, 28, 17, 29, 18, 30, 19, 12,
-    11, 20, 21, 22, 23, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0].getD i 0
-
-/-- The first answer bit of chain `k` kept by the root: the high 24 bytes of the tops of the
-stacked expanded chains (0–9), of chain 11 and of the last chain, and all 32 bytes of the others. -/
-def rootStart (k : ℕ) : ℕ := if k ≤ 9 ∨ k = 11 ∨ k = 31 then 64 else 0
-
-/-- The number of answer bits of chain `k` kept by the root. -/
-def rootWidth (k : ℕ) : ℕ := 256 - rootStart k
-
-/-- Bit offset of the `i`-th piece (in memory order) of the root input. -/
-def rootOff : ℕ → ℕ
-  | 0 => 0
-  | i + 1 => rootOff i + rootWidth (rootChain i)
-
-theorem rootOff_succ (i : ℕ) : rootOff (i + 1) = rootOff i + rootWidth (rootChain i) := rfl
-
-/-- The first `i` pieces of the root input, the first piece in the low bits. -/
-def rootPart (c : Fin 32 → BitVec 256) : (i : ℕ) → BitVec (rootOff i)
-  | 0 => 0#0
-  | i + 1 => ((c (rootChain i)).extractLsb' (rootStart (rootChain i)) (rootWidth (rootChain i)) ++
-      rootPart c i).cast (by
-        first
-        | (show _ = rootOff i + rootWidth (rootChain i); omega)
-        | (rw [rootOff_succ]; omega))
-
-theorem rootOff_32 : rootOff 32 = 7424 := by decide +kernel
-
-/-- The root input: the kept part of every chain top, in memory order. -/
-def rootCat (c : Fin 32 → BitVec 256) : BitVec 7424 := (rootPart c 32).cast rootOff_32
-
-/-- The memory-order position of chain `k` in the root input (the inverse of `rootChain`). -/
-def rootPiece (k : ℕ) : ℕ :=
-  [31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 16, 15, 2, 4, 6,
-    8, 10, 12, 14, 17, 18, 19, 20, 1, 3, 5, 7, 9, 11, 13, 0].getD k 0
-
-theorem rootPiece_spec' : ∀ k : Fin 32, rootPiece k < 32 ∧ rootChain (rootPiece k) = k := by
-  decide +kernel
-
-theorem rootStart_le (k : ℕ) : rootStart k ≤ 64 := by
-  unfold rootStart
-  split_ifs <;> omega
-
-/-- Bit position of the high 192 answer bits of chain `k` in the root input. -/
-def rootPos (k : ℕ) : ℕ := rootOff (rootPiece k) + (64 - rootStart k)
-
-/-- Earlier pieces end below later ones. -/
-theorem rootOff_le (n : ℕ) : ∀ i, i < n → rootOff i + rootWidth (rootChain i) ≤ rootOff n := by
-  induction n with
-  | zero => intro i hi; exact absurd hi (Nat.not_lt_zero _)
-  | succ n ih =>
-    intro i hi
-    rw [rootOff_succ]
-    by_cases hin : i < n
-    · have := ih i hin
-      omega
-    · have e : i = n := by omega
-      subst e
-      exact le_refl _
-
-/-- Piece `i` of the root input occupies bits `rootOff i, …` of every longer prefix. -/
-theorem getLsbD_rootPart (c : Fin 32 → BitVec 256) (n : ℕ) :
-    ∀ i, i < n → ∀ t, t < rootWidth (rootChain i) →
-      (rootPart c n).getLsbD (rootOff i + t) =
-        (c (rootChain i)).getLsbD (rootStart (rootChain i) + t) := by
-  induction n with
-  | zero => intro i hi; exact absurd hi (Nat.not_lt_zero _)
-  | succ n ih =>
-    intro i hi t ht
-    rw [rootPart, BitVec.getLsbD_cast, BitVec.getLsbD_append]
-    by_cases hin : i < n
-    · have hle := rootOff_le n i hin
-      rw [if_pos (show rootOff i + t < rootOff n by omega)]
-      exact ih i hin t ht
-    · have e : i = n := by omega
-      rw [e] at ht ⊢
-      rw [if_neg (show ¬ (rootOff n + t < rootOff n) by omega), Nat.add_sub_cancel_left,
-        BitVec.getLsbD_extractLsb']
-      simp only [ht, decide_true, Bool.true_and]
-
-/-- The root input determines the high 192 answer bits of every chain top. -/
-theorem rootCat_extract (c : Fin 32 → BitVec 256) (k : Fin 32) :
-    (rootCat c).extractLsb' (rootPos k) 192 = (c k).extractLsb' 64 192 := by
-  obtain ⟨hi, hk⟩ := rootPiece_spec' k
-  have hs := rootStart_le k
-  apply BitVec.eq_of_getLsbD_eq
-  intro u hu
-  have ht : 64 - rootStart (rootChain (rootPiece k)) + u < rootWidth (rootChain (rootPiece k)) := by
-    rw [hk]
-    unfold rootWidth
-    omega
-  have key := getLsbD_rootPart c 32 (rootPiece k) hi
-    (64 - rootStart (rootChain (rootPiece k)) + u) ht
-  rw [hk] at key
-  have e1 : rootPos k + u = rootOff (rootPiece k) + (64 - rootStart k + u) := by
-    unfold rootPos
-    omega
-  have e2 : rootStart k + (64 - rootStart k + u) = 64 + u := by omega
-  rw [e2] at key
-  simp only [BitVec.getLsbD_extractLsb', hu, decide_true, Bool.true_and]
-  unfold rootCat
-  rw [BitVec.getLsbD_cast, e1, key]
+/-- The 768 bytes of the working grid: the low 192 bits of every top, chain `0`
+lowest, exactly as the cells lie in memory. -/
+def rootCat (c : Fin 32 → BitVec 256) : BitVec 6144 :=
+  (lowCat (topFun c) 31).cast (by norm_num)
 
 /-! ## The graph -/
 
@@ -478,8 +377,8 @@ theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
     simp [Name.cost, Name.len, blockCost, blockBits, chainBits]
   split_ifs <;> norm_num
 
-theorem graph_keygenCost : graph.keygenCost = 1039 := by
-  show ∑ v : Fin N, graph.nodeCost v = 1039
+theorem graph_keygenCost : graph.keygenCost = 1036 := by
+  show ∑ v : Fin N, graph.nodeCost v = 1036
   rw [← Fintype.sum_equiv nameEquiv (fun n => graph.nodeCost n.fin) (fun v => graph.nodeCost v)
     (fun _ => rfl)]
   simp only [graph_nodeCost_fin]

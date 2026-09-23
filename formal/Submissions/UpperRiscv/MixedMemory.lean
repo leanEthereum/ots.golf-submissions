@@ -10,7 +10,7 @@ def PayloadFrom (s : MachineState) (payload : List Bool) (k : ℕ) : Prop :=
   ∀ j : Fin 32, k ≤ j.val →
     MemBits s (W (wireSlot j)) (ofBits (chainBits j) (payload.drop (wireOffset j)))
 
-def rootSliceStart (k : ℕ) : ℕ := rootStart k
+def rootSliceStart (_k : ℕ) : ℕ := 0
 def rootSlice (k : ℕ) (y : BitVec 256) : BitVec (rootSliceBits k) :=
   y.extractLsb' (rootSliceStart k) (rootSliceBits k)
 
@@ -18,18 +18,16 @@ def Completed (s : MachineState) (tops : Fin 32 → BitVec 256) (k : ℕ) : Prop
   ∀ j : Fin 32, j.val < k → MemBits s (W (rootSliceAddr j)) (rootSlice j (tops j))
 
 theorem rootSlice_contained (k : ℕ) : rootSliceStart k + rootSliceBits k ≤ 256 := by
-  have h := rootStart_le k
-  unfold rootSliceStart rootSliceBits rootWidth
-  omega
+  unfold rootSliceStart rootSliceBits; omega
 
 theorem rootSlice_aligned (k : ℕ) : rootSliceStart k % 8 = 0 := by
-  unfold rootSliceStart rootStart
-  split_ifs <;> decide
+  unfold rootSliceStart; decide
 
 theorem rootSlice_address (k : Fin 32) :
-    rootSliceAddr k = outAddr k + rootSliceStart k / 8 := rfl
+    rootSliceAddr k = outAddr k + rootSliceStart k / 8 := by
+  unfold rootSliceAddr rootSliceStart; omega
 
-/-- A hash writes exactly the slice needed by the root. -/
+/-- A hash writes exactly the slice needed by the root: the low 192 bits of its cell. -/
 theorem rootSlice_of_answer (s : MachineState) (k : Fin 32) (y : BitVec 256)
     (ho : s.getReg .x12 = W (outAddr k)) :
     MemBits (Riscv.writeHash s y) (W (rootSliceAddr k)) (rootSlice k y) := by
@@ -64,7 +62,7 @@ theorem PayloadFrom.writeHash {s : MachineState} {payload : List Bool} (k : Fin 
   have bo := output_bounds k
   have bj := wireOffset_contained j
   have bw := chainBits_le j
-  have hn : chainBits j % 8 = 0 := by rcases chainBits_cases j with h | h <;> rw [h] <;> decide
+  have hn : chainBits j % 8 = 0 := by have := chainBits_cases j; omega
   apply writeHash_preserves s y (wireSlot j) (outAddr k) (chainBits j) _ (hp j hj)
     ho bo.2.2 hn
   · rw [wireSlot_eq j]; omega
@@ -77,10 +75,12 @@ theorem Completed.writeHash {s : MachineState} {tops : Fin 32 → BitVec 256} (k
     Completed (Riscv.writeHash s y) tops k := by
   intro j hj
   have bo := output_bounds k
-  have bj := rootSlice_bounds' j
+  have bj := slot_bounds j
+  have hn : rootSliceBits j % 8 = 0 := by unfold rootSliceBits; decide
   apply writeHash_preserves s y (rootSliceAddr j) (outAddr k) (rootSliceBits j) _ (hp j hj)
-    ho bo.2.2 bj.2.2
-  · omega
+    ho bo.2.2 hn
+  · unfold rootSliceAddr rootSliceBits outAddr
+    omega
   · omega
   · exact completed_disjoint j k hj
 

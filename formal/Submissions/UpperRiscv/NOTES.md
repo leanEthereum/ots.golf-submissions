@@ -1,161 +1,162 @@
-# In-place chains: 362-cycle candidate
+# In-place chains above the cell: 360-cycle candidate
 
-This extends the 372-cycle dense-dispatch record (PR #27 by alexanderlhicks, which builds
-on dhsorens's paired dispatch and the 377/393-cycle optimizations credited below). The
-notes of the 372 construction follow unchanged after this section.
+This extends dhsorens's 364-cycle ascending cell grid (PR #28), which extends the 372-cycle dense
+dispatch and the constructions it credits. The notes of the 364 construction follow unchanged
+after this section.
 
-Assisted by: Claude Fable 5.1 (design search) and Claude Opus 5.5 (Lean implementation),
-Anthropic.
+Assisted by: Claude Fable 5.1 (design), Claude Opus 5.5 (implementation)
 
-## Byte layout (offsets from `0x400040`; `k` = execution order)
+## What changes (364 -> 360)
 
-```
- k   type    mode   wire        x12   j   note
- 0-9 narrow  EXP    gaps        896..680 (24-byte stack, top-down)   retain answer[8,32)
- 10  narrow  EXP    [652,672)   656   -   stack base, retains all 32 bytes
- 11  narrow  EXP    [492,512)   496   -   in-span tile, retains answer[8,32)
- 12  narrow  EXP    [472,492)   472   -   in-span tile, overwrites chain 11's read value
- 13-19 narrow IP    68+64m      56+64m 12  unit `gap | N(j=12) | W(j=0)`
- 20  narrow  IP     [532,552)   528   4
- 21  narrow  IP     [572,592)   560   12
- 22  narrow  IP     [592,612)   592   0
- 23  narrow  IP     [632,652)   624   8
- 24-30 wide  IP     24+64m      24+64m 0   spill 8 bytes up into the next gap
- 31  wide    IP     [0,24)      -8    8   last chain; spill into the consumed nonce tail
-```
-
-`R = [0, 928)`: chains 31, 24, 13, 25, 14, ..., 30, 19, 12, 11, 20-23, 10, 9, ..., 0 in
-memory order (`Forest.rootChain`); chains 0-9, 11 and 31 keep answer bytes `[8, 32)`,
-the others all 32 bytes (`Forest.rootStart`).
-
-## Accounting
-
-- Index 40 (unchanged; its final instruction now sets `x11 = 160` because the narrow
-  chains run first, and `prologue 12` switches to 192).
-- Chains: 189 hashes + 64 pointer ADDIs + 13 redirects + 32 dispatch + 1 width change = 299.
-- Root `ADDI x11, x13, 1920` (7424 bits) + 15-cycle ECALL + decision 7 = 23.
-- 362 on every accepted input; the proof bounds every run by 362.
+- **Machine.** Chains 7, 11, 15 and 19 (the last 152-bit value of each 96-byte wire group, at
+  group offset 77 = cell + 5) are hashed in place: `x12 = outAddr k` as before, `x10 = wireSlot k
+  = outAddr k + 13` for every hash, next state = answer bytes `[13, 32)`. Their buffer bytes
+  `[0, 13)` hold the previous chain's discarded top 8 bytes and already-read wire bytes, so no
+  unread input and no committed root byte is overwritten. Their entries lose `ECALL; ADDI x10,
+  x12, 8`, their copy bodies use 16-ECALL ladders, and prologues 4, 6, 8, 10 start from
+  `work (2q-1) = slot (2q-1) + 5`.
+- **Root, wire, rows, dispatch.** Unchanged. Each chain still commits its answer bytes `[0, 24)`
+  at `outAddr k`, so `R`, `rootCat` and the 12-block root hash are untouched.
+- **Accounting.** 40 + (189 + 64 + 12 + 32 + 2 = 299) + 21 = 360; 12340 instructions and
+  104 data bytes as before.
 
 ## Proof changes
 
-- `Payload`: 32-bit-unit permutation tables with kernel-checked inverse laws.
-- `Names`: `chainBits` (narrow first), `truncOff` (0/32/64/96), root input `rootCat` as a
-  recursive concatenation `rootPart` over the memory-order table, and the generic
-  `rootCat_extract`; root cost 15, keygen cost 1039.
-- `Values`/`Events`: `rootSlice` is uniformly the high 192 bits; `rootCat_slice_inj` and
-  `card_updHash_rc_le` follow from `rootCat_extract`. Constants 7424/204/205/1039.
-- `MixedProgram`/`MixedLayout`/`MixedMemory`: table-driven `outAddr`, `wireSlot`,
-  `slot = outAddr + 8`, `work`; every per-chain fact is `decide +kernel` over `Fin 32`.
-- `MixedRootMemory` assembles `R` by induction over `rootPart`; `MixedRoot` has no pointer
-  update and hashes 15 blocks; `MixedIndexPhase`/`MixedPair`/`MixedLanding` move the
-  width change to pair 12.
+- `Names.truncOff` (104 for chains 7, 11, 15, 19, else 64) and `trunc` at
+  `min (truncOff k) (w - chainBits k)`. `Values` adds `card_filter_extract_le` (256-bit words
+  with a fixed `c`-bit window at any offset), and `card_filter_trunc_le'` goes through it
+  (still `2 ^ 104`, since every state has at least 152 bits). No other security file reads the
+  offset.
+- `MixedProgram`: `expands k` (the wire value is neither at its cell nor five bytes above it)
+  and `work k` (`slot k` if the chain expands, else `wireSlot k`). The machine invariants
+  (`HashInv`, `HoldsAt`, `Prepared`, dispatch, landing) are stated at `work k`, and `prevInput`
+  is the previous chain's `work`. `MixedLayout.work_eq'`, `MixedEntry.prevInput_bounds'` and
+  `MixedChainFrame.prevInput_32` are kernel checks over all chains. The unused `Holds` and
+  `holds_of_answer`, which hard-coded offset 64, are removed.
+- `MixedCost`/`MixedPhase`: 12 early hashes, per-pair overhead 110, chains 299.
 
 ## Validation status
 
-Checked by our private CI mirror of the verifier (build of
-`Submissions.UpperRiscv.Solution` against the pinned `.contract`, policy check,
-stub-statement and axiom check, pinned comparator); **not** yet by the hosted ots.golf
-verifier. A Python emulator of this exact image (a port of the Lean image definitions over
-the pinned machine semantics, with a stand-in random oracle) measured 362 = 40/299/23 on
-every accepted input and at most 362 on every rejecting path we exercised, rejected every
-single-bit flip of whole honest signatures, reproduced the key-generation root input on
-every run, and a byte-ownership replay confirmed that no hash overwrites an unread byte and
-no signature byte goes unread.
+Checked on a CI mirror of the verifier: a GitHub Actions build of
+`Submissions.UpperRiscv.Solution` against the pinned `.contract`, with the policy, stub-statement,
+axiom and pinned-comparator checks. The hosted ots.golf verifier has not checked it yet. Before
+the push, a Python port of the edited image definitions reproduced the 364 image
+(12340 instructions, 104 data bytes), checked every new kernel table fact, and replayed byte
+provenance for 202 digit vectors: every first hash reads its wire value, every later hash reads
+exactly its own state, no unread signature byte is overwritten, and the root region holds bytes
+`[0, 24)` of every chain's final answer.
 
 ## What did not work, and what is left
 
-- **Imbalanced acceptance rules.** Rejecting the most expensive accepted digit vectors needs
-  digit-dependent cost, which this machine only creates at digit 0 (a moved chain whose
-  coarse digit is 0 can skip its redirect). The availability slack at sum 157 is 5.5 %
-  (751 vs 712 in units of 2^105); the best weighted level set `Σd + #{nonzero} = 167` over
-  those 12 chains gains 2 cycles but its SWAR check costs 13 (index 40 → 53). Digit-range
-  restrictions never reach the availability threshold at useful targets.
-- **Zero-hash chains.** A chain that hashes zero times must disclose its own root slice and
-  leave every other root byte unchanged; with spills into neighbouring cells this is possible
-  for at most one chain, so the per-chain `+1` hash is not removable in general.
-- **The root input is 15 blocks here**: in-place narrow chains retain full 32-byte answers
-  and the moved tiles stack above the signature. Reconciling this with a 12-block root (as
-  in the 364 ascending grid) is the obvious next direction.
-- Dropping the fold with `REMU 255` fails: sum 157 aliases 412, and a grindable 412-sum
-  index would run ~444 chain hashes before rejecting.
+- **More in-place chains on the strict grid.** An exhaustive search over wire orders with
+  152/160/192-bit states (on-grid iff the value lies inside its own chain's 32-byte block with
+  dead bytes around it) finds at most 20 in-place chains with a 12-block root, i.e. this 360.
+  Every 12-block layout is a single-direction slice grid (or one `D…D U…U` junction), and the
+  only sub-360 witness we found (a hybrid with a zero-hash bottom chain) fails byte contiguity.
+- **Fewer root blocks.** Under 8-aligned 32-byte answer blocks a chain keeps 8, 16, 24 or 32
+  bytes of the root region, so even 152-bit retention needs at least 758 bytes: 11 blocks are
+  impossible for 32 chains.
+- **Imbalanced acceptance rules** (reject the costliest accepted digit vectors using the
+  availability slack): cost only varies at digit 0 in this machine, and the SWAR check of any
+  such rule costs far more than it saves.
+- A non-grid layout with in-place narrow chains, a stack of moved tiles and a zero-hash last
+  chain reaches 361-362 with a 15-block root; it does not beat the grid.
 
 ---
 
-# Dense dispatch: 372-cycle candidate
+# Ascending cell grid: 364-cycle candidate
 
-This extends Alexander Hicks's officially verified 377-cycle mixed-width submission
-(PR #26, commit 7635add16c45b513b8afe37f6b3b3916e55b0fae), which builds on dhsorens's
-paired-dispatch construction and the earlier 393-cycle fold optimization.
+This extends the officially verified 372-cycle dense-dispatch submission (PR #27,
+commit 9fe2362), which builds on Alexander Hicks's 377-cycle mixed-width image and
+dhsorens's paired dispatch.
 
-Assisted by: GPT-6 (Codex)
+Assisted by: Claude Fable 5.1
 
 ## What changes
 
-The 377 image reserves 64 instructions per pair body and packs two bodies into a
-128-instruction coarse-digit row. It uses two 5/3-bit digit pairs to keep that image
-within the reach of halfword-based dispatch. Here up to three bodies share a row,
-so the scheme can use 32 four-bit digits and accepted sum 157 instead of 160.
-That removes three chain hashes without reducing the nonce or state widths.
+The 372 image expands 24 of its 32 chains: a chain whose wire value is not already
+in its 24-byte working cell pays one `ADDI x10, x12, 8` after its first hash. Only
+the eight 192-bit chains at the bottom of the payload sit on the cell grid, because
+the wide chains run upwards from the payload base while the narrow chains are
+relocated downwards from the top, and the two families meet at a 16-byte junction
+that costs two full 256-bit root slices.
 
-Pair groups are `[0,1,2]`, `[3]`, `[8,4,12]`, `[9,5,13]`, `[10,6,14]`, `[11,7,15]`.
-Every group has 16 rows of 128 instructions. Body starts are at offsets 0, 40 and 80
-instructions. Pair 3 occupies a row on its own because its continuation changes the
-hash-input width. Ordinary wide bodies need at most 38 instructions, pair 3 needs 41,
-ordinary narrow bodies need 40, and the final body needs 47. This preserves the
-`4*dA + 512*dB` displacement. Pairs 8/12 through 11/15 differ by 320 bytes, allowing
-the final dispatch word to reuse the third word's base constants.
+Here every chain runs in the same direction. The 32 cells are `0x3FFFE0 + 24k` in
+execution order, each hash writing its 32 bytes at `0x3FFFD8 + 24k`, eight bytes
+below the state. A chain needs no expansion exactly when its wire value starts at
+its own cell, and a wire block survives until it is read exactly when it lies at or
+above its own cell's state address: the writes of the chains processed so far cover
+`[0x3FFFD8, 0x3FFFE0 + 24k)`, and every later block is above that. So the payload
+can be permuted freely as long as `wireSlot k ≥ slot k` for every chain.
 
-The masks are now identical in all four index-answer words, so one load is removed.
-For each accumulated 16-bit lane the fine and coarse sums are each at most 60.
-After division by four, the shifted addition has alternating seven- and nine-bit
-cells: a fine-plus-coarse sum is below 128, and each intervening field is below 512.
-Thus `SRLI 7; ADD; AND 0x01fc` replaces the two-mask fold. REMU 65535 then sums the
-four lanes. `MixedLanes.fold_fields` factors the arithmetic into small digit and
-quotient lemmas to keep proof checking economical.
+The signature budget is 672 bytes = 28 cells of 24 bytes. A group of consecutive wire
+blocks whose lengths sum to a multiple of 24 places one chain on the grid. With the
+152-bit (19-byte) minimum state, only one-chain groups (a 192-bit chain) and
+five-chain groups (four 152-bit chains and one 160-bit chain, 96 bytes) pay off, and
+12 + 4 such groups fill the budget exactly: sixteen chains on the grid, sixteen
+relocated, against eight and twenty-four before.
 
-The 128-bit nonce, 8 wide/24 narrow state split, reverse expansion, and 6272-bit root
-input are unchanged. The proved accounting is:
+- Chains 0–3 carry 160-bit states, 4–19 carry 152-bit states, 20–31 carry 192-bit
+  states (5376 bits, signature 5504 bits as before).
+- The wire holds four 96-byte blocks with chains `4b+4` (on the grid), `b`,
+  `4b+5`, `4b+6`, `4b+7`, then chains 20–31 in place. `Payload.index`/`coindex`
+  are the two directions of this permutation, checked inverse by kernel decision;
+  the verifier applies `permute`, the signer `unpermute`.
+- The root reads the low 192 bits of every cell, 768 contiguous bytes from
+  `0x3FFFD8`: 6144 bits, twelve compression blocks instead of thirteen.
+- The dispatch halfwords move from `0x3FFFE0` (now cell 0) to `0x4002E0`, the first
+  bytes after the signature buffer.
+- `x11` starts at 160, becomes 152 at pair 2 and 192 at pair 10: two width changes,
+  both on pair boundaries.
+
+Rows are `[12,1,8] / [13,9,4] / [14,10,6] / [11,0,15] / [3,5,2] / [7]`, still 16 rows of
+128 instructions per group with bodies at offsets 0, 40 and 80. The four pairs whose
+left chain is on the grid and whose right chain is relocated need 41 instructions and
+take the 48-instruction third slot, as does pair 15 with the root and decision (47).
+Pairs 12–15 share a row with pairs 8–11 at displacements −320, −160, −160 and +320
+bytes, so the fourth dispatch word again reuses the third word's base constants.
+Chain 0 is now relocated, so the first prologue is six instructions and the copies
+start at instruction 52.
+
+The proved accounting is:
 
 - Index phase: 40 cycles.
-- Chains: 189 hashes + 64 pointer instructions + 24 redirects + 32 dispatch
-  instructions + one width change = 310 cycles.
-- Root hash and decision: 22 cycles.
-- Total: 372 cycles; 12338 instructions + 104 data bytes = 49456 bytes.
+- Chains: 189 hashes + 64 pointer instructions + 16 redirects + 32 dispatch
+  instructions + two width changes = 303 cycles.
+- Root hash (12 blocks) and decision: 21 cycles.
+- Total: 364 cycles; 12340 instructions + 104 data bytes = 49464 bytes.
+
+## Security and availability at 152 bits
+
+The bad-record weight is `δ = 2 · 1025² · 2⁻¹⁵²`, about `0.125 · 2⁻¹²⁸`, and the
+signing-failure allowance is `2⁻¹²⁸` in total. The 372 proof spent `0.882 · 2⁻¹²⁸` of it
+on the availability term through the bound `numValid ≥ 712 · 2¹⁰⁵`; the true count at
+sum 157 is `751.03 · 2¹⁰⁵`, so `Valid.numValid_avail` now certifies `750 · 2¹⁰⁵` and the
+miss term becomes `(1 − 750/2²³)^(2²⁰) ≤ 0.482¹²⁸ < 0.74 · 2⁻¹²⁸`, leaving `0.26 · 2⁻¹²⁸`
+for `δ ≤ 2⁻¹³⁰`. Strong unforgeability keeps its margin: `2δ < 1036 κ` with the
+keygen cost now 1036 (1024 chain hashes and a 12-block root), and verification costs
+202 compressions. Chain states of 144 bits would put `δ` near `32 · 2⁻¹²⁸` and are not
+admissible under this proof, which is why the narrow width is 152.
 
 ## Validation status
 
-The Python prototype passes 6170 full-transcript cases, eight honest signing/key
-cases and 528 signature mutations (6706 in total). Seven fixtures replay through
-the pinned RISC-V loader and instruction/hash semantics. The Lean image exactly
-matches the generator. These checks supplement the universal proof.
+`lake build Submissions.UpperRiscv.Solution` passes with the pinned toolchain, and the
+exported submission, certificate and image-size theorem use only `propext`,
+`Classical.choice` and `Quot.sound`. The layout was first checked by a small model of
+the image (block sizes, row capacities, landing addresses below 65536, the
+`wireSlot ≥ slot` and commit-disjointness invariants); the Lean image reproduces its
+12340-instruction length and the same invariants by decision.
 
-The complete public 372-cycle certificate and image-size theorem compile with the
-pinned Lean toolchain: `lake build Submissions.UpperRiscv.Solution` passes (8900 jobs).
-The exported submission, certificate, image-size theorem and machine refinement use
-only `propext`, `Classical.choice` and `Quot.sound`. The full proof includes security,
-signing availability and exact oracle-computation refinement on every raw input.
+## Rejected directions
 
-The local production verifier was attempted, but stopped before proof checking:
-this Linux host lacks the required dedicated filesystem of at most 64 GiB for
-`OTS_WORK_DIR`. Its isolation checks were not bypassed. The hosted comparator and
-resource-limited verification are requested by this PR; no hosted verdict is claimed
-in these submission notes.
-
-## Rejected directions and next work
-
-The earlier 375-cycle nonce-64 variant fails the quantitative security requirement:
-a chosen-message collision attack exceeds the permitted bound by at least 7.28x.
-This candidate retains the verified construction's 128-bit nonce. An earlier
-mixed-state placement also corrupted four unread input bytes; retain the shifted
-boundary and both full boundary tops in the root input.
-
-The denser packing was missed by counting every body as a 64-instruction allocation.
-It is distinct from dispatching three chain digits together: this still dispatches
-two digits, while packing three independent bodies into one coarse-digit row.
-Future work could explore dispatch encodings or a stronger availability/freshness
-argument. Neither the histogram search nor these layouts establish a global optimum.
-
-The score is not hardware latency or zkVM proving time. REMU may be expensive on a
-physical core, and a zkVM must charge real arithmetic, memory and hash-precompile
-traces. Fewer hashes and a smaller image are potentially useful across those models,
-but no hardware or zkVM wall-time benchmark is claimed.
+- 144-bit states (sixteen wide, sixteen narrow, one width change) fail the
+  signing-failure budget as described above.
+- A twelve-block root with the record's two-directional layout is impossible: the
+  junction between an upward and a downward family always needs two 256-bit slices.
+- With the grid but the wire in execution order, on-grid chains must form a suffix
+  of the payload and at most twelve fit (368 cycles); the sixteenth on-grid chain
+  needs the block permutation.
+- Two widths only ({152, 192}) cannot fill 672 bytes with sixteen on-grid chains:
+  the relocated deficit of 96 bytes is not a multiple of 5.
+- Fewer chains (30 or 31) save expansions and a root block but raise the accepted
+  digit sum by more than they save.

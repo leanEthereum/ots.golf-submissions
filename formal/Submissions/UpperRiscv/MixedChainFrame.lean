@@ -41,7 +41,8 @@ theorem holdsAt_frame {s t : MachineState} {x : graph.Assignment} {k : Fin 32} {
   unfold HoldsAt at *
   split_ifs at * <;> exact memBits_of_mem_eq mem held
 
-def prevBits (k : ℕ) : ℕ := if k ≤ 24 then 160 else 192
+/-- Hash-input width in `x11` at the boundary before chain `k`: the previous chain's width. -/
+def prevBits (k : ℕ) : ℕ := if k ≤ 4 then 160 else if k ≤ 20 then 152 else 192
 
 /-- State at a boundary between complete chains. -/
 structure ChainsInv (s : MachineState) (x : graph.Assignment) (k : ℕ) : Prop where
@@ -86,9 +87,8 @@ theorem initial_chains (pk : PublicKey) (m : Message) (bits : List Bool) (answer
   · intro h; omega
   · intro j hj; omega
 
-/-- After the last chain (hashed in place at the start of the root input), `x10` is the root
-input. -/
-theorem prevInput_32 : prevInput 32 = rootAddr := by decide +kernel
+/-- After the last chain (which is on the grid), `x10` is its cell. -/
+theorem prevInput_32 : prevInput 32 = slot 31 := by decide +kernel
 
 theorem final_root {s : MachineState} {x : graph.Assignment}
     (inv : ChainsInv index wire pk s x 32) : RootInv index pk s x := by

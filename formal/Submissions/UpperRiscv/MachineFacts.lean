@@ -28,7 +28,7 @@ def slotAddr (k : ℕ) : ℕ := payloadAddr + 24 * k
 
 /-- The root input starts eight bytes below chain `0`'s value: the 32-byte answer of chain `k`
 is written at `slotAddr k - 8`. -/
-def regionAddr : ℕ := 0x400038
+def regionAddr : ℕ := 0x3FFFD8
 
 theorem W_toNat (n : ℕ) (h : n < 2 ^ 64) : (W n).toNat = n := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]

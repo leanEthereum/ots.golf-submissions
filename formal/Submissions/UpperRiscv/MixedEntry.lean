@@ -73,9 +73,10 @@ theorem enterPointers_ready (s : MachineState) (k : ℕ) : Riscv.LinearReady s (
 /-- After the first hash of an expanding chain its state begins eight bytes into the output. -/
 theorem redirect_input (s : MachineState) (k : Fin 32) (ho : s.getReg .x12 = W (outAddr k)) :
     (execInstrBr s (.ADDI .x10 .x12 8)).getReg .x10 = W (slot k) := by
+  have hs := slot_bounds k
   simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
   simp only [ne_eq, reduceCtorEq, not_false_eq_true, if_true, and_true, ho]
   rw [show (8:BitVec 12)=BitVec.ofNat 12 8 from rfl, signExtend12_nat _ (by norm_num), W_add]
-  rfl
+  congr 1; unfold outAddr; omega
 
 end OptimalOTS.RiscvMixedProgram

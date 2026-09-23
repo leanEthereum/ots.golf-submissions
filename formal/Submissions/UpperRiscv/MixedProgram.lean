@@ -1,16 +1,11 @@
 import Submissions.UpperRiscv.Program
-import Submissions.UpperRiscv.Payload
 
-/-! The 362-cycle in-place candidate image. This module proves image validity;
+/-! The 360-cycle mixed-width candidate image. This module proves image validity;
 the complete execution/refinement certificate is a separate obligation.
 
-Chains are numbered in execution order. Chains 0–12 are narrow chains whose first hash
-*expands* the 20-byte wire value into a separate 32-byte output block, followed by the redirect
-`ADDI x10, x12, 8`. Chains 13–23 (narrow) and 24–31 (wide) are hashed *in place*: every hash
-reads the state at its wire address (`work k = wireSlot k`) and writes its answer to an 8-byte
-aligned block `outAddr k` that contains it, `j = wireSlot k - outAddr k` bytes below it. The last
-chain's block starts at `0x400038`, eight bytes below the root input, so after it `x10` already
-points at the root input. -/
+Chains 7, 11, 15 and 19 are hashed in place: each wire value starts five bytes into its own cell,
+inside the chain's 32-byte answer buffer at byte 13, so the chain has no expansion hash and no
+redirect, and while it hashes `x10` points at its wire value (`work k = wireSlot k`). -/
 
 set_option maxRecDepth 100000
 
@@ -20,27 +15,37 @@ open RiscvZkvm.Rv64
 open Riscv2Program (Code imm12 reject indexPrefix lengthCheck wordReg baseReg
   laneWordAddr hashBase laneBase wordBytes broadcast nop decision)
 
-def narrow (k : ℕ) : Bool := decide (k < 24)
-/-- The chain's first hash expands a packed narrow value and is followed by the redirect. -/
-def expands (k : ℕ) : Bool := decide (k ≤ 12)
-/-- Offset of chain `k`'s 32-byte output block (`x12`) from `0x400038`. -/
-def outOffset (k : ℕ) : ℕ :=
-  [904, 880, 856, 832, 808, 784, 760, 736, 712, 688, 664, 504, 480, 64, 128, 192,
-    256, 320, 384, 448, 536, 568, 600, 632, 32, 96, 160, 224, 288, 352, 416, 0].getD k 0
-def outAddr (k : ℕ) : ℕ := 0x400038 + outOffset k
-/-- The disclosed value of chain `k` in the signature. -/
-def wireSlot (k : ℕ) : ℕ := 0x400040 + 4 * Payload.wireUnit k
-/-- The state of an expanding chain after the redirect. -/
-def slot (k : ℕ) : ℕ := outAddr k + 8
+/-- Working cell of chain `k`: 24-byte cells from 0x3FFFE0, in execution order. -/
+def slot (k : ℕ) : ℕ := 0x3FFFE0 + 24 * k
+/-- Byte offset of chain `k`'s value in the wire payload: four 96-byte blocks holding
+chains `4b+4, b, 4b+5, 4b+6, 4b+7`, then chains 20–31 in place. -/
+def wireByte (k : ℕ) : ℕ :=
+  if k < 4 then 96 * k + 19
+  else if k < 20 then 96 * ((k - 4) / 4) +
+    (if (k - 4) % 4 = 0 then 0 else if (k - 4) % 4 = 1 then 39
+      else if (k - 4) % 4 = 2 then 58 else 77)
+  else 384 + 24 * (k - 20)
+def wireSlot (k : ℕ) : ℕ := 0x400040 + wireByte k
+/-- Chains whose wire value is not already in its cell and need an expansion step. -/
+def narrow (k : ℕ) : Bool := decide (wireSlot k ≠ slot k)
+
+theorem wireSlot_eq_slot_of_not_narrow {k : ℕ} (hn : ¬ narrow k = true) : wireSlot k = slot k := by
+  unfold narrow at hn; simpa using hn
+
+theorem wireSlot_ne_slot_of_narrow {k : ℕ} (hn : narrow k = true) : wireSlot k ≠ slot k := by
+  unfold narrow at hn; simpa using hn
+/-- Chains whose first hash moves the wire value into the cell, followed by the redirect. A value
+at its cell (byte 8 of the answer buffer) or five bytes above it (byte 13) is hashed in place. -/
+def expands (k : ℕ) : Bool := decide (wireSlot k ≠ slot k ∧ wireSlot k ≠ slot k + 5)
 /-- The input address while the chain hashes. -/
 def work (k : ℕ) : ℕ := if expands k then slot k else wireSlot k
+def outAddr (k : ℕ) : ℕ := slot k - 8
 def fineWidth (_q : ℕ) : ℕ := 4
 def copies (_q : ℕ) : ℕ := 16
-def group (q : ℕ) : ℕ := if q < 3 then 0 else if q = 3 then 1 else
-  if q < 8 then q-2 else if q < 12 then q-6 else q-10
-def withinGroup (q : ℕ) : ℕ := if q < 3 then q else if q = 3 then 0 else
-  if q < 8 then 1 else if q < 12 then 0 else 2
-def copyCapacity (q : ℕ) : ℕ := if q = 3 then 128 else if withinGroup q = 2 then 48 else 40
+/-- Row group of each pair: `[12,1,8] / [13,9,4] / [14,10,6] / [11,0,15] / [3,5,2] / [7]`. -/
+def group (q : ℕ) : ℕ := [3,0,4,4,1,4,2,5,0,1,2,3,0,1,2,3].getD q 0
+def withinGroup (q : ℕ) : ℕ := [1,1,2,0,2,1,2,0,2,1,1,0,0,0,0,2].getD q 0
+def copyCapacity (q : ℕ) : ℕ := if q = 7 then 128 else if withinGroup q = 2 then 48 else 40
 def groupOffset (g : ℕ) : ℕ := 2048*g
 def copiesStart : ℕ := 4096 + 4 * 52
 def copyStart (q d : ℕ) : ℕ :=
@@ -63,23 +68,21 @@ def laneWord (g : ℕ) : Code :=
 def fold : Code :=
   [.SRLI .x26 .x27 7, .ADD .x27 .x27 .x26, .AND .x27 .x27 .x1]
 def sumCheck : Code := [.REMU .x27 .x27 .x2, .XORI .x27 .x27 628, .BEQ .x27 .x0 16] ++ reject
-/-- The narrow chains run first. -/
-def chainSetup : Code := [.ADDI .x11 .x0 160]
 def indexPhase : Code :=
   indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++
-    (List.range 4).flatMap laneWord ++ fold ++ sumCheck ++ chainSetup
+    (List.range 4).flatMap laneWord ++ fold ++ sumCheck ++ [.ADDI .x11 .x0 160]
 
 def enter (k previous : ℕ) : Code :=
   [.ADDI .x10 .x10 (imm12 ((wireSlot k : ℤ) - previous)),
    .ADDI .x12 .x10 (imm12 ((outAddr k : ℤ) - wireSlot k))] ++
     if expands k then [.ECALL, .ADDI .x10 .x12 8] else []
 def prologue (q : ℕ) : Code :=
-  (if q = 12 then [.ADDI .x11 .x0 192] else []) ++
+  (if q = 2 then [.ADDI .x11 .x0 152] else if q = 10 then [.ADDI .x11 .x0 192] else []) ++
     enter (2*q) (if q = 0 then hashBase else work (2*q-1)) ++
     [.LHU .x28 .x12 (imm12 ((laneBase + 2*q : ℤ) - outAddr (2*q))),
      .JALR .x0 .x28 (imm12 (jumpImm q))]
-/-- `x10` already points at the root input after the last chain. -/
-def root : Code := [.ADDI .x11 .x13 1920, .ECALL]
+def root : Code :=
+  [.ADDI .x10 .x10 (imm12 ((0x3FFFD8 : ℤ) - slot 31)), .ADDI .x11 .x13 640, .ECALL]
 def copyBody (q d : ℕ) : Code :=
   List.replicate (2 ^ fineWidth q - if expands (2*q) then 1 else 0) .ECALL ++
     enter (2*q+1) (work (2*q)) ++
@@ -88,7 +91,8 @@ def copyBody (q d : ℕ) : Code :=
 def copyCode (q d : ℕ) : Code :=
   copyBody q d ++ List.replicate (copyCapacity q - (copyBody q d).length) nop
 def groupPairs (g : ℕ) : List ℕ :=
-  if g = 0 then [0,1,2] else if g = 1 then [3] else [g+6,g+2,g+10]
+  if g = 0 then [12,1,8] else if g = 1 then [13,9,4] else if g = 2 then [14,10,6] else
+    if g = 3 then [11,0,15] else if g = 4 then [3,5,2] else [7]
 def groupCode (g : ℕ) : Code :=
   (List.range 16).flatMap fun c =>
     (groupPairs g).flatMap fun q => copyCode q (copies q - 1 - c)

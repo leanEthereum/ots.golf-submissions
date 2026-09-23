@@ -47,7 +47,7 @@ theorem enter_refines (k : Fin 32) (tail : Code)
   rw [enter_parts, List.append_assoc] at located
   by_cases hn : expands k = true
   · rw [if_pos hn] at located
-    simp only [Bool.false_eq_true, ↓reduceIte, entryNodes, hn, if_true, earlyHash, Nat.mul_one] at bound ⊢
+    simp only [↓reduceIte, entryNodes, hn, earlyHash, Nat.mul_one] at bound ⊢
     rw [show 2+2+c = 2+(1+(1+c)) by omega]
     apply move_refines index wire pk k s x ([.ECALL,.ADDI .x10 .x12 8] ++ tail)
       ctx input len payload done located _ (1+(1+c)) fuel (by omega)
@@ -64,7 +64,7 @@ theorem enter_refines (k : Fin 32) (tail : Code)
     have h := continuation w z readyW locatedW (left-1) (by omega)
     simpa only [Bool.false_eq_true, ↓reduceIte, entryCursor, hn, if_true] using h
   · rw [if_neg hn, List.nil_append] at located
-    simp only [Bool.false_eq_true, ↓reduceIte, entryNodes, hn, if_false, runNodes', pure_bind, earlyHash, Nat.mul_zero,
+    simp only [Bool.false_eq_true, ↓reduceIte, entryNodes, hn, runNodes', pure_bind, earlyHash, Nat.mul_zero,
       Nat.add_zero] at bound ⊢
     apply move_refines index wire pk k s x tail ctx input len payload done located _ c fuel (by omega)
     intro u invU heldU locatedU
@@ -98,18 +98,18 @@ theorem table_refines (k : Fin 32) (tail : Code)
     exact continuation u z (HashInv.complete index wire pk invU topU) locatedU left hleft
   by_cases hn : expands k = true
   · have he : remaining index k = 32-(p+1) := by
-      simp only [Bool.false_eq_true, ↓reduceIte, remaining, earlyHash, hn, if_true]
+      simp only [↓reduceIte, remaining, earlyHash, hn]
       omega
     rw [he] at located bound ⊢
-    simp only [Bool.false_eq_true, ↓reduceIte, tableNodes, entryCursor, hn, if_true, suffixNodes]
+    simp only [↓reduceIte, tableNodes, entryCursor, hn, suffixNodes]
     have ready := prep.ready
     rw [if_pos hn] at ready
     exact steps_refines index wire pk k tail K c rest (cursor k+chainBits k) finish
       (32-(p+1)) (p+1) rfl (by omega) (by omega) s x fuel prep.inv ready located bound
-  · have he : remaining index k = 32-p := by simp only [Bool.false_eq_true, ↓reduceIte, remaining, earlyHash, hn, if_false, Nat.sub_zero]; rfl
+  · have he : remaining index k = 32-p := by simp only [Bool.false_eq_true, ↓reduceIte, remaining, earlyHash, hn, Nat.sub_zero]; rfl
     have hw : wireSlot k = work k := (work_of_not_expands hn).symm
     rw [he] at located bound ⊢
-    simp only [Bool.false_eq_true, ↓reduceIte, tableNodes, entryCursor, hn, if_false, Nat.add_zero]
+    simp only [Bool.false_eq_true, ↓reduceIte, tableNodes, entryCursor, hn, Nat.add_zero]
     rw [chain_split_first index k, runNodes'_append, bind_assoc]
     have hcount : 32-p = (32-(p+1))+1 := by omega
     rw [hcount] at located bound ⊢

@@ -180,12 +180,12 @@ theorem child_hashParent {h p : Name} (hp : hashParent h = some p) : child p = s
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   all_goals rfl
 
-/-- The input of a hash node has length 160 or 192 (chains) or 7424 (root). -/
+/-- The input of a hash node has length 152, 160, 192 (chains) or 6144 (root). -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 160 ∨ p.len = 192 ∨ p.len = 7424 := by
+    p.len = 152 ∨ p.len = 160 ∨ p.len = 192 ∨ p.len = 6144 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · rename_i k t
-    rcases chainBits_cases k with hk | hk <;> simp [Name.len, hk]
+    rcases chainBits_cases k with hk | hk | hk <;> simp [Name.len, hk]
   · simp [Name.len]
 
 /-- Key generation and indexing use disjoint input lengths. -/
@@ -193,7 +193,7 @@ theorem len_hashParent_ne_enc {h p : Name} (hp : hashParent h = some p) :
     p.len ≠ emsgBits + nonceBits := by
   have e : emsgBits + nonceBits = 512 := rfl
   rw [e]
-  rcases len_hashParent_cases hp with e | e | e <;> omega
+  rcases len_hashParent_cases hp with e | e | e | e <;> omega
 
 /-- The keygen point of the hash node `h` with parent `p`: the bare input of `h`. The hash node
 is not written next to the input (the oracle has no labels, the scheme no headers). -/
@@ -428,12 +428,11 @@ theorem fHid_isSome_some_iff (A : Finset Name) (ξ : Rec) (q : Query) :
 
 /-! ## The event `Spr` -/
 
-/-- A 192-bit slice committed by the root, for each chain in execution order: the high 192 bits
-of its top (`rootCat_extract`). -/
-def rootSlice (_k : Fin 32) (w : BitVec 256) : BitVec 192 := w.extractLsb' 64 192
+/-- The 192-bit slice committed by the root: the low half of the cell, for every chain. -/
+def rootSlice (_k : Fin 32) (w : BitVec 256) : BitVec 192 := lo192 w
 
 /-- `sim ξ h w`: the answer `w` agrees with the honest output of the hash node `h` on the bits the
-graph consumes: the state slice along a chain, the high 192 bits at a chain top (read by the root
+graph consumes: the high 192 bits along a chain, the low 192 bits at a chain top (read by the root
 input) and the public-key prefix at the root. -/
 def sim (ξ : Rec) : Name → BitVec 256 → Prop
   | ch k t, w => if t.val = 31 then rootSlice k w = rootSlice k (ξ.2 (ch k t).fin) else trunc k w = trunc k (ξ.2 (ch k t).fin)
@@ -605,27 +604,23 @@ theorem card_filter_extract_le (o c : ℕ) (hoc : o + c ≤ 256) (a : BitVec c) 
   rw [Finset.card_univ, Fintype.card_bitVec, he] at key
   exact key
 
-/-- Fixing a chain's state slice leaves at most 96 unconstrained bits. This also
-bounds the wider chain slices. -/
+/-- Fixing a chain's state slice (at least 152 bits, at bit `truncOff k`) leaves at most 104
+unconstrained bits. -/
 theorem card_filter_trunc_le' (k : Fin 32) (a : BitVec (chainBits k)) :
-    (Finset.univ.filter fun w : BitVec 256 => trunc k w = a).card ≤ 2 ^ 96 := by
+    (Finset.univ.filter fun w : BitVec 256 => trunc k w = a).card ≤ 2 ^ 104 := by
   refine le_trans (Finset.card_le_card fun w hw => ?_)
     ((card_filter_extract_le (truncOff k) (chainBits k) (truncOff_add_le k) a).trans
       (Nat.pow_le_pow_right (by norm_num) (by have := chainBits_ge k; omega)))
   simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hw ⊢
   exact (trunc_256 k w).symm.trans hw
 
-/-- The root slice fixes 192 bits of the top, whatever the chain's state offset. -/
+/-- The root slice pins 192 of the 256 bits of a top. -/
 theorem card_filter_rootSlice_le (k : Fin 32) (a : BitVec 192) :
-    (Finset.univ.filter fun w : BitVec 256 => rootSlice k w = a).card ≤ 2 ^ 96 := by
-  refine le_trans (Finset.card_le_card fun w hw => ?_)
-    ((card_filter_extract_le 64 192 (by norm_num) a).trans
-      (show 2 ^ (256 - 192) ≤ 2 ^ 96 by norm_num))
-  simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hw ⊢
-  exact hw
+    (Finset.univ.filter fun w : BitVec 256 => rootSlice k w = a).card ≤ 2 ^ 104 :=
+  (card_filter_lo192_le' a).trans (by norm_num)
 
 theorem card_filter_sim_le' (ξ : Rec) (h : Name) (hh : h ≠ rh) :
-    (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 96 := by
+    (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 104 := by
   cases h with
   | ch k t =>
     by_cases ht : t.val = 31
@@ -652,7 +647,7 @@ theorem mem_hashNodes {h : Name} : h ∈ hashNodes ↔ (hashParent h).isSome := 
 
 attribute [irreducible] hashNodes
 
-theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 7424) :
+theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 6144) :
     h = rh := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · simp [Name.len, chainBits] at hl
@@ -665,7 +660,7 @@ def simSet (ξ : Rec) (n : ℕ) : Finset (BitVec 256) :=
 
 /-- At most `2 ^ 128` answers simulate some hash node of a given input length. -/
 theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := by
-  by_cases hn : n = 7424
+  by_cases hn : n = 6144
   · subst hn
     refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_trunc128_le (trunc128 (ξ.2 rh.fin)))
     rw [simSet, Finset.mem_filter] at hw
@@ -686,7 +681,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
       exact hn hl.symm
     refine (Finset.card_le_card hsub).trans ((Finset.card_biUnion_le).trans ?_)
     calc ∑ h ∈ hashNodes, (Finset.univ.filter fun w : BitVec 256 => sim ξ h w ∧ h ≠ rh).card
-        ≤ ∑ _h ∈ hashNodes, 2 ^ 96 := by
+        ≤ ∑ _h ∈ hashNodes, 2 ^ 104 := by
           refine Finset.sum_le_sum fun h _ => ?_
           by_cases hh : h = rh
           · subst hh
@@ -697,7 +692,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
           · refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_sim_le' ξ h hh)
             rw [Finset.mem_filter] at hw ⊢
             exact ⟨hw.1, hw.2.1⟩
-      _ = 1025 * 2 ^ 96 := by rw [Finset.sum_const, card_hashNodes, smul_eq_mul]
+      _ = 1025 * 2 ^ 104 := by rw [Finset.sum_const, card_hashNodes, smul_eq_mul]
       _ ≤ 2 ^ 128 := by norm_num
 
 theorem inv_card_bitVec_mul_two_pow : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * ((2 ^ 128 : ℕ) : ℝ≥0∞) = ε := by
@@ -903,26 +898,27 @@ theorem low192_lowCat (c : ℕ → BitVec 256) : ∀ j, (lowCat c j).setWidth 19
   | j + 1 => by
     rw [lowCat, setWidth_cast, BitVec.setWidth_append, dif_pos (by omega), low192_lowCat c j]
 
+theorem low192_rootCat (c : Fin 32 → BitVec 256) : (rootCat c).setWidth 192 = lo192 (c 0) := by
+  unfold rootCat
+  rw [setWidth_cast, low192_lowCat]
+  rfl
+
 /-- A filter whose members all have the same low 192 bits has at most `2 ^ 64` elements. -/
 theorem card_filter_le_of_imp_lo (p : BitVec 256 → Prop) [DecidablePred p] (a : BitVec 192)
     (hp : ∀ b, p b → lo192 b = a) : (Finset.univ.filter p).card ≤ 2 ^ 64 :=
   le_trans (Finset.card_le_card fun b hb => Finset.mem_filter.2
     ⟨Finset.mem_univ _, hp b (Finset.mem_filter.1 hb).2⟩) (card_filter_lo192_le' a)
 
-/-- Resampling the top of chain `0` moves the root input through its high 192 bits. -/
+/-- Resampling the top of chain `0` moves the root input through its low 192 bits. -/
 theorem card_updHash_rc_le (ξ : Rec) (u : BitVec rc.len) :
     (Finset.univ.filter fun b : BitVec 256 => val (updHash ξ (coordOf rh) b) rc = u).card ≤
       2 ^ 64 := by
-  refine le_trans (Finset.card_le_card fun b hb => ?_)
-    ((card_filter_extract_le 64 192 (by norm_num) (u.extractLsb' (rootPos 0) 192)).trans
-      (show 2 ^ (256 - 192) ≤ 2 ^ 64 by norm_num))
-  simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hb ⊢
-  have e := congrArg (fun x : BitVec rc.len => x.extractLsb' (rootPos 0) 192) hb
+  refine card_filter_le_of_imp_lo _ (u.setWidth 192) fun b hb => ?_
+  have e := congrArg (fun x : BitVec rc.len => x.setWidth 192) hb
   rw [val_rc] at e
-  have l := rootCat_extract (fun k => (updHash ξ (coordOf rh) b).2 (ch k 31).fin) 0
-  have e2 : ((updHash ξ (coordOf rh) b).2 (ch 0 31).fin).extractLsb' 64 192 =
-      u.extractLsb' (rootPos 0) 192 := l.symm.trans e
-  change ((updHash ξ (ch 0 31) b).2 (ch 0 31).fin).extractLsb' 64 192 = _ at e2
+  have l := low192_rootCat (fun k => (updHash ξ (coordOf rh) b).2 (ch k 31).fin)
+  have e2 : lo192 ((updHash ξ (coordOf rh) b).2 (ch 0 31).fin) = u.setWidth 192 := l.symm.trans e
+  change lo192 ((updHash ξ (ch 0 31) b).2 (ch 0 31).fin) = _ at e2
   rwa [updHash_snd_self] at e2
 
 /-- A filter whose members all have the same truncation has at most `2 ^ 128` elements. -/

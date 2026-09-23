@@ -54,7 +54,7 @@ store base of the lane area (`x10` through the index phase). -/
 def hashBase : ℕ := 0x400000
 
 /-- The lane area: four words below the public key. -/
-def laneBase : ℕ := 0x3FFFE0
+def laneBase : ℕ := 0x4002E0
 
 /-- The address of lane word `g`. -/
 def laneWordAddr (g : ℕ) : ℕ := laneBase + 8 * g
@@ -138,7 +138,7 @@ def sumCheck : Code :=
    .BEQ .x27 .x0 16] ++ reject
 
 /-- The chain input length; the input pointer still holds the public-key address. -/
-def setup : Code := [.ADDI .x11 .x0 192]
+def setup : Code := [.ADDI .x11 .x0 160]
 
 def indexPhase : Code :=
   indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++ lanes ++ fold ++ sumCheck ++ setup

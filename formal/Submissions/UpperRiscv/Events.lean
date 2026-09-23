@@ -79,24 +79,12 @@ theorem lowCat_lo192 {c c' : ℕ → BitVec 256} :
     · obtain rfl : i = j + 1 := by omega
       exact h1
 
-theorem highCat_slice {c c' : ℕ → BitVec 256} :
-    ∀ j, highCat c j = highCat c' j → ∀ i ≤ j,
-      (c i).extractLsb' 64 192 = (c' i).extractLsb' 64 192
-  | 0, h, i, hi => by
-    obtain rfl : i = 0 := by omega
-    exact h
-  | j + 1, h, i, hi => by
-    obtain ⟨h1, h2⟩ := bv_append_inj (cast_injective _ h)
-    rcases Nat.lt_or_ge i (j + 1) with lt | ge
-    · exact highCat_slice j h1 i (by omega)
-    · obtain rfl : i = j + 1 := by omega
-      exact h2
-
 /-- The root input determines the retained 192-bit slice of every chain top. -/
 theorem rootCat_slice_inj {a b : Fin 32 → BitVec 256} (h : rootCat a = rootCat b) (k : Fin 32) :
     rootSlice k (a k) = rootSlice k (b k) := by
-  show (a k).extractLsb' 64 192 = (b k).extractLsb' 64 192
-  rw [← rootCat_extract a k, ← rootCat_extract b k, h]
+  unfold rootCat at h
+  have key := lowCat_lo192 31 (cast_injective _ h) k.val (by omega)
+  simpa [rootSlice, topFun, k.isLt] using key
 
 /-! ## Names -/
 
@@ -199,7 +187,7 @@ theorem yv_hash_ch (hy : graph.ReconEqs d (fins A) given y) {k : Fin 32} {t : Fi
   exact ⟨w, hd, hw⟩
 
 theorem yv_hash_rh (hy : graph.ReconEqs d (fins A) given y) (he : Evaluated A rh) :
-    ∃ w : BitVec 256, d ⟨7424, yv y rc⟩ = some w ∧ yv y rh = w := by
+    ∃ w : BitVec 256, d ⟨6144, yv y rc⟩ = some w ∧ yv y rh = w := by
   obtain ⟨w, hd, hw⟩ := yv_hash hy (h := rh) (p := rc) rfl he
   exact ⟨w, hd, hw⟩
 
@@ -235,8 +223,8 @@ end Recon
 /-! ## The walk -/
 
 /-- The forged value at a node differs from the honest one on the bits the graph reads from it:
-all of them at a source, a chain input or the root input; the state slice at a chain value below
-the top; the high 192 bits at a chain top. -/
+all of them at a source, a chain input or the root input; the high 192 bits at a chain value below
+the top; the low 192 bits at a chain top. -/
 def Dif (ξ : Rec) : (v : Name) → BitVec v.len → Prop
   | cv k t, x => if t.val = 31 then rootSlice k x ≠ rootSlice k (val ξ (cv k t)) else
       trunc k x ≠ trunc k (val ξ (cv k t))
@@ -352,7 +340,7 @@ theorem events_none {A' : Finset Name} (hA' : IsCut A') {ξ : Rec} {d : Cache}
   obtain ⟨w, hd, -⟩ := yv_hash_rh hy hrE
   by_cases hne : yv y rc = val ξ rc
   · right
-    refine ⟨⟨7424, yv y rc⟩, ?_, by rw [hd]; rfl⟩
+    refine ⟨⟨6144, yv y rc⟩, ?_, by rw [hd]; rfl⟩
     rw [kc_isSome_iff]
     exact ⟨rh, rc, rfl, by rw [hne]; rfl⟩
   · left

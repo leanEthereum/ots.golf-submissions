@@ -82,11 +82,11 @@ theorem fixedCut_isCut (i : Idx) : IsCut (cutOf (fixedChoice i)) := isCut_cutOf 
 
 theorem fixedCut_card (i : Idx) : (cutOf (fixedChoice i)).card = 32 := card_cutOf _
 
-/-- Every disclosure set costs `target + 32 + 15 = 204` compressions to reconstruct. -/
+/-- Every disclosure set costs `target + 32 + 12 = 201` compressions to reconstruct. -/
 theorem fixedCut_cost (i : Idx) :
-    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 204 := by
+    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 201 := by
   rw [cost_cutOf]
-  change ∑ k, (32 - (fixedPositions i k).val) + 15 = 204
+  change ∑ k, (32 - (fixedPositions i k).val) + 12 = 201
   rw [fixedPositions_sum]
   rfl
 
