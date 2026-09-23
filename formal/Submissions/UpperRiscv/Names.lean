@@ -4,14 +4,16 @@ import Submissions.UpperRiscv.Semantics
 /-!
 # The mixed-width chain graph
 
-There are 32 chains of 32 hash steps. The first eight chains carry 192-bit states;
-the remaining 24 carry 160-bit states. Chains are indexed in execution order:
-physical slots 0–7 forwards, then 31–8 backwards. Every hash returns 256 bits;
-the next state is the slice starting at bit 64. A source is already state-width.
+There are 32 chains of 32 hash steps. Chains 0–3 carry 160-bit states, chains 4–19
+carry 152-bit states and chains 20–31 carry 192-bit states. Chains are indexed in
+execution order, which is also the order of their 24-byte working cells; sixteen of
+the wire values already sit on that grid and need no expansion. Every hash returns
+256 bits; the next state is the slice starting at bit 64. A source is already
+state-width.
 
-The root commits to 30 slices of 192 bits and two complete 256-bit boundary tops,
-for 6272 bits. Its physical-memory order is encoded by `rootCat`. The three
-key-generation input lengths 160, 192, and 6272 differ from the 512-bit index input.
+The root commits to the low 192 bits of all 32 tops, in cell order, for 6144 bits
+(`rootCat`). The key-generation input lengths 152, 160, 192 and 6144 differ from the
+512-bit index input.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -27,16 +29,18 @@ open OptimalOTS.Dag
 namespace Forest
 
 /-- Width of chain states, indexed in execution order. -/
-def chainBits (k : Fin 32) : ℕ := if k.val < 8 then 192 else 160
+def chainBits (k : Fin 32) : ℕ :=
+  if k.val < 4 then 160 else if k.val < 20 then 152 else 192
 
-theorem chainBits_cases (k : Fin 32) : chainBits k = 192 ∨ chainBits k = 160 := by
+theorem chainBits_cases (k : Fin 32) :
+    chainBits k = 160 ∨ chainBits k = 152 ∨ chainBits k = 192 := by
   unfold chainBits; split_ifs <;> simp
 
-theorem chainBits_ge (k : Fin 32) : 160 ≤ chainBits k := by
-  rcases chainBits_cases k with h | h <;> omega
+theorem chainBits_ge (k : Fin 32) : 152 ≤ chainBits k := by
+  rcases chainBits_cases k with h | h | h <;> omega
 
 theorem chainBits_le (k : Fin 32) : chainBits k ≤ 192 := by
-  rcases chainBits_cases k with h | h <;> omega
+  rcases chainBits_cases k with h | h | h <;> omega
 
 /-- Node names. -/
 inductive Name where
@@ -74,13 +78,13 @@ def len : Name → ℕ
   | ci k _ => chainBits k
   | ch _ _ => 256
   | cv _ _ => 256
-  | rc => 6272
+  | rc => 6144
   | rh => 256
 
 /-- Query cost of a node: one compression for every chain hash, thirteen for the root. -/
 def cost : Name → ℕ
   | ch _ _ => 1
-  | rh => 13
+  | rh => 12
   | _ => 0
 
 /-- The value node feeding the chain input `ci k t`: the source for `t = 0`, else `cv k (t-1)`. -/
@@ -213,16 +217,10 @@ def lowCat (c : ℕ → BitVec 256) : (j : ℕ) → BitVec (192 * (j + 1))
 /-- The chain tops as a function on naturals. -/
 def topFun (c : Fin 32 → BitVec 256) (j : ℕ) : BitVec 256 := if h : j < 32 then c ⟨j, h⟩ else 0
 
-/-- High 192-bit slices in execution order, the first slice in the highest bits. -/
-def highCat (c : ℕ → BitVec 256) : (j : ℕ) → BitVec (192 * (j + 1))
-  | 0 => (c 0).extractLsb' 64 192
-  | j + 1 => (highCat c j ++ (c (j + 1)).extractLsb' 64 192).cast (by omega)
-
-/-- Physical chains 0–7 run forwards and 31–8 run backwards. Two full tops at the
-boundary and 30 partial tops occupy 784 bytes. -/
-def rootCat (c : Fin 32 → BitVec 256) : BitVec 6272 :=
-  (highCat (fun j => topFun c (j + 8)) 22 ++ c 31 ++ c 7 ++ lowCat (topFun c) 6).cast
-    (by norm_num)
+/-- The 768 bytes of the working grid: the low 192 bits of every top, chain `0`
+lowest, exactly as the cells lie in memory. -/
+def rootCat (c : Fin 32 → BitVec 256) : BitVec 6144 :=
+  (lowCat (topFun c) 31).cast (by norm_num)
 
 /-! ## The graph -/
 
@@ -362,8 +360,8 @@ theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
     simp [Name.cost, Name.len, blockCost, blockBits, chainBits]
   split_ifs <;> norm_num
 
-theorem graph_keygenCost : graph.keygenCost = 1037 := by
-  show ∑ v : Fin N, graph.nodeCost v = 1037
+theorem graph_keygenCost : graph.keygenCost = 1036 := by
+  show ∑ v : Fin N, graph.nodeCost v = 1036
   rw [← Fintype.sum_equiv nameEquiv (fun n => graph.nodeCost n.fin) (fun v => graph.nodeCost v)
     (fun _ => rfl)]
   simp only [graph_nodeCost_fin]

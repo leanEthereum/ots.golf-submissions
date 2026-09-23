@@ -41,7 +41,8 @@ theorem holdsAt_frame {s t : MachineState} {x : graph.Assignment} {k : Fin 32} {
   unfold HoldsAt at *
   split_ifs at * <;> exact memBits_of_mem_eq mem held
 
-def prevBits (k : ℕ) : ℕ := if k ≤ 8 then 192 else 160
+/-- Hash-input width in `x11` at the boundary before chain `k`: the previous chain's width. -/
+def prevBits (k : ℕ) : ℕ := if k ≤ 4 then 160 else if k ≤ 20 then 152 else 192
 
 /-- State at a boundary between complete chains. -/
 structure ChainsInv (s : MachineState) (x : graph.Assignment) (k : ℕ) : Prop where

@@ -45,6 +45,6 @@ theorem afterIndex_payloadFrom (pk : PublicKey) (m : Message) (bits : List Bool)
   intro i hi
   apply afterIndex_frame
   rw [alignToDword_toNat, W_add, W_toNat _ (by rw [wireSlot_eq]; omega), wireSlot_eq]
-  constructor <;> right <;> simp only [dataAddr, laneBase] <;> omega
+  refine ⟨Or.inr ?_, Or.inl ?_⟩ <;> simp only [dataAddr, laneBase] <;> omega
 
 end OptimalOTS.RiscvMixedProgram

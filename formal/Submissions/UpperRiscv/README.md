@@ -1,32 +1,31 @@
-# RISC-V upper bound: 372-cycle dense-dispatch candidate
+# RISC-V upper bound: 364-cycle ascending-grid candidate
 
-The candidate extends the verified 377-cycle mixed-width construction. It uses
-thirty-two four-bit index digits with accepted sum 157, executes 189 chain hashes,
-and packs up to three pair bodies into a 128-instruction dispatch row. The signature
-still occupies 5504 bits, including a 128-bit nonce, eight 192-bit chain states and
-twenty-four 160-bit states.
+The candidate extends the verified 372-cycle dense-dispatch construction. It keeps
+thirty-two four-bit index digits with accepted sum 157, 189 chain hashes, paired
+dispatch and three bodies per 128-instruction row, and changes the memory layout:
+all thirty-two chains work in 24-byte cells laid out in execution order from
+`0x3FFFE0`, and the wire payload is permuted so that sixteen chain values already
+sit in their cells. The signature still occupies 5504 bits: a 128-bit nonce, four
+160-bit, sixteen 152-bit and twelve 192-bit chain states.
 
-The coarse digit still selects a row with a 512-byte stride. Bodies start at row
-offsets 0, 40 and 80 instructions; the final body may occupy 48 instructions. This
-reduces code size enough to use the all-four-bit digit profile with halfword loads
-and signed-immediate JALR dispatch. A shared digit mask removes one load, and the
-bounded fine/coarse sums permit a single mask after the shifted addition, removing
-one AND. REMU 65535 still performs the horizontal sum.
+Eight fewer chains need the expansion instruction, and the root now reads the low
+192 bits of every cell as one 768-byte region, twelve compression blocks instead of
+thirteen. The narrower 152-bit states are admissible because the availability bound
+is tightened to the true accepted-index count. Two width changes remain.
 
-The proved bound is 40 cycles for index processing, 310 for all chain blocks and 22
-for the root and decision. The image contains 12338 instructions and 104 data bytes:
-49456 bytes. Hash work is 203 compressions; ordinary instructions contribute 169 cycles.
+The proved bound is 40 cycles for index processing, 303 for all chain blocks and 21
+for the root and decision. The image contains 12340 instructions and 104 data bytes:
+49464 bytes. Hash work is 202 compressions.
 
-**Validation:** the full exported 372-cycle certificate and image-size theorem pass
-the pinned Lean build (8900 jobs), with only the three permitted axioms. Independent
-tests cover 6706 transcript cases, seven pinned-machine fixtures and exact image
-equality. The PR requests official hosted validation; see `NOTES.md` for the local
-production-wrapper infrastructure limitation.
+**Validation:** the full exported 364-cycle certificate and image-size theorem pass
+the pinned Lean build with only the three permitted axioms, and the official
+verifier script was run locally (see the PR). See `NOTES.md` for the layout, the
+security accounting at 152 bits and the rejected directions.
 
 The proof remains in the `Mixed*.lean` modules, with security and availability in the
-shared graph/wire modules. `MixedProgram` defines the image; `MixedLanes` proves the
-single-mask fold; `MixedCode` locates the packed bodies; `MixedVerifier`, `Candidate`
-and `Solution` connect execution to the certified wire algorithm and export the claim.
+shared graph/wire modules. `MixedProgram` defines the image and `MixedLayout` the
+cell/wire geometry; `Payload` holds the wire permutation and its inverse;
+`MixedCode` locates the packed bodies; `MixedVerifier`, `Candidate` and `Solution`
+connect execution to the certified wire algorithm and export the claim.
 
-See `NOTES.md` for layout details, validation and attribution.
 Rules: [ots.golf/rules](https://ots.golf/rules).

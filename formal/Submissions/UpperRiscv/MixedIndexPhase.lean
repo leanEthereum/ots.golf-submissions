@@ -486,7 +486,7 @@ theorem minus24 : signExtend12 (BitVec.ofInt 12 (-24)) = BitVec.ofInt 64 (-24) :
 
 /-- The registers written by the setup, and the input pointer still at the message. -/
 theorem afterIndex_setupRegs :
-    (afterIndex pk m bits answer).getReg .x11 = 192 ∧
+    (afterIndex pk m bits answer).getReg .x11 = 160 ∧
     (afterIndex pk m bits answer).getReg .x10 = W hashBase := by
   have x10 : (S6 pk m bits answer).getReg .x10 = W hashBase := by
     rw [S6_regs, S5_regs _ _ _ _ _ (by decide) (by decide), S45_x10]

@@ -25,31 +25,43 @@ theorem lengthSetup_ready (s : MachineState) (q : ℕ) : Riscv.LinearReady s (le
   unfold lengthSetup
   split_ifs <;> simp [Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
+theorem prevBits_left (q : Fin 16) (h2 : q.val ≠ 2) (h10 : q.val ≠ 10) :
+    prevBits (leftChain q) = chainBits (leftChain q) := by
+  revert q; decide
+
+theorem prevBits_right (q : Fin 16) : prevBits (rightChain q) = chainBits (rightChain q) := by
+  revert q; decide
+
 theorem lengthSetup_effect (s : MachineState) (q : Fin 16)
     (h : s.getReg .x11 = W (prevBits (leftChain q))) :
     LengthEffect s ((lengthSetup q).foldl execInstrBr s) q := by
-  by_cases hq : q.val=4
-  · have he : q=4 := Fin.ext hq
+  by_cases hq : q.val=2
+  · have he : q=2 := Fin.ext hq
     subst q
     refine ⟨?_, ?_, rfl, rfl⟩
     · simp [lengthSetup, execInstrBr, getReg_setReg_ite, chainBits, leftChain, W, getReg_x0']
       decide
     · intro r hr; simp [lengthSetup, execInstrBr, getReg_setReg_ite, hr]
-  · have hw : prevBits (leftChain q) = chainBits (leftChain q) := by
-      change (if 2*q.val ≤ 8 then 192 else 160) = (if 2*q.val < 8 then 192 else 160)
-      split_ifs <;> omega
-    simp only [lengthSetup, if_neg hq, List.foldl_nil]
+  by_cases hq' : q.val=10
+  · have he : q=10 := Fin.ext hq'
+    subst q
+    refine ⟨?_, ?_, rfl, rfl⟩
+    · simp [lengthSetup, execInstrBr, getReg_setReg_ite, chainBits, leftChain, W, getReg_x0']
+      decide
+    · intro r hr; simp [lengthSetup, execInstrBr, getReg_setReg_ite, hr]
+  · have hw := prevBits_left q hq hq'
+    simp only [lengthSetup, if_neg hq, if_neg hq', List.foldl_nil]
     exact ⟨h.trans (congrArg W hw), fun _ _ => rfl, rfl, rfl⟩
 
 theorem pairCost_eq (q : Fin 16) : pairCost index q =
-    (lengthSetup q).length+6+2*earlyHash (leftChain q) +
+    (lengthSetup q).length+6+earlyHash (leftChain q)+earlyHash (rightChain q) +
       (32-RiscvUpperForest.ForestVerifier.pos index (leftChain q)) +
       (32-RiscvUpperForest.ForestVerifier.pos index (rightChain q)) := by
   have ha := pos_le index (leftChain q)
   have hb := pos_le index (rightChain q)
   have ba := earlyHash_cases (leftChain q)
+  have bb := earlyHash_cases (rightChain q)
   unfold pairCost remaining
-  rw [early_pair]
   omega
 
 /-- One pair runs its two graph chains and reaches the next block with all invariants restored. -/
@@ -125,8 +137,7 @@ theorem pair_refines (q : Fin 16)
   have lenB : s4.getReg .x11 = W (chainBits B) := by
     rw [inv4.length]
     congr 1
-    change (if 2*q.val+1 ≤ 8 then 192 else 160) = (if 2*q.val+1 < 8 then 192 else 160)
-    split_ifs <;> omega
+    exact prevBits_right q
   apply enter_refines index wire pk B (List.replicate NB .ECALL ++ (nextCode q ++ junk))
     (fun r => runNodes' index (Payload.permute wire) (tableNodes index B) r.1 r.2 >>= K)
     (NB+c) (NB+rest) hlen ?_ s4 x4 left4 inv4.ctx inv4.input lenB inv4.payload inv4.done loc4

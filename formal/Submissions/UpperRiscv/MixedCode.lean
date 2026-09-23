@@ -8,7 +8,7 @@ open Riscv2Program
 
 /-- Position of a copy in the concrete instruction image. -/
 def copyOffset (q d : ℕ) : ℕ :=
-  50 + groupOffset (group q) + 128*(copies q-1-d) + 40*withinGroup q
+  52 + groupOffset (group q) + 128*(copies q-1-d) + 40*withinGroup q
 
 theorem copyStart_eq (q d : ℕ) : copyStart q d = 4096+4*copyOffset q d := by
   unfold copyStart copiesStart copyOffset
@@ -18,7 +18,7 @@ theorem copyCode_length' : ∀ q : Fin 16, ∀ d : Fin (copies q), (copyCode q d
   decide +kernel
 
 theorem group_image' : ∀ g : Fin 6,
-    (verifier.drop (50+groupOffset g)).take (groupCode g).length = groupCode g := by
+    (verifier.drop (52+groupOffset g)).take (groupCode g).length = groupCode g := by
   decide +kernel
 
 theorem copy_group' : ∀ q : Fin 16, ∀ d : Fin (copies q),
@@ -42,9 +42,9 @@ theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
 theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (q : Fin 16) (d : Fin (copies q)) :
     Riscv.CodeAt s (W (copyStart q d)) (copyCode q d) := by
-  have hg := CodeAt.drop global (50+groupOffset (group q))
+  have hg := CodeAt.drop global (52+groupOffset (group q))
   have eg := List.take_append_drop (groupCode (group q)).length
-    (verifier.drop (50+groupOffset (group q)))
+    (verifier.drop (52+groupOffset (group q)))
   rw [group_image' ⟨group q, group_lt' q⟩] at eg
   rw [← eg] at hg
   have hc := CodeAt.drop hg.append_left (128*(copies q-1-d)+40*withinGroup q)
@@ -54,7 +54,7 @@ theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifi
   rw [← ec] at hc
   have h := hc.append_left
   rw [W_add, W_add] at h
-  have e : 4096+4*(50+groupOffset (group q))+4*(128*(copies q-1-d)+40*withinGroup q) =
+  have e : 4096+4*(52+groupOffset (group q))+4*(128*(copies q-1-d)+40*withinGroup q) =
       copyStart q d := by rw [copyStart_eq]; unfold copyOffset; omega
   rw [e] at h
   exact h

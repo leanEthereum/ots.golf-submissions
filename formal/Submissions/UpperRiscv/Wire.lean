@@ -28,8 +28,8 @@ theorem decode_encode (σ : Signature) :
 
 theorem encode_decode (bits : List Bool) (hlen : 128 ≤ bits.length) :
     AlgorithmAdapter.encodeSignature (decode bits) = bits := by
-  change toBits (ofBits 128 (bits.take 128)) ++ Payload.permute (Payload.permute (bits.drop 128)) = bits
-  rw [Payload.permute_permute, toBits_ofBits _ (by simp [hlen]), List.take_append_drop]
+  change toBits (ofBits 128 (bits.take 128)) ++ Payload.unpermute (Payload.permute (bits.drop 128)) = bits
+  rw [Payload.unpermute_permute, toBits_ofBits _ (by simp [hlen]), List.take_append_drop]
 
 theorem reveal_positive (i : Idx) :
     0 < Forest.forestScheme.graph.revealBits (Forest.forestScheme.sets i) := by
@@ -41,7 +41,7 @@ theorem reveal_positive (i : Idx) :
     exact ⟨0, rfl⟩
   have bound := Finset.single_le_sum (s := Forest.setsName i)
     (f := fun n => n.len) (fun _ _ => Nat.zero_le _) present
-  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 192 := Forest.chainNode_len _ _
+  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 160 := Forest.chainNode_len _ _
   rw [len] at bound
   omega
 
@@ -75,13 +75,13 @@ theorem secure : scheme.Secure :=
 
 theorem admissible : scheme.Admissible :=
   WireAdapter.admissible RiscvUpperForest.scheme decode decode_encode canonical
-    RiscvUpperForest.admissible 203 RiscvUpperForest.cost (by decide)
+    RiscvUpperForest.admissible 202 RiscvUpperForest.cost (by decide)
 
-theorem cost : scheme.VerifyCostAtMost 203 :=
-  WireAdapter.verifyCost RiscvUpperForest.scheme decode 203 RiscvUpperForest.cost
+theorem cost : scheme.VerifyCostAtMost 202 :=
+  WireAdapter.verifyCost RiscvUpperForest.scheme decode 202 RiscvUpperForest.cost
 
 /-- A complete OTS certificate on its transmitted signature bits. -/
-theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 203 := ⟨admissible, secure, cost⟩
+theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 202 := ⟨admissible, secure, cost⟩
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.Wire.certificate' depends on axioms: [propext, Classical.choice, Quot.sound]

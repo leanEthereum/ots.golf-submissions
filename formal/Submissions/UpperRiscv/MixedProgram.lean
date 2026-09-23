@@ -1,6 +1,6 @@
 import Submissions.UpperRiscv.Program
 
-/-! The 372-cycle mixed-width candidate image. This module proves image validity;
+/-! The 364-cycle mixed-width candidate image. This module proves image validity;
 the complete execution/refinement certificate is a separate obligation. -/
 
 set_option maxRecDepth 100000
@@ -11,21 +11,34 @@ open RiscvZkvm.Rv64
 open Riscv2Program (Code imm12 reject indexPrefix lengthCheck wordReg baseReg
   laneWordAddr hashBase laneBase wordBytes broadcast nop decision)
 
-def physical (k : ℕ) : ℕ := if k < 8 then k else 39 - k
-def narrow (k : ℕ) : Bool := decide (8 ≤ k)
-def slot (k : ℕ) : ℕ := 0x400040 + 24 * physical k + if narrow k then 8 else 0
-def wireSlot (k : ℕ) : ℕ :=
-  if narrow k then 0x400100 + 20 * (physical k - 8) else slot k
+/-- Working cell of chain `k`: 24-byte cells from 0x3FFFE0, in execution order. -/
+def slot (k : ℕ) : ℕ := 0x3FFFE0 + 24 * k
+/-- Byte offset of chain `k`'s value in the wire payload: four 96-byte blocks holding
+chains `4b+4, b, 4b+5, 4b+6, 4b+7`, then chains 20–31 in place. -/
+def wireByte (k : ℕ) : ℕ :=
+  if k < 4 then 96 * k + 19
+  else if k < 20 then 96 * ((k - 4) / 4) +
+    (if (k - 4) % 4 = 0 then 0 else if (k - 4) % 4 = 1 then 39
+      else if (k - 4) % 4 = 2 then 58 else 77)
+  else 384 + 24 * (k - 20)
+def wireSlot (k : ℕ) : ℕ := 0x400040 + wireByte k
+/-- Chains whose wire value is not already in its cell and need an expansion step. -/
+def narrow (k : ℕ) : Bool := decide (wireSlot k ≠ slot k)
+
+theorem wireSlot_eq_slot_of_not_narrow {k : ℕ} (hn : ¬ narrow k = true) : wireSlot k = slot k := by
+  unfold narrow at hn; simpa using hn
+
+theorem wireSlot_ne_slot_of_narrow {k : ℕ} (hn : narrow k = true) : wireSlot k ≠ slot k := by
+  unfold narrow at hn; simpa using hn
 def outAddr (k : ℕ) : ℕ := slot k - 8
 def fineWidth (_q : ℕ) : ℕ := 4
 def copies (_q : ℕ) : ℕ := 16
-def group (q : ℕ) : ℕ := if q < 3 then 0 else if q = 3 then 1 else
-  if q < 8 then q-2 else if q < 12 then q-6 else q-10
-def withinGroup (q : ℕ) : ℕ := if q < 3 then q else if q = 3 then 0 else
-  if q < 8 then 1 else if q < 12 then 0 else 2
-def copyCapacity (q : ℕ) : ℕ := if q = 3 then 128 else if withinGroup q = 2 then 48 else 40
+/-- Row group of each pair: `[12,1,8] / [13,9,4] / [14,10,6] / [11,0,15] / [3,5,2] / [7]`. -/
+def group (q : ℕ) : ℕ := [3,0,4,4,1,4,2,5,0,1,2,3,0,1,2,3].getD q 0
+def withinGroup (q : ℕ) : ℕ := [1,1,2,0,2,1,2,0,2,1,1,0,0,0,0,2].getD q 0
+def copyCapacity (q : ℕ) : ℕ := if q = 7 then 128 else if withinGroup q = 2 then 48 else 40
 def groupOffset (g : ℕ) : ℕ := 2048*g
-def copiesStart : ℕ := 4096 + 4 * 50
+def copiesStart : ℕ := 4096 + 4 * 52
 def copyStart (q d : ℕ) : ℕ :=
   copiesStart + 4 * (groupOffset (group q) + 128 * (copies q - 1 - d) + 40 * withinGroup q)
 def landing0 (q : ℕ) : ℕ := copyStart q 0 + 4 * (2 ^ fineWidth q - 1)
@@ -48,19 +61,19 @@ def fold : Code :=
 def sumCheck : Code := [.REMU .x27 .x27 .x2, .XORI .x27 .x27 628, .BEQ .x27 .x0 16] ++ reject
 def indexPhase : Code :=
   indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++
-    (List.range 4).flatMap laneWord ++ fold ++ sumCheck ++ [.ADDI .x11 .x0 192]
+    (List.range 4).flatMap laneWord ++ fold ++ sumCheck ++ [.ADDI .x11 .x0 160]
 
 def enter (k previous : ℕ) : Code :=
   [.ADDI .x10 .x10 (imm12 ((wireSlot k : ℤ) - previous)),
    .ADDI .x12 .x10 (imm12 ((outAddr k : ℤ) - wireSlot k))] ++
     if narrow k then [.ECALL, .ADDI .x10 .x12 8] else []
 def prologue (q : ℕ) : Code :=
-  (if q = 4 then [.ADDI .x11 .x0 160] else []) ++
+  (if q = 2 then [.ADDI .x11 .x0 152] else if q = 10 then [.ADDI .x11 .x0 192] else []) ++
     enter (2*q) (if q = 0 then hashBase else slot (2*q-1)) ++
     [.LHU .x28 .x12 (imm12 ((laneBase + 2*q : ℤ) - outAddr (2*q))),
      .JALR .x0 .x28 (imm12 (jumpImm q))]
 def root : Code :=
-  [.ADDI .x10 .x10 (imm12 ((0x400038 : ℤ) - slot 31)), .ADDI .x11 .x13 768, .ECALL]
+  [.ADDI .x10 .x10 (imm12 ((0x3FFFD8 : ℤ) - slot 31)), .ADDI .x11 .x13 640, .ECALL]
 def copyBody (q d : ℕ) : Code :=
   List.replicate (2 ^ fineWidth q - if narrow (2*q) then 1 else 0) .ECALL ++
     enter (2*q+1) (slot (2*q)) ++
@@ -69,7 +82,8 @@ def copyBody (q d : ℕ) : Code :=
 def copyCode (q d : ℕ) : Code :=
   copyBody q d ++ List.replicate (copyCapacity q - (copyBody q d).length) nop
 def groupPairs (g : ℕ) : List ℕ :=
-  if g = 0 then [0,1,2] else if g = 1 then [3] else [g+6,g+2,g+10]
+  if g = 0 then [12,1,8] else if g = 1 then [13,9,4] else if g = 2 then [14,10,6] else
+    if g = 3 then [11,0,15] else if g = 4 then [3,5,2] else [7]
 def groupCode (g : ℕ) : Code :=
   (List.range 16).flatMap fun c =>
     (groupPairs g).flatMap fun q => copyCode q (copies q - 1 - c)
@@ -83,7 +97,7 @@ def dataImage : List (BitVec 8) :=
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
 theorem index_length : indexPhase.length = 46 := by decide +kernel
-theorem code_length : verifier.length = 12338 := by decide +kernel
+theorem code_length : verifier.length = 12340 := by decide +kernel
 theorem data_length : dataImage.length = 104 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel
 theorem image_valid : image.Valid := by

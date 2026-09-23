@@ -28,8 +28,7 @@ theorem wireSlot_bounds (k : Fin 32) : 32 ≤ wireSlot k ∧ wireSlot k + 24 < 2
 
 theorem prevInput_bounds (k : Fin 32) : prevInput k < 2^62 := by
   have hk := k.isLt
-  unfold prevInput slot physical narrow hashBase
-  simp only [decide_eq_true_eq]
+  unfold prevInput slot hashBase
   split_ifs <;> omega
 
 theorem input_step (s : MachineState) (k : Fin 32) (hp : s.getReg .x10 = W (prevInput k)) :

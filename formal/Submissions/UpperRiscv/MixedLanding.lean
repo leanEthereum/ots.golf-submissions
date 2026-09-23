@@ -9,7 +9,8 @@ open Riscv2Program
 def leftChain (q : Fin 16) : Fin 32 := ⟨2*q.val, by have := q.isLt; omega⟩
 def rightChain (q : Fin 16) : Fin 32 := ⟨2*q.val+1, by have := q.isLt; omega⟩
 def nextCode (q : ℕ) : Code := if q=15 then root ++ decision else prologue (q+1)
-def lengthSetup (q : ℕ) : Code := if q=4 then [.ADDI .x11 .x0 160] else []
+def lengthSetup (q : ℕ) : Code :=
+  if q=2 then [.ADDI .x11 .x0 152] else if q=10 then [.ADDI .x11 .x0 192] else []
 
 theorem prologue_parts (q : Fin 16) : prologue q = lengthSetup q ++
     enter (leftChain q) (prevInput (leftChain q)) ++ dispatchCode q := by
@@ -20,11 +21,6 @@ theorem prologue_parts (q : Fin 16) : prologue q = lengthSetup q ++
 theorem right_previous (q : Fin 16) : prevInput (rightChain q) = slot (leftChain q) := by
   unfold prevInput leftChain rightChain
   rw [if_neg (by omega : 2*q.val+1 ≠ 0), Nat.add_sub_cancel]
-
-theorem early_pair (q : Fin 16) : earlyHash (rightChain q) = earlyHash (leftChain q) := by
-  unfold earlyHash narrow leftChain rightChain
-  simp only [decide_eq_true_eq]
-  split_ifs <;> omega
 
 theorem Prepared.frame {index : Idx} {wire : List Bool} {pk : PublicKey}
     {s t : MachineState} {x : graph.Assignment} {k : Fin 32}

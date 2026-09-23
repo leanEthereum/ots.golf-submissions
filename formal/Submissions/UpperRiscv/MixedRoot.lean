@@ -4,8 +4,8 @@ import Submissions.UpperRiscv.MixedIndexPhase
 /-!
 # The root and the decision
 
-The 784 bytes from eight below chain `0`'s slot are the 6272-bit root input: the low 192 bits
-of every top and the full top of chain `27`. Its hash, charged eleven cycles, is written where the
+The 768 bytes from eight below chain `0`'s slot are the 6144-bit root input: the low 192 bits
+of every top. Its hash, charged twelve cycles, is written where the
 last chain left its answer buffer, eight bytes below the last slot, and the low 128 bits of the answer are compared with the public key saved in
 `x30`/`x31`. The root length is built in one instruction from the checked signature length still
 held in `x13`, and the comparison branches on each mismatching word to a rejection after the
@@ -25,7 +25,7 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 variable (index : Idx) (payload : List Bool) (pk : PublicKey)
 
-def rootLin : Code := [.ADDI .x10 .x10 (imm12 (-208)), .ADDI .x11 .x13 (imm12 768)]
+def rootLin : Code := [.ADDI .x10 .x10 (imm12 (-752)), .ADDI .x11 .x13 (imm12 640)]
 
 /-- Where the root answer is written: the answer buffer of the last chain. -/
 def rootOut : ℕ := outAddr 31
@@ -71,7 +71,7 @@ theorem decision_refines (s : MachineState) (answer : BitVec hashBits) (fuel : �
     (bound : 7 ≤ fuel) :
     Riscv.Refines fuel s (pure (some (decide (answer.setWidth 128 = pk)))) 7 := by
   have hs : 32 ≤ rootOut ∧ rootOut + 32 ≤ 0x78000000 ∧ rootOut % 8 = 0 := by
-    norm_num [rootOut, outAddr, slot, physical, narrow]
+    norm_num [rootOut, outAddr, slot]
   rw [decision_parts] at located
   have l0 : signExtend12 (0 : BitVec 12) = 0#64 := by decide
   have l8 : signExtend12 (8 : BitVec 12) = W 8 := by decide
@@ -256,7 +256,7 @@ theorem decision_refines (s : MachineState) (answer : BitVec hashBits) (fuel : �
     have rej := reject_refines (s1.setPC (s1.pc + 24)) (fuel - 2) locR (by omega)
     exact (Riscv.Refines.branch fetch1 rfl (fun h => nomatch h) tr1 rej).mono (by omega)
 
-theorem root_length_literal : W 5504 + signExtend12 (imm12 768) = 6272 := by decide
+theorem root_length_literal : W 5504 + signExtend12 (imm12 640) = 6144 := by decide
 
 /-- Machine state at the root after all chains have completed. -/
 structure RootInv (s : MachineState) (x : graph.Assignment) : Prop where
@@ -269,14 +269,14 @@ theorem root_memBits (s : MachineState) (x : graph.Assignment)
     (inv : RootInv index pk s x) : MemBits s (W regionAddr) (rootCat (tops x)) := inv.root
 
 open scoped Classical in
-/-- The root hash over the region and the decision, at 22 cycles. -/
+/-- The root hash over the region and the decision, at 21 cycles. -/
 theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (inv : RootInv index pk s x)
     (located : Riscv.CodeAt s s.pc (root ++ decision)) (bound : 11 ≤ fuel) :
     Riscv.Refines fuel s (runNodes' index payload [rc, rh] x 5376 >>= fun r =>
-        pure (some (decide ((r.1 rh.fin).setWidth 128 = pk)))) 22 := by
+        pure (some (decide ((r.1 rh.fin).setWidth 128 = pk)))) 21 := by
   have hd : 32 ≤ rootOut ∧ rootOut + 32 ≤ 0x78000000 ∧ rootOut % 8 = 0 := by
-    norm_num [rootOut, outAddr, slot, physical, narrow]
+    norm_num [rootOut, outAddr, slot]
   simp only [runNodes', bind_assoc, pure_bind, cursorStep_rc, cursorStep_rh, Prod.mk.eta]
   set x' := Function.update x rc.fin
     ((rootCat fun k => (x (cv k 31).fin).cast (lenF_fin _)).cast (graph_len_fin rc).symm) with hx'
@@ -301,10 +301,10 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
       getReg_setReg_ite]
     simp only [show ¬ (Reg.x10 = Reg.x11) by decide, false_and, if_false, true_and, ne_eq,
       reduceCtorEq, not_false_eq_true, if_true, s10]
-    rw [W_add_imm _ _ (by norm_num) (by norm_num) (by norm_num [slot, physical, narrow])
-      (by norm_num [slot, physical, narrow])]
+    rw [W_add_imm _ _ (by norm_num) (by norm_num) (by norm_num [slot])
+      (by norm_num [slot])]
     rfl
-  have w11 : w.getReg .x11 = 6272 := by
+  have w11 : w.getReg .x11 = 6144 := by
     rw [hw]
     simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
@@ -326,11 +326,11 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
   have wCall : w.getReg .x5 = Riscv.hashCall := by
     rw [wRegs .x5 (by decide) (by decide)]; exact inv.ctx.call
   have wValid : Riscv.hashArgumentsValid w = true := by
-    have r1 : isValidOutputRange (W regionAddr) 784 = true :=
+    have r1 : isValidOutputRange (W regionAddr) 768 = true :=
       range_ok _ _ (by norm_num [regionAddr]) (by norm_num [regionAddr]) (by norm_num)
         (by norm_num)
     have r2 := hashOutput_ok rootOut hd.1 hd.2.1 hd.2.2
-    have e : ((6272 : Word).toNat + 7) / 8 = 784 := rfl
+    have e : ((6144 : Word).toNat + 7) / 8 = 768 := rfl
     unfold Riscv.hashArgumentsValid
     rw [w10, w11, w12, e, r1, Bool.true_and]
     exact r2
@@ -342,9 +342,9 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
     rw [value]
     apply (memBits_cast _ _ _ _).mpr
     exact wValue
-  have blocks : blockCost (graph.len rc.fin) = 13 := by
-    rw [graph_len_fin]; show blockCost 6272 = 13; decide
-  rw [show (22 : ℕ) = rootLin.length + (13 + 7) by rfl,
+  have blocks : blockCost (graph.len rc.fin) = 12 := by
+    rw [graph_len_fin]; show blockCost 6144 = 12; decide
+  rw [show (21 : ℕ) = rootLin.length + (12 + 7) by rfl,
     show fuel = rootLin.length + ((fuel - rootLin.length - 1) + 1) by simp [rootLin]; omega]
   apply Riscv.Refines.linear _ located.append_left ready
   rw [← hw]
@@ -364,7 +364,7 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
     rw [vPc]
     exact wCode.tail.code_eq (by rw [vCode, wCodeEq])
   have vRoot : MemBits v (W rootOut) y := by
-    have h := writeHash_memBits w y (by rw [w12]; exact aligned_W _ hd.2.2 (by norm_num [rootOut, outAddr, slot, physical, narrow]))
+    have h := writeHash_memBits w y (by rw [w12]; exact aligned_W _ hd.2.2 (by norm_num [rootOut, outAddr, slot]))
     rw [w12] at h
     exact h
   rw [Function.update_self]
