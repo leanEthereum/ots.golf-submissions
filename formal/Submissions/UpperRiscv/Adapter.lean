@@ -36,7 +36,7 @@ theorem encodeSignature_injective : Function.Injective (@encodeSignature) := by
     simpa [encodeSignature, toBits] using ht
   have hp := toBits_injective hn
   have ht : a.2 = b.2 := by
-    exact Payload.injective (List.append_cancel_left (by simpa only [encodeSignature, hn] using h))
+    exact Payload.unpermute_injective (List.append_cancel_left (by simpa only [encodeSignature, hn] using h))
   exact Prod.ext hp ht
 
 @[simp] theorem length_encodeSignature (σ : Signature) :

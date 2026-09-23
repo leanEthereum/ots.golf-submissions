@@ -9,8 +9,7 @@ open Riscv2Program
 def leftChain (q : Fin 16) : Fin 32 := ⟨2*q.val, by have := q.isLt; omega⟩
 def rightChain (q : Fin 16) : Fin 32 := ⟨2*q.val+1, by have := q.isLt; omega⟩
 def nextCode (q : ℕ) : Code := if q=15 then root ++ decision else prologue (q+1)
-def lengthSetup (q : ℕ) : Code :=
-  if q=2 then [.ADDI .x11 .x0 152] else if q=10 then [.ADDI .x11 .x0 192] else []
+def lengthSetup (q : ℕ) : Code := if q=12 then [.ADDI .x11 .x0 192] else []
 
 theorem prologue_parts (q : Fin 16) : prologue q = lengthSetup q ++
     enter (leftChain q) (prevInput (leftChain q)) ++ dispatchCode q := by
@@ -18,13 +17,13 @@ theorem prologue_parts (q : Fin 16) : prologue q = lengthSetup q ++
   have he : (2*q.val=0) ↔ (q.val=0) := by omega
   simp only [he, List.append_assoc, Nat.cast_add, Nat.cast_mul, Nat.cast_ofNat]
 
-theorem right_previous (q : Fin 16) : prevInput (rightChain q) = slot (leftChain q) := by
+theorem right_previous (q : Fin 16) : prevInput (rightChain q) = work (leftChain q) := by
   unfold prevInput leftChain rightChain
   rw [if_neg (by omega : 2*q.val+1 ≠ 0), Nat.add_sub_cancel]
 
 theorem Prepared.frame {index : Idx} {wire : List Bool} {pk : PublicKey}
     {s t : MachineState} {x : graph.Assignment} {k : Fin 32}
-    (prep : Prepared index wire pk s x k) (inv : HashInv index wire pk t x k (slot k))
+    (prep : Prepared index wire pk s x k) (inv : HashInv index wire pk t x k (work k))
     (mem : t.mem=s.mem) : Prepared index wire pk t x k := by
   refine ⟨inv, ?_⟩
   have h := prep.ready
@@ -64,7 +63,7 @@ theorem landing_located (index : Idx) (s : MachineState)
   simp only [List.append_assoc] at h
   change Riscv.CodeAt s (W (copyStart q d)+W (4*off))
     ((List.replicate (2^fineWidth q-earlyHash (leftChain q)) Instr.ECALL ++
-      (enter (rightChain q) (slot (leftChain q)) ++
+      (enter (rightChain q) (work (leftChain q)) ++
       (List.replicate (d+1-earlyHash (rightChain q)) Instr.ECALL ++ (nextCode q ++ _)))).drop off) at h
   rw [List.drop_append_of_le_length (by simpa only [List.length_replicate] using hOff),
     List.drop_replicate, hRemain, hSecond, ← right_previous q, W_add] at h

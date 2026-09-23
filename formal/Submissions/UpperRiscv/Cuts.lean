@@ -8,7 +8,7 @@ A disclosure set is described by a *choice* `c : Fin 32 → Fin 32`: for every c
 position `c k ∈ {0, …, 31}` of the revealed chain input `ci k (c k)` (`0` reveals the input
 `ci k 0`, whose value is the source `z_k`). `cutOf c` is always a cut (`isCut_cutOf`), the choice
 is determined by the set (`cutOf_injective`), and its reconstruction cost is
-`Σ (32 - c k) + 12` (`cost_cutOf`). `FixedChoice.lean` instantiates this with the digits of the
+`Σ (32 - c k) + 15` (`cost_cutOf`). `FixedChoice.lean` instantiates this with the digits of the
 index.
 -/
 
@@ -180,7 +180,7 @@ theorem sum_fin32_ge (v : ℕ) : ∑ t : Fin 32, (if v ≤ t.val then 1 else 0) 
     omega
   rw [this, Nat.card_Ico]
 
-/-- Every cut reveals four 160-bit, sixteen 152-bit and twelve 192-bit states. -/
+/-- Every cut reveals twenty-four 160-bit and eight 192-bit states. -/
 theorem reveal_cutOf (c : Choice) : ∑ n ∈ cutOf c, n.len = 5376 := by
   unfold cutOf
   rw [Finset.sum_image]
@@ -189,9 +189,9 @@ theorem reveal_cutOf (c : Choice) : ∑ n ∈ cutOf c, n.len = 5376 := by
   · intro a _ b _ h
     exact chainNode_injective c h
 
-/-- The reconstruction cost of a disclosure set: the chain steps and the 12-block root. -/
+/-- The reconstruction cost of a disclosure set: the chain steps and the 15-block root. -/
 theorem cost_cutOf (c : Choice) :
-    ∑ n ∈ evaluatedSet (cutOf c), n.cost = (∑ k, (32 - (c k).val)) + 12 := by
+    ∑ n ∈ evaluatedSet (cutOf c), n.cost = (∑ k, (32 - (c k).val)) + 15 := by
   have h_ch : ∑ k, ∑ t, (if Evaluated (cutOf c) (ch k t) then 1 else 0) =
       ∑ k, (32 - (c k).val) := by
     simp only [evaluated_ch_iff]

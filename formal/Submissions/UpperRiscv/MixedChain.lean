@@ -12,9 +12,9 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 variable (index : Idx) (wire : List Bool) (pk : PublicKey)
 
-def entryNodes (k : Fin 32) : List Name := if narrow k then readNodes index k else []
-def tableNodes (k : Fin 32) : List Name := if narrow k then suffixNodes index k else chainNodes k
-def entryCursor (k : Fin 32) : ℕ := cursor k + if narrow k then chainBits k else 0
+def entryNodes (k : Fin 32) : List Name := if expands k then readNodes index k else []
+def tableNodes (k : Fin 32) : List Name := if expands k then suffixNodes index k else chainNodes k
+def entryCursor (k : Fin 32) : ℕ := cursor k + if expands k then chainBits k else 0
 def remaining (k : Fin 32) : ℕ := 32-RiscvUpperForest.ForestVerifier.pos index k-earlyHash k
 
 theorem chain_entry_split (k : Fin 32) : chainNodes k = entryNodes index k ++ tableNodes index k := by
@@ -24,11 +24,11 @@ theorem chain_entry_split (k : Fin 32) : chainNodes k = entryNodes index k ++ ta
   · rfl
 
 structure Prepared (s : MachineState) (x : graph.Assignment) (k : Fin 32) : Prop where
-  inv : HashInv index wire pk s x k (slot k)
-  ready : if narrow k then HoldsAt s x k (RiscvUpperForest.ForestVerifier.pos index k+1)
-    else MemBits s (W (slot k)) (ofBits (chainBits k) (wire.drop (wireOffset k)))
+  inv : HashInv index wire pk s x k (work k)
+  ready : if expands k then HoldsAt s x k (RiscvUpperForest.ForestVerifier.pos index k+1)
+    else MemBits s (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k)))
 
-/-- Chain entry accounts for the first hash and redirect exactly when the state is narrow. -/
+/-- Chain entry accounts for the first hash and redirect exactly when the chain expands. -/
 theorem enter_refines (k : Fin 32) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (hlen : wire.length = 5376)
@@ -45,9 +45,9 @@ theorem enter_refines (k : Fin 32) (tail : Code)
       (runNodes' index (Payload.permute wire) (entryNodes index k) x (cursor k) >>= K)
       (2+2*earlyHash k+c) := by
   rw [enter_parts, List.append_assoc] at located
-  by_cases hn : narrow k = true
+  by_cases hn : expands k = true
   · rw [if_pos hn] at located
-    simp only [↓reduceIte, entryNodes, hn, earlyHash, Nat.mul_one] at bound ⊢
+    simp only [Bool.false_eq_true, ↓reduceIte, entryNodes, hn, if_true, earlyHash, Nat.mul_one] at bound ⊢
     rw [show 2+2+c = 2+(1+(1+c)) by omega]
     apply move_refines index wire pk k s x ([.ECALL,.ADDI .x10 .x12 8] ++ tail)
       ctx input len payload done located _ (1+(1+c)) fuel (by omega)
@@ -58,17 +58,17 @@ theorem enter_refines (k : Fin 32) (tail : Code)
     apply redirect_refines index wire pk k (wireSlot k) v z tail invV locatedV _ c left (by omega)
     intro w invW memW locatedW
     have readyW : Prepared index wire pk w z k := by
-      refine ⟨invW, ?_⟩
+      refine ⟨(by rw [work_of_expands hn]; exact invW), ?_⟩
       rw [if_pos hn]
       exact holdsAt_frame memW heldV
     have h := continuation w z readyW locatedW (left-1) (by omega)
     simpa only [Bool.false_eq_true, ↓reduceIte, entryCursor, hn, if_true] using h
   · rw [if_neg hn, List.nil_append] at located
-    simp only [Bool.false_eq_true, ↓reduceIte, entryNodes, hn, runNodes', pure_bind, earlyHash, Nat.mul_zero,
+    simp only [Bool.false_eq_true, ↓reduceIte, entryNodes, hn, if_false, runNodes', pure_bind, earlyHash, Nat.mul_zero,
       Nat.add_zero] at bound ⊢
     apply move_refines index wire pk k s x tail ctx input len payload done located _ c fuel (by omega)
     intro u invU heldU locatedU
-    have he : wireSlot k = slot k := wireSlot_eq_slot_of_not_narrow hn
+    have he : wireSlot k = work k := (work_of_not_expands hn).symm
     rw [he] at invU heldU
     have prep : Prepared index wire pk u x k := ⟨invU, by rw [if_neg hn]; exact heldU⟩
     have h := continuation u x prep locatedU (fuel-2) (by omega)
@@ -91,25 +91,25 @@ theorem table_refines (k : Fin 32) (tail : Code)
   set p := RiscvUpperForest.ForestVerifier.pos index k with hp
   have hp32 : p < 32 := by have := pos_le index k; omega
   have finish : ∀ (u : MachineState) (z : graph.Assignment),
-      HashInv index wire pk u z k (slot k) → MemBits u (W (outAddr k)) (tops z k) →
+      HashInv index wire pk u z k (work k) → MemBits u (W (outAddr k)) (tops z k) →
       Riscv.CodeAt u u.pc tail → ∀ left, rest ≤ left →
       Riscv.Refines left u (K (z,cursor k+chainBits k)) c := by
     intro u z invU topU locatedU left hleft
     exact continuation u z (HashInv.complete index wire pk invU topU) locatedU left hleft
-  by_cases hn : narrow k = true
+  by_cases hn : expands k = true
   · have he : remaining index k = 32-(p+1) := by
-      simp only [↓reduceIte, remaining, earlyHash, hn]
+      simp only [Bool.false_eq_true, ↓reduceIte, remaining, earlyHash, hn, if_true]
       omega
     rw [he] at located bound ⊢
-    simp only [↓reduceIte, tableNodes, entryCursor, hn, suffixNodes]
+    simp only [Bool.false_eq_true, ↓reduceIte, tableNodes, entryCursor, hn, if_true, suffixNodes]
     have ready := prep.ready
     rw [if_pos hn] at ready
     exact steps_refines index wire pk k tail K c rest (cursor k+chainBits k) finish
       (32-(p+1)) (p+1) rfl (by omega) (by omega) s x fuel prep.inv ready located bound
-  · have he : remaining index k = 32-p := by simp only [Bool.false_eq_true, ↓reduceIte, remaining, earlyHash, hn, Nat.sub_zero]; rfl
-    have hw : wireSlot k = slot k := wireSlot_eq_slot_of_not_narrow hn
+  · have he : remaining index k = 32-p := by simp only [Bool.false_eq_true, ↓reduceIte, remaining, earlyHash, hn, if_false, Nat.sub_zero]; rfl
+    have hw : wireSlot k = work k := (work_of_not_expands hn).symm
     rw [he] at located bound ⊢
-    simp only [Bool.false_eq_true, ↓reduceIte, tableNodes, entryCursor, hn, Nat.add_zero]
+    simp only [Bool.false_eq_true, ↓reduceIte, tableNodes, entryCursor, hn, if_false, Nat.add_zero]
     rw [chain_split_first index k, runNodes'_append, bind_assoc]
     have hcount : 32-p = (32-(p+1))+1 := by omega
     rw [hcount] at located bound ⊢

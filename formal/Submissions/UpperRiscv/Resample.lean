@@ -154,8 +154,8 @@ theorem inv_card_mul_two_pow : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * 2
   rw [card_bitVec_ennreal, ε, show (2 : ℝ≥0∞) ^ 256 = 2 ^ 128 * 2 ^ 128 by rw [← pow_add],
     ENNReal.mul_inv (Or.inl h0) (Or.inl ht), mul_assoc, ENNReal.inv_mul_cancel h0 ht, mul_one]
 
-/-- `ε₁ = 2 ^ (-152)`: the sharp per-node hit probability. -/
-def ε₁ : ℝ≥0∞ := ((2 : ℝ≥0∞) ^ 152)⁻¹
+/-- `ε₁ = 2 ^ (-160)`: the sharp per-node hit probability. -/
+def ε₁ : ℝ≥0∞ := ((2 : ℝ≥0∞) ^ 160)⁻¹
 
 theorem ε₁_le_ε : ε₁ ≤ ε := by
   unfold ε₁ ε
@@ -166,23 +166,23 @@ theorem inv_source_card_le (k : Fin 32) :
   rw [card_bitVec_ennreal, ε₁]
   exact ENNReal.inv_le_inv.mpr (pow_le_pow_right₀ (by norm_num) (chainBits_ge k))
 
-theorem inv_card_mul_two_pow_104 : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * 2 ^ 104 = ε₁ := by
-  have h0 : (2 : ℝ≥0∞) ^ 104 ≠ 0 := by simp
-  have ht : (2 : ℝ≥0∞) ^ 104 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
-  rw [card_bitVec_ennreal, ε₁, show (2 : ℝ≥0∞) ^ 256 = 2 ^ 152 * 2 ^ 104 by rw [← pow_add],
+theorem inv_card_mul_two_pow_96 : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * 2 ^ 96 = ε₁ := by
+  have h0 : (2 : ℝ≥0∞) ^ 96 ≠ 0 := by simp
+  have ht : (2 : ℝ≥0∞) ^ 96 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
+  rw [card_bitVec_ennreal, ε₁, show (2 : ℝ≥0∞) ^ 256 = 2 ^ 160 * 2 ^ 96 by rw [← pow_add],
     ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)),
     mul_assoc, ENNReal.inv_mul_cancel h0 ht, mul_one]
 
-/-- A filter whose members all have the same truncation has at most `2 ^ 104` elements. -/
+/-- A filter whose members all have the same truncation has at most `2 ^ 96` elements. -/
 theorem card_filter_le_of_imp' (k : Fin 32) (p : BitVec 256 → Prop) [DecidablePred p] (a : BitVec (chainBits k))
-    (hp : ∀ b, p b → trunc k b = a) : (Finset.univ.filter p).card ≤ 2 ^ 104 :=
+    (hp : ∀ b, p b → trunc k b = a) : (Finset.univ.filter p).card ≤ 2 ^ 96 :=
   le_trans (Finset.card_le_card fun b hb => Finset.mem_filter.2
     ⟨Finset.mem_univ _, hp b (Finset.mem_filter.1 hb).2⟩) (card_filter_trunc_le' k a)
 
-/-- The sharp count: at most `2 ^ 104` resamplings of a hash coordinate give a chosen input. -/
+/-- The sharp count: at most `2 ^ 96` resamplings of a hash coordinate give a chosen input. -/
 theorem card_updHash_input_le' {h p : Name} (hp : hashParent h = some p) (ξ : Rec)
     (hs : ∀ k, coordOf h ≠ src k) (u : BitVec p.len) :
-    (Finset.univ.filter fun b : BitVec 256 => val (updHash ξ (coordOf h) b) p = u).card ≤ 2 ^ 104 := by
+    (Finset.univ.filter fun b : BitVec 256 => val (updHash ξ (coordOf h) b) p = u).card ≤ 2 ^ 96 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · rename_i k t
     have ht : ¬ t.val = 0 := fun ht => hs k (by simp [coordOf, ht])
@@ -221,12 +221,12 @@ theorem sum_input_eq_le' {h p : Name} (hp : hashParent h = some p) (S : Finset R
     rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
     have hle := card_updHash_input_le' hp ξ hsrc u
     have hle' : ((Finset.univ.filter fun b : BitVec 256 =>
-        val (updHash ξ (coordOf h) b) p = u).card : ℝ≥0∞) ≤ 2 ^ 104 := by exact_mod_cast hle
+        val (updHash ξ (coordOf h) b) p = u).card : ℝ≥0∞) ≤ 2 ^ 96 := by exact_mod_cast hle
     calc (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
           (((Finset.univ.filter fun b : BitVec 256 =>
             val (updHash ξ (coordOf h) b) p = u).card : ℝ≥0∞) * w)
-        ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 104 * w) := by gcongr
-      _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_104]
+        ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 96 * w) := by gcongr
+      _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_96]
 
 /-- The same with the coarser `ε`. -/
 theorem sum_input_eq_le {h p : Name} (hp : hashParent h = some p) (S : Finset Rec)
@@ -529,14 +529,14 @@ theorem eq_pointOf_iff (ξ : Rec) (h p : Name) (u : BitVec p.len) :
     rw [hv]
 
 theorem card_hashNodes_mul_ε₁_le : (1025 : ℝ≥0∞) * ε₁ ≤ ε := by
-  have h0 : (2 : ℝ≥0∞) ^ 24 ≠ 0 := by simp
-  have ht : (2 : ℝ≥0∞) ^ 24 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
-  have e : ε = (2 : ℝ≥0∞) ^ 24 * ε₁ := by
-    rw [ε₁, ε, show (2 : ℝ≥0∞) ^ 152 = 2 ^ 24 * 2 ^ 128 by rw [← pow_add],
+  have h0 : (2 : ℝ≥0∞) ^ 32 ≠ 0 := by simp
+  have ht : (2 : ℝ≥0∞) ^ 32 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
+  have e : ε = (2 : ℝ≥0∞) ^ 32 * ε₁ := by
+    rw [ε₁, ε, show (2 : ℝ≥0∞) ^ 160 = 2 ^ 32 * 2 ^ 128 by rw [← pow_add],
       ENNReal.mul_inv (Or.inl h0) (Or.inl ht), ← mul_assoc, ENNReal.mul_inv_cancel h0 ht, one_mul]
   rw [e]
   refine mul_le_mul' ?_ le_rfl
-  exact_mod_cast (by norm_num : (1025 : ℕ) ≤ 2 ^ 24)
+  exact_mod_cast (by norm_num : (1025 : ℕ) ≤ 2 ^ 32)
 
 /-- A fixed query is the point of at most one node per hash node in expectation: the union bound
 over the hash nodes with the sharp per-node bound `ε₁`. -/

@@ -7,10 +7,10 @@ import Submissions.UpperRiscv.GoodRec
 For every adversary `A` whose experiment costs at most `B ≤ 2 ^ 127` on every path,
 
 ```
-probTrue (GScheme.experiment forestScheme A) ≤ 2 ε (B - 1036) + 2 δ,  ε = 2 ^ (-128),
+probTrue (GScheme.experiment forestScheme A) ≤ 2 ε (B - 1039) + 2 δ,  ε = 2 ^ (-128),
 ```
 
-where `δ = 2 · 1025² · 2 ^ (-152)` bounds the weight of the bad records (`GoodRec.lean`).
+where `δ = 2 · 1025² · 2 ^ (-160)` bounds the weight of the bad records (`GoodRec.lean`).
 
 The proof follows `DESIGN.md`: key generation is a uniform record (`E_run_keygen_le`, up to the
 records whose keygen points collide); the bad records are given up at once; the
@@ -274,7 +274,7 @@ theorem E_run_experiment (g' : Bool × Cache → ℝ≥0∞) (hg : ∀ a, g' a �
 
 /-- The budget after key generation, for the concrete scheme. -/
 theorem costAtMost_rest_forest {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) :
-    1036 ≤ B ∧ ∀ ξ : Rec, CostAtMost (rest A (pkOf ξ, graph.evalRec ξ)) (B - 1036) := by
+    1039 ≤ B ∧ ∀ ξ : Rec, CostAtMost (rest A (pkOf ξ, graph.evalRec ξ)) (B - 1039) := by
   rw [experiment_eq] at hB
   obtain ⟨h1, h2⟩ := costAtMost_keygen_bind forestScheme (rest A) hB
   refine ⟨?_, fun ξ => ?_⟩
@@ -284,7 +284,7 @@ theorem costAtMost_rest_forest {B : ℕ} (hB : CostAtMost (GScheme.experiment fo
         (B - graph.keygenCost) := h2 ξ
     rwa [publicKey_eq_pkOf, graph_keygenCost] at h2'
 
-theorem keygen_le {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) : 1036 ≤ B :=
+theorem keygen_le {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) : 1039 ≤ B :=
   (costAtMost_rest_forest A hB).1
 
 theorem sum_w_ind_not_goodRec_le : ∑ ξ : Rec, w * ind (¬ GoodRec ξ) ≤ δ := by
@@ -298,8 +298,8 @@ theorem sum_w_ind_not_distinctRec_le : ∑ ξ : Rec, w * ind (¬ DistinctRec ξ)
   split_ifs <;> simp
 
 theorem main_bound {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) (hB' : B ≤ 2 ^ 127) :
-    probTrue (GScheme.experiment forestScheme A) ≤ κ * ((B - 1036 : ℕ) : ℝ≥0∞) + 2 * δ := by
-  obtain ⟨h1036, hrest⟩ := costAtMost_rest_forest A hB
+    probTrue (GScheme.experiment forestScheme A) ≤ κ * ((B - 1039 : ℕ) : ℝ≥0∞) + 2 * δ := by
+  obtain ⟨h1039, hrest⟩ := costAtMost_rest_forest A hB
   rw [probTrue_eq]
   refine (E_run_experiment A g g_le_one).trans ?_
   simp only [mul_add, Finset.sum_add_distrib]
@@ -341,15 +341,15 @@ theorem main_bound {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A
         unfold FA
         refine Finset.sum_congr rfl fun ξ hξ => ?_
         rw [mem_fiberA_asm hξ]
-    _ ≤ δ + ∑ pk, κ * sumW (fiberA pk) * ((B - 1036 : ℕ) : ℝ≥0∞) := by
+    _ ≤ δ + ∑ pk, κ * sumW (fiberA pk) * ((B - 1039 : ℕ) : ℝ≥0∞) := by
         refine add_le_add le_rfl (Finset.sum_le_sum fun pk _ => ?_)
-        refine stageA_master A pk (B - 1036) ((Nat.sub_le B 1036).trans hB') fun ξ hξ => ?_
+        refine stageA_master A pk (B - 1039) ((Nat.sub_le B 1039).trans hB') fun ξ hξ => ?_
         have h := hrest ξ
         rw [mem_fiberA_asm hξ] at h
         unfold rest at h
         dsimp only at h
         exact h
-    _ = κ * ((B - 1036 : ℕ) : ℝ≥0∞) + δ := by
+    _ = κ * ((B - 1039 : ℕ) : ℝ≥0∞) + δ := by
         rw [← Finset.sum_mul, ← Finset.mul_sum, sum_sumW_fiberA, mul_one, add_comm]
 
 end Forest
