@@ -61,7 +61,9 @@ theorem Record.rootState_after (ξ : Record) (i : Fin 34) :
     ξ.rootState i.succ = ξ.2 (.inr i) := by
   simp only [Record.rootState, Fin.val_succ, dif_neg (Nat.succ_ne_zero i.val), Nat.add_sub_cancel]
 
-theorem rootValueFold_record (f : HashTable) (ξ : Record) (hf : Respects f ξ)
+/-- The root fold reads only the root answers of the record. -/
+theorem rootValueFold_record_of_roots (f : HashTable) (ξ : Record)
+    (hf : ∀ i : Fin 34, f (ξ.query (.inr i)) = ξ.2 (.inr i))
     (n j : ℕ) (hj : j + n = 34) :
     rootValueFold f (List.ofFn (fun k : Fin n => ξ.endpoint ⟨j + k.val, by have := k.isLt; omega⟩))
       (ξ.rootState ⟨j, by omega⟩) = ξ.rootState 34 := by
@@ -93,22 +95,34 @@ theorem rootValueFold_record (f : HashTable) (ξ : Record) (hf : Respects f ξ)
         ((ξ.endpoint i).setWidth 512) (BitVec.ofNat 128 (2 + (List.ofFn tail).length))⟩ =
         ξ.rootState ⟨j + 1, by omega⟩ := by
       rw [List.length_ofFn]
-      have h := hf (.inr i)
+      have h := hf i
       change f ⟨896, LeanIsa.hashInput (ξ.rootBefore i) ((ξ.endpoint i).setWidth 512)
         (BitVec.ofNat 128 (2 + (rootTag i).val))⟩ = ξ.2 (.inr i) at h
       rw [ht] at h
       exact h.trans (ξ.rootState_after i).symm
     exact (congrArg (rootValueFold f (List.ofFn tail)) hq).trans (ih (j + 1) (by omega))
 
-theorem rootValue_record (f : HashTable) (ξ : Record) (hf : Respects f ξ) :
+theorem rootValueFold_record (f : HashTable) (ξ : Record) (hf : Respects f ξ)
+    (n j : ℕ) (hj : j + n = 34) :
+    rootValueFold f (List.ofFn (fun k : Fin n => ξ.endpoint ⟨j + k.val, by have := k.isLt; omega⟩))
+      (ξ.rootState ⟨j, by omega⟩) = ξ.rootState 34 :=
+  rootValueFold_record_of_roots f ξ (fun i => hf (.inr i)) n j hj
+
+/-- The public key is determined by the root answers alone. -/
+theorem rootValue_record_of_roots (f : HashTable) (ξ : Record)
+    (hf : ∀ i : Fin 34, f (ξ.query (.inr i)) = ξ.2 (.inr i)) :
     rootValue f ξ.endpoint = ξ.publicKey := by
-  have h := rootValueFold_record f ξ hf 34 0 (by omega)
+  have h := rootValueFold_record_of_roots f ξ hf 34 0 (by omega)
   have hl : (fun k : Fin 34 => ξ.endpoint ⟨0 + k.val, by have := k.isLt; omega⟩) = ξ.endpoint := by
     funext k
     simp only [Nat.zero_add]
   rw [hl] at h
   change rootValueFold f (List.ofFn ξ.endpoint) 0 = ξ.2 (.inr 33) at h
   exact congrArg (fun x : BitVec hashBits => x.extractLsb' 0 128) h
+
+theorem rootValue_record (f : HashTable) (ξ : Record) (hf : Respects f ξ) :
+    rootValue f ξ.endpoint = ξ.publicKey :=
+  rootValue_record_of_roots f ξ (fun i => hf (.inr i))
 
 end
 end OptimalOTS.LeanIsaBaseline

@@ -1,3 +1,32 @@
+# leanISA baseline — 170549 cycles
+
+This root completes the leanISA Winternitz baseline started in PR #23 by Tom Wambsgans. The
+scheme (`Algorithms.lean`) is unchanged: 34 chains of 128-bit words, 32 base-256 message digits
+plus two checksum digits, every chain step tagged with its chain and position, and an MD-style
+root fold with distinct metadata. What this root adds:
+
+- **Strong unforgeability** (`Security.lean`, `theorem secure`), assembled from PR #23's
+  ingredients in two stages: `Stages`, `Budget`, `KeygenBridge` (key generation as a uniform
+  average over records), `Transcript`, `CutTargets`, `Events` (an accepted fresh forgery is a
+  hidden-word hit or a cut-target hit on the exposed run), `StageB`, `StageA` (supermartingale
+  via `master_family`). Two charges of `2^-129` per compression give `B / 2^128 < B / 2^127`.
+- **Bytecode** (`MachineProgram.lean`): straight-line, `fp = 1` throughout, one final `JUMP`.
+  Each chain runs all 255 steps; a thermometer mux feeds the signature word in at the signed
+  digit and hashes it as a dummy before. Digits are tied to the pinned message cells by
+  XOR-accumulating shifted byte constants; the checksum is checked in the exponent
+  (`g^C = g^(256·c_hi) · g^(c_lo)`). 92093 instructions, 8704 `BLAKE2S`.
+- **Execution** (`MachineRun.lean`): every completing run executes exactly the 92093
+  instructions, so the cost is `92093 + 9 · 8704 = 170429`, plus the 120-cycle boundary charge.
+- **Soundness and faithfulness** (`ConstraintMath`, `MachineProver`, `MachineSound`,
+  `MachineFaithful`): the constraints force the verifier's chain values, digits and root on any
+  committed image; the honest prover's image satisfies all of them exactly when the verifier
+  accepts.
+- `seededRows = 2^17 + 2^17 < 2^20`.
+
+The design is deliberately simple rather than cycle-optimal; it is a baseline.
+
+---
+
 # leanISA baseline — work in progress
 
 This is an unfinished candidate, not a certified competition entry. There is no cycle
