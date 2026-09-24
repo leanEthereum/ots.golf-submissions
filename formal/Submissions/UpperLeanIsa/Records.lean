@@ -5,7 +5,7 @@ import Submissions.UpperLeanIsa.Cache
 # Records of a layer scheme and their oracle points
 
 A *record* is the randomness of key generation laid out by location: the 42 seeds and the full
-256-bit answer at every keygen query. Chain step `(k, j)` (`j + 1 < len k`) and root call `r < 10`
+256-bit answer at every keygen query. Chain step `(k, j)` (`j + 1 < len k`) and root call `r < 9`
 are the locations. Distinct locations have distinct inputs in every pair of records
 (`location_eq_of_input_eq`), because the three tag cells and the metadata separate them
 syntactically (`Params.Hyp`); no probabilistic collision exception is needed.
@@ -35,13 +35,13 @@ structure Hyp : Prop where
     P.tag k j 0 = P.tag k' j' 0 → P.tag k j 1 = P.tag k' j' 1 → P.tag k j 2 = P.tag k' j' 2 →
     k = k' ∧ j = j'
   chain_idx : P.chainMd ≠ P.idxMd
-  chain_root : ∀ r < 10, P.chainMd ≠ P.rootMd r
-  root_idx : ∀ r < 10, P.rootMd r ≠ P.idxMd
-  root_inj : ∀ r s, r < 10 → s < 10 → P.rootMd r = P.rootMd s → r = s
+  chain_root : ∀ r < 9, P.chainMd ≠ P.rootMd r
+  root_idx : ∀ r < 9, P.rootMd r ≠ P.idxMd
+  root_inj : ∀ r s, r < 9 → s < 9 → P.rootMd r = P.rootMd s → r = s
   numValid_ge : 200 * 2 ^ 108 ≤ P.numValid
   numValid_le : 2 * P.numValid ≤ 2 ^ 128
-  keygen_le : 2 * (∑ k, (P.len k - 1)) + 20 ≤ 2 ^ 20
-  verify_le : 22 + 2 * P.layer ≤ 2 ^ 20
+  keygen_le : 2 * (∑ k, (P.len k - 1)) + 18 ≤ 2 ^ 20
+  verify_le : 20 + 2 * P.layer ≤ 2 ^ 20
   len_zero : 2 ≤ P.len 0
 
 end Params
@@ -86,14 +86,11 @@ theorem chainInput_same_iff (k : Fin numChains) (j : ℕ) (x y : Word) :
   · rintro rfl
     rfl
 
-theorem rootInput_eq_iff (hP : P.Hyp) {r s : ℕ} (hr : r < 10) (hs : s < 10)
+theorem rootInput_eq_iff (hP : P.Hyp) {r s : ℕ} (hr : r < 9) (hs : s < 9)
     (t t' : Fin numChains → Word) (st st' : BitVec 256) :
     P.rootInput t r st = P.rootInput t' s st' ↔
-      r = s ∧ st = st' ∧
-        Params.topAt t (4 * r + 5) ++ Params.topAt t (4 * r + 4) ++ Params.topAt t (4 * r + 3) ++
-            Params.topAt t (4 * r + 2) =
-          Params.topAt t' (4 * s + 5) ++ Params.topAt t' (4 * s + 4) ++ Params.topAt t' (4 * s + 3) ++
-            Params.topAt t' (4 * s + 2) := by
+      r = s ∧ Params.rootCv t r st = Params.rootCv t' s st' ∧
+        Params.rootBlock t r st = Params.rootBlock t' s st' := by
   unfold rootInput
   rw [hashInput_eq_iff]
   constructor
@@ -102,7 +99,7 @@ theorem rootInput_eq_iff (hP : P.Hyp) {r s : ℕ} (hr : r < 10) (hs : s < 10)
   · rintro ⟨rfl, h1, h2⟩
     exact ⟨h1, h2, rfl⟩
 
-theorem chainInput_ne_rootInput (hP : P.Hyp) {r : ℕ} (hr : r < 10) (k : Fin numChains) (j : ℕ)
+theorem chainInput_ne_rootInput (hP : P.Hyp) {r : ℕ} (hr : r < 9) (k : Fin numChains) (j : ℕ)
     (x : Word) (t : Fin numChains → Word) (st : BitVec 256) :
     P.chainInput k j x ≠ P.rootInput t r st := by
   intro h
@@ -113,7 +110,7 @@ theorem chainInput_ne_idxInput (hP : P.Hyp) (k : Fin numChains) (j : ℕ) (x : W
   intro h
   exact hP.chain_idx ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.2
 
-theorem rootInput_ne_idxInput (hP : P.Hyp) {r : ℕ} (hr : r < 10) (t : Fin numChains → Word)
+theorem rootInput_ne_idxInput (hP : P.Hyp) {r : ℕ} (hr : r < 9) (t : Fin numChains → Word)
     (st : BitVec 256) (m : Message) (η : Nonce) (pk : PublicKey) :
     P.rootInput t r st ≠ P.idxInput m η pk := by
   intro h
@@ -126,8 +123,8 @@ end Params
 /-- Chain step `(k, j)`: the query at position `j < len k - 1` of chain `k`. -/
 abbrev ChainLoc (P : Params) := (k : Fin numChains) × Fin (P.len k - 1)
 
-/-- The keygen locations: chain steps and the 10 root calls. -/
-abbrev Loc (P : Params) := ChainLoc P ⊕ Fin 10
+/-- The keygen locations: chain steps and the 9 root calls. -/
+abbrev Loc (P : Params) := ChainLoc P ⊕ Fin 9
 
 /-- The seeds and the full answer at every keygen location. -/
 abbrev Record (P : Params) := (Fin numChains → Word) × (Loc P → BitVec hashBits)
@@ -137,12 +134,12 @@ variable {P : Params}
 /-- The word of chain `k` at position `j` (zero past the end). -/
 def Record.word (ξ : Record P) (k : Fin numChains) : ℕ → Word
   | 0 => ξ.1 k
-  | j + 1 => if h : j < P.len k - 1 then (ξ.2 (.inl ⟨k, ⟨j, h⟩⟩)).extractLsb' 0 128 else 0
+  | j + 1 => if h : j < P.len k - 1 then P.slice k j (ξ.2 (.inl ⟨k, ⟨j, h⟩⟩)) else 0
 
 theorem Record.word_zero (ξ : Record P) (k : Fin numChains) : ξ.word k 0 = ξ.1 k := rfl
 
 theorem Record.word_succ (ξ : Record P) (k : Fin numChains) (j : ℕ) (h : j < P.len k - 1) :
-    ξ.word k (j + 1) = (ξ.2 (.inl ⟨k, ⟨j, h⟩⟩)).extractLsb' 0 128 := by
+    ξ.word k (j + 1) = P.slice k j (ξ.2 (.inl ⟨k, ⟨j, h⟩⟩)) := by
   simp only [Record.word, dif_pos h]
 
 /-- The tops: the last word of every chain. -/
@@ -151,21 +148,21 @@ def Record.top (ξ : Record P) (k : Fin numChains) : Word := ξ.word k (P.len k 
 /-- The root state before call `r`. -/
 def Record.rootState (ξ : Record P) : ℕ → BitVec 256
   | 0 => Params.rootInit ξ.top
-  | r + 1 => if h : r < 10 then ξ.2 (.inr ⟨r, h⟩) else 0
+  | r + 1 => if h : r < 9 then ξ.2 (.inr ⟨r, h⟩) else 0
 
-theorem Record.rootState_succ (ξ : Record P) (r : Fin 10) :
+theorem Record.rootState_succ (ξ : Record P) (r : Fin 9) :
     ξ.rootState (r.val + 1) = ξ.2 (.inr r) := by
   unfold Record.rootState
   exact dif_pos r.isLt
 
 theorem Record.rootState_zero (ξ : Record P) : ξ.rootState 0 = Params.rootInit ξ.top := rfl
 
-theorem Record.rootState_succ_lt (ξ : Record P) (r : ℕ) (hr : r < 10) :
+theorem Record.rootState_succ_lt (ξ : Record P) (r : ℕ) (hr : r < 9) :
     ξ.rootState (r + 1) = ξ.2 (.inr ⟨r, hr⟩) := by
   unfold Record.rootState
   exact dif_pos hr
 
-theorem Record.rootState_succ_ge (ξ : Record P) (r : ℕ) (hr : ¬ r < 10) :
+theorem Record.rootState_succ_ge (ξ : Record P) (r : ℕ) (hr : ¬ r < 9) :
     ξ.rootState (r + 1) = 0 := by
   unfold Record.rootState
   exact dif_neg hr
@@ -181,11 +178,11 @@ def Record.query (ξ : Record P) (a : Loc P) : Query := ⟨896, ξ.input a⟩
 theorem Record.query_inl (ξ : Record P) (k : Fin numChains) (j : Fin (P.len k - 1)) :
     ξ.query (.inl ⟨k, j⟩) = ⟨896, P.chainInput k j.val (ξ.word k j.val)⟩ := rfl
 
-theorem Record.query_inr (ξ : Record P) (r : Fin 10) :
+theorem Record.query_inr (ξ : Record P) (r : Fin 9) :
     ξ.query (.inr r) = ⟨896, P.rootInput ξ.top r.val (ξ.rootState r.val)⟩ := rfl
 
 /-- The public key: the low half of the last root answer. -/
-def Record.pk (ξ : Record P) : PublicKey := (ξ.2 (.inr 9)).extractLsb' 0 128
+def Record.pk (ξ : Record P) : PublicKey := (ξ.2 (.inr 8)).extractLsb' 0 128
 
 /-- The chain table of chain `k`: its words at positions `0, …, len k - 1`. -/
 def Record.table (ξ : Record P) (k : Fin numChains) : List Word :=

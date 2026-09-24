@@ -111,7 +111,7 @@ theorem chainInput_ne_encQuery (hP : P.Hyp) (k : Fin numChains) (j : ℕ) (x : W
   intro h
   exact P.chainInput_ne_idxInput hP k j x _ _ _ (query_inj h)
 
-theorem rootInput_ne_encQuery (hP : P.Hyp) {r : ℕ} (hr : r < 10) (t : Fin numChains → Word)
+theorem rootInput_ne_encQuery (hP : P.Hyp) {r : ℕ} (hr : r < 9) (t : Fin numChains → Word)
     (st : BitVec 256) (u : EncInput) : (⟨896, P.rootInput t r st⟩ : Query) ≠ P.encQuery u := by
   intro h
   exact P.rootInput_ne_idxInput hP hr t st _ _ _ (query_inj h)

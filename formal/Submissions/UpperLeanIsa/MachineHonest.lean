@@ -6,7 +6,7 @@ import Submissions.UpperLeanIsa.MachineProver
 Under a table `f` for which the verifier accepts, the honest image `imageF f pk m bits`, loaded
 with the statement, satisfies the fixed-table relation of every slot on the path of the index
 digits (`honest_path`), with the return hints and `K0` the walk needs; so the machine completes
-in `260` instructions (`honest_run`). Together with `fixed_sound` this is `Faithful`.
+in `258` instructions (`honest_run`). Together with `fixed_sound` this is `Faithful`.
 -/
 
 namespace OptimalOTS.HLFlat
@@ -22,7 +22,7 @@ noncomputable section
 
 /-- `omega` after unfolding the cell layout. -/
 macro "cellω" : tactic => `(tactic| ((try simp only [zCell, oneCell, tidxCell, gCell, k0Cell,
-  x3Cell, fCell, idxCell, tCell, hCell, h1Cell, cCell, topCell, cvCell, xCell, stCell] at *) <;>
+  fCell, idxCell, tCell, hCell, h1Cell, cCell, xCell, stCell] at *) <;>
   omega))
 
 section Cells
@@ -49,11 +49,6 @@ theorem hc_k0 : hcell bits y0 A RA k0Cell = k0V := by
   unfold hcell
   rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_pos (by cellω)]
-
-theorem hc_x3 : hcell bits y0 A RA x3Cell = natV 3 := by
-  unfold hcell
-  rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_pos (by cellω), if_pos (by cellω)]
 
 theorem hc_frame {g : ℕ} (hg : g < 14) : hcell bits y0 A RA (fCell g) = frameV g := by
   unfold hcell
@@ -134,55 +129,20 @@ theorem hc_gp {v : ℕ} (h2 : 2 ≤ v) (h7 : v ≤ 7) :
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
+    if_pos (by cellω)]
   rw [show 440 + v - 440 = v by omega]
 
-theorem hc_top {k : ℕ} (hk : k < 42) :
-    hcell bits y0 A RA (topCell k) = cellOfBits (topOf bits y0 A k) := by
+theorem hc_out {k b : ℕ} (hk : k < 42) (hb : b < 2) :
+    hcell bits y0 A RA (chainOut k + b) = pairV bits y0 A k b := by
+  obtain ⟨h1, h2, h3, h4⟩ := out_decode k hk b hb
+  generalize chainOut k + b = c at *
+  subst h1 h2
   unfold hcell
-  rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
-  rw [if_pos (by cellω), show (topCell k - 320) / 2 = k by unfold topCell; omega]
-
-theorem hc_top1 {k : ℕ} (hk : k < 42) :
-    hcell bits y0 A RA (topCell k + 1) = hiOf y0 A k := by
-  unfold hcell
-  rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
-  rw [if_neg (by cellω), show (topCell k + 1 - 320) / 2 = k by unfold topCell; omega]
-
-theorem hc_cv0 : hcell bits y0 A RA cvCell = cellOfBits (topOf bits y0 A 0) := by
-  unfold hcell
-  rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_pos (by cellω)]
-
-theorem hc_cv1 : hcell bits y0 A RA (cvCell + 1) = cellOfBits (topOf bits y0 A 1) := by
-  unfold hcell
-  rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_pos (by cellω)]
-
-theorem hc_cv2 : hcell bits y0 A RA (cvCell + 2) = hiOf y0 A 1 := by
-  unfold hcell
-  rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
+  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
+    if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
+    if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
+    if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
+    if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos (by omega)]
 
 theorem hc_x {k t : ℕ} (hk : k < 42) (ht : t < 16) :
     hcell bits y0 A RA (xCell k t) = loC (A k t) := by
@@ -192,8 +152,7 @@ theorem hc_x {k t : ℕ} (hk : k < 42) (ht : t < 16) :
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_pos (by cellω)]
+    if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
   rw [if_pos (by cellω), show (xCell k t - 1024) / 32 = k by unfold xCell; omega,
     show (xCell k t - 1024) % 32 / 2 = t by unfold xCell; omega]
 
@@ -205,31 +164,28 @@ theorem hc_x1 {k t : ℕ} (hk : k < 42) (ht : t < 16) :
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_pos (by cellω)]
+    if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
   rw [if_neg (by cellω), show (xCell k t + 1 - 1024) / 32 = k by unfold xCell; omega,
     show (xCell k t + 1 - 1024) % 32 / 2 = t by unfold xCell; omega]
 
-theorem hc_st {r : ℕ} (hr : r < 10) : hcell bits y0 A RA (stCell r) = loC (RA r) := by
+theorem hc_st {r : ℕ} (hr : r < 9) : hcell bits y0 A RA (stCell r) = loC (RA r) := by
   unfold hcell
   rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
+    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
   rw [if_pos (by cellω), show (stCell r - 2400) / 2 = r by unfold stCell; omega]
 
-theorem hc_st1 {r : ℕ} (hr : r < 10) : hcell bits y0 A RA (stCell r + 1) = hiC (RA r) := by
+theorem hc_st1 {r : ℕ} (hr : r < 9) : hcell bits y0 A RA (stCell r + 1) = hiC (RA r) := by
   unfold hcell
   rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
+    if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_pos (by cellω)]
   rw [if_neg (by cellω), show (stCell r + 1 - 2400) / 2 = r by unfold stCell; omega]
 
 end Cells
@@ -295,31 +251,22 @@ theorem chain_query {v : ℕ → E} (hz : v zCell = 0) (hone : v oneCell = oneV)
 
 /-! ## Blocks by region -/
 
-/-- Every op of a block holds once its pre ops, nops, steps, chain-0 copy and tail hold. -/
+/-- Every op of a block holds once its pre ops, nops, steps and tail hold. -/
 theorem blockOp_of {P : CInstr → Prop} {g a b c i : ℕ} (hg : g < 14) (ha : a < 8) (hb : b < 8)
     (hc : c < Wc g) (hi0 : 0 < i) (hi : i ≤ NH g + (a + b + c) + (if g < 13 then 1 else 0))
     (hpre : ∀ q < preLen g a b c, P (preOp g a b c q)) (hnop : P nop)
     (hstep : ∀ t < a + b + c, P (stepOp g a b c t))
-    (hpost : g = 0 → a ≠ 0 → P (.xor (topCell 0) zCell cvCell))
     (htail : P (if g < 13 then .mul (hCell (g + 1)) gCell (h1Cell (g + 1)) else .exit))
     (hdisp : g < 13 → P (.dispatch (g + 1))) : P (blockOp g a b c i) := by
   have hfit := pre_fit hg ha hb hc
-  have hsb := stepBase_le g a
   by_cases h1 : i < 1 + preLen g a b c
   · obtain ⟨q, rfl⟩ : ∃ q, i = 1 + q := ⟨i - 1, by omega⟩
     rw [blockOp_pre (by omega)]; exact hpre q (by omega)
-  by_cases h2 : i < stepBase g a
+  by_cases h2 : i < NH g
   · rw [blockOp_nop (by omega) h2]; exact hnop
-  by_cases h3 : i < stepBase g a + (a + b + c)
-  · obtain ⟨t, rfl⟩ : ∃ t, i = stepBase g a + t := ⟨i - stepBase g a, by omega⟩
+  by_cases h3 : i < NH g + (a + b + c)
+  · obtain ⟨t, rfl⟩ : ∃ t, i = NH g + t := ⟨i - NH g, by omega⟩
     rw [blockOp_step hfit (by omega)]; exact hstep t (by omega)
-  by_cases h4 : i < NH g + (a + b + c)
-  · rw [blockOp_post hfit (by omega) h4]
-    have hp : postLen g a = 1 := by
-      unfold stepBase at h3; unfold postLen at *; split_ifs at * <;> omega
-    unfold postLen at hp
-    split_ifs at hp with hh
-    · exact hpost hh.1 hh.2
   by_cases h5 : i = NH g + (a + b + c)
   · rw [h5, blockOp_tail hfit]; exact htail
   · have hg13 : g < 13 := by split_ifs at hi <;> omega
@@ -373,6 +320,22 @@ theorem AF_spec {k : ℕ} (hk : k < 42) {t : ℕ} (ht : t < dg (idxOf (y0F f pk 
       (chainValue f FP ⟨k, hk⟩ (W k - 1 - dg (idxOf (y0F f pk m bits)) k) t (sigW bits k))) := by
   rw [AF_eq f pk m bits hk, chainAnsF_spec f _ _ _ _ _ ht]
 
+/-- The slice of the step producing the top: the top's half. -/
+theorem slice_last {k : ℕ} (hk : k < 42) {j : ℕ} (hj : j + 2 = W k) (y : BitVec 256) :
+    FP.slice ⟨k, hk⟩ j y = y.extractLsb' (128 * topBit k) 128 := by
+  unfold Params.slice topBit
+  rw [stepOff_eq hk]
+  by_cases h : hiChain k = true
+  · rw [if_pos ⟨h, hj⟩, if_pos h]; rfl
+  · rw [if_neg (fun h' => h h'.1), if_neg h]; rfl
+
+/-- The slice of every other step: the low half. -/
+theorem slice_mid {k : ℕ} (hk : k < 42) {j : ℕ} (hj : j + 2 ≠ W k) (y : BitVec 256) :
+    FP.slice ⟨k, hk⟩ j y = y.extractLsb' 0 128 := by
+  unfold Params.slice
+  rw [stepOff_eq hk, if_neg (fun h' => hj h'.2)]
+  rfl
+
 /-- The honest top of chain `k` is the verifier's. -/
 theorem topOf_eq {k : ℕ} (hk : k < 42) :
     topOf bits (y0F f pk m bits) (AF f pk m bits) k =
@@ -381,10 +344,12 @@ theorem topOf_eq {k : ℕ} (hk : k < 42) :
   by_cases h0 : dg (idxOf (y0F f pk m bits)) k = 0
   · rw [if_pos h0, h0]; rfl
   · rw [if_neg h0]
+    have hd := dF_lt f pk m bits hk
     obtain ⟨u, hu⟩ : ∃ u, dg (idxOf (y0F f pk m bits)) k = u + 1 := ⟨dg (idxOf (y0F f pk m bits)) k - 1, by omega⟩
     have hs := AF_spec f pk m bits hk (t := u) (by omega)
-    rw [hu] at hs
-    rw [hu, Nat.add_sub_cancel, hs, chainValue_succ]
+    rw [hu] at hs hd
+    rw [hu, Nat.add_sub_cancel, hs, chainValue_succ, slice_last hk (by omega)]
+
 /-! ### Cell values of the loaded honest image -/
 
 section Values
@@ -400,7 +365,6 @@ theorem hv_one : hv f pk m bits oneCell = oneV := hv_c (by decide) (by decide) (
 theorem hv_tidx : hv f pk m bits tidxCell = natV 10 := hv_c (by decide) (by decide) (hc_tidx ..)
 theorem hv_g : hv f pk m bits gCell = gV := hv_c (by decide) (by decide) (hc_g ..)
 theorem hv_k0 : hv f pk m bits k0Cell = k0V := hv_c (by decide) (by decide) (hc_k0 ..)
-theorem hv_x3 : hv f pk m bits x3Cell = natV 3 := hv_c (by decide) (by decide) (hc_x3 ..)
 theorem hv_frame {g : ℕ} (hg : g < 14) : hv f pk m bits (fCell g) = frameV g :=
   hv_c (by unfold fCell; omega) (by unfold fCell; omega) (hc_frame _ _ _ _ hg)
 theorem hv_idx : hv f pk m bits idxCell = loC (y0F f pk m bits) :=
@@ -436,41 +400,39 @@ theorem hv_sym {i : ℕ} (hi : i < 7) : hv f pk m bits (symCell i) = symV i := b
   · subst h1; rw [hv_one, oneV, show 1 - 1 = 0 from rfl, gpow_zero']
   · exact hv_gp (by omega) (by omega)
 
-theorem hv_top {k : ℕ} (hk : k < 42) :
-    hv f pk m bits (topCell k) = cellOfBits (topOf bits (y0F f pk m bits) (AF f pk m bits) k) :=
-  hv_c (by unfold topCell; omega) (by unfold topCell; omega) (hc_top _ _ _ _ hk)
-theorem hv_top1 {k : ℕ} (hk : k < 42) :
-    hv f pk m bits (topCell k + 1) = hiOf (y0F f pk m bits) (AF f pk m bits) k :=
-  hv_c (by unfold topCell; omega) (by unfold topCell; omega) (hc_top1 _ _ _ _ hk)
-theorem hv_cv0 : hv f pk m bits cvCell =
-    cellOfBits (topOf bits (y0F f pk m bits) (AF f pk m bits) 0) :=
-  hv_c (by decide) (by decide) (hc_cv0 ..)
-theorem hv_cv1 : hv f pk m bits (cvCell + 1) =
-    cellOfBits (topOf bits (y0F f pk m bits) (AF f pk m bits) 1) :=
-  hv_c (by decide) (by decide) (hc_cv1 ..)
-theorem hv_cv2 : hv f pk m bits (cvCell + 1 + 1) = hiOf (y0F f pk m bits) (AF f pk m bits) 1 :=
-  hv_c (by decide) (by decide) (hc_cv2 ..)
+theorem hv_out {k b : ℕ} (hk : k < 42) (hb : b < 2) :
+    hv f pk m bits (chainOut k + b) = pairV bits (y0F f pk m bits) (AF f pk m bits) k b := by
+  have := out_decode k hk b hb
+  exact hv_c (by omega) (by omega) (hc_out _ _ _ _ hk hb)
 theorem hv_x {k t : ℕ} (hk : k < 42) (ht : t < 16) :
     hv f pk m bits (xCell k t) = loC (AF f pk m bits k t) :=
   hv_c (by unfold xCell; omega) (by unfold xCell; omega) (hc_x _ _ _ _ hk ht)
 theorem hv_x1 {k t : ℕ} (hk : k < 42) (ht : t < 16) :
     hv f pk m bits (xCell k t + 1) = hiC (AF f pk m bits k t) :=
   hv_c (by unfold xCell; omega) (by unfold xCell; omega) (hc_x1 _ _ _ _ hk ht)
-theorem hv_st {r : ℕ} (hr : r < 10) : hv f pk m bits (stCell r) = loC (RAF f pk m bits r) :=
+theorem hv_st {r : ℕ} (hr : r < 9) : hv f pk m bits (stCell r) = loC (RAF f pk m bits r) :=
   hv_c (by unfold stCell; omega) (by unfold stCell; omega) (hc_st _ _ _ _ hr)
-theorem hv_st1 {r : ℕ} (hr : r < 10) : hv f pk m bits (stCell r + 1) = hiC (RAF f pk m bits r) :=
+theorem hv_st1 {r : ℕ} (hr : r < 9) : hv f pk m bits (stCell r + 1) = hiC (RAF f pk m bits r) :=
   hv_c (by unfold stCell; omega) (by unfold stCell; omega) (hc_st1 _ _ _ _ hr)
+
+theorem rootTop_eq_out (k : ℕ) : rootTop k = chainOut k + topBit k := by
+  unfold topBit
+  by_cases h : hiChain k = true
+  · rw [if_pos h, rootTop_of_hi h]
+  · rw [if_neg h, rootTop_of_lo h, Nat.add_zero]
 
 /-- The root reads the honest tops. -/
 theorem hv_rootTop {k : ℕ} (hk : k < 42) :
     hv f pk m bits (rootTop k) = cellOfBits (topOf bits (y0F f pk m bits) (AF f pk m bits) k) := by
-  unfold rootTop
-  by_cases h0 : k = 0
-  · subst h0; rw [if_pos rfl]; exact hv_cv0
-  · rw [if_neg h0]
-    by_cases h1 : k = 1
-    · subst h1; rw [if_pos rfl]; exact hv_cv1
-    · rw [if_neg h1]; exact hv_top hk
+  rw [rootTop_eq_out, hv_out hk (by unfold topBit; split_ifs <;> omega)]
+  unfold pairV topOf
+  by_cases h0 : dg (idxOf (y0F f pk m bits)) k = 0
+  · rw [if_pos h0, if_pos h0, if_pos rfl]
+  · rw [if_neg h0, if_neg h0]
+    unfold topBit
+    by_cases h : hiChain k = true
+    · rw [if_pos h, if_neg (by omega)]; rfl
+    · rw [if_neg h, if_pos rfl]; rfl
 
 /-- The revealed words (for an admitted length). -/
 theorem hv_w (hlen : bits.length = 5504) {k : ℕ} (hk : k < 42) :
@@ -587,9 +549,9 @@ theorem honest_lay_step {g : ℕ} (h1 : 1 ≤ g) (hg : g < 14) :
   rw [Nat.add_sub_cancel, Finset.sum_range_succ _ (j + 1), Nat.add_assoc]
 
 include hlen in
-theorem honest_pro : ∀ t < 30, HR f pk m bits t := by
+theorem honest_pro : ∀ t < 29, HR f pk m bits t := by
   intro t ht
-  by_cases h7 : t < 7
+  by_cases h6 : t < 6
   · unfold HR
     interval_cases t
     · rw [cinstrAt_set0]; exact hv_z
@@ -600,16 +562,15 @@ theorem honest_pro : ∀ t < 30, HR f pk m bits t := by
     · rw [cinstrAt_set3]; exact hv_tidx
     · rw [cinstrAt_set4]; exact hv_g
     · rw [cinstrAt_set5]; exact hv_k0
-    · rw [cinstrAt_set6]; exact hv_x3
-  by_cases h21 : t < 21
-  · obtain ⟨g, rfl⟩ : ∃ g, t = 7 + g := ⟨t - 7, by omega⟩
+  by_cases h20 : t < 20
+  · obtain ⟨g, rfl⟩ : ∃ g, t = 6 + g := ⟨t - 6, by omega⟩
     unfold HR; rw [cinstrAt_frame (by omega)]; exact hv_frame (by omega)
-  by_cases h27 : t < 27
-  · obtain ⟨v, rfl⟩ : ∃ v, t = 19 + v := ⟨t - 19, by omega⟩
+  by_cases h26 : t < 26
+  · obtain ⟨v, rfl⟩ : ∃ v, t = 18 + v := ⟨t - 18, by omega⟩
     unfold HR; rw [cinstrAt_gp (by omega) (by omega)]; exact hv_gp (by omega) (by omega)
   unfold HR
-  rcases (show t = 27 ∨ t = 28 ∨ t = 29 by omega) with rfl | rfl | rfl
-  · rw [cinstrAt_27]
+  rcases (show t = 26 ∨ t = 27 ∨ t = 28 by omega) with rfl | rfl | rfl
+  · rw [cinstrAt_26]
     refine blake_rel (a := y0F f pk m bits) ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hv_idx hv_idx1
     · rw [show msgLo = 1 from rfl, hv_lt f pk m bits (by omega), inputWord_one]
       exact canon_cellOfBits _
@@ -624,8 +585,8 @@ theorem honest_pro : ∀ t < 30, HR f pk m bits t := by
     · rw [show zCell + 1 = oneCell from rfl, hv_one]; exact canon_ofK 1
     · rw [hv_tidx]; exact canon_natV _
     · rw [honest_idx_query hlen]; rfl
-  · rw [cinstrAt_28]; exact honest_hmul (by omega)
-  · rw [cinstrAt_29]; exact honest_dispatch (by omega)
+  · rw [cinstrAt_27]; exact honest_hmul (by omega)
+  · rw [cinstrAt_28]; exact honest_dispatch (by omega)
 
 include hlen in
 /-- The honest source of chain step `t`. -/
@@ -639,7 +600,7 @@ theorem honest_src {k : ℕ} (hk : k < 42) {t : ℕ} (ht : t < dg (idxOf (y0F f 
     have := @W_le k
     obtain ⟨u, rfl⟩ : ∃ u, t = u + 1 := ⟨t - 1, by omega⟩
     rw [Nat.add_sub_cancel, hv_x hk (by omega), cellBits_loC, AF_spec f pk m bits hk (by omega),
-      chainValue_succ]
+      chainValue_succ, slice_mid hk (by omega)]
 
 /-- The honest destination pair of chain step `t`. -/
 theorem honest_dst {k : ℕ} (hk : k < 42) {t : ℕ} (ht : t < dg (idxOf (y0F f pk m bits)) k) :
@@ -651,18 +612,14 @@ theorem honest_dst {k : ℕ} (hk : k < 42) {t : ℕ} (ht : t < dg (idxOf (y0F f 
   have := @W_le k
   by_cases hl : t + 1 = dg (idxOf (y0F f pk m bits)) k
   · rw [if_pos hl]
-    have htop : topOf bits (y0F f pk m bits) (AF f pk m bits) k =
-        (AF f pk m bits k t).extractLsb' 0 128 := by
-      unfold topOf; rw [if_neg (by omega), show dg (idxOf (y0F f pk m bits)) k - 1 = t by omega]
-    have hhi : hiOf (y0F f pk m bits) (AF f pk m bits) k = hiC (AF f pk m bits k t) := by
-      unfold hiOf; rw [if_neg (by omega), show dg (idxOf (y0F f pk m bits)) k - 1 = t by omega]; rfl
-    unfold chainOut
-    by_cases h1 : k = 1
-    · subst h1
-      rw [if_pos rfl]
-      exact ⟨by rw [hv_cv1, htop]; rfl, by rw [hv_cv2, hhi]⟩
-    · rw [if_neg h1]
-      exact ⟨by rw [hv_top hk, htop]; rfl, by rw [hv_top1 hk, hhi]⟩
+    have hp : ∀ b, pairV bits (y0F f pk m bits) (AF f pk m bits) k b =
+        if b = 0 then loC (AF f pk m bits k t) else hiC (AF f pk m bits k t) := fun b => by
+      unfold pairV; rw [if_neg (by omega), show dg (idxOf (y0F f pk m bits)) k - 1 = t by omega]
+    refine ⟨?_, ?_⟩
+    · have h := hv_out (f := f) (pk := pk) (m := m) (bits := bits) hk (show 0 < 2 by omega)
+      rw [Nat.add_zero] at h
+      rw [h, hp 0, if_pos rfl]
+    · rw [hv_out hk (show 1 < 2 by omega), hp 1, if_neg (by omega)]
   · rw [if_neg hl]
     exact ⟨hv_x hk (by omega), hv_x1 hk (by omega)⟩
 
@@ -800,9 +757,6 @@ theorem honest_blk : ∀ g < 14, ∀ i, 0 < i →
   · show hv f pk m bits zCell = hv f pk m bits zCell + hv f pk m bits zCell
     rw [hv_z, add_zero]
   · exact honest_step hlen hg ha hb hc
-  · intro _ _
-    show hv f pk m bits cvCell = hv f pk m bits (topCell 0) + hv f pk m bits zCell
-    rw [hv_z, add_zero, hv_cv0, hv_top (by omega)]
   · split_ifs with h13
     · exact honest_hmul (by omega)
     · show IsInK (hv f pk m bits k0Cell)
@@ -825,10 +779,10 @@ theorem rootState_last (f : HashTable) (P : Params) (tp : Fin numChains → Word
     rw [ih, show r + 1 + n = r + (n + 1) by ring]
     rfl
 
-theorem RAF_eq {i : ℕ} (hi : i < 10) :
+theorem RAF_eq {i : ℕ} (hi : i < 9) :
     RAF f pk m bits i = rootState f FP (tpsF f pk m bits) 0 (i + 1)
       (Params.rootInit (tpsF f pk m bits)) := by
-  unfold RAF; exact rootAnsF_spec f _ 10 0 _ i hi
+  unfold RAF; exact rootAnsF_spec f _ 9 0 _ i hi
 
 theorem topAt_tps {j : ℕ} (hj : j < 42) :
     Params.topAt (tpsF f pk m bits) j = topOf bits (y0F f pk m bits) (AF f pk m bits) j := by
@@ -838,23 +792,33 @@ theorem cb_rootTop {j : ℕ} (hj : j < 42) :
     cellBits (hv f pk m bits (rootTop j)) = Params.topAt (tpsF f pk m bits) j := by
   rw [hv_rootTop hj, cellBits_cellOfBits, topAt_tps hj]
 
-/-- The honest cv pair of root call `i`. -/
-theorem honest_rootCv {i : ℕ} (hi : i < 10) :
+/-- The honest cv pair of root call `i`, and its cells are canonical. -/
+theorem honest_rootCv {i : ℕ} (hi : i < 9) :
+    IsCanonical128 (hv f pk m bits (rootCv i)) ∧ IsCanonical128 (hv f pk m bits (rootCv i + 1)) ∧
     cellBits (hv f pk m bits (rootCv i + 1)) ++ cellBits (hv f pk m bits (rootCv i)) =
-      rootState f FP (tpsF f pk m bits) 0 i (Params.rootInit (tpsF f pk m bits)) := by
-  unfold rootCv
+      Params.rootCv (tpsF f pk m bits) i
+        (rootState f FP (tpsF f pk m bits) 0 i (Params.rootInit (tpsF f pk m bits))) := by
   by_cases h0 : i = 0
   · subst h0
-    rw [if_pos rfl, hv_cv1, hv_cv0, cellBits_cellOfBits, cellBits_cellOfBits]
-    unfold Params.rootInit
-    rw [topAt_tps (by omega), topAt_tps (by omega)]
-    rfl
-  · rw [if_neg h0, hv_st1 (by omega), hv_st (by omega), cellBits_hiC, cellBits_loC, hi_append_lo]
-    obtain ⟨u, rfl⟩ : ∃ u, i = u + 1 := ⟨i - 1, by omega⟩
-    rw [Nat.add_sub_cancel, RAF_eq (by omega)]
+    rw [show rootCv 0 = rootTop 0 from rfl, show rootTop 0 + 1 = rootTop 1 from rfl,
+      hv_rootTop (by omega), hv_rootTop (by omega), cellBits_cellOfBits, cellBits_cellOfBits,
+      ← topAt_tps (by omega), ← topAt_tps (by omega)]
+    exact ⟨canon_cellOfBits _, canon_cellOfBits _, rfl⟩
+  by_cases h8 : i < 8
+  · obtain ⟨hc0, hc1⟩ := rootTop_cv (r := i) (by omega) h8
+    rw [show rootCv i = cvCell i by unfold rootCv; rw [if_pos h8], ← hc1, ← hc0,
+      hv_rootTop (by omega), hv_rootTop (by omega), cellBits_cellOfBits, cellBits_cellOfBits,
+      ← topAt_tps (by omega), ← topAt_tps (by omega)]
+    refine ⟨canon_cellOfBits _, canon_cellOfBits _, ?_⟩
+    unfold Params.rootCv; rw [if_neg (by omega)]
+  · obtain rfl : i = 8 := by omega
+    rw [show rootCv 8 = stCell 7 from rfl, hv_st1 (by omega), hv_st (by omega), cellBits_hiC,
+      cellBits_loC, hi_append_lo, RAF_eq (by omega)]
+    refine ⟨canon_loC _, canon_hiC _, ?_⟩
+    unfold Params.rootCv; rw [if_pos (Or.inr le_rfl)]
 
 include hlen in
-theorem honest_rho {i : ℕ} (hi : i < 10) :
+theorem honest_rho {i : ℕ} (hi : i < 9) :
     IsCanonical128 (hv f pk m bits (rhoCell i)) ∧ cellBits (hv f pk m bits (rhoCell i)) = FP.rootMd i := by
   by_cases h0 : i = 0
   · subst h0; rw [show rhoCell 0 = zCell from rfl, hv_z]
@@ -862,45 +826,64 @@ theorem honest_rho {i : ℕ} (hi : i < 10) :
   by_cases h8 : i < 8
   · rw [rhoCell_eq (by omega) h8, rootMd_eq (by omega) h8, hv_gp (by omega) (by omega)]
     exact ⟨canon_ofK _, cellBits_gpow h8⟩
-  by_cases h8' : i = 8
-  · subst h8'
+  · obtain rfl : i = 8 := by omega
     rw [show rhoCell 8 = lenCell from rfl, show lenCell = 3 from rfl, hv_lt f pk m bits (by omega),
       inputWord_len_of pk m bits hlen]
     exact ⟨canon_natV _, by rw [cellBits_natV]; rfl⟩
-  · obtain rfl : i = 9 := by omega
-    rw [show rhoCell 9 = x3Cell from rfl, hv_x3]
-    exact ⟨canon_natV _, by rw [cellBits_natV]; rfl⟩
+
+theorem canon_rootTop {j : ℕ} (hj : j < 42) : IsCanonical128 (hv f pk m bits (rootTop j)) := by
+  rw [hv_rootTop hj]; exact canon_cellOfBits _
 
 include hlen hroot in
 /-- **The honest root.** -/
-theorem honest_root : ∀ t < 11, HR f pk m bits (rootSlot + t) := by
+theorem honest_root : ∀ t < 10, HR f pk m bits (rootSlot + t) := by
   intro t ht
   unfold HR
   rw [cinstrAt_root ht]
-  unfold rootOp
-  by_cases h10 : t < 10
-  · rw [if_pos h10]
-    obtain ⟨hcan, hmd⟩ := honest_rho hlen h10
-    refine blake_rel (a := RAF f pk m bits t) ?_ ?_ ?_ ?_ ?_ ?_ hcan ?_ (hv_st h10) (hv_st1 h10)
-    · rw [hv_rootTop (by omega)]; exact canon_cellOfBits _
-    · rw [hv_rootTop (by omega)]; exact canon_cellOfBits _
-    · rw [hv_rootTop (by omega)]; exact canon_cellOfBits _
-    · rw [hv_rootTop (by omega)]; exact canon_cellOfBits _
-    · unfold rootCv; split_ifs
-      · rw [hv_cv0]; exact canon_cellOfBits _
-      · rw [hv_st (by omega)]; exact canon_loC _
-    · unfold rootCv; split_ifs
-      · rw [hv_cv1]; exact canon_cellOfBits _
-      · rw [hv_st1 (by omega)]; exact canon_hiC _
-    · rw [blake2sQuery_eq, honest_rootCv h10, hmd, cb_rootTop (by omega), cb_rootTop (by omega),
-        cb_rootTop (by omega), cb_rootTop (by omega), RAF_eq h10, rootState_last, Nat.zero_add]
+  by_cases h9 : t < 9
+  · obtain ⟨hcan, hmd⟩ := honest_rho hlen h9
+    obtain ⟨hc0, hc1, hcv⟩ := honest_rootCv (f := f) (pk := pk) (m := m) (bits := bits) h9
+    have hq : ∀ {a b c d : ℕ}, cellBits (hv f pk m bits d) ++ cellBits (hv f pk m bits c) ++
+        cellBits (hv f pk m bits b) ++ cellBits (hv f pk m bits a) =
+          Params.rootBlock (tpsF f pk m bits) t
+            (rootState f FP (tpsF f pk m bits) 0 t (Params.rootInit (tpsF f pk m bits))) →
+        ans f (blake2sQuery ![hv f pk m bits a, hv f pk m bits b, hv f pk m bits c,
+          hv f pk m bits d] (hv f pk m bits (rootCv t)) (hv f pk m bits (rootCv t + 1))
+          (hv f pk m bits (rhoCell t))) = RAF f pk m bits t := fun hblk => by
+      rw [blake2sQuery_eq, hcv, hmd, hblk, RAF_eq h9, rootState_last, Nat.zero_add]
       rfl
-  · obtain rfl : t = 10 := by omega
-    rw [if_neg (by omega)]
-    show hv f pk m bits pkCell = hv f pk m bits (stCell 9) + hv f pk m bits zCell
+    unfold rootOp
+    by_cases h0 : t = 0
+    · subst h0
+      rw [if_pos rfl]
+      refine blake_rel (a := RAF f pk m bits 0) (canon_rootTop (by omega))
+        (canon_rootTop (by omega)) (canon_rootTop (by omega)) (canon_rootTop (by omega)) hc0 hc1
+        hcan (hq ?_) (hv_st h9) (hv_st1 h9)
+      rw [cb_rootTop (by omega), cb_rootTop (by omega), cb_rootTop (by omega),
+        cb_rootTop (by omega)]
+      unfold Params.rootBlock; rw [if_pos rfl]
+    by_cases h8 : t < 8
+    · rw [if_neg h0, if_pos h8]
+      refine blake_rel (a := RAF f pk m bits t) (by rw [hv_st (by omega)]; exact canon_loC _)
+        (canon_rootTop (by omega)) (canon_rootTop (by omega)) (canon_rootTop (by omega)) hc0 hc1
+        hcan (hq ?_) (hv_st h9) (hv_st1 h9)
+      rw [cb_rootTop (by omega), cb_rootTop (by omega), cb_rootTop (by omega), hv_st (by omega),
+        cellBits_loC, RAF_eq (by omega), show t - 1 + 1 = t by omega]
+      unfold Params.rootBlock; rw [if_neg h0, if_pos h8]
+    · obtain rfl : t = 8 := by omega
+      rw [if_neg (by omega), if_neg (by omega), if_pos rfl]
+      refine blake_rel (a := RAF f pk m bits 8) (canon_rootTop (by omega))
+        (by rw [hv_z]; exact canon_zero) (by rw [hv_z]; exact canon_zero)
+        (by rw [hv_z]; exact canon_zero) hc0 hc1 hcan (hq ?_) (hv_st h9) (hv_st1 h9)
+      rw [hv_z, cellBits_zero_E, cb_rootTop (by omega)]
+      unfold Params.rootBlock; rw [if_neg (by omega), if_neg (by omega)]
+  · obtain rfl : t = 9 := by omega
+    unfold rootOp
+    rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+    show hv f pk m bits pkCell = hv f pk m bits (stCell 8) + hv f pk m bits zCell
     rw [hv_z, add_zero, hv_st (by omega), show pkCell = 0 from rfl, hv_lt f pk m bits (by omega),
       inputWord_pk]
-    have hlo : (RAF f pk m bits 9).extractLsb' 0 128 = pk := by
+    have hlo : (RAF f pk m bits 8).extractLsb' 0 128 = pk := by
       rw [RAF_eq (by omega)]
       show rootValue f FP (topsOfV bits (y0F f pk m bits) (AF f pk m bits)) = pk
       rw [topsOfV_eq]
@@ -916,11 +899,11 @@ theorem honest_path : PathFacts (HR f pk m bits) (dg (idxOf (y0F f pk m bits))) 
 
 include hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`260` instructions. -/
+`258` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 260
-          Regs.initial) = pure (some 1313) := by
+        (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 258
+          Regs.initial) = pure (some 1302) := by
   obtain ⟨n, c, hw⟩ := walk_mk (dF_valid f pk m bits) (honest_path hlen hacc hroot)
     (fun g hg => hv_h1 hg) hv_k0
   have hpin : Pinned (hv f pk m bits) := ⟨hv_one, fun g hg => hv_frame hg⟩

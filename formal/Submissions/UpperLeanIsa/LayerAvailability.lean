@@ -99,8 +99,8 @@ theorem keepsNoIdx_chainList (hc : P.chainMd ≠ P.idxMd) (k : Fin numChains) :
     exact P.keepsNoIdx_bind (P.keepsNoIdx_map _ (P.keepsNoIdx_hash hc))
       fun y => P.keepsNoIdx_bind (ih (j + 1) y) fun _ => P.keepsNoIdx_pure _
 
-theorem keepsNoIdx_rootFrom (hr : ∀ r < 10, P.rootMd r ≠ P.idxMd) (t : Fin numChains → Word) :
-    ∀ n r st, r + n ≤ 10 → P.KeepsNoIdx (P.rootFrom t r n st) := by
+theorem keepsNoIdx_rootFrom (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd) (t : Fin numChains → Word) :
+    ∀ n r st, r + n ≤ 9 → P.KeepsNoIdx (P.rootFrom t r n st) := by
   intro n
   induction n with
   | zero => intro r st _; exact P.keepsNoIdx_pure _
@@ -118,13 +118,13 @@ theorem keepsNoIdx_tabulate {α : Type} :
       P.keepsNoIdx_bind (keepsNoIdx_tabulate (fun i : Fin n => f i.succ) fun i => h i.succ)
         fun _ => P.keepsNoIdx_pure _
 
-theorem keepsNoIdx_keygen (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 10, P.rootMd r ≠ P.idxMd) :
+theorem keepsNoIdx_keygen (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd) :
     P.KeepsNoIdx P.keygen := by
   unfold keygen
   refine P.keepsNoIdx_bind (P.keepsNoIdx_tabulate _ fun _ => P.keepsNoIdx_liftM _) fun seeds => ?_
   refine P.keepsNoIdx_bind (P.keepsNoIdx_tabulate _ fun k => P.keepsNoIdx_chainList hc k _ _ _)
     fun tables => ?_
-  exact P.keepsNoIdx_bind (P.keepsNoIdx_map _ (P.keepsNoIdx_rootFrom hr _ 10 0 _ le_rfl))
+  exact P.keepsNoIdx_bind (P.keepsNoIdx_map _ (P.keepsNoIdx_rootFrom hr _ 9 0 _ le_rfl))
     fun _ => P.keepsNoIdx_pure _
 
 theorem noIdx_empty : P.NoIdx ∅ := fun _ _ _ => rfl
@@ -413,7 +413,7 @@ theorem sign_isNone_le (hN : 200 * 2 ^ 108 ≤ P.numValid) (sk : SecretKey) (m :
 /-- **Signing availability.** For every message chosen from the public key, signing fails with
 probability at most `2 ^ -128`, given the metadata separation and `200 · 2 ^ 108` accepted
 indices. -/
-theorem signingFailure (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 10, P.rootMd r ≠ P.idxMd)
+theorem signingFailure (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd)
     (hN : 200 * 2 ^ 108 ≤ P.numValid) :
     P.scheme.SigningFailureAtMost (1 / 2 ^ signingFailureBits) := by
   intro message

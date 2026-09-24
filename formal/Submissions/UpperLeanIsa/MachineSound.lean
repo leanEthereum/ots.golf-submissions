@@ -7,15 +7,16 @@ import Submissions.UpperLeanIsa.MachineCycles
 vector `s`, and agreeing with the loader on the pinned cells, certify a signature that
 `Flat.params.verify` accepts under the table.
 
-1. The prologue pins `Z, ONE, LEN, TIDX, g, K0`, the constant `3` and `g ^ 2 … g ^ 7` (the cells
-   of the tag symbols and the root metadata); the length cell pins `|σ| = 5504`, so the loader's
-   cells are the 42 words and the nonce.
+1. The prologue pins `Z, ONE, LEN, TIDX, g, K0` and `g ^ 2 … g ^ 7` (the cells of the tag
+   symbols and the root metadata); the length cell pins `|σ| = 5504`, so the loader's cells are
+   the 42 words and the nonce.
 2. The index `BLAKE2S` is the scheme's index query; its low half `I` is the index cell.
 3. The group ties accumulate the tie words into the index cell (`idx_of_facts`); the words' bit
    fields are disjoint, so `I` is the digit vector (`tie_sum`) and `digit I k = s k`; the layer
    products force `Σ s = 106` (`layer_of_facts`), so `I` is accepted.
-4. The inline `BLAKE2S` compute the verifier's chain tops (`chain_top`), the ten root calls
-   compute its root (`root_state`), and the pk `XOR` compares it with the public key.
+4. The inline `BLAKE2S` compute the verifier's chain tops (`chain_top`; the last step of a
+   high-top chain leaves its top in the high cell of its pair), the nine root calls compute its
+   root (`root_state`), and the pk `XOR` compares it with the public key.
 -/
 
 
@@ -72,12 +73,18 @@ theorem oracle_pair {f : HashTable} {m : Fin 4 → E} {cv0 cv1 o0 o1 md : E}
     cellBits o1 ++ cellBits o0 = f ⟨896, blake2sQuery m cv0 cv1 md⟩ :=
   out_pair _ _ _ h.2.2.2.2.2.2.1 h.2.2.2.2.2.2.2
 
+/-- The oracle relation of a `BLAKE2S` gives its high output half. -/
+theorem oracle_hi {f : HashTable} {m : Fin 4 → E} {cv0 cv1 o0 o1 md : E}
+    (h : oracleRel f m cv0 cv1 o0 o1 md) :
+    cellBits o1 = (f ⟨896, blake2sQuery m cv0 cv1 md⟩).extractLsb' 128 128 := by
+  rw [← oracle_pair h]; exact BitVec.extractLsb'_append_eq_left.symm
+
 /-! ## Chains under the table -/
 
 /-- A sequence obeying the chain recursion is the fixed-table chain. -/
 theorem chainValue_of_seq (f : HashTable) (P : Params) (k : Fin numChains) :
     ∀ (n j0 : ℕ) (X : ℕ → Word),
-      (∀ t < n, X (t + 1) = (f ⟨896, P.chainInput k (j0 + t) (X t)⟩).extractLsb' 0 128) →
+      (∀ t < n, X (t + 1) = P.slice k (j0 + t) (f ⟨896, P.chainInput k (j0 + t) (X t)⟩)) →
         X n = chainValue f P k j0 n (X 0) := by
   intro n
   induction n with
@@ -109,20 +116,20 @@ theorem rootState_of_seq (f : HashTable) (P : Params) (t : Fin numChains → Wor
 /-! ## The chain sequence of a block -/
 
 /-- The chain values a block walks through: the revealed word, the intermediate pairs, and the
-chain's output cell after the last step. -/
+top cell the root reads after the last step. -/
 def chainSeq (v : ℕ → E) (k n : ℕ) (t : ℕ) : Word :=
-  cellBits (v (if t = 0 then wCell k else if t = n then chainOut k else xCell k (t - 1)))
+  cellBits (v (if t = 0 then wCell k else if t = n then rootTop k else xCell k (t - 1)))
 
 theorem chainSeq_zero (v : ℕ → E) (k n : ℕ) : chainSeq v k n 0 = cellBits (v (wCell k)) := by
   unfold chainSeq; rw [if_pos rfl]
 
 theorem chainSeq_last {v : ℕ → E} {k n : ℕ} (hn : n ≠ 0) :
-    chainSeq v k n n = cellBits (v (chainOut k)) := by
+    chainSeq v k n n = cellBits (v (rootTop k)) := by
   unfold chainSeq; rw [if_neg hn, if_pos rfl]
 
-/-- Step `t` writes the pair of `chainSeq (t + 1)`. -/
+/-- Step `t` writes the cell of `chainSeq (t + 1)`. -/
 theorem chainSeq_succ (v : ℕ → E) (k n t : ℕ) :
-    chainSeq v k n (t + 1) = cellBits (v (if t + 1 = n then chainOut k else xCell k t)) := by
+    chainSeq v k n (t + 1) = cellBits (v (if t + 1 = n then rootTop k else xCell k t)) := by
   unfold chainSeq; rw [if_neg (by omega)]
   by_cases h : t + 1 = n
   · rw [if_pos h, if_pos h]
@@ -234,11 +241,11 @@ variable {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool} {v : 
   {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s)
 
 include hP in
-theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 30) (hc : cinstrAt t = ci) : ci.Rel f v := by
+theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 29) (hc : cinstrAt t = ci) : ci.Rel f v := by
   have := hP.pro t ht; rwa [hc] at this
 
 include hP in
-theorem root_rel {t : ℕ} (ht : t < 11) : (rootOp t).Rel f v := by
+theorem root_rel {t : ℕ} (ht : t < 10) : (rootOp t).Rel f v := by
   have := hP.root t ht; rwa [cinstrAt_root ht] at this
 
 section Consts
@@ -250,14 +257,13 @@ theorem v_one : v oneCell = oneV := pro_rel hP (by omega) cinstrAt_set1
 theorem v_len : v lenCell = natV 5504 := pro_rel hP (by omega) cinstrAt_set2
 theorem v_tidx : v tidxCell = natV 10 := pro_rel hP (by omega) cinstrAt_set3
 theorem v_g : v gCell = gV := pro_rel hP (by omega) cinstrAt_set4
-theorem v_x3 : v x3Cell = natV 3 := pro_rel hP (by omega) cinstrAt_set6
 
 /-- The prologue constants `g ^ w`, `1 ≤ w ≤ 7`. -/
 theorem v_gp {w : ℕ} (h1 : 1 ≤ w) (h7 : w ≤ 7) : v (gpCell w) = ofK (gpow w) := by
   by_cases hw : w = 1
   · subst hw
     rw [show gpCell 1 = gCell from rfl, v_g hP, gV, gpow, pow_one]
-  · exact pro_rel hP (t := 19 + w) (by omega) (cinstrAt_gp (by omega) h7)
+  · exact pro_rel hP (t := 18 + w) (by omega) (cinstrAt_gp (by omega) h7)
 
 theorem v_sym {i : ℕ} (hi : i < 7) : v (symCell i) = symV i := by
   unfold symCell symV
@@ -287,6 +293,14 @@ theorem chainOp_query (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : �
     cellBits_oneV]
   rfl
 
+/-- The answer slice of a chain step: the high half exactly for the step producing the top of a
+high-top chain. -/
+theorem stepOff_eq {k : ℕ} (hk : k < 42) (j : ℕ) :
+    FP.stepOff ⟨k, hk⟩ j = if hiChain k = true ∧ j + 2 = W k then 128 else 0 := by
+  unfold Params.stepOff
+  rw [W_eq_len ⟨k, hk⟩]
+  rfl
+
 include hV in
 /-- **Chain tops.** The root reads the verifier's chain top of chain `k`. -/
 theorem chain_top (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : ℕ} (hk : k < 42) :
@@ -301,23 +315,29 @@ theorem chain_top (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : ℕ} (
     rfl
   · -- the inline steps
     have hstep : ∀ t < s k, chainSeq v k (s k) (t + 1) =
-        (f ⟨896, FP.chainInput ⟨k, hk⟩ (W k - 1 - s k + t) (chainSeq v k (s k) t)⟩).extractLsb' 0 128 := by
+        FP.slice ⟨k, hk⟩ (W k - 1 - s k + t)
+          (f ⟨896, FP.chainInput ⟨k, hk⟩ (W k - 1 - s k + t) (chainSeq v k (s k) t)⟩) := by
       intro t ht
       have hr := stepOff_range hV hk ht
       have h := hP.blk (grp k) (grp_lt hk).1 _ hr.1 hr.2
       simp only [cinstrAt_step hV hk ht] at h
       unfold chainOp at h
-      have hlo := oracle_lo h
-      rw [chainOp_query hP hk (by omega)] at hlo
-      rw [chainSeq_eq_src v ht] at hlo
+      have hq := chainOp_query hP hk (j := W k - 1 - s k + t) (by omega)
+        (v (if t = 0 then wCell k else xCell k (t - 1)))
+      rw [chainSeq_eq_src v ht] at hq
       rw [chainSeq_succ]
-      exact hlo
+      unfold Params.slice
+      rw [stepOff_eq hk]
+      by_cases hl : t + 1 = s k
+      · rw [if_pos hl] at h ⊢
+        by_cases hhi : hiChain k = true
+        · rw [if_pos ⟨hhi, by omega⟩, rootTop_of_hi hhi, oracle_hi h, hq]
+        · rw [if_neg (fun h' => hhi h'.1), rootTop_of_lo hhi, oracle_lo h, hq]
+      · rw [if_neg hl] at h ⊢
+        rw [if_neg (fun h' => hl (by omega)), oracle_lo h, hq]
     have hend := chainValue_of_seq f FP ⟨k, hk⟩ (s k) (W k - 1 - s k) (chainSeq v k (s k)) hstep
     rw [chainSeq_last h0, chainSeq_zero] at hend
-    by_cases hk0 : k = 0
-    · subst hk0
-      rw [show rootTop 0 = cvCell from rfl, copy0_of_facts hR hV hP h0, hz, add_zero, ← hend]; rfl
-    · rw [show rootTop k = chainOut k by unfold rootTop chainOut; rw [if_neg hk0], hend]
+    exact hend
 
 /-! ### The root -/
 
@@ -339,61 +359,69 @@ theorem rootMd_eq {r : ℕ} (h1 : 1 ≤ r) (h8 : r < 8) : FP.rootMd r = BitVec.o
   unfold Flat.rootMd; rw [if_neg (by omega), if_pos h8]
 
 include hP in
-theorem rho_md {r : ℕ} (hr : r < 10) : cellBits (v (rhoCell r)) = FP.rootMd r := by
+theorem rho_md {r : ℕ} (hr : r < 9) : cellBits (v (rhoCell r)) = FP.rootMd r := by
   by_cases h0 : r = 0
   · subst h0; rw [show rhoCell 0 = zCell from rfl, cb_z hP]; rfl
   by_cases h8 : r < 8
   · rw [rhoCell_eq (by omega) h8, rootMd_eq (by omega) h8, v_gp hP (by omega) (by omega),
       cellBits_gpow h8]
-  by_cases h8' : r = 8
-  · subst h8'; rw [show rhoCell 8 = lenCell from rfl, v_len hP, cellBits_natV]; rfl
-  · obtain rfl : r = 9 := by omega
-    rw [show rhoCell 9 = x3Cell from rfl, v_x3 hP, cellBits_natV]; rfl
+  · obtain rfl : r = 8 := by omega
+    rw [show rhoCell 8 = lenCell from rfl, v_len hP, cellBits_natV]; rfl
 
 /-- The root state sequence: the initial cv pair, then the states. -/
 def rootSeq (v : ℕ → E) (i : ℕ) : BitVec 256 :=
   if i = 0 then Params.rootInit (topsV v) else stVal v (i - 1)
 
-theorem rootCv_pair (v : ℕ → E) (i : ℕ) :
-    cellBits (v (rootCv i + 1)) ++ cellBits (v (rootCv i)) = rootSeq v i := by
-  unfold rootCv rootSeq
-  by_cases h0 : i = 0
-  · rw [if_pos h0, if_pos h0]
-    unfold Params.rootInit
-    rw [topAt_topsV v (by omega), topAt_topsV v (by omega)]
-    rfl
-  · rw [if_neg h0, if_neg h0]; rfl
+theorem rootSeq_succ (v : ℕ → E) (i : ℕ) : rootSeq v (i + 1) = stVal v i := by
+  unfold rootSeq; rw [if_neg (by omega), Nat.add_sub_cancel]
 
 include hP in
-theorem root_step {i : ℕ} (hi : i < 10) :
+theorem root_step {i : ℕ} (hi : i < 9) :
     rootSeq v (i + 1) = f ⟨896, FP.rootInput (topsV v) i (rootSeq v i)⟩ := by
   have hrel := root_rel hP (t := i) (by omega)
+  rw [rootSeq_succ]
   unfold rootOp at hrel
-  rw [if_pos hi] at hrel
-  have hp := oracle_pair hrel
-  have hq : blake2sQuery ![v (rootTop (4 * i + 2)), v (rootTop (4 * i + 3)),
-      v (rootTop (4 * i + 4)), v (rootTop (4 * i + 5))] (v (rootCv i)) (v (rootCv i + 1))
-      (v (rhoCell i)) = FP.rootInput (topsV v) i (rootSeq v i) := by
-    rw [blake2sQuery_eq, rootCv_pair, rho_md hP hi]
-    unfold Params.rootInput
-    rw [topAt_topsV v (by omega), topAt_topsV v (by omega), topAt_topsV v (by omega),
-      topAt_topsV v (by omega)]
-  rw [hq] at hp
-  unfold rootSeq
-  rw [if_neg (by omega), Nat.add_sub_cancel]
-  exact hp
+  by_cases h0 : i = 0
+  · subst h0
+    rw [if_pos rfl] at hrel
+    refine (oracle_pair hrel).trans (congrArg (fun x => f ⟨896, x⟩) ?_)
+    rw [blake2sQuery_eq, rho_md hP (by omega)]
+    unfold Params.rootInput Params.rootCv Params.rootBlock rootSeq Params.rootInit
+    rw [if_pos (Or.inl rfl), if_pos rfl, if_pos rfl, topAt_topsV v (by omega),
+      topAt_topsV v (by omega), topAt_topsV v (by omega), topAt_topsV v (by omega),
+      topAt_topsV v (by omega), topAt_topsV v (by omega)]
+    rfl
+  by_cases h8 : i < 8
+  · rw [if_neg h0, if_pos h8] at hrel
+    obtain ⟨hc0, hc1⟩ := rootTop_cv (r := i) (by omega) h8
+    refine (oracle_pair hrel).trans (congrArg (fun x => f ⟨896, x⟩) ?_)
+    rw [blake2sQuery_eq, rho_md hP (by omega)]
+    unfold Params.rootInput Params.rootCv Params.rootBlock rootSeq
+    rw [if_neg (by omega), if_neg h0, if_pos h8, if_neg h0, topAt_topsV v (by omega),
+      topAt_topsV v (by omega), topAt_topsV v (by omega), topAt_topsV v (by omega),
+      topAt_topsV v (by omega), hc0, hc1, show rootCv i = cvCell i by unfold rootCv; rw [if_pos h8]]
+    unfold stVal
+    rw [BitVec.extractLsb'_append_eq_right]
+  · obtain rfl : i = 8 := by omega
+    rw [if_neg (by omega), if_neg (by omega), if_pos rfl] at hrel
+    refine (oracle_pair hrel).trans (congrArg (fun x => f ⟨896, x⟩) ?_)
+    rw [blake2sQuery_eq, rho_md hP (by omega)]
+    unfold Params.rootInput Params.rootCv Params.rootBlock rootSeq
+    rw [if_pos (Or.inr le_rfl), if_neg (by omega), if_neg (by omega), if_neg (by omega),
+      topAt_topsV v (by omega), cb_z hP]
+    rfl
 
 include hP in
-/-- **The root.** The ten root calls compute the fixed-table root of the tops. -/
-theorem root_state : rootState f FP (topsV v) 0 10 (Params.rootInit (topsV v)) = stVal v 9 := by
-  have h := rootState_of_seq f FP (topsV v) 10 0 (rootSeq v) (fun i hi => by
+/-- **The root.** The nine root calls compute the fixed-table root of the tops. -/
+theorem root_state : rootState f FP (topsV v) 0 9 (Params.rootInit (topsV v)) = stVal v 8 := by
+  have h := rootState_of_seq f FP (topsV v) 9 0 (rootSeq v) (fun i hi => by
     rw [Nat.zero_add]; exact root_step hP hi)
   unfold rootSeq at h
   rw [if_pos rfl, if_neg (by omega)] at h
   exact h
 
 include hP in
-theorem rootValue_topsV : rootValue f FP (topsV v) = cellBits (v (stCell 9)) := by
+theorem rootValue_topsV : rootValue f FP (topsV v) = cellBits (v (stCell 8)) := by
   unfold rootValue
   rw [root_state hP]
   exact BitVec.extractLsb'_append_eq_right
@@ -418,7 +446,7 @@ theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ
     length_of_inputWord_len pk m bits ((hpin 3 (by omega)).symm.trans (v_len hP))
   -- the index
   have hidx : idxValue f FP m (decodeNonce bits) pk = cellBits (v idxCell) := by
-    have h := pro_rel hP (by omega) cinstrAt_27
+    have h := pro_rel hP (by omega) cinstrAt_26
     have hlo := oracle_lo h
     have hpk : cellBits (v pkCell) = pk := by
       rw [show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
@@ -467,10 +495,10 @@ theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ
       rw [chain_top hV hP k.isLt, hdig k, show FP.len k = W k.val from (W_eq_len k).symm, hw]
     rw [htops, rootValue_topsV hP]
     -- the public key
-    have h := root_rel hP (t := 10) (by omega)
+    have h := root_rel hP (t := 9) (by omega)
     unfold rootOp at h
-    rw [if_neg (by omega)] at h
-    have h' : v pkCell = v (stCell 9) + v zCell := h
+    rw [if_neg (by omega), if_neg (by omega), if_neg (by omega)] at h
+    have h' : v pkCell = v (stCell 8) + v zCell := h
     rw [v_z hP, add_zero] at h'
     rw [← h', show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
     exact cellBits_cellOfBits pk

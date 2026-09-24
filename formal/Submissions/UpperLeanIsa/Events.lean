@@ -8,8 +8,9 @@ Deterministic extraction on the verifier's cached paths. Let `c` contain the poi
 exposed at a cut `d` (`RespectsExposed`), and let the verifier accept `(m₂, σ₂)` in `c` with
 index `I₂`. Then, unless `c` hits a hidden point of `ζ` or a cut target of `ζ`:
 
-* the reconstructed tops are the honest tops (`root_binding`: the tagged 10-call root has no
-  second preimage on the verifier's cached calls, the internal calls comparing all 256 bits);
+* the reconstructed tops are the honest tops (`root_binding`: the tagged 9-call root has no
+  second preimage on the verifier's cached calls, each call comparing the low half of its answer,
+  the part the next call or the public key reads);
 * no chain starts strictly below the cut, and a chain that starts at the cut starts at the
   honest word there (`accept_core`).
 
@@ -115,11 +116,14 @@ theorem endpoint_match_exposed (f : HashTable) (d : Cut) (ζ : Record P)
 
 /-! ## Records realising a query -/
 
-/-- A word placed in the low half of an answer. -/
-def padWord (y : Word) : BitVec hashBits := (0 : BitVec 128) ++ y
+/-- A word placed in both halves of an answer, so that every step slice reads it. -/
+def padWord (y : Word) : BitVec hashBits := y ++ y
 
-theorem padWord_low (y : Word) : (padWord y).extractLsb' 0 128 = y :=
-  BitVec.extractLsb'_append_eq_right (a := (0 : BitVec 128)) (b := y)
+theorem padWord_slice (k : Fin numChains) (j : ℕ) (y : Word) : P.slice k j (padWord y) = y := by
+  unfold Params.slice Params.stepOff
+  split
+  · exact BitVec.extractLsb'_append_eq_left (a := y) (b := y)
+  · exact BitVec.extractLsb'_append_eq_right (a := y) (b := y)
 
 /-- The record whose chain `k` is constantly `t k` and whose root answers are all `st`. -/
 def constRecord (t : Fin numChains → Word) (st : BitVec 256) : Record P :=
@@ -131,7 +135,7 @@ theorem constRecord_word (t : Fin numChains → Word) (st : BitVec 256) (k : Fin
   | zero => rfl
   | succ j =>
     rw [Record.word_succ _ k j (by omega)]
-    exact padWord_low _
+    exact padWord_slice k j _
 
 theorem constRecord_top (t : Fin numChains → Word) (st : BitVec 256) :
     (constRecord (P := P) t st).top = t :=
@@ -145,7 +149,7 @@ theorem queryLocation_chainInput (hP : P.Hyp) (k : Fin numChains) (j : Fin (P.le
   rw [← hq]
   exact queryLocation_query hP _ _
 
-theorem queryLocation_rootInput (hP : P.Hyp) (r : Fin 10) (t : Fin numChains → Word)
+theorem queryLocation_rootInput (hP : P.Hyp) (r : Fin 9) (t : Fin numChains → Word)
     (st : BitVec 256) (h0 : r.val = 0 → st = Params.rootInit t) :
     queryLocation P ⟨896, P.rootInput t r.val st⟩ = some (.inr r) := by
   have hq : (constRecord (P := P) t st).query (.inr r) = ⟨896, P.rootInput t r.val st⟩ := by
@@ -177,14 +181,13 @@ theorem chain_spi_targetHit (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
     intro h
     rw [Record.query_inl] at h
     exact hy ((Params.chainInput_same_iff k i _ _).mp (query_inj h)).symm
-  have h1 : P.stepValue (table c) k i y = u.extractLsb' 0 128 :=
-    congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (table_eq_of_some hu)
-  have h2 : P.stepValue (table c) k i (ζ.word k i) =
-      (ζ.2 (.inl ⟨k, ⟨i, hi⟩⟩)).extractLsb' 0 128 :=
-    congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (hf (.inl ⟨k, ⟨i, hi⟩⟩) hnh)
+  have h1 : P.stepValue (table c) k i y = P.slice k i u :=
+    congrArg (P.slice k i) (table_eq_of_some hu)
+  have h2 : P.stepValue (table c) k i (ζ.word k i) = P.slice k i (ζ.2 (.inl ⟨k, ⟨i, hi⟩⟩)) :=
+    congrArg (P.slice k i) (hf (.inl ⟨k, ⟨i, hi⟩⟩) hnh)
   refine mem_cutTargets_exposed (queryLocation_chainInput hP k ⟨i, hi⟩ y) hnh hne ?_
   rw [matchingAnswers_inl]
-  exact mem_lowAnswers.mpr (h1.symm.trans (hmatch.trans h2))
+  exact mem_sliceAnswers.mpr (h1.symm.trans (hmatch.trans h2))
 
 /-- A cached verifier step just below the cut whose output is the public word at the cut: the
 honest hidden input was queried, or the boundary target was hit. -/
@@ -209,13 +212,13 @@ theorem boundary_hit (hP : P.Hyp) (d : Cut) (hd : ValidCut P d) (ζ : Record P) 
     have hbd : Boundary d (.inl ⟨k, ⟨d k - 1, he⟩⟩) := by
       show d k - 1 + 1 = d k
       omega
-    have h1 : P.stepValue (table c) k (d k - 1) y = u.extractLsb' 0 128 :=
-      congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (table_eq_of_some hu)
-    have h2 : ζ.word k (d k) = (ζ.2 (.inl ⟨k, ⟨d k - 1, he⟩⟩)).extractLsb' 0 128 := by
+    have h1 : P.stepValue (table c) k (d k - 1) y = P.slice k (d k - 1) u :=
+      congrArg (P.slice k (d k - 1)) (table_eq_of_some hu)
+    have h2 : ζ.word k (d k) = P.slice k (d k - 1) (ζ.2 (.inl ⟨k, ⟨d k - 1, he⟩⟩)) := by
       rw [← Record.word_succ _ k (d k - 1) he, Nat.sub_add_cancel hpos]
     refine mem_cutTargets_boundary (queryLocation_chainInput hP k ⟨d k - 1, he⟩ y) hhid hbd ?_
     rw [matchingAnswers_inl]
-    exact mem_lowAnswers.mpr (h1.symm.trans (hmatch.trans h2))
+    exact mem_sliceAnswers.mpr (h1.symm.trans (hmatch.trans h2))
 
 /-- A chain that starts strictly below the cut and reaches the honest top passes the boundary
 (hidden or boundary hit) or merges later (exposed chain target). -/
@@ -273,54 +276,92 @@ theorem upper_chain (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
 
 /-! ## Root events -/
 
-/-- The block of root call `r`. -/
-def rootBlock (t : Fin numChains → Word) (r : ℕ) : BitVec 512 :=
-  Params.topAt t (4 * r + 5) ++ Params.topAt t (4 * r + 4) ++ Params.topAt t (4 * r + 3) ++
-    Params.topAt t (4 * r + 2)
-
-theorem rootInput_eq_iff' (hP : P.Hyp) {r : ℕ} (hr : r < 10) (t t' : Fin numChains → Word)
-    (st st' : BitVec 256) :
-    P.rootInput t r st = P.rootInput t' r st' ↔ st = st' ∧ rootBlock t r = rootBlock t' r := by
-  rw [Params.rootInput_eq_iff hP hr hr]
-  exact ⟨fun h => ⟨h.2.1, h.2.2⟩, fun h => ⟨rfl, h.1, h.2⟩⟩
-
-theorem tops_eq_of_blocks (t t' : Fin numChains → Word)
-    (h0 : Params.rootInit t = Params.rootInit t')
-    (hb : ∀ r < 10, rootBlock t r = rootBlock t' r) : t = t' := by
-  have htop : ∀ i, Params.topAt t i = Params.topAt t' i := by
-    intro i
-    by_cases hi : i < 42
-    · by_cases h2 : i < 2
-      · obtain ⟨h1, h0'⟩ := append_inj h0
-        interval_cases i
-        · exact h0'
-        · exact h1
-      · have hr : (i - 2) / 4 < 10 := by omega
-        have e := hb _ hr
-        unfold rootBlock at e
-        obtain ⟨e1, e2⟩ := append_inj e
-        obtain ⟨e3, e4⟩ := append_inj e1
-        obtain ⟨e5, e6⟩ := append_inj e3
-        have hmod : (i - 2) % 4 < 4 := Nat.mod_lt _ (by norm_num)
-        have hdecomp : i = 4 * ((i - 2) / 4) + 2 + (i - 2) % 4 := by omega
-        rcases (by omega : (i - 2) % 4 = 0 ∨ (i - 2) % 4 = 1 ∨ (i - 2) % 4 = 2 ∨
-            (i - 2) % 4 = 3) with h | h | h | h
-        · rw [show i = 4 * ((i - 2) / 4) + 2 by omega]; exact e2
-        · rw [show i = 4 * ((i - 2) / 4) + 3 by omega]; exact e4
-        · rw [show i = 4 * ((i - 2) / 4) + 4 by omega]; exact e6
-        · rw [show i = 4 * ((i - 2) / 4) + 5 by omega]; exact e5
-    · unfold Params.topAt
-      rw [dif_neg hi, dif_neg hi]
+/-- Equal inputs at all nine root calls (from the initial states `rootInit t`, `rootInit t'`)
+force equal tops: every top is a cv or block word of exactly one call. -/
+theorem tops_eq_of_rootInputs (hP : P.Hyp) (t t' : Fin numChains → Word)
+    (S S' : ℕ → BitVec 256) (h0 : S 0 = Params.rootInit t) (h0' : S' 0 = Params.rootInit t')
+    (h : ∀ r < 9, P.rootInput t r (S r) = P.rootInput t' r (S' r)) : t = t' := by
+  have hcb : ∀ r < 9, Params.rootCv t r (S r) = Params.rootCv t' r (S' r) ∧
+      Params.rootBlock t r (S r) = Params.rootBlock t' r (S' r) := fun r hr =>
+    ((Params.rootInput_eq_iff hP hr hr _ _ _ _).mp (h r hr)).2
+  have htop : ∀ i, i < 42 → Params.topAt t i = Params.topAt t' i := by
+    intro i hi
+    by_cases h2 : i < 2
+    · have e := (hcb 0 (by norm_num)).1
+      have hc0 : (0 = 0 ∨ 8 ≤ 0) := Or.inl rfl
+      unfold Params.rootCv at e
+      rw [if_pos hc0, if_pos hc0, h0, h0'] at e
+      obtain ⟨e1, e0⟩ := append_inj e
+      interval_cases i
+      · exact e0
+      · exact e1
+    by_cases h6 : i < 6
+    · have e := (hcb 0 (by norm_num)).2
+      unfold Params.rootBlock at e
+      rw [if_pos rfl, if_pos rfl] at e
+      obtain ⟨e1, e2⟩ := append_inj e
+      obtain ⟨e3, e4⟩ := append_inj e1
+      obtain ⟨e5, e6⟩ := append_inj e3
+      interval_cases i
+      · exact e2
+      · exact e4
+      · exact e6
+      · exact e5
+    by_cases h41 : i < 41
+    · set r := (i - 1) / 5 with hr
+      have hr0 : ¬ r = 0 := by omega
+      have hr8 : r < 8 := by omega
+      have hc : ¬ (r = 0 ∨ 8 ≤ r) := by omega
+      obtain ⟨ec, eb⟩ := hcb r (by omega)
+      unfold Params.rootCv at ec
+      rw [if_neg hc, if_neg hc] at ec
+      unfold Params.rootBlock at eb
+      rw [if_neg hr0, if_pos hr8, if_neg hr0, if_pos hr8] at eb
+      obtain ⟨c2, c1⟩ := append_inj ec
+      obtain ⟨b1, -⟩ := append_inj eb
+      obtain ⟨b2, b3⟩ := append_inj b1
+      obtain ⟨b5, b4⟩ := append_inj b2
+      rcases (by omega : i = 5 * r + 1 ∨ i = 5 * r + 2 ∨ i = 5 * r + 3 ∨ i = 5 * r + 4 ∨
+          i = 5 * r + 5) with e | e | e | e | e <;> rw [e]
+      · exact c1
+      · exact c2
+      · exact b3
+      · exact b4
+      · exact b5
+    · obtain rfl : i = 41 := by omega
+      have e := (hcb 8 (by norm_num)).2
+      have h80 : ¬ (8 = 0) := by norm_num
+      have h88 : ¬ (8 < 8) := by norm_num
+      unfold Params.rootBlock at e
+      rw [if_neg h80, if_neg h88, if_neg h80, if_neg h88] at e
+      exact (append_inj e).2
   funext k
-  have := htop k.val
+  have := htop k.val k.isLt
   unfold Params.topAt at this
   rwa [dif_pos k.isLt, dif_pos k.isLt] at this
+
+/-- Equal inputs at a root call `r ≥ 1` read the low half of the state before it: calls `1, …, 7`
+carry it in the block, call 8 carries the whole state as its cv. -/
+theorem lo_eq_of_rootInput (hP : P.Hyp) {r : ℕ} (hr : r < 9) (h1 : 1 ≤ r)
+    (t t' : Fin numChains → Word) (st st' : BitVec 256)
+    (h : P.rootInput t r st = P.rootInput t' r st') :
+    st.extractLsb' 0 128 = st'.extractLsb' 0 128 := by
+  obtain ⟨-, ec, eb⟩ := (Params.rootInput_eq_iff hP hr hr _ _ _ _).mp h
+  have hr0 : ¬ r = 0 := by omega
+  by_cases hr8 : r < 8
+  · unfold Params.rootBlock at eb
+    rw [if_neg hr0, if_pos hr8, if_neg hr0, if_pos hr8] at eb
+    exact (append_inj eb).2
+  · have hc : r = 0 ∨ 8 ≤ r := Or.inr (by omega)
+    unfold Params.rootCv at ec
+    rw [if_pos hc, if_pos hc] at ec
+    rw [ec]
 
 /-- The honest root states are reproduced by any table that respects the (always exposed) root
 answers. -/
 theorem rootFromValue_honest (f : HashTable) (d : Cut) (ζ : Record P)
     (hf : RespectsExposed f d ζ) :
-    ∀ r, r ≤ 10 → P.rootFromValue f ζ.top 0 r (Params.rootInit ζ.top) = ζ.rootState r := by
+    ∀ r, r ≤ 9 → P.rootFromValue f ζ.top 0 r (Params.rootInit ζ.top) = ζ.rootState r := by
   intro r
   induction r with
   | zero => intro _; rfl
@@ -334,85 +375,71 @@ theorem rootFromValue_honest (f : HashTable) (d : Cut) (ζ : Record P)
 theorem rootValue_honest (f : HashTable) (d : Cut) (ζ : Record P)
     (hf : RespectsExposed f d ζ) : P.rootValue f ζ.top = ζ.pk := by
   unfold Params.rootValue
-  rw [rootFromValue_honest f d ζ hf 10 le_rfl, Record.rootState_succ_lt _ 9 (by norm_num)]
+  rw [rootFromValue_honest f d ζ hf 9 le_rfl, Record.rootState_succ_lt _ 8 (by norm_num)]
   rfl
 
 /-- **Root binding.** A cached tagged root path of the verifier that reaches the public key
 has the honest tops, or some call on it hits an exposed root target. -/
 theorem root_binding (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
     (hc : Cache.Sub (exposedCache d ζ) c) (t : Fin numChains → Word)
-    (hpath : P.RootPath c t 0 10 (Params.rootInit t))
+    (hpath : P.RootPath c t 0 9 (Params.rootInit t))
     (hroot : P.rootValue (table c) t = ζ.pk)
     (hno : ¬ TargetHit (cutTargets P d ζ) c) : t = ζ.top := by
   have hf := respectsExposed_of_sub hP d ζ hc
   set S : ℕ → BitVec 256 := fun r => P.rootFromValue (table c) t 0 r (Params.rootInit t) with hS
   have hhon := rootFromValue_honest (table c) d ζ hf
-  -- the step at call `r`: a mismatching input with a matching answer is a target hit
-  have step : ∀ r (hr : r < 10),
-      (if r = 9 then (S (r + 1)).extractLsb' 0 128 = (ζ.rootState (r + 1)).extractLsb' 0 128
-        else S (r + 1) = ζ.rootState (r + 1)) →
-      S r = ζ.rootState r ∧ rootBlock t r = rootBlock ζ.top r := by
+  -- the step at call `r`: a mismatching input with a matching low half is a target hit
+  have step : ∀ r (hr : r < 9),
+      (S (r + 1)).extractLsb' 0 128 = (ζ.rootState (r + 1)).extractLsb' 0 128 →
+      P.rootInput t r (S r) = P.rootInput ζ.top r (ζ.rootState r) := by
     intro r hr hm
     have hcached := hpath r hr
     rw [Nat.zero_add] at hcached
-    by_cases hX : P.rootInput t r (S r) = P.rootInput ζ.top r (ζ.rootState r)
-    · exact (rootInput_eq_iff' hP hr _ _ _ _).mp hX
-    · exfalso
-      apply hno
-      obtain ⟨u, hu⟩ := Option.isSome_iff_exists.1 hcached
-      refine ⟨⟨896, P.rootInput t r (S r)⟩, u, hu, ?_⟩
-      have hSu : S (r + 1) = u := by
-        show P.rootFromValue (table c) t 0 (r + 1) (Params.rootInit t) = u
-        rw [Params.rootFromValue_snoc, Nat.zero_add]
-        exact table_eq_of_some hu
-      have hloc := queryLocation_rootInput hP ⟨r, hr⟩ t (S r) (fun h0 => by
-        simp only at h0
-        subst h0
-        rfl)
-      have hne : ζ.query (.inr ⟨r, hr⟩) ≠ ⟨896, P.rootInput t r (S r)⟩ := by
-        intro h
-        rw [Record.query_inr] at h
-        exact hX (query_inj h).symm
-      refine mem_cutTargets_exposed hloc (not_hidden_inr d _) hne ?_
-      rw [matchingAnswers_inr, ← Record.rootState_succ_lt _ r hr, ← hSu]
-      by_cases h9 : r = 9
-      · rw [if_pos (show (⟨r, hr⟩ : Fin 10).val = 9 from h9)]
-        rw [if_pos h9] at hm
-        exact mem_lowAnswers.mpr hm
-      · rw [if_neg (show ¬ (⟨r, hr⟩ : Fin 10).val = 9 from h9)]
-        rw [if_neg h9] at hm
-        rw [hm]
-        exact Finset.mem_singleton_self _
+    by_contra hX
+    apply hno
+    obtain ⟨u, hu⟩ := Option.isSome_iff_exists.1 hcached
+    refine ⟨⟨896, P.rootInput t r (S r)⟩, u, hu, ?_⟩
+    have hSu : S (r + 1) = u := by
+      show P.rootFromValue (table c) t 0 (r + 1) (Params.rootInit t) = u
+      rw [Params.rootFromValue_snoc, Nat.zero_add]
+      exact table_eq_of_some hu
+    have hloc := queryLocation_rootInput hP ⟨r, hr⟩ t (S r) (fun h0 => by
+      simp only at h0
+      subst h0
+      rfl)
+    have hne : ζ.query (.inr ⟨r, hr⟩) ≠ ⟨896, P.rootInput t r (S r)⟩ := by
+      intro h
+      rw [Record.query_inr] at h
+      exact hX (query_inj h).symm
+    refine mem_cutTargets_exposed hloc (not_hidden_inr d _) hne ?_
+    rw [matchingAnswers_inr, ← Record.rootState_succ_lt _ r hr, ← hSu]
+    exact mem_lowAnswers.mpr hm
   -- walk down from the last call
-  have key : ∀ n, n ≤ 10 → ∀ s, 10 - n ≤ s → s < 10 →
-      S s = ζ.rootState s ∧ rootBlock t s = rootBlock ζ.top s := by
+  have key : ∀ n, n ≤ 9 → ∀ s, 9 - n ≤ s → s < 9 →
+      P.rootInput t s (S s) = P.rootInput ζ.top s (ζ.rootState s) := by
     intro n
     induction n with
     | zero => intro _ s hs hs'; omega
     | succ n ih =>
       intro hn s hs hs'
-      have hr : 9 - n < 10 := by omega
-      have hm : (if 9 - n = 9 then (S (9 - n + 1)).extractLsb' 0 128 =
-            (ζ.rootState (9 - n + 1)).extractLsb' 0 128
-          else S (9 - n + 1) = ζ.rootState (9 - n + 1)) := by
-        by_cases h9 : 9 - n = 9
-        · rw [if_pos h9, show 9 - n + 1 = 10 by omega]
-          have hr' : (S 10).extractLsb' 0 128 = ζ.pk := hroot
+      have hr : 8 - n < 9 := by omega
+      have hm : (S (8 - n + 1)).extractLsb' 0 128 =
+          (ζ.rootState (8 - n + 1)).extractLsb' 0 128 := by
+        by_cases h8 : n = 0
+        · subst h8
+          have hr' : (S 9).extractLsb' 0 128 = ζ.pk := hroot
+          show (S 9).extractLsb' 0 128 = (ζ.rootState 9).extractLsb' 0 128
           rw [hr', ← rootValue_honest (table c) d ζ hf]
           unfold Params.rootValue
-          rw [hhon 10 le_rfl]
-        · rw [if_neg h9]
-          exact (ih (by omega) (9 - n + 1) (by omega) (by omega)).1
-      by_cases hs0 : s = 9 - n
+          rw [hhon 9 le_rfl]
+        · exact lo_eq_of_rootInput hP (by omega) (by omega) _ _ _ _
+            (ih (by omega) (8 - n + 1) (by omega) (by omega))
+      by_cases hs0 : s = 8 - n
       · rw [hs0]
-        exact step (9 - n) hr hm
+        exact step (8 - n) hr hm
       · exact ih (by omega) s (by omega) hs'
-  have h0 := key 10 le_rfl
-  apply tops_eq_of_blocks t ζ.top
-  · have := (h0 0 (by norm_num) (by norm_num)).1
-    exact this
-  · intro r hr
-    exact (h0 r (by omega) hr).2
+  exact tops_eq_of_rootInputs hP t ζ.top S ζ.rootState rfl rfl
+    (fun r hr => key 9 le_rfl r (by omega) hr)
 
 /-! ## The events lemma -/
 

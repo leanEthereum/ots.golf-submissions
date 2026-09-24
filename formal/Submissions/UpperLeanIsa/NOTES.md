@@ -1,9 +1,10 @@
-# HL-TRI-TM: three chains per landing and reused constant cells, 1433 cycles
+# HL-TRI-R9: three chains per landing, nine root calls with high-half tops, 1422 cycles
 
-Lineage: HL-FLAT-A (1598) → HL-TRI (1439, grouped dispatch) → HL-TRI-TM (this root, claim 1433,
-reused constant cells). Relative to HL-FLAT-A, the security proof is unchanged; the scheme
-changes only in its tag-symbol and root-metadata *values* (`SchemeFlat.sym`, `rootMd`,
-re-proved in `FlatHyp`). The bytecode and the machine proofs are new.
+Lineage: HL-FLAT-A (1598) → HL-TRI (1439, grouped dispatch) → HL-TRI-TM (1433, reused constant
+cells) → HL-TRI-R9 (this root, claim 1422, nine root calls). HL-TRI-TM kept HL-FLAT-A's security
+proof and changed only tag-symbol and root-metadata *values*. HL-TRI-R9 changes the scheme: a
+per-chain high-half top (`Params.hiTop`, `Params.slice`) and the 9-call root (section 6); the
+security proof keeps its structure. The bytecode and the machine proofs are new.
 
 ## 1. Where HL-FLAT-A's cycles were
 
@@ -36,6 +37,11 @@ the frame-shifted entry `I0`, the tie `SET T; XOR`, and the landing product `MUL
   `1313 + 120 = 1433`. The tag symbols are the cells `Z, ONE, g, g^2..g^5` (values
   `0, 1, 2, 4, 8, 16, 32`), the root metadata `0, 2, 4, …, 128, 5504, 3` (one new `SET` for 3),
   and the seven symbol `SET`s are gone. The prologue is 30 slots.
+- HL-TRI-R9 (section 6, second item): 258 instructions, 116 `BLAKE2S`, `142 + 1160 = 1302`, claim
+  `1302 + 120 = 1422`. The root cv cells are `410 + 4r` (`cvCell r`, `r < 8`); a high-top chain's
+  last step writes `(rootTop k − 1, rootTop k)`, so no top copy is needed; the constant `3` and
+  its `SET` are gone, so the prologue is 29 slots and the root segment (9 `BLAKE2S` and the pk
+  `XOR`) starts at `sentinel − 10`.
 
 ## 3. A tempting design that is unsound
 
@@ -54,30 +60,38 @@ completes on the 1425 model and is rejected on this one.
    exhaustively for every slot and frame, runs honest signatures and tampered inputs through the
    leanVM semantics, runs 400 random layer vectors in support mode (constant 1319 / 266), rejects
    off-layer vectors, and rejects mid-block landings with adversarial cell fills.
-3. A Python mirror of the Lean `cinstrAt` matched the model on all 262,144 slots.
+3. A Python mirror of the Lean `cinstrAt` matched the model on all 262,144 slots (for HL-TRI-R9:
+   `.tmp/hl/hltri_r9_lean_mirror.py` against `.tmp/hl/hltri_r9_model.py`, 0 mismatches).
 4. Two agents: machine core (`MachineProgram` → `MachineCycles`) and machine proofs
    (`MachineSound`, `MachineProver`, `MachineHonest`, `MachineFaithful`, `Solution`).
 
 ## 5. Validation
 
 - `lake build Submissions.UpperLeanIsa.Solution` from a clean copy of the pinned contract.
-- `check_submission.py upper-leanisa`: ok, claim 1433.
-- `certificate : submission.Certificate 1433` and `seeded_rows` type-check against the stub's
+- `check_submission.py upper-leanisa`: ok, claim 1422.
+- `certificate : submission.Certificate 1422` and `seeded_rows` type-check against the stub's
   statements; axioms are `propext`, `Classical.choice`, `Quot.sound` only.
 - No `sorry`, `native_decide` or `admit` in the root.
 
 ## 6. What next
 
-- **Tag and metadata constants (done in this root: 1433).** Tag symbols `{0, 1, 2, 4, 8, 16, 32}` are
+- **Tag and metadata constants (done in HL-TRI-TM: 1433).** Tag symbols `{0, 1, 2, 4, 8, 16, 32}` are
   exactly the existing cells `Z, ONE, g, g^2..g^5`, and the root metadata can use
   `0, 2, 4, …, 128, 5504` plus one new constant. That removes the seven symbol `SET`s and nets −6.
   It changes only `SchemeFlat`'s `sym`/`rootMd`/`idxMd` and `FlatHyp`'s decidable facts; the
   security proof is generic in `Params`.
-- **Nine root calls (about −10).** A 128-bit chaining state in `m` absorbs five tops per call if
-  the cv pair holds two tops. Two tops can sit in adjacent cells without a copy if one chain's top
-  is the *high* half of its last output (output pair `(c−1, c)`) and the other's the low half
-  (`(c+1, c+2)`). That needs a per-chain answer slice in the scheme, as the RISC-V track's
-  `truncOff` does.
+- **Nine root calls (done in this root: 1422).** A 128-bit chaining state in `m` absorbs five
+  tops per call if the cv pair holds two tops. Two tops sit in adjacent cells without a copy
+  because one chain's top is the *high* half of its last output (output pair `(c−1, c)`) and the
+  other's the low half (`(c+1, c+2)`). In the scheme: `Params.hiTop` marks the chains
+  `0, 6, 11, …, 36`; the step producing their top keeps the high half (`Params.slice`, offset
+  `stepOff = 128`). Root call 0 has cv `(top 0, top 1)` and block tops 2..5; call `r = 1..7` has
+  cv `(top (5r+1), top (5r+2))` and block `[lo state, top (5r+3), top (5r+4), top (5r+5)]`; call
+  8 has cv the full state and block `[top 41, 0, 0, 0]`; `pk = lo(state 8)`. Metadata
+  `0, 2, 4, …, 128, 5504`; the extra constant `3` is gone. Keygen costs `2·(310 + 9) = 638`,
+  verification `2·(1 + 106 + 9) = 232`. Security: every location is charged hidden input plus
+  second preimage against at most `2^128` matching answers, the step's slice at chain steps and
+  the low half at every root call (the next call reads the low half; call 8's low half is `pk`).
 - Larger groups do not fit: a quadruple of 3-bit chains needs about 90k slots.
 
 ## 7. Credits (carried over from HL-FLAT-A)

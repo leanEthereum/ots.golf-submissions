@@ -49,7 +49,7 @@ variable (f : HashTable) (P : Params)
 /-- `n` chain steps under the table. -/
 def chainValue (k : Fin numChains) : ℕ → ℕ → Word → Word
   | _, 0, x => x
-  | j, n + 1, x => chainValue k (j + 1) n ((ans f (P.chainInput k j x)).extractLsb' 0 128)
+  | j, n + 1, x => chainValue k (j + 1) n (P.slice k j (ans f (P.chainInput k j x)))
 
 theorem fixed_chain (k : Fin numChains) (j n : ℕ) (x : Word) :
     simulateQ (unifFwdAnswerImpl f) (P.chain k j n x) = pure (chainValue f P k j n x) := by
@@ -91,12 +91,12 @@ theorem fixed_rootFrom (t : Fin numChains → Word) (r n : ℕ) (st : BitVec 256
 
 /-- The public key of the tops under the table. -/
 def rootValue (t : Fin numChains → Word) : PublicKey :=
-  (rootState f P t 0 10 (Params.rootInit t)).extractLsb' 0 128
+  (rootState f P t 0 9 (Params.rootInit t)).extractLsb' 0 128
 
 theorem fixed_root (t : Fin numChains → Word) :
     simulateQ (unifFwdAnswerImpl f) (P.root t) = pure (rootValue f P t) := by
   change simulateQ (unifFwdAnswerImpl f)
-      ((fun y : BitVec 256 => y.extractLsb' 0 128) <$> P.rootFrom t 0 10 (Params.rootInit t)) =
+      ((fun y : BitVec 256 => y.extractLsb' 0 128) <$> P.rootFrom t 0 9 (Params.rootInit t)) =
     (pure (rootValue f P t) : ProbComp (BitVec 128))
   rw [simulateQ_map, fixed_rootFrom, map_pure]
   rfl

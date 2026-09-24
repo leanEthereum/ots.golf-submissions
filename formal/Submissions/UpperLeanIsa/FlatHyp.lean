@@ -7,8 +7,8 @@ import Submissions.UpperLeanIsa.BasicProperties
 `Flat.hyp : Flat.params.Hyp`: the digit fields tile the index (digits determine the index), the
 tag symbols `sym (p % 7), sym (p / 7 % 7), sym (p / 49)` (`sym` is injective below `7`)
 determine the step position `p = off k + j` and hence `(k, j)`, and the metadata values `1`
-(chains), `10` (index) and `0, 2, 4, …, 128, 5504, 3` (root calls) are pairwise distinct. Hence
-`Flat.admissible`, with the concrete budgets `keygen 640`, `sign 2 ^ 20` and `verify 234`.
+(chains), `10` (index) and `0, 2, 4, …, 128, 5504` (root calls) are pairwise distinct. Hence
+`Flat.admissible`, with the concrete budgets `keygen 638`, `sign 2 ^ 20` and `verify 232`.
 -/
 
 open OracleSpec OracleComp
@@ -85,14 +85,14 @@ theorem hyp : params.Hyp where
       simp only [len_eq]
       decide
     rw [this]; norm_num
-  verify_le := by change 22 + 2 * 106 ≤ 2 ^ 20; norm_num
+  verify_le := by change 20 + 2 * 106 ≤ 2 ^ 20; norm_num
   len_zero := by change 2 ≤ len 0; rw [len_eq]; decide
 
 /-- **Admissibility of HL-FLAT-A.** -/
 theorem admissible : scheme.Admissible := params.admissible hyp
 
-/-- Key generation of HL-FLAT-A costs 640 compressions on every path. -/
-theorem keygen_cost : CostAtMost params.keygen 640 := by
+/-- Key generation of HL-FLAT-A costs 638 compressions on every path. -/
+theorem keygen_cost : CostAtMost params.keygen 638 := by
   have h := params.cost_keygen
   have : (∑ k : Fin numChains, (params.len k - 1)) = 310 := by
     change (∑ k : Fin numChains, (len k - 1)) = 310
@@ -100,9 +100,9 @@ theorem keygen_cost : CostAtMost params.keygen 640 := by
     decide
   rwa [this] at h
 
-/-- Verification of HL-FLAT-A costs at most 234 compressions on every path. -/
+/-- Verification of HL-FLAT-A costs at most 232 compressions on every path. -/
 theorem verify_cost (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (params.verify pk m bits) 234 :=
+    CostAtMost (params.verify pk m bits) 232 :=
   params.cost_verify pk m bits
 
 end Flat
