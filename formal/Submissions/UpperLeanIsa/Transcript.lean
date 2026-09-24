@@ -256,12 +256,12 @@ right length, the reconstructed endpoints (read off the final cache) hash to `pk
 chain paths and the root fold are cached. -/
 theorem verify_support (pk : PublicKey) (m : Message) (bits : List Bool) (c : Cache) :
     ∀ p ∈ support (run (verify pk m bits) c), Cache.Sub c p.2 ∧ (p.1 = true →
-      bits.length = 4352 ∧
+      bits.length = 4992 ∧
       rootValue (table p.2) (reconstructedWords (table p.2) m bits) = pk ∧
-      (∀ i : Fin 34, ChainPath p.2 i.val (digit m i) (255 - digit m i) (decode bits i)) ∧
+      (∀ i : Fin 39, ChainPath p.2 i.val (digit m i) (127 - digit m i) (decode bits i)) ∧
       RootPath p.2 (List.ofFn (reconstructedWords (table p.2) m bits)) 0) := by
   intro p hp
-  by_cases hlen : bits.length = 4352
+  by_cases hlen : bits.length = 4992
   · simp only [verify, hlen, ne_eq, not_true_eq_false, ↓reduceIte] at hp
     rw [run_bind, support_bind] at hp
     simp only [Set.mem_iUnion] at hp
@@ -272,13 +272,13 @@ theorem verify_support (pk : PublicKey) (m : Message) (bits : List Bool) (c : Ca
     rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
     subst hp
     obtain ⟨hsub₁, hys⟩ := tabulate_support
-      (fun i : Fin 34 => chain i.val (digit m i) (255 - digit m i) (decode bits i))
+      (fun i : Fin 39 => chain i.val (digit m i) (127 - digit m i) (decode bits i))
       (fun i y c' =>
-        y = chainValue (table c') i.val (digit m i) (255 - digit m i) (decode bits i) ∧
-          ChainPath c' i.val (digit m i) (255 - digit m i) (decode bits i))
+        y = chainValue (table c') i.val (digit m i) (127 - digit m i) (decode bits i) ∧
+          ChainPath c' i.val (digit m i) (127 - digit m i) (decode bits i))
       (fun _ _ _ _ hsub hP =>
         ⟨hP.1.trans (ChainPath.mono hsub hP.2).2.symm, (ChainPath.mono hsub hP.2).1⟩)
-      (fun i c' => chain_support i.val (digit m i) (255 - digit m i) (decode bits i) c')
+      (fun i c' => chain_support i.val (digit m i) (127 - digit m i) (decode bits i) c')
       c q hq
     obtain ⟨hsub₂, hr₁, hrpath⟩ := root_support q.1 q.2 r hr
     have hrec : reconstructedWords (table r.2) m bits = q.1 :=
@@ -307,9 +307,9 @@ theorem stB_support (pk : PublicKey) (m₁ : Message) (st : A.State)
     (σ : Option OracleAlgorithm.Signature) (c : Cache) :
     ∀ p ∈ support (run (stB A pk m₁ st σ) c), Cache.Sub c p.2 ∧ (p.1 = true →
       ∃ m₂ σ₂, σ.map (fun s => (m₁, s)) ≠ some (m₂, σ₂) ∧
-        σ₂.length = 4352 ∧
+        σ₂.length = 4992 ∧
         rootValue (table p.2) (reconstructedWords (table p.2) m₂ σ₂) = pk ∧
-        (∀ i : Fin 34, ChainPath p.2 i.val (digit m₂ i) (255 - digit m₂ i) (decode σ₂ i)) ∧
+        (∀ i : Fin 39, ChainPath p.2 i.val (digit m₂ i) (127 - digit m₂ i) (decode σ₂ i)) ∧
         RootPath p.2 (List.ofFn (reconstructedWords (table p.2) m₂ σ₂)) 0) := by
   intro p hp
   unfold stB at hp

@@ -11,8 +11,8 @@ predicate `R` implying the hash-free relation (`hR : ∀ s, R s → HoldsNH L s`
 * `walk_seg`: a run of non-jump slots, with its cost as a sum over the decoded slots;
 * `walk_node`: a `SET tc := tgtV t` followed by `JUMP zc tc oneCell`, landing on `s + 2` or `t`;
 * `walk_unary`: a generic unary chain of nodes (instantiated for the Rice chains and `c_hi`);
-* `walk_group`: the two-level subtree of a Rice group;
-* `walk_leaf`, `walk_leaf32`: a leaf's straight ops, then its unconditional `JUMP`;
+* `walk_group`: the one-level subtree of a Rice(1) group;
+* `walk_leaf`, `walk_leafHi`: a leaf's straight ops, then its unconditional `JUMP`;
 * `walk_body`: the body steps up to the next segment.
 -/
 
@@ -114,7 +114,7 @@ theorem seg_cost {s a w : ℕ} (hc : ∀ i < a, (cinstrAt (s + i)).cost = w) :
 condition cell is zero and on `t` otherwise, after two steps and two cycles. -/
 theorem walk_node (hR : ∀ s, R s → HoldsNH L s) {s tc zc t n c : ℕ}
     (hset : cinstrAt s = .setc tc (tgtV t)) (hjmp : cinstrAt (s + 1) = .jump zc tc oneCell)
-    (ht : t < 2 ^ 17) (hs : s + 1 < sentinel) (h : Walk R L n s c) :
+    (ht : t < 2 ^ 16) (hs : s + 1 < sentinel) (h : Walk R L n s c) :
     R s ∧ R (s + 1) ∧ ∃ n' c', n = n' + 2 ∧ c = c' + 2 ∧
       Walk R L n' (if Lx L zc = 0 then s + 2 else t) c' := by
   obtain ⟨n1, c1, rfl, rfl, -, hr0, hw⟩ := h.inv (by omega)
@@ -131,7 +131,7 @@ theorem walk_node (hR : ∀ s, R s → HoldsNH L s) {s tc zc t n c : ℕ}
 
 theorem walk_node_mk (hR : ∀ s, R s → HoldsNH L s) {s tc zc t n c : ℕ}
     (hset : cinstrAt s = .setc tc (tgtV t)) (hjmp : cinstrAt (s + 1) = .jump zc tc oneCell)
-    (ht : t < 2 ^ 17) (hs : s + 1 < sentinel) (hr0 : R s) (hr1 : R (s + 1))
+    (ht : t < 2 ^ 16) (hs : s + 1 < sentinel) (hr0 : R s) (hr1 : R (s + 1))
     (h : Walk R L n (if Lx L zc = 0 then s + 2 else t) c) : Walk R L (n + 2) s (c + 2) := by
   have htc := (setc_of_holdsNH hset (hR s hr0)).2
   have hn : nextSlot L (s + 1) = if Lx L zc = 0 then s + 2 else t := by
@@ -254,54 +254,60 @@ theorem walk_unary_mk (hR : ∀ s, R s → HoldsNH L s) {base w L0 : ℕ} {zc tc
 
 end Generic
 
+
 /-! ## Layout bounds -/
 
-theorem rBase_add_le {k : ℕ} (hk : k < 32 ∨ k = 33) : rBase k + 2942 ≤ 105947 := by
+theorem rBase_add_le {k : ℕ} (hk : k < 37 ∨ k = 38) : rBase k + dispLen k ≤ 47866 := by
   rcases hk with hk | rfl
-  · rw [rBase_of_le (by omega)]; omega
-  · rw [rBase_33]
+  · rcases Nat.eq_zero_or_pos k with rfl | h0
+    · decide
+    · rw [rBase_of_mid h0 (by omega), dispLen_of (by omega)]; omega
+  · decide
 
-theorem gBase_add_le (k : ℕ) {q : ℕ} (hq : q < 64) : gBase k q + 44 ≤ rBase k + 2942 := by
-  unfold gBase; split_ifs <;> omega
+theorem gBase_add_le (k q : ℕ) : gBase k q + 16 ≤ rBase k + dispLen k := by
+  rw [dispLen_eq]; unfold gBase; split_ifs <;> omega
 
-theorem leafSlot_add_le (k : ℕ) {e : ℕ} (he : e < 256) : leafSlot k e + 7 ≤ rBase k + 2942 := by
-  have := gBase_add_le k (q := e / 4) (by omega)
+theorem leafSlot_add_le (k e : ℕ) : leafSlot k e + 7 ≤ rBase k + dispLen k := by
+  have := gBase_add_le k (e / 2)
   unfold leafSlot; omega
 
-theorem leafSlot32_add_le {c : ℕ} : leafSlot32 c + 5 ≤ rBase 32 + 222 := by
-  unfold leafSlot32; split_ifs <;> omega
+theorem leafSlotHi_add_le {c : ℕ} : leafSlotHi c + 5 ≤ rBase 37 + 257 := by
+  unfold leafSlotHi; split_ifs <;> omega
 
-theorem s0_le {k : ℕ} (hk : k < 34) : s0 k + 255 ≤ rootBase := by
-  rcases Nat.lt_or_ge k 32 with h | h
-  · rw [s0_of_lt h, show rootBase = 131036 from rfl]; omega
-  · rcases (show k = 32 ∨ k = 33 by omega) with rfl | rfl <;> decide
+theorem s0_le {k : ℕ} (hk : k < 39) : s0 k + 127 ≤ rootBase := by
+  rcases Nat.eq_zero_or_pos k with rfl | h0
+  · decide
+  rcases Nat.lt_or_ge k 37 with h | h
+  · rw [s0_of_mid h0 h, show rootBase = 65495 from rfl]; omega
+  · rcases (show k = 37 ∨ k = 38 by omega) with rfl | rfl <;> decide
 
 /-! ## Instances of the unary chain -/
 
-theorem riceShape {k : ℕ} (hk : k < 32 ∨ k = 33) :
-    UnaryShape (rBase k) 46 63 (zuCell k) (tuCell k) where
+theorem riceShape {k : ℕ} (hk : k < 37 ∨ k = 38) :
+    UnaryShape (rBase k) 18 (nU k) (zuCell k) (tuCell k) where
   two_le := by omega
-  lt := by have := rBase_add_le hk; rw [sentinel]; omega
+  lt := by have := rBase_add_le hk; rw [dispLen_eq] at this; rw [sentinel]; omega
   set := fun _ hi => cinstrAt_uset hk hi
   jmp := fun _ hi => cinstrAt_ujmp hk hi
 
-theorem c32Shape : UnaryShape (rBase 32) 7 31 (zuCell 32) (tuCell 32) where
+theorem hiShape : UnaryShape (rBase 37) 7 36 (zuCell 37) (tuCell 37) where
   two_le := by omega
-  lt := by rw [rBase_32, sentinel]; norm_num
-  set := fun _ hi => cinstrAt_u32set hi
-  jmp := fun _ hi => cinstrAt_u32jmp hi
+  lt := by rw [rBase_37, sentinel]; norm_num
+  set := fun _ hi => cinstrAt_hiset hi
+  jmp := fun _ hi => cinstrAt_hijmp hi
 
-theorem unaryExit_rice (k : ℕ) {x : ℕ} (hx : x ≤ 63) : unaryExit (rBase k) 46 63 x = gBase k x := by
+theorem unaryExit_rice (k : ℕ) {x : ℕ} (hx : x ≤ nU k) :
+    unaryExit (rBase k) 18 (nU k) x = gBase k x := by
   unfold unaryExit
   split_ifs with h
   · rw [gBase_of_lt h]
-  · rw [show x = 63 by omega, gBase_63]
+  · rw [show x = nU k by omega, gBase_last]
 
-theorem unaryExit_c32 {c : ℕ} (hc : c < 32) : unaryExit (rBase 32) 7 31 (31 - c) = leafSlot32 c := by
+theorem unaryExit_hi {c : ℕ} (hc : c ≤ 36) : unaryExit (rBase 37) 7 36 (36 - c) = leafSlotHi c := by
   unfold unaryExit
   split_ifs with h
-  · rw [leafSlot32_of_pos (by omega)]
-  · rw [show c = 0 by omega, leafSlot32_zero]
+  · rw [leafSlotHi_of_pos (by omega)]
+  · rw [show c = 0 by omega, leafSlotHi_zero]
 
 section Tree
 
@@ -309,98 +315,41 @@ variable {κ : ℕ} {R : ℕ → Prop} {L : MemImage κ}
 
 /-! ### Groups -/
 
-/-- The node facts of the group subtree taken to leaf `4q + b`: node `(0,0)`, then node
-`(1, 2 ⌊b/2⌋)`, with condition cells encoding the two bits of `b`. -/
+/-- The node facts of group `q` taken to leaf `2q + b`: the group node, with a condition cell
+that is zero exactly for `b = 0`. -/
 def GroupFacts (R : ℕ → Prop) {κ : ℕ} (L : MemImage κ) (k q b : ℕ) : Prop :=
-  R (gBase k q) ∧ R (gBase k q + 1) ∧ (Lx L (zbCell k 0) = 0 ↔ b < 2) ∧
-    R (gBase k q + 11 * (2 * (b / 2)) + 2) ∧ R (gBase k q + 11 * (2 * (b / 2)) + 3) ∧
-    (Lx L (zbCell k 1) = 0 ↔ b % 2 = 0)
+  R (gBase k q) ∧ R (gBase k q + 1) ∧ (Lx L (zbCell k) = 0 ↔ b = 0)
 
-theorem walk_g1 (hR : ∀ s, R s → HoldsNH L s) {k q b' n c : ℕ} (hk : k < 32 ∨ k = 33)
-    (hq : q < 64) (hb' : b' = 0 ∨ b' = 2) (h : Walk R L n (gBase k q + 11 * b' + 2) c) :
-    R (gBase k q + 11 * b' + 2) ∧ R (gBase k q + 11 * b' + 3) ∧ ∃ n' c', n = n' + 2 ∧
-      c = c' + 2 ∧ Walk R L n' (if Lx L (zbCell k 1) = 0 then gBase k q + 11 * b' + 4
-        else gBase k q + 11 * (b' + 1) + 4) c' := by
-  have hb := gBase_add_le k hq
+/-- **Group.** A walk from group `q`'s entry reaches leaf `2q + b` after two steps and cycles. -/
+theorem walk_group (hR : ∀ s, R s → HoldsNH L s) {k q n c : ℕ} (hk : k < 37 ∨ k = 38)
+    (hq : q ≤ nU k) (h : Walk R L n (gBase k q) c) :
+    ∃ b, b < 2 ∧ GroupFacts R L k q b ∧ ∃ n' c', n = 2 + n' ∧ c = 2 + c' ∧
+      Walk R L n' (leafSlot k (2 * q + b)) c' := by
+  have hb := gBase_add_le k q
   have hr := rBase_add_le hk
-  have hjmp : cinstrAt (gBase k q + 11 * b' + 2 + 1) = .jump (zbCell k 1) (tbCell k 1) oneCell := by
-    rw [show gBase k q + 11 * b' + 2 + 1 = gBase k q + 11 * b' + 3 by omega]
-    exact cinstrAt_g1jmp hk hq hb'
-  obtain ⟨hr0, hr1, n', c', rfl, rfl, hw⟩ := walk_node hR (cinstrAt_g1set hk hq hb') hjmp
-    (by omega) (by rw [sentinel]; omega) h
-  refine ⟨hr0, rcast hr1 (by omega), n', c', rfl, rfl, hw.cast rfl ?_ rfl⟩
-  split_ifs <;> omega
-
-theorem walk_g1_mk (hR : ∀ s, R s → HoldsNH L s) {k q b' n c : ℕ} (hk : k < 32 ∨ k = 33)
-    (hq : q < 64) (hb' : b' = 0 ∨ b' = 2) (hr0 : R (gBase k q + 11 * b' + 2))
-    (hr1 : R (gBase k q + 11 * b' + 3))
-    (h : Walk R L n (if Lx L (zbCell k 1) = 0 then gBase k q + 11 * b' + 4
-        else gBase k q + 11 * (b' + 1) + 4) c) :
-    Walk R L (n + 2) (gBase k q + 11 * b' + 2) (c + 2) := by
-  have hb := gBase_add_le k hq
-  have hr := rBase_add_le hk
-  have hjmp : cinstrAt (gBase k q + 11 * b' + 2 + 1) = .jump (zbCell k 1) (tbCell k 1) oneCell := by
-    rw [show gBase k q + 11 * b' + 2 + 1 = gBase k q + 11 * b' + 3 by omega]
-    exact cinstrAt_g1jmp hk hq hb'
-  refine walk_node_mk hR (cinstrAt_g1set hk hq hb') hjmp (by omega) (by rw [sentinel]; omega) hr0
-    (rcast hr1 (by omega)) (h.cast rfl ?_ rfl)
-  split_ifs <;> omega
-
-/-- **Group.** A walk from group `q`'s entry reaches leaf `4q + b` after four steps and cycles. -/
-theorem walk_group (hR : ∀ s, R s → HoldsNH L s) {k q n c : ℕ} (hk : k < 32 ∨ k = 33)
-    (hq : q < 64) (h : Walk R L n (gBase k q) c) :
-    ∃ b, b < 4 ∧ GroupFacts R L k q b ∧ ∃ n' c', n = 4 + n' ∧ c = 4 + c' ∧
-      Walk R L n' (leafSlot k (4 * q + b)) c' := by
-  have hb := gBase_add_le k hq
-  have hr := rBase_add_le hk
-  obtain ⟨hr0, hr1, n1, c1, rfl, rfl, hw⟩ := walk_node hR (cinstrAt_g0set hk hq)
-    (cinstrAt_g0jmp hk hq) (by omega) (by rw [sentinel]; omega) h
-  by_cases h0 : Lx L (zbCell k 0) = 0
+  obtain ⟨hr0, hr1, n1, c1, rfl, rfl, hw⟩ := walk_node hR (cinstrAt_gset hk hq)
+    (cinstrAt_gjmp hk hq) (by omega) (by rw [sentinel]; omega) h
+  by_cases h0 : Lx L (zbCell k) = 0
   · rw [if_pos h0] at hw
-    obtain ⟨hr2, hr3, n2, c2, rfl, rfl, hw2⟩ :=
-      walk_g1 hR hk hq (b' := 0) (Or.inl rfl) (hw.cast rfl (by omega) rfl)
-    by_cases h1 : Lx L (zbCell k 1) = 0
-    · rw [if_pos h1] at hw2
-      exact ⟨0, by omega, ⟨hr0, hr1, iff_of_true h0 (by omega), hr2, hr3, iff_of_true h1 rfl⟩,
-        n2, c2, by omega, by omega, hw2.cast rfl (by rw [leafSlot_eq (by omega)]) rfl⟩
-    · rw [if_neg h1] at hw2
-      exact ⟨1, by omega, ⟨hr0, hr1, iff_of_true h0 (by omega), hr2, hr3,
-        iff_of_false h1 (by omega)⟩, n2, c2, by omega, by omega,
-        hw2.cast rfl (by rw [leafSlot_eq (by omega)]) rfl⟩
+    exact ⟨0, by omega, ⟨hr0, hr1, iff_of_true h0 rfl⟩, n1, c1, by omega, by omega,
+      hw.cast rfl (by rw [leafSlot_eq (by omega)]) rfl⟩
   · rw [if_neg h0] at hw
-    obtain ⟨hr2, hr3, n2, c2, rfl, rfl, hw2⟩ :=
-      walk_g1 hR hk hq (b' := 2) (Or.inr rfl) (hw.cast rfl (by omega) rfl)
-    by_cases h1 : Lx L (zbCell k 1) = 0
-    · rw [if_pos h1] at hw2
-      exact ⟨2, by omega, ⟨hr0, hr1, iff_of_false h0 (by omega), rcast hr2 (by omega),
-        rcast hr3 (by omega), iff_of_true h1 rfl⟩, n2, c2, by omega, by omega,
-        hw2.cast rfl (by rw [leafSlot_eq (by omega)]) rfl⟩
-    · rw [if_neg h1] at hw2
-      exact ⟨3, by omega, ⟨hr0, hr1, iff_of_false h0 (by omega), rcast hr2 (by omega),
-        rcast hr3 (by omega), iff_of_false h1 (by omega)⟩, n2, c2, by omega, by omega,
-        hw2.cast rfl (by rw [leafSlot_eq (by omega)]) rfl⟩
+    exact ⟨1, by omega, ⟨hr0, hr1, iff_of_false h0 (by omega)⟩, n1, c1, by omega, by omega,
+      hw.cast rfl (by rw [leafSlot_eq (by omega)]) rfl⟩
 
-theorem walk_group_mk (hR : ∀ s, R s → HoldsNH L s) {k q b n c : ℕ} (hk : k < 32 ∨ k = 33)
-    (hq : q < 64) (hb4 : b < 4) (hF : GroupFacts R L k q b)
-    (h : Walk R L n (leafSlot k (4 * q + b)) c) : Walk R L (4 + n) (gBase k q) (4 + c) := by
-  have hb := gBase_add_le k hq
+theorem walk_group_mk (hR : ∀ s, R s → HoldsNH L s) {k q b n c : ℕ} (hk : k < 37 ∨ k = 38)
+    (hq : q ≤ nU k) (hb2 : b < 2) (hF : GroupFacts R L k q b)
+    (h : Walk R L n (leafSlot k (2 * q + b)) c) : Walk R L (2 + n) (gBase k q) (2 + c) := by
+  have hb := gBase_add_le k q
   have hr := rBase_add_le hk
-  obtain ⟨hr0, hr1, h0, hr2, hr3, h1⟩ := hF
-  rw [leafSlot_eq hb4] at h
-  have hb' : 2 * (b / 2) = 0 ∨ 2 * (b / 2) = 2 := by omega
-  have e1 : gBase k q + 11 * b + 4 = if Lx L (zbCell k 1) = 0 then
-      gBase k q + 11 * (2 * (b / 2)) + 4 else gBase k q + 11 * (2 * (b / 2) + 1) + 4 := by
-    by_cases h1' : Lx L (zbCell k 1) = 0
-    · rw [if_pos h1']; have := h1.mp h1'; omega
-    · rw [if_neg h1']; have : b % 2 ≠ 0 := fun e => h1' (h1.mpr e); omega
-  have e0 : gBase k q + 11 * (2 * (b / 2)) + 2 =
-      if Lx L (zbCell k 0) = 0 then gBase k q + 2 else gBase k q + 24 := by
-    by_cases h0' : Lx L (zbCell k 0) = 0
+  obtain ⟨hr0, hr1, h0⟩ := hF
+  rw [leafSlot_eq hb2] at h
+  have e0 : gBase k q + 2 + 7 * b = if Lx L (zbCell k) = 0 then gBase k q + 2 else gBase k q + 9 := by
+    by_cases h0' : Lx L (zbCell k) = 0
     · rw [if_pos h0']; have := h0.mp h0'; omega
-    · rw [if_neg h0']; have : ¬ b < 2 := fun e => h0' (h0.mpr e); omega
-  have hw2 := walk_g1_mk hR hk hq hb' hr2 hr3 (n := n) (c := c) (h.cast rfl e1 rfl)
-  have hw := walk_node_mk hR (cinstrAt_g0set hk hq) (cinstrAt_g0jmp hk hq) (by omega)
-    (by rw [sentinel]; omega) hr0 hr1 (hw2.cast rfl e0 rfl)
+    · rw [if_neg h0']; have : b ≠ 0 := fun e => h0' (h0.mpr e); omega
+  have hw := walk_node_mk hR (cinstrAt_gset hk hq) (cinstrAt_gjmp hk hq) (by omega)
+    (by rw [sentinel]; omega) hr0 hr1 (h.cast rfl e0 rfl)
   exact hw.cast (by omega) rfl (by omega)
 
 /-! ### Leaves -/
@@ -408,7 +357,7 @@ theorem walk_group_mk (hR : ∀ s, R s → HoldsNH L s) {k q b n c : ℕ} (hk : 
 /-- The last two ops of leaf `e`, indexed from `a = leafLen k e - 2`. -/
 theorem leaf_split (k e : ℕ) :
     ∃ a, leafLen k e = a + 2 ∧
-      leafOp k e a = .setc (leafJC k e) (tgtV (s0 k + min e 254 + 1)) ∧
+      leafOp k e a = .setc (leafJC k e) (tgtV (s0 k + min e 126 + 1)) ∧
       leafOp k e (a + 1) = .jump oneCell (leafJC k e) oneCell ∧
       (∑ i ∈ Finset.range a, (leafOp k e i).cost) + 2 = leafCost k e := by
   have h4 := leafLen_ge k e
@@ -420,25 +369,25 @@ theorem leaf_split (k e : ℕ) :
     simp only [CInstr.cost]
 
 /-- **Leaf.** A walk from leaf `e`'s first op runs its `leafLen` ops and lands on body step
-`min e 254 + 1`, i.e. `s0 k + e + 1`, or the next segment `s0 k + 255` when `e = 255`. -/
+`min e 126 + 1`, i.e. `s0 k + e + 1`, or the next segment `s0 k + 127` when `e = 127`. -/
 theorem walk_leaf (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {k e n c : ℕ}
-    (hk : k < 32 ∨ k = 33) (he : e < 256) (h : Walk R L n (leafSlot k e) c) :
+    (hk : k < 37 ∨ k = 38) (he : e < nLeaves k) (h : Walk R L n (leafSlot k e) c) :
     (∀ i < leafLen k e, R (leafSlot k e + i)) ∧ ∃ n' c', n = leafLen k e + n' ∧
-      c = leafCost k e + c' ∧ Walk R L n' (s0 k + min e 254 + 1) c' := by
+      c = leafCost k e + c' ∧ Walk R L n' (s0 k + min e 126 + 1) c' := by
   obtain ⟨a, ha, hsetJ, hlast, hsum⟩ := leaf_split k e
   have h7 := leafLen_le k e
-  have hb := leafSlot_add_le k he
+  have hb := leafSlot_add_le k e
   have hr := rBase_add_le hk
   have hs0 := s0_le (k := k) (by omega)
   have hjs : ∀ i < a, (cinstrAt (leafSlot k e + i)).isJump = false := fun i hi => by
     rw [cinstrAt_leaf hk he (by omega)]; exact leafOp_isJump (by omega)
   obtain ⟨hr1, n1, c1, rfl, rfl, hw1⟩ := walk_seg hjs (by rw [sentinel]; omega) h
-  have hs1 : cinstrAt (leafSlot k e + a) = .setc (leafJC k e) (tgtV (s0 k + min e 254 + 1)) := by
+  have hs1 : cinstrAt (leafSlot k e + a) = .setc (leafJC k e) (tgtV (s0 k + min e 126 + 1)) := by
     rw [cinstrAt_leaf hk he (by omega), hsetJ]
   have hs2 : cinstrAt (leafSlot k e + a + 1) = .jump oneCell (leafJC k e) oneCell := by
     rw [Nat.add_assoc, cinstrAt_leaf hk he (by omega), hlast]
   obtain ⟨hr2, hr3, n2, c2, rfl, rfl, hw2⟩ := walk_node hR hs1 hs2
-    (by rw [show rootBase = 131036 from rfl] at hs0; omega) (by rw [sentinel]; omega) hw1
+    (by rw [show rootBase = 65495 from rfl] at hs0; omega) (by rw [sentinel]; omega) hw1
   rw [if_neg (oneCell_ne_zero hone)] at hw2
   have hsum' : ∑ i ∈ Finset.range a, (cinstrAt (leafSlot k e + i)).cost =
       ∑ i ∈ Finset.range a, (leafOp k e i).cost :=
@@ -451,21 +400,21 @@ theorem walk_leaf (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV)
   · exact rcast hr3 (by omega)
 
 theorem walk_leaf_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {k e n c : ℕ}
-    (hk : k < 32 ∨ k = 33) (he : e < 256) (hr : ∀ i < leafLen k e, R (leafSlot k e + i))
-    (h : Walk R L n (s0 k + min e 254 + 1) c) :
+    (hk : k < 37 ∨ k = 38) (he : e < nLeaves k) (hr : ∀ i < leafLen k e, R (leafSlot k e + i))
+    (h : Walk R L n (s0 k + min e 126 + 1) c) :
     Walk R L (leafLen k e + n) (leafSlot k e) (leafCost k e + c) := by
   obtain ⟨a, ha, hsetJ, hlast, hsum⟩ := leaf_split k e
   have h7 := leafLen_le k e
-  have hb := leafSlot_add_le k he
+  have hb := leafSlot_add_le k e
   have hrb := rBase_add_le hk
   have hs0 := s0_le (k := k) (by omega)
   have hjs : ∀ i < a, (cinstrAt (leafSlot k e + i)).isJump = false := fun i hi => by
     rw [cinstrAt_leaf hk he (by omega)]; exact leafOp_isJump (by omega)
-  have hs1 : cinstrAt (leafSlot k e + a) = .setc (leafJC k e) (tgtV (s0 k + min e 254 + 1)) := by
+  have hs1 : cinstrAt (leafSlot k e + a) = .setc (leafJC k e) (tgtV (s0 k + min e 126 + 1)) := by
     rw [cinstrAt_leaf hk he (by omega), hsetJ]
   have hs2 : cinstrAt (leafSlot k e + a + 1) = .jump oneCell (leafJC k e) oneCell := by
     rw [Nat.add_assoc, cinstrAt_leaf hk he (by omega), hlast]
-  have hw2 := walk_node_mk hR hs1 hs2 (by rw [show rootBase = 131036 from rfl] at hs0; omega)
+  have hw2 := walk_node_mk hR hs1 hs2 (by rw [show rootBase = 65495 from rfl] at hs0; omega)
     (by rw [sentinel]; omega) (hr a (by omega)) (rcast (hr (a + 1) (by omega)) (by omega))
     (by rw [if_neg (oneCell_ne_zero hone)]; exact h)
   have hw1 := walk_seg_mk hjs (by rw [sentinel]; omega) (fun i hi => hr i (by omega)) hw2
@@ -475,35 +424,35 @@ theorem walk_leaf_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = on
       rw [cinstrAt_leaf hk he (by have := Finset.mem_range.mp hi; omega)]
   exact hw1.cast (by omega) rfl (by omega)
 
-/-- The five ops of leaf `c` of chain 32: the first three are straight, then a node. -/
-theorem leaf32_facts {c : ℕ} (hc : c < 32) :
-    (∀ i < 3, (cinstrAt (leafSlot32 c + i)).isJump = false) ∧
-    ∑ i ∈ Finset.range 3, (cinstrAt (leafSlot32 c + i)).cost = 12 ∧
-    cinstrAt (leafSlot32 c + 3) = .setc (tCell 32) (tgtV (s0 32 + c + 1)) ∧
-    cinstrAt (leafSlot32 c + 3 + 1) = .jump oneCell (tCell 32) oneCell := by
-  refine ⟨fun i hi => ?_, ?_, by rw [cinstrAt_leaf32 hc (by omega), leaf32Op_setT],
-    by rw [Nat.add_assoc, cinstrAt_leaf32 hc (by omega), leaf32Op_jmp]⟩
-  · rw [cinstrAt_leaf32 hc (by omega)]
+/-- The five ops of leaf `c` of chain 37: the first three are straight, then a node. -/
+theorem leafHi_facts {c : ℕ} (hc : c ≤ 36) :
+    (∀ i < 3, (cinstrAt (leafSlotHi c + i)).isJump = false) ∧
+    ∑ i ∈ Finset.range 3, (cinstrAt (leafSlotHi c + i)).cost = 12 ∧
+    cinstrAt (leafSlotHi c + 3) = .setc (tCell 37) (tgtV (s0 37 + c + 1)) ∧
+    cinstrAt (leafSlotHi c + 3 + 1) = .jump oneCell (tCell 37) oneCell := by
+  refine ⟨fun i hi => ?_, ?_, by rw [cinstrAt_hileaf hc (by omega), hiLeafOp_setT],
+    by rw [Nat.add_assoc, cinstrAt_hileaf hc (by omega), hiLeafOp_jmp]⟩
+  · rw [cinstrAt_hileaf hc (by omega)]
     rcases (show i = 0 ∨ i = 1 ∨ i = 2 by omega) with rfl | rfl | rfl
-    · rw [leaf32Op_blake]; rfl
-    · rw [leaf32Op_setU]; rfl
-    · rw [leaf32Op_mul]; rfl
+    · rw [hiLeafOp_blake]; rfl
+    · rw [hiLeafOp_setU]; rfl
+    · rw [hiLeafOp_mul]; rfl
   · rw [Finset.sum_range_succ, Finset.sum_range_succ, Finset.sum_range_one,
-      cinstrAt_leaf32 hc (show 0 < 5 by omega), cinstrAt_leaf32 hc (show 1 < 5 by omega),
-      cinstrAt_leaf32 hc (show 2 < 5 by omega), leaf32Op_blake, leaf32Op_setU, leaf32Op_mul]
+      cinstrAt_hileaf hc (show 0 < 5 by omega), cinstrAt_hileaf hc (show 1 < 5 by omega),
+      cinstrAt_hileaf hc (show 2 < 5 by omega), hiLeafOp_blake, hiLeafOp_setU, hiLeafOp_mul]
     rfl
 
-/-- **Leaf of chain 32.** Five ops, fourteen cycles, landing on body step `c + 1`. -/
-theorem walk_leaf32 (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {c n cost : ℕ}
-    (hc : c < 32) (h : Walk R L n (leafSlot32 c) cost) :
-    (∀ i < 5, R (leafSlot32 c + i)) ∧ ∃ n' c', n = 5 + n' ∧ cost = 14 + c' ∧
-      Walk R L n' (s0 32 + c + 1) c' := by
-  obtain ⟨hj, hsum, hs1, hs2⟩ := leaf32_facts hc
-  have hb : leafSlot32 c + 5 ≤ rBase 32 + 222 := leafSlot32_add_le
-  rw [rBase_32] at hb
+/-- **Leaf of chain 37.** Five ops, fourteen cycles, landing on body step `c + 1`. -/
+theorem walk_leafHi (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {c n cost : ℕ}
+    (hc : c ≤ 36) (h : Walk R L n (leafSlotHi c) cost) :
+    (∀ i < 5, R (leafSlotHi c + i)) ∧ ∃ n' c', n = 5 + n' ∧ cost = 14 + c' ∧
+      Walk R L n' (s0 37 + c + 1) c' := by
+  obtain ⟨hj, hsum, hs1, hs2⟩ := leafHi_facts hc
+  have hb : leafSlotHi c + 5 ≤ rBase 37 + 257 := leafSlotHi_add_le
+  rw [rBase_37] at hb
   obtain ⟨hr1, n1, c1, rfl, rfl, hw1⟩ := walk_seg hj (by rw [sentinel]; omega) h
   obtain ⟨hr2, hr3, n2, c2, rfl, rfl, hw2⟩ := walk_node hR hs1 hs2
-    (by rw [s0_32]; omega) (by rw [sentinel]; omega) hw1
+    (by rw [s0_37]; omega) (by rw [sentinel]; omega) hw1
   rw [if_neg (oneCell_ne_zero hone)] at hw2
   refine ⟨fun i hi => ?_, n2, c2, by omega, by omega, hw2⟩
   rcases (show i < 3 ∨ i = 3 ∨ i = 4 by omega) with hi | rfl | rfl
@@ -511,13 +460,13 @@ theorem walk_leaf32 (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = one
   · exact hr2
   · exact rcast hr3 (by omega)
 
-theorem walk_leaf32_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV)
-    {c n cost : ℕ} (hc : c < 32) (hr : ∀ i < 5, R (leafSlot32 c + i))
-    (h : Walk R L n (s0 32 + c + 1) cost) : Walk R L (5 + n) (leafSlot32 c) (14 + cost) := by
-  obtain ⟨hj, hsum, hs1, hs2⟩ := leaf32_facts hc
-  have hb : leafSlot32 c + 5 ≤ rBase 32 + 222 := leafSlot32_add_le
-  rw [rBase_32] at hb
-  have hw2 := walk_node_mk hR hs1 hs2 (by rw [s0_32]; omega) (by rw [sentinel]; omega)
+theorem walk_leafHi_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV)
+    {c n cost : ℕ} (hc : c ≤ 36) (hr : ∀ i < 5, R (leafSlotHi c + i))
+    (h : Walk R L n (s0 37 + c + 1) cost) : Walk R L (5 + n) (leafSlotHi c) (14 + cost) := by
+  obtain ⟨hj, hsum, hs1, hs2⟩ := leafHi_facts hc
+  have hb : leafSlotHi c + 5 ≤ rBase 37 + 257 := leafSlotHi_add_le
+  rw [rBase_37] at hb
+  have hw2 := walk_node_mk hR hs1 hs2 (by rw [s0_37]; omega) (by rw [sentinel]; omega)
     (hr 3 (by omega)) (rcast (hr 4 (by omega)) (by omega))
     (by rw [if_neg (oneCell_ne_zero hone)]; exact h)
   have hw1 := walk_seg_mk hj (by rw [sentinel]; omega) (fun i hi => hr i (by omega)) hw2
@@ -525,29 +474,29 @@ theorem walk_leaf32_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = 
 
 /-! ### Bodies -/
 
-/-- **Body.** From body step `j0 ≥ 1` the walk runs steps `j0..254`, ten cycles each, and lands
-on `s0 k + 255`. -/
-theorem walk_body {k j0 n c : ℕ} (hk : k < 34) (hj1 : 1 ≤ j0) (hj2 : j0 ≤ 255)
+/-- **Body.** From body step `j0 ≥ 1` the walk runs steps `j0..126`, ten cycles each, and lands
+on `s0 k + 127`. -/
+theorem walk_body {k j0 n c : ℕ} (hk : k < 39) (hj1 : 1 ≤ j0) (hj2 : j0 ≤ 127)
     (h : Walk R L n (s0 k + j0) c) :
-    (∀ j, j0 ≤ j → j ≤ 254 → R (s0 k + j)) ∧ ∃ n' c', n = (255 - j0) + n' ∧
-      c = 10 * (255 - j0) + c' ∧ Walk R L n' (s0 k + 255) c' := by
+    (∀ j, j0 ≤ j → j ≤ 126 → R (s0 k + j)) ∧ ∃ n' c', n = (127 - j0) + n' ∧
+      c = 10 * (127 - j0) + c' ∧ Walk R L n' (s0 k + 127) c' := by
   have hs0 := s0_le hk
-  have hbody : ∀ i < 255 - j0, cinstrAt (s0 k + j0 + i) = bodyInstr k (j0 + i) := fun i hi => by
+  have hbody : ∀ i < 127 - j0, cinstrAt (s0 k + j0 + i) = bodyInstr k (j0 + i) := fun i hi => by
     rw [Nat.add_assoc, cinstrAt_body hk (by omega) (by omega)]
-  obtain ⟨hr, n', c', rfl, rfl, hw⟩ := walk_seg (a := 255 - j0)
-    (fun i hi => by rw [hbody i hi]; rfl) (by rw [sentinel, show rootBase = 131036 from rfl] at *; omega) h
+  obtain ⟨hr, n', c', rfl, rfl, hw⟩ := walk_seg (a := 127 - j0)
+    (fun i hi => by rw [hbody i hi]; rfl) (by rw [sentinel, show rootBase = 65495 from rfl] at *; omega) h
   refine ⟨fun j hj hj' => rcast (hr (j - j0) (by omega)) (by omega), n', c', rfl, ?_,
     hw.cast rfl (by omega) rfl⟩
   rw [seg_cost (w := 10) fun i hi => by rw [hbody i hi]; rfl]
 
-theorem walk_body_mk {k j0 n c : ℕ} (hk : k < 34) (hj1 : 1 ≤ j0) (hj2 : j0 ≤ 255)
-    (hr : ∀ j, j0 ≤ j → j ≤ 254 → R (s0 k + j)) (h : Walk R L n (s0 k + 255) c) :
-    Walk R L ((255 - j0) + n) (s0 k + j0) (10 * (255 - j0) + c) := by
+theorem walk_body_mk {k j0 n c : ℕ} (hk : k < 39) (hj1 : 1 ≤ j0) (hj2 : j0 ≤ 127)
+    (hr : ∀ j, j0 ≤ j → j ≤ 126 → R (s0 k + j)) (h : Walk R L n (s0 k + 127) c) :
+    Walk R L ((127 - j0) + n) (s0 k + j0) (10 * (127 - j0) + c) := by
   have hs0 := s0_le hk
-  have hbody : ∀ i < 255 - j0, cinstrAt (s0 k + j0 + i) = bodyInstr k (j0 + i) := fun i hi => by
+  have hbody : ∀ i < 127 - j0, cinstrAt (s0 k + j0 + i) = bodyInstr k (j0 + i) := fun i hi => by
     rw [Nat.add_assoc, cinstrAt_body hk (by omega) (by omega)]
-  have hw := walk_seg_mk (a := 255 - j0) (fun i hi => by rw [hbody i hi]; rfl)
-    (by rw [sentinel, show rootBase = 131036 from rfl] at *; omega)
+  have hw := walk_seg_mk (a := 127 - j0) (fun i hi => by rw [hbody i hi]; rfl)
+    (by rw [sentinel, show rootBase = 65495 from rfl] at *; omega)
     (fun i hi => rcast (hr (j0 + i) (by omega) (by omega)) (by omega)) (h.cast rfl (by omega) rfl)
   rw [seg_cost (w := 10) fun i hi => by rw [hbody i hi]; rfl] at hw
   exact hw
