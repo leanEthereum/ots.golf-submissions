@@ -5,9 +5,9 @@ import Submissions.UpperLeanIsa.Security
 # Admissibility and strong unforgeability of HL-FLAT-A
 
 `Flat.admissible : Flat.scheme.Admissible` (all eight fields, with the concrete budgets
-`keygen 638`, `sign 2 ^ 20`, `verify 232`) and `Flat.secure : Flat.scheme.Secure`: every attacker
+`keygen 622`, `sign 2 ^ 20`, `verify 226`) and `Flat.secure : Flat.scheme.Secure`: every attacker
 whose experiment costs at most `B` compressions on every path wins with probability at most
-`B / 2 ^ 128 < B / 2 ^ 127`.
+`(19/20) · B / 2 ^ 127 < B / 2 ^ 127`.
 -/
 
 namespace OptimalOTS.LeanIsaBaseline.Layer

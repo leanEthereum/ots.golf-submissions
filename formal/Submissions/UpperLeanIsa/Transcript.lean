@@ -262,7 +262,7 @@ theorem index_support (m : Message) (η : Nonce) (pk : PublicKey) (c : Cache) :
   obtain ⟨q, hq, rfl⟩ := hp
   obtain ⟨hsub, hc⟩ := run_hash_support _ c q hq
   refine ⟨hsub, Option.isSome_iff_exists.2 ⟨q.1, hc⟩, ?_⟩
-  exact congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (table_eq_of_some hc).symm
+  exact congrArg (fun z : BitVec hashBits => idxAns z) (table_eq_of_some hc).symm
 
 theorem tabulate_support {α : Type} {n : ℕ} (f : Fin n → OracleComp Spec α)
     (Q : Fin n → α → Cache → Prop)
@@ -345,7 +345,7 @@ theorem verify_support (pk : PublicKey) (m : Message) (bits : List Bool) (c : Ca
       obtain ⟨hsub₂, hr₁, hrpath⟩ := P.root_support q.1 q.2 r hr
       have hIr : P.idxValue (table r.2) m (decodeNonce bits) pk = q₀.1 := by
         rw [hI₀]
-        exact congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128)
+        exact congrArg (fun z : BitVec hashBits => idxAns z)
           (table_of_sub (hsub₁.trans hsub₂) hidx₀)
       have hrec : P.reconWords (table r.2) q₀.1 bits = q.1 :=
         funext fun k => (ChainPath.mono P hsub₂ (hys k).2).2.trans (hys k).1.symm

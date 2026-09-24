@@ -9,8 +9,8 @@ the cache `d` before signing. At every trial the signer draws an untried nonce `
 * if `m ++ η` is cached with an accepted index it stops, and loses exactly when another cached
   entry shares that index (`rowBad`);
 * if it is cached with a rejected index it tries again;
-* if it is fresh, the answer is accepted with probability `numValid / 2 ^ 128` and then loses
-  exactly when its index is already held (`V`), with probability `|V| / 2 ^ 128`.
+* if it is fresh, the answer is accepted with probability `numValid / 2 ^ 127` and then loses
+  exactly when its index is already held (`V`), with probability `|V| / 2 ^ 127`.
 
 Any `ρ` bounding the ratio of the losing to the stopping mass bounds the probability of losing
 (`signRho_bound`), with no union over the trials.
@@ -95,9 +95,9 @@ theorem card_status (d : Cache) (m : EMessage) (U : Finset Nonce) :
   · rintro ((⟨h, -⟩ | ⟨h, -⟩) | ⟨h, -⟩) <;> exact h
 
 /-- The mass of the accepted and of the rejected answers. -/
-theorem frac_acc (hidx : 128 ≤ hashBits) (hM : P.numValid ≤ 2 ^ 128) :
+theorem frac_acc (hidx : 127 ≤ hashBits) (hM : P.numValid ≤ 2 ^ 127) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-      (if idxOf w ∈ P.validSet then (1 : ℝ≥0∞) else 0) = (P.numValid : ℝ≥0∞) / 2 ^ 128 := by
+      (if idxOf w ∈ P.validSet then (1 : ℝ≥0∞) else 0) = (P.numValid : ℝ≥0∞) / 2 ^ 127 := by
   rw [← Finset.mul_sum, Finset.sum_boole, card_idxOf_mem _ (fun n hn => P.mem_validSet_lt hn),
     Nat.cast_mul, inv_card_mul_pow hidx, P.card_validSet]
 
@@ -107,9 +107,9 @@ theorem frac_split (w : BitVec hashBits) :
   split_ifs <;> simp
 
 /-- The mass of the answers whose index is held. -/
-theorem frac_V (hidx : 128 ≤ hashBits) (d : Cache) :
+theorem frac_V (hidx : 127 ≤ hashBits) (d : Cache) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-      (if idxOf w ∈ P.V d then (1 : ℝ≥0∞) else 0) = ((P.V d).card : ℝ≥0∞) / 2 ^ 128 := by
+      (if idxOf w ∈ P.V d then (1 : ℝ≥0∞) else 0) = ((P.V d).card : ℝ≥0∞) / 2 ^ 127 := by
   rw [← Finset.mul_sum, Finset.sum_boole, card_idxOf_mem _ (P.V_lt d), Nat.cast_mul,
     inv_card_mul_pow hidx]
 
@@ -155,7 +155,7 @@ set_option maxHeartbeats 4000000 in
 /-- The signing loop as one disjoint case split: `k` further trials, nonces `tried` already
 used, current cache `d'` differing from `d` only by rejected entries at tried nonces. The loop's
 value, plus `λ ρ` when it fails, is at most `Φ d + κ b + λ ρ`. -/
-theorem signRhoLoop_bound (hM' : P.numValid ≤ 2 ^ 128) (hidx : 128 ≤ hashBits)
+theorem signRhoLoop_bound (hM' : P.numValid ≤ 2 ^ 127) (hidx : 127 ≤ hashBits)
     (m : EMessage) (d : Cache) {β J : Type} [Nonempty J]
     (kont : J → Option (Nonce × P.Idx) → OracleComp Spec β)
     (Fn : Option (Nonce × P.Idx) → Cache → ℝ≥0∞)
@@ -169,8 +169,8 @@ theorem signRhoLoop_bound (hM' : P.numValid ≤ 2 ^ 128) (hidx : 128 ≤ hashBit
       Fn r d' ≤ Φ d' + lam * (if ∃ η i, r = some (η, i) ∧ P.IdxPre d (m ++ η) i.val then 1 else 0) +
         κ * b')
     (hρ : ∀ c : ℕ, (P.rowFresh d m).card ≤ c + trials → c ≤ (P.rowFresh d m).card →
-      ((P.rowBad d m).card : ℝ≥0∞) + c * (((P.V d).card : ℝ≥0∞) / 2 ^ 128) ≤
-        ρ * ((P.rowAcc d m).card + c * ((P.numValid : ℝ≥0∞) / 2 ^ 128))) :
+      ((P.rowBad d m).card : ℝ≥0∞) + c * (((P.V d).card : ℝ≥0∞) / 2 ^ 127) ≤
+        ρ * ((P.rowAcc d m).card + c * ((P.numValid : ℝ≥0∞) / 2 ^ 127))) :
     ∀ (k : ℕ) (tried : Finset Nonce) (d' : Cache) (b : ℕ),
       Cache.Sub d d' →
       (∀ q w, d q = none → d' q = some w →
@@ -217,8 +217,8 @@ theorem signRhoLoop_bound (hM' : P.numValid ≤ 2 ^ 128) (hidx : 128 ≤ hashBit
       simp only [hcR]
       have hc0 : ((Finset.univ \ tried).card : ℝ≥0∞) ≠ 0 := Nat.cast_ne_zero.2 hc.ne'
       have hct : ((Finset.univ \ tried).card : ℝ≥0∞) ≠ ⊤ := ENNReal.natCast_ne_top _
-      set vf : ℝ≥0∞ := ((P.V d).card : ℝ≥0∞) / 2 ^ 128 with hvf
-      set af : ℝ≥0∞ := (P.numValid : ℝ≥0∞) / 2 ^ 128 with haf
+      set vf : ℝ≥0∞ := ((P.V d).card : ℝ≥0∞) / 2 ^ 127 with hvf
+      set af : ℝ≥0∞ := (P.numValid : ℝ≥0∞) / 2 ^ 127 with haf
       set rf : ℝ≥0∞ := ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         (if idxOf w ∈ P.validSet then (0 : ℝ≥0∞) else 1) with hrf
       have hsplit : af + rf = 1 := by
@@ -425,7 +425,7 @@ theorem signRhoLoop_bound (hM' : P.numValid ≤ 2 ^ 128) (hidx : 128 ≤ hashBit
       exact hnone d' b tried hSub hNew hΦd hI hB
 
 /-- **The signing bound, as one disjoint case split.** -/
-theorem signRho_bound (hM' : P.numValid ≤ 2 ^ 128) (hidx : 128 ≤ hashBits)
+theorem signRho_bound (hM' : P.numValid ≤ 2 ^ 127) (hidx : 127 ≤ hashBits)
     (m : EMessage) (d : Cache) {β J : Type} [Nonempty J]
     (k : J → Option (Nonce × P.Idx) → OracleComp Spec β)
     (Fn : Option (Nonce × P.Idx) → Cache → ℝ≥0∞)
@@ -439,8 +439,8 @@ theorem signRho_bound (hM' : P.numValid ≤ 2 ^ 128) (hidx : 128 ≤ hashBits)
       Fn r d' ≤ Φ d' + lam * (if ∃ η i, r = some (η, i) ∧ P.IdxPre d (m ++ η) i.val then 1 else 0) +
         κ * b')
     (hρ : ∀ c : ℕ, (P.rowFresh d m).card ≤ c + trials → c ≤ (P.rowFresh d m).card →
-      ((P.rowBad d m).card : ℝ≥0∞) + c * (((P.V d).card : ℝ≥0∞) / 2 ^ 128) ≤
-        ρ * ((P.rowAcc d m).card + c * ((P.numValid : ℝ≥0∞) / 2 ^ 128)))
+      ((P.rowBad d m).card : ℝ≥0∞) + c * (((P.V d).card : ℝ≥0∞) / 2 ^ 127) ≤
+        ρ * ((P.rowAcc d m).card + c * ((P.numValid : ℝ≥0∞) / 2 ^ 127)))
     {b : ℕ} (hI : I d b) (hB : ∀ j, CostAtMost (P.signIdx m >>= k j) b) :
     E (run (P.signIdx m) d) (fun p => Fn p.1 p.2) ≤ Φ d + lam * ρ + κ * b := by
   have h := P.signRhoLoop_bound hM' hidx m d k Fn Φ hΦ κ lam ρ I hI_fresh hI_cached hF hρ

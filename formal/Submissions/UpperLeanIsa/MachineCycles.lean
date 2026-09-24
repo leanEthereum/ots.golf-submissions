@@ -4,17 +4,17 @@ import OptimalOTS.LeanIsa
 /-!
 # The hash-free facts and the cycle bound
 
-`CyclesAtMost 1422` for the HL-TRI bytecode, over every admissible memory size, every committed
+`CyclesAtMost 1390` for the HL-TRI bytecode, over every admissible memory size, every committed
 image and every step count, in the cache-free `support` semantics.
 
-* `layer_of_facts`: the layer products along the path force `L_13 = g ^ (rootSlot - 106 + Σ σ)`,
-  and `L_13 = K0 = g ^ rootSlot`; `gpow` is injective below the group order, so `Σ_k s k = 106`.
-* `tie_of_facts`: the tie accumulators hold the sums of the group words; `acc_13` is the index
-  cell (`idx_of_facts`).
+* `layer_of_facts`: the layer products along the path force `L_13 = g ^ (rootSlot - 103 + Σ σ)`,
+  and `L_13 = K0 = g ^ rootSlot`; `gpow` is injective below the group order, so `Σ_k s k = 103`.
+* `tie_of_facts`: the tie accumulators hold the sums of the group words (group 0's word carries
+  the junk digit); `acc_13` is the index cell (`idx_of_facts`).
 * `zero_copy_of_facts`: the copies the root reads for zero digits.
-* `totalCost_eq`, `totalSteps_eq`: every path of a layer vector costs exactly `1302` cycles in
-  `258` instructions: each block's non-hash cost is independent of its digits, and the hashes
-  number `1 + 106 + 9`.
+* `totalCost_eq`, `totalSteps_eq`: every path of a layer vector costs exactly `1270` cycles in
+  `253` instructions: each block's non-hash cost is independent of its digits, and the hashes
+  number `1 + 103 + 9`.
 * `cycles`: a completing run is a walk (`walk_of_supp`), the walk is a path (`walk_full`), and
   the two facts give its cost. No hash binding is used.
 -/
@@ -27,7 +27,7 @@ open OptimalOTS.LeanIsaBaseline.Layer
 noncomputable section
 
 /-- The tie word of group `g` on the digit vector `s`. -/
-def gwordS (s : ℕ → ℕ) (g : ℕ) : ℕ := gword g (s (gch g 0)) (s (gch g 1)) (s (gch g 2))
+def gwordS (s : ℕ → ℕ) (g : ℕ) : ℕ := gword g (jdig s g) (s (gch g 0)) (s (gch g 1)) (s (gch g 2))
 
 /-- The group sums are the chain sum. -/
 theorem sum_sig (s : ℕ → ℕ) : ∑ g ∈ Finset.range 14, sig s g = ∑ k ∈ Finset.range 42, s k := by
@@ -43,34 +43,34 @@ variable {v : ℕ → E} {R : ℕ → Prop} (hR : ∀ t, R t → (cinstrAt t).Re
   {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts R s)
 include hR hP
 
-theorem pro_relNH {t : ℕ} {ci : CInstr} (ht : t < 29) (hc : cinstrAt t = ci) : ci.RelNH v := by
+theorem pro_relNH {t : ℕ} {ci : CInstr} (ht : t < 28) (hc : cinstrAt t = ci) : ci.RelNH v := by
   have := hR t (hP.pro t ht); rwa [hc] at this
 
 theorem fact_z : v zCell = 0 := pro_relNH hR hP (by omega) cinstrAt_set0
 theorem fact_one : v oneCell = oneV := pro_relNH hR hP (by omega) cinstrAt_set1
-theorem fact_g : v gCell = gV := pro_relNH hR hP (by omega) cinstrAt_set4
-theorem fact_k0 : v k0Cell = k0V := pro_relNH hR hP (by omega) cinstrAt_set5
+theorem fact_g : v gCell = gV := pro_relNH hR hP (by omega) cinstrAt_set3
+theorem fact_k0 : v k0Cell = k0V := pro_relNH hR hP (by omega) cinstrAt_set4
 
 /-- The prologue constants `g ^ w`, `1 ≤ w ≤ 7`. -/
 theorem fact_gp {w : ℕ} (h1 : 1 ≤ w) (h7 : w ≤ 7) : v (gpCell w) = ofK (gpow w) := by
   by_cases hw : w = 1
   · subst hw
     rw [show gpCell 1 = gCell from rfl, fact_g hR hP, gV, gpow, pow_one]
-  · have := pro_relNH hR hP (t := 18 + w) (by omega) (cinstrAt_gp (by omega) h7)
+  · have := pro_relNH hR hP (t := 17 + w) (by omega) (cinstrAt_gp (by omega) h7)
     exact this
 
 include hV
 
 /-- Op `i` of group `g`'s block on the path. -/
 theorem blk_relNH {g i : ℕ} (hg : g < 14) (hi0 : 0 < i) (hi : i ≤ ctlOff g (sig s g)) :
-    (blockOp g (s (gch g 0)) (s (gch g 1)) (s (gch g 2)) i).RelNH v := by
+    (blockOp g (jdig s g) (s (gch g 0)) (s (gch g 1)) (s (gch g 2)) i).RelNH v := by
   have := hR _ (hP.blk g hg i hi0 hi)
   rwa [cinstrAt_blk (gvalid_of_valid hV hg) hg hi0 hi] at this
 
 /-- Pre op `q` of group `g`'s block on the path. -/
 theorem pre_relNH {g q : ℕ} (hg : g < 14)
     (hq : q < preLen g (s (gch g 0)) (s (gch g 1)) (s (gch g 2))) :
-    (preOp g (s (gch g 0)) (s (gch g 1)) (s (gch g 2)) q).RelNH v := by
+    (preOp g (jdig s g) (s (gch g 0)) (s (gch g 1)) (s (gch g 2)) q).RelNH v := by
   have hG := gvalid_of_valid hV hg
   have hf := pre_fit' hG hg
   have := blk_relNH hR hV hP hg (i := 1 + q) (by omega) (by unfold ctlOff; omega)
@@ -108,7 +108,7 @@ theorem lay_step {g : ℕ} (hg : g < 14) (hg0 : g ≠ 0) :
 
 /-- The layer products along the path. -/
 theorem lay_val : ∀ g < 14,
-    v (layCell g) = ofK (gpow (rootSlot - 106 + ∑ j ∈ Finset.range (g + 1), sig s j)) := by
+    v (layCell g) = ofK (gpow (rootSlot - 103 + ∑ j ∈ Finset.range (g + 1), sig s j)) := by
   intro g
   induction g with
   | zero =>
@@ -128,8 +128,8 @@ theorem lay_val : ∀ g < 14,
     rw [lay_step hR hV hP hg (by omega), Nat.add_sub_cancel, ih (by omega), ← ofK_mul,
       gpow_mul_gpow, Finset.sum_range_succ _ (g + 1), Nat.add_assoc]
 
-/-- **The layer.** The hash-free relations on any path force `Σ s = 106`. -/
-theorem layer_of_facts : ∑ k ∈ Finset.range 42, s k = 106 := by
+/-- **The layer.** The hash-free relations on any path force `Σ s = 103`. -/
+theorem layer_of_facts : ∑ k ∈ Finset.range 42, s k = 103 := by
   have h13 := lay_val hR hV hP 13 (by omega)
   simp only [show (13 : ℕ) + 1 = 14 from rfl] at h13
   rw [show layCell 13 = k0Cell from rfl, fact_k0 hR hP, k0V] at h13
@@ -140,7 +140,7 @@ theorem layer_of_facts : ∑ k ∈ Finset.range 42, s k = 106 := by
       unfold sig; omega
   rw [Finset.sum_const, Finset.card_range, smul_eq_mul] at hbound
   have heq := gpow_inj (show rootSlot < 2 ^ 64 - 1 by unfold rootSlot; omega)
-    (show rootSlot - 106 + ∑ j ∈ Finset.range 14, sig s j < 2 ^ 64 - 1 by
+    (show rootSlot - 103 + ∑ j ∈ Finset.range 14, sig s j < 2 ^ 64 - 1 by
       unfold rootSlot; omega) (ofK_injective h13)
   rw [← sum_sig]
   unfold rootSlot at heq
@@ -148,49 +148,56 @@ theorem layer_of_facts : ∑ k ∈ Finset.range 42, s k = 106 := by
 
 /-- The tie op `q` of group `g`'s block on the path. -/
 theorem tie_rel {g q : ℕ} (hg : g < 14) (hq : q < tieLen g (sig s g)) :
-    (tieOp g (s (gch g 0)) (s (gch g 1)) (s (gch g 2)) q).RelNH v := by
+    (tieOp g (jdig s g) (s (gch g 0)) (s (gch g 1)) (s (gch g 2)) q).RelNH v := by
   have := pre_relNH hR hV hP hg (q := q) (by unfold preLen; unfold sig at hq; omega)
   unfold sig at hq
   rwa [preOp_tie hq] at this
 
-/-- **The tie.** The accumulator after group `g` holds the sum of the words of groups `≤ g`. -/
+/-- Group 0's tie sets its accumulator to its word. -/
+theorem tie_zero : v (accCell 0) = natV (gwordS s 0) := by
+  have h := tie_rel hR hV hP (g := 0) (q := 0) (by omega) (by unfold tieLen; simp)
+  unfold tieOp at h
+  rw [if_pos rfl] at h
+  exact h
+
+/-- The tie of group `g ≥ 1` adds its word to the previous accumulator. -/
+theorem tie_step {g : ℕ} (hg : g < 14) (hg0 : g ≠ 0) :
+    v (accCell g) = v (accCell (g - 1)) + natV (gwordS s g) := by
+  by_cases h0 : sig s g = 0
+  · have h := tie_rel hR hV hP (g := g) (q := 0) hg (by unfold tieLen; rw [if_neg (by omega)]; omega)
+    unfold tieOp at h
+    unfold sig at h0
+    rw [if_neg hg0, if_pos h0] at h
+    have h' : v (accCell g) = v (accCell (g - 1)) + v zCell := h
+    have hw : gwordS s g = 0 := by
+      unfold gwordS gword jdig
+      rw [if_neg hg0, show s (gch g 0) = 0 by omega, show s (gch g 1) = 0 by omega,
+        show s (gch g 2) = 0 by omega]
+      simp
+    rw [h', fact_z hR hP, hw, natV_zero]
+  · have hlen : tieLen g (sig s g) = 2 := by unfold tieLen; rw [if_pos ⟨hg0, h0⟩]
+    have ht := tie_rel hR hV hP (g := g) (q := 0) hg (by omega)
+    have hx := tie_rel hR hV hP (g := g) (q := 1) hg (by omega)
+    unfold sig at h0
+    unfold tieOp at ht hx
+    rw [if_neg hg0, if_neg h0, if_pos rfl] at ht
+    rw [if_neg hg0, if_neg h0, if_neg (by omega)] at hx
+    have ht' : v (tCell g) = natV (gwordS s g) := ht
+    have hx' : v (accCell g) = v (accCell (g - 1)) + v (tCell g) := hx
+    rw [hx', ht']
+
+/-- **The tie.** The accumulator after group `g` holds the words of groups `≤ g`. -/
 theorem tie_of_facts : ∀ g < 14,
     v (accCell g) = ∑ j ∈ Finset.range (g + 1), natV (gwordS s j) := by
   intro g
   induction g with
   | zero =>
     intro _
-    have h := tie_rel hR hV hP (g := 0) (q := 0) (by omega) (by unfold tieLen; simp)
-    unfold tieOp at h
-    rw [if_pos rfl] at h
-    rw [Finset.sum_range_one]
-    exact h
+    rw [tie_zero hR hV hP, Finset.sum_range_one]
   | succ g ih =>
     intro hg
-    rw [Finset.sum_range_succ, ← ih (by omega)]
-    by_cases h0 : sig s (g + 1) = 0
-    · have h := tie_rel hR hV hP (g := g + 1) (q := 0) hg (by unfold tieLen; split_ifs <;> omega)
-      unfold tieOp at h
-      unfold sig at h0
-      rw [if_neg (by omega), if_pos h0] at h
-      have h' : v (accCell (g + 1)) = v (accCell g) + v zCell := h
-      have hw : gwordS s (g + 1) = 0 := by
-        unfold gwordS gword
-        rw [show s (gch (g + 1) 0) = 0 by omega, show s (gch (g + 1) 1) = 0 by omega,
-          show s (gch (g + 1) 2) = 0 by omega]
-        simp
-      rw [h', fact_z hR hP, hw, natV_zero]
-    · have hlen : tieLen (g + 1) (sig s (g + 1)) = 2 := by
-        unfold tieLen; rw [if_pos ⟨by omega, h0⟩]
-      have ht := tie_rel hR hV hP (g := g + 1) (q := 0) hg (by omega)
-      have hx := tie_rel hR hV hP (g := g + 1) (q := 1) hg (by omega)
-      unfold sig at h0
-      unfold tieOp at ht hx
-      rw [if_neg (by omega), if_neg h0, if_pos rfl] at ht
-      rw [if_neg (by omega), if_neg h0, if_neg (by omega)] at hx
-      have ht' : v (tCell (g + 1)) = natV (gwordS s (g + 1)) := ht
-      have hx' : v (accCell (g + 1)) = v (accCell g) + v (tCell (g + 1)) := hx
-      rw [hx', ht']
+    rw [tie_step hR hV hP hg (by omega), Finset.sum_range_succ, Nat.add_sub_cancel,
+      ← ih (by omega)]
 
 /-- The index cell is the tie accumulator after group 13. -/
 theorem idx_of_facts : v idxCell = ∑ j ∈ Finset.range 14, natV (gwordS s j) :=
@@ -214,29 +221,29 @@ end Facts
 
 /-! ## The cost -/
 
-theorem segBase_sum : ∑ g ∈ Finset.range 14, (NH g + 2) = 114 := by decide
+theorem segBase_sum : ∑ g ∈ Finset.range 14, (NH g + 2) = 113 := by decide
 
-/-- On the layer, every path costs `1302` cycles. -/
-theorem totalCost_eq {s : ℕ → ℕ} (h : ∑ k ∈ Finset.range 42, s k = 106) : totalCost s = 1302 := by
+/-- On the layer, every path costs `1270` cycles. -/
+theorem totalCost_eq {s : ℕ → ℕ} (h : ∑ k ∈ Finset.range 42, s k = 103) : totalCost s = 1270 := by
   rw [← sum_sig] at h
   unfold totalCost segCost
   rw [Finset.sum_add_distrib, segBase_sum, ← Finset.mul_sum, h]; norm_num
 
-/-- On the layer, every path executes `258` instructions. -/
-theorem totalSteps_eq {s : ℕ → ℕ} (h : ∑ k ∈ Finset.range 42, s k = 106) : totalSteps s = 258 := by
+/-- On the layer, every path executes `253` instructions. -/
+theorem totalSteps_eq {s : ℕ → ℕ} (h : ∑ k ∈ Finset.range 42, s k = 103) : totalSteps s = 253 := by
   rw [← sum_sig] at h
   unfold totalSteps segSteps
   rw [Finset.sum_add_distrib, segBase_sum, h]; norm_num
 
-/-- The claim: `boundaryCycles + 1302`. -/
-def claim : ℕ := 1422
+/-- The claim: `boundaryCycles + 1270`. -/
+def claim : ℕ := 1390
 
 theorem boundary_eq : LeanIsa.boundaryCycles = 120 := by decide
 
 /-! ## The certificate clauses -/
 
 /-- **Cycles.** Every completing execution of the bytecode, under every admissible memory size,
-every committed image and every step count, costs exactly `1302` plus the boundary. -/
+every committed image and every step count, costs exactly `1270` plus the boundary. -/
 theorem cycles (S : LeanIsa.Submission) (hS : S.program = program) : S.CyclesAtMost claim := by
   intro pk m σ κ h16 hκ L n cost h
   unfold LeanIsa.Submission.exec at h

@@ -476,7 +476,7 @@ theorem accept_core (hP : P.Hyp) (d : Cut) (hd : ValidCut P d) (ζ : Record P) (
     · rw [h, hk]
     · exact absurd h ht
 
-theorem digits_eq_of_le (hP : P.Hyp) {I J : Word} (hI : P.Accepted I) (hJ : P.Accepted J)
+theorem digits_eq_of_le (hP : P.Hyp) {I J : IdxWord} (hI : P.Accepted I) (hJ : P.Accepted J)
     (h : ∀ k, P.digit J k ≤ P.digit I k) : J = I := by
   apply hP.digit_inj
   have hs : ∑ k, P.digit J k = ∑ k, P.digit I k := by
@@ -492,7 +492,7 @@ variable (A : OracleAlgorithm.Adversary)
 points of `ζ` exposed by the signature, an accepted fresh pair yields a hidden hit, a cut-target
 hit, or a different message or nonce whose cached index answer is `I₁`. -/
 theorem events_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State) (ζ : Record P)
-    (c : Cache) (I₁ : Word) (hI₁ : P.Accepted I₁) (η₁ : Nonce)
+    (c : Cache) (I₁ : IdxWord) (hI₁ : P.Accepted I₁) (η₁ : Nonce)
     (hc : Cache.Sub (exposedCache (afterSigning P I₁) ζ) c) (hpk : ζ.pk = pk)
     (p : Bool × Cache)
     (hp : p ∈ support (run (P.stB A pk m₁ st
@@ -501,7 +501,7 @@ theorem events_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
     Cache.Hits p.2 (hiddenCache (afterSigning P I₁) ζ) ∨
       TargetHit (cutTargets P (afterSigning P I₁) ζ) p.2 ∨
       ∃ (m₂ : Message) (η₂ : Nonce), (m₂, η₂) ≠ (m₁, η₁) ∧
-        ∃ w, p.2 ⟨896, P.idxInput m₂ η₂ pk⟩ = some w ∧ w.extractLsb' 0 128 = I₁ := by
+        ∃ w, p.2 ⟨896, P.idxInput m₂ η₂ pk⟩ = some w ∧ idxAns w = I₁ := by
   obtain ⟨hcp, h⟩ := P.stB_support A pk m₁ st _ c p hp
   obtain ⟨m₂, σ₂, hne, hacc⟩ := h hok
   have hsub := hc.trans hcp
@@ -534,7 +534,7 @@ theorem events_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
   · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.1 hacc.idx_cached
     refine ⟨w, hw, ?_⟩
     rw [← hII, hI₂]
-    exact congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (table_eq_of_some hw).symm
+    exact congrArg (fun z : BitVec hashBits => idxAns z) (table_eq_of_some hw).symm
 
 /-- **Forgery events after a signing failure.** Every accepted pair yields a hidden hit or a
 cut-target hit at the cut before signing. -/

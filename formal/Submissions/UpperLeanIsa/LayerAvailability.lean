@@ -10,7 +10,7 @@ Key generation makes no index query: its chain steps carry `chainMd` and its roo
 `rootMd r`, both different from `idxMd`, so the keygen cache has no index entry
 (`keygen_noIdx`). The signer then tries fresh, distinct nonces, each index answer is a fresh
 uniform 256-bit string, and each trial fails with probability exactly
-`miss = 1 - numValid / 2 ^ 128` (`loop_failure`). With `numValid ≥ 200 · 2 ^ 108` the
+`miss = 1 - numValid / 2 ^ 127` (`loop_failure`). With `numValid ≥ 90 · 2 ^ 108` the
 `2 ^ 19` trials fail with probability at most `2 ^ -128` (`miss_trials_le`), for every message
 chosen from the public key (`signingFailure`). No bad-record term is needed: the query shapes are
 separated syntactically.
@@ -25,6 +25,55 @@ open scoped Classical
 set_option linter.constructorNameAsVariable false
 
 namespace OptimalOTS.LeanIsaBaseline.Layer
+
+/-- The index word of an answer, as a number. -/
+theorem toNat_idxAns {n : ℕ} (w : BitVec n) : (idxAns w).toNat = w.toNat / 2 % 2 ^ 127 := by
+  rw [idxAns, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow, pow_one]
+
+/-- Each index word is the index word of `2 ^ 129` answers. -/
+theorem card_filter_idxAns (p : IdxWord → Prop) [DecidablePred p] :
+    (Finset.univ.filter fun w : BitVec 256 => p (idxAns w)).card =
+      (Finset.univ.filter p).card * 2 ^ 129 := by
+  have hu : (Finset.univ : Finset (BitVec 129)).card = 2 ^ 129 := by
+    rw [Finset.card_univ, Fintype.card_bitVec]
+  rw [← hu, ← Finset.card_product]
+  refine Finset.card_nbij' (fun w => (idxAns w,
+      BitVec.ofNat 129 (w.toNat % 2 + 2 * (w.toNat / 2 ^ 128))))
+    (fun x => BitVec.ofNat 256 (x.2.toNat % 2 + 2 * x.1.toNat + 2 ^ 128 * (x.2.toNat / 2)))
+    ?_ ?_ ?_ ?_
+  · intro w hw
+    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq] at hw
+    simp only [Finset.coe_product, Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_prod,
+      Set.mem_ofPred_eq, Finset.coe_univ, Set.mem_univ, and_true]
+    exact hw
+  · intro x hx
+    simp only [Finset.coe_product, Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_prod,
+      Set.mem_ofPred_eq, Finset.coe_univ, Set.mem_univ, and_true] at hx
+    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq]
+    have e : idxAns (BitVec.ofNat 256
+        (x.2.toNat % 2 + 2 * x.1.toNat + 2 ^ 128 * (x.2.toNat / 2))) = x.1 := by
+      apply BitVec.eq_of_toNat_eq
+      have h1 := x.1.isLt
+      have h2 := x.2.isLt
+      rw [toNat_idxAns, BitVec.toNat_ofNat]
+      omega
+    rw [e]
+    exact hx
+  · intro w _
+    apply BitVec.eq_of_toNat_eq
+    have h := w.isLt
+    simp only [BitVec.toNat_ofNat, toNat_idxAns]
+    omega
+  · intro x _
+    have h1 := x.1.isLt
+    have h2 := x.2.isLt
+    refine Prod.ext ?_ ?_
+    · apply BitVec.eq_of_toNat_eq
+      rw [toNat_idxAns, BitVec.toNat_ofNat]
+      omega
+    · apply BitVec.eq_of_toNat_eq
+      simp only [BitVec.toNat_ofNat]
+      omega
 
 namespace Params
 
@@ -147,48 +196,18 @@ theorem idxQuery_ne {m : Message} {pk : PublicKey} {η η' : Nonce} (h : η ≠ 
   have hb' : (pk ++ η) ++ m = (pk ++ η') ++ m := hb
   exact h (append_injective (append_injective hb').1).2
 
-/-- The low half of an answer. -/
-abbrev lo (w : BitVec hashBits) : Word := w.extractLsb' 0 128
-
 /-- Failure probability of one fresh index query. -/
-def miss : ℝ≥0∞ := ((2 ^ 256 - P.numValid * 2 ^ 128 : ℕ) : ℝ≥0∞) * (((2 ^ 256 : ℕ) : ℝ≥0∞))⁻¹
+def miss : ℝ≥0∞ := ((2 ^ 256 - P.numValid * 2 ^ 129 : ℕ) : ℝ≥0∞) * (((2 ^ 256 : ℕ) : ℝ≥0∞))⁻¹
 
-theorem numValid_le : P.numValid ≤ 2 ^ 128 := by
+theorem numValid_le : P.numValid ≤ 2 ^ 127 := by
   unfold numValid
   exact (Finset.card_filter_le _ _).trans (by rw [Finset.card_univ, Fintype.card_bitVec])
 
-theorem append_extract (w : BitVec 256) :
-    (w.extractLsb' 128 128 ++ w.extractLsb' 0 128 : BitVec (128 + 128)) = w := by
-  rw [BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (x := w) (start₁ := 0) (len₁ := 128)
-    (start₂ := 128) (len₂ := 128) rfl]
-  exact BitVec.extractLsb'_eq_self
-
-/-- The answers whose low half is accepted. -/
+/-- The answers whose index word is accepted. -/
 theorem card_acceptedOut :
-    (Finset.univ.filter fun w : BitVec 256 => P.Accepted (w.extractLsb' 0 128)).card =
-      P.numValid * 2 ^ 128 := by
-  have hu : (Finset.univ : Finset (BitVec 128)).card = 2 ^ 128 := by
-    rw [Finset.card_univ, Fintype.card_bitVec]
-  rw [numValid, ← hu, ← Finset.card_product]
-  refine Finset.card_nbij' (fun w => (w.extractLsb' 0 128, w.extractLsb' 128 128))
-    (fun p => (p.2 ++ p.1 : BitVec (128 + 128))) ?_ ?_ ?_ ?_
-  · intro w hw
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq] at hw
-    simp [hw]
-  · intro p hp
-    simp only [Finset.coe_product, Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_prod,
-      Set.mem_ofPred_eq, Finset.coe_univ, Set.mem_univ, and_true] at hp
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq]
-    have e : (p.2 ++ p.1 : BitVec (128 + 128)).extractLsb' 0 128 = p.1 :=
-      BitVec.extractLsb'_append_eq_right
-    rw [e]
-    exact hp
-  · intro w _
-    exact append_extract w
-  · intro p _
-    refine Prod.ext ?_ ?_
-    · exact BitVec.extractLsb'_append_eq_right
-    · exact BitVec.extractLsb'_append_eq_left
+    (Finset.univ.filter fun w : BitVec 256 => P.Accepted (idxAns w)).card =
+      P.numValid * 2 ^ 129 :=
+  card_filter_idxAns _
 
 attribute [local irreducible] hashBits
 
@@ -203,12 +222,11 @@ attribute [local semireducible] hashBits
 
 /-- One fresh uniform answer fails with probability `miss`. -/
 theorem uniform_miss (a : ℝ≥0∞) :
-    E ($ᵗ BitVec hashBits) (fun w => if P.Accepted (lo w) then 0 else a) = P.miss * a := by
-  have hn : (Finset.univ.filter fun w : BitVec 256 => ¬ P.Accepted (w.extractLsb' 0 128)).card =
-      2 ^ 256 - P.numValid * 2 ^ 128 :=
-    card_filter_not_bitVec (fun w : BitVec 256 => P.Accepted (w.extractLsb' 0 128))
-      P.card_acceptedOut
-  change E ($ᵗ BitVec 256) (fun w => if P.Accepted (w.extractLsb' 0 128) then 0 else a) = _
+    E ($ᵗ BitVec hashBits) (fun w => if P.Accepted (idxAns w) then 0 else a) = P.miss * a := by
+  have hn : (Finset.univ.filter fun w : BitVec 256 => ¬ P.Accepted (idxAns w)).card =
+      2 ^ 256 - P.numValid * 2 ^ 129 :=
+    card_filter_not_bitVec (fun w : BitVec 256 => P.Accepted (idxAns w)) P.card_acceptedOut
+  change E ($ᵗ BitVec 256) (fun w => if P.Accepted (idxAns w) then 0 else a) = _
   rw [E_uniform]
   simp only [mul_ite, mul_zero]
   rw [Finset.sum_ite, Finset.sum_const_zero, zero_add, Finset.sum_const, nsmul_eq_mul, hn,
@@ -229,7 +247,7 @@ theorem nonceOf_mem (tried : Finset Nonce) (hc : 0 < (Finset.univ \ tried).card)
 /-- The continuation after the index answer `w` at nonce `η`. -/
 def afterHash (sk : SecretKey) (m : Message) (k : ℕ) (tried : Finset Nonce) (η : Nonce)
     (w : BitVec hashBits) : OracleComp Spec (Option (List Bool)) :=
-  if P.Accepted (lo w) then pure (some (encode (P.revealed sk (lo w)) η))
+  if P.Accepted (idxAns w) then pure (some (encode (P.revealed sk (idxAns w)) η))
   else P.signLoop sk m k (insert η tried)
 
 /-- One trial at nonce `η`: the index query, then stop or recurse. -/
@@ -287,10 +305,10 @@ theorem loop_failure (sk : SecretKey) (m : Message) :
           E (run (P.afterHash sk m k tried η w)
             (c.cacheQuery ⟨896, P.idxInput m η sk.pk⟩ w))
             (fun p => if p.1.isNone then 1 else 0) =
-          if P.Accepted (lo w) then 0 else P.miss ^ k := by
+          if P.Accepted (idxAns w) then 0 else P.miss ^ k := by
         intro w
         unfold afterHash
-        by_cases hw : P.Accepted (lo w)
+        by_cases hw : P.Accepted (idxAns w)
         · rw [if_pos hw, if_pos hw, run_pure, E_pure]
           rfl
         · rw [if_neg hw, if_neg hw]
@@ -310,21 +328,21 @@ theorem loop_failure (sk : SecretKey) (m : Message) :
 
 /-! ## The numeric bound -/
 
-/-- At least `200 · 2 ^ 108` accepted indices: one trial fails with probability at most
-`1 - 200 / 2 ^ 20`. -/
-theorem miss_le (hN : 200 * 2 ^ 108 ≤ P.numValid) : P.miss ≤ 1048376 / 1048576 := by
-  have hN' : 200 * 2 ^ 236 ≤ P.numValid * 2 ^ 128 :=
-    calc 200 * 2 ^ 236 = (200 * 2 ^ 108) * 2 ^ 128 := by norm_num
+/-- At least `90 · 2 ^ 108` accepted indices: one trial fails with probability at most
+`1 - 90 / 2 ^ 19`. -/
+theorem miss_le (hN : 90 * 2 ^ 108 ≤ P.numValid) : P.miss ≤ 524198 / 524288 := by
+  have hN' : 90 * 2 ^ 237 ≤ P.numValid * 2 ^ 129 :=
+    calc 90 * 2 ^ 237 = (90 * 2 ^ 108) * 2 ^ 129 := by norm_num
       _ ≤ _ := Nat.mul_le_mul_right _ hN
-  have ha : 2 ^ 256 - P.numValid * 2 ^ 128 ≤ 1048376 * 2 ^ 236 := by
+  have ha : 2 ^ 256 - P.numValid * 2 ^ 129 ≤ 524198 * 2 ^ 237 := by
     have h := Nat.sub_le_sub_left hN' (2 ^ 256)
-    have e : 2 ^ 256 - 200 * 2 ^ 236 = 1048376 * 2 ^ 236 := by norm_num
+    have e : 2 ^ 256 - 90 * 2 ^ 237 = 524198 * 2 ^ 237 := by norm_num
     omega
-  calc P.miss = ((2 ^ 256 - P.numValid * 2 ^ 128 : ℕ) : ℝ≥0∞) / 2 ^ 256 := by
+  calc P.miss = ((2 ^ 256 - P.numValid * 2 ^ 129 : ℕ) : ℝ≥0∞) / 2 ^ 256 := by
         rw [miss, div_eq_mul_inv, Nat.cast_pow, Nat.cast_ofNat]
-    _ ≤ ((1048376 * 2 ^ 236 : ℕ) : ℝ≥0∞) / 2 ^ 256 :=
+    _ ≤ ((524198 * 2 ^ 237 : ℕ) : ℝ≥0∞) / 2 ^ 256 :=
         ENNReal.div_le_div_right (Nat.cast_le.mpr ha) _
-    _ = 1048376 / 1048576 := by
+    _ = 524198 / 524288 := by
       rw [ENNReal.div_eq_div_iff (by norm_num) (by finiteness) (by norm_num) (by finiteness)]
       norm_num
 
@@ -352,34 +370,31 @@ private theorem ofReal_frac (a b : ℕ) (hb : 0 < b) :
   rw [ENNReal.ofReal_div_of_pos (by exact_mod_cast hb), ENNReal.ofReal_natCast,
     ENNReal.ofReal_natCast]
 
-/-- `2 ^ 19` trials fail with probability at most `2 ^ -128`: blocks of 512 trials by the
-reciprocal bound, `(2 ^ 20 / 1150976) ^ 32 ≤ 0.051`, and `0.051 ^ 32 ≤ 2 ^ -128`. -/
-theorem miss_trials_le (hN : 200 * 2 ^ 108 ≤ P.numValid) :
+/-- `2 ^ 19` trials fail with probability at most `2 ^ -128`: blocks of 128 trials by the
+reciprocal bound, `(2 ^ 19 / 535808) ^ 64 ≤ 1 / 4`, and `(1 / 4) ^ 64 = 2 ^ -128`. -/
+theorem miss_trials_le (hN : 90 * 2 ^ 108 ≤ P.numValid) :
     P.miss ^ trials ≤ 1 / 2 ^ 128 := by
-  have hreal : ((1048376 : ℝ) / 1048576) ^ trials ≤ 1 / 2 ^ 128 := by
-    have h512 := bernoulli_reciprocal (p := (200 : ℝ) / 1048576) (by norm_num) (by norm_num) 512
-    have hbase : (1 : ℝ) - 200 / 1048576 = 1048376 / 1048576 := by norm_num
-    have hden : 1 + ((512 : ℕ) : ℝ) * (200 / 1048576) = 1150976 / 1048576 := by norm_num
-    rw [hbase, hden, one_div_div] at h512
-    have hnn : (0 : ℝ) ≤ ((1048376 : ℝ) / 1048576) ^ 512 := by positivity
-    have h32 : ((1048576 : ℝ) / 1150976) ^ 32 ≤ 51 / 1000 := by
+  have hreal : ((524198 : ℝ) / 524288) ^ trials ≤ 1 / 2 ^ 128 := by
+    have h128 := bernoulli_reciprocal (p := (90 : ℝ) / 524288) (by norm_num) (by norm_num) 128
+    have hbase : (1 : ℝ) - 90 / 524288 = 524198 / 524288 := by norm_num
+    have hden : 1 + ((128 : ℕ) : ℝ) * (90 / 524288) = 535808 / 524288 := by norm_num
+    rw [hbase, hden, one_div_div] at h128
+    have hnn : (0 : ℝ) ≤ ((524198 : ℝ) / 524288) ^ 128 := by positivity
+    have h64 : ((524288 : ℝ) / 535808) ^ 64 ≤ 1 / 4 := by
       rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
       norm_num
-    have h51 : ((51 : ℝ) / 1000) ^ 32 ≤ 1 / 2 ^ 128 := by
-      rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
-      norm_num
-    calc ((1048376 : ℝ) / 1048576) ^ trials
-        = ((((1048376 : ℝ) / 1048576) ^ 512) ^ 32) ^ 32 := by
+    calc ((524198 : ℝ) / 524288) ^ trials
+        = ((((524198 : ℝ) / 524288) ^ 128) ^ 64) ^ 64 := by
           rw [← pow_mul, ← pow_mul]; rfl
-      _ ≤ (((1048576 : ℝ) / 1150976) ^ 32) ^ 32 := by
+      _ ≤ (((524288 : ℝ) / 535808) ^ 64) ^ 64 := by
           gcongr
-      _ ≤ ((51 : ℝ) / 1000) ^ 32 := by gcongr
-      _ ≤ 1 / 2 ^ 128 := h51
+      _ ≤ ((1 : ℝ) / 4) ^ 64 := by gcongr
+      _ = 1 / 2 ^ 128 := by norm_num
   refine (pow_le_pow_left' (P.miss_le hN) trials).trans ?_
   have h' := ENNReal.ofReal_le_ofReal hreal
   rw [ENNReal.ofReal_pow (by norm_num)] at h'
-  have hb : ENNReal.ofReal ((1048376 : ℝ) / 1048576) = (1048376 / 1048576 : ℝ≥0∞) := by
-    have := ofReal_frac 1048376 1048576 (by norm_num)
+  have hb : ENNReal.ofReal ((524198 : ℝ) / 524288) = (524198 / 524288 : ℝ≥0∞) := by
+    have := ofReal_frac 524198 524288 (by norm_num)
     simpa using this
   have hh : ENNReal.ofReal ((1 : ℝ) / 2 ^ 128) = (1 / 2 ^ 128 : ℝ≥0∞) := by
     rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_one,
@@ -401,7 +416,7 @@ theorem sign_failure (sk : SecretKey) (m : Message) (c : Cache) (hc : P.NoIdx c)
     E (run (P.sign sk m) c) (fun p => if p.1.isNone then 1 else 0) = P.miss ^ trials :=
   P.sign_eq sk m ▸ P.loop_failure sk m trials ∅ c (by norm_num [trials]) (fun η _ => hc m η sk.pk)
 
-theorem sign_isNone_le (hN : 200 * 2 ^ 108 ≤ P.numValid) (sk : SecretKey) (m : Message)
+theorem sign_isNone_le (hN : 90 * 2 ^ 108 ≤ P.numValid) (sk : SecretKey) (m : Message)
     (c : Cache) (hc : P.NoIdx c) :
     E (run (P.sign sk m >>= fun σ => pure σ.isNone) c) (fun p => if p.1 = true then 1 else 0) ≤
       1 / 2 ^ signingFailureBits := by
@@ -411,10 +426,10 @@ theorem sign_isNone_le (hN : 200 * 2 ^ 108 ≤ P.numValid) (sk : SecretKey) (m :
   exact P.miss_trials_le hN
 
 /-- **Signing availability.** For every message chosen from the public key, signing fails with
-probability at most `2 ^ -128`, given the metadata separation and `200 · 2 ^ 108` accepted
+probability at most `2 ^ -128`, given the metadata separation and `90 · 2 ^ 108` accepted
 indices. -/
 theorem signingFailure (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd)
-    (hN : 200 * 2 ^ 108 ≤ P.numValid) :
+    (hN : 90 * 2 ^ 108 ≤ P.numValid) :
     P.scheme.SigningFailureAtMost (1 / 2 ^ signingFailureBits) := by
   intro message
   rw [probTrue_eq_E_run, run_bind, E_bind]

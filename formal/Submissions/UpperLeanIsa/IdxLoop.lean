@@ -96,10 +96,10 @@ theorem signLoop_eq_map (sk : SecretKey) (m : Message) :
       refine bind_congr fun w => ?_
       unfold afterHash idxAfterHash
       by_cases hi : idxOf w ∈ P.validSet
-      · have ha : P.Accepted (lo w) := (P.mem_validSet_iff w).mp hi
+      · have ha : P.Accepted (idxAns w) := (P.mem_validSet_iff w).mp hi
         rw [if_pos ha, dif_pos hi, map_pure]
         simp only [sigOfIdx, Option.map_some, idxWord_idxOf]
-      · have ha : ¬ P.Accepted (lo w) := fun h => hi ((P.mem_validSet_iff w).mpr h)
+      · have ha : ¬ P.Accepted (idxAns w) := fun h => hi ((P.mem_validSet_iff w).mpr h)
         rw [if_neg ha, dif_neg hi]
         exact ih _
     · rw [signLoop, signIdxLoop, dif_neg hc, dif_neg hc, map_pure]
@@ -368,7 +368,7 @@ theorem mem_V {d : Cache} {u : EncInput} {w : BitVec hashBits}
   · exact P.mem_validInputs.2 ⟨w, hu, hw⟩
   · rw [hu, idxOfOpt_some]
 
-theorem V_lt (d : Cache) : ∀ n ∈ P.V d, n < 2 ^ 128 := by
+theorem V_lt (d : Cache) : ∀ n ∈ P.V d, n < 2 ^ 127 := by
   intro n hn
   obtain ⟨u, hu, rfl⟩ := Finset.mem_image.1 hn
   obtain ⟨w, hw, -⟩ := (P.mem_validInputs).1 hu

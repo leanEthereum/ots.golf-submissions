@@ -16,8 +16,9 @@ signing and the second stage. The potential
 
 (`ψ` the row potential of the index cache, ported from UpperRiscv) grows by at most
 `κ · sumW (fiber₀ v)` per compression, split by query shape (`ΦA_charge`): an index query only
-moves `θ ψ`, by at most `2 · 2 ^ -128` per query (`psi_charge`), and a chain or root query only
-the hidden and second-preimage terms, by at most `2 · 2 ^ -129` per compression. The
+moves `θ ψ`, by at most `(19/10) · 2 ^ -127` per query of two compressions (`psi_charge`), and a
+chain or root query only the hidden and second-preimage terms, by at most `2 · 2 ^ -129` per
+compression. The
 continuation is bounded by signing as one disjoint case split (`signRho_bound`, with `θ ψ`
 bounding the loss of a pre-held signed index, `psi_dom`), then the second stage (`stageB_none`,
 `stageB_some`) (`stageA_cont`). The master lemma gives `stageA_master`.
@@ -51,7 +52,7 @@ theorem table_getD (ξ : Record P) (k : Fin numChains) (j : ℕ) (hj : j < P.len
   rw [List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_range hj]
   rfl
 
-theorem revealed_record (hP : P.Hyp) (ξ : Record P) (I : Word) (k : Fin numChains) :
+theorem revealed_record (hP : P.Hyp) (ξ : Record P) (I : IdxWord) (k : Fin numChains) :
     P.revealed ξ.sk I k = ξ.word k (afterSigning P I k) := by
   unfold revealed afterSigning
   have := hP.len_pos k
@@ -104,7 +105,7 @@ theorem publicData_mono {d₀ d₁ : Cut} (h : ∀ k, d₁ k ≤ d₀ k) (ξ ζ 
       · simp only [publicData, hb, if_false]
     · simp only [publicData, data_root_eq d₁ ξ ζ hd r]
 
-theorem afterSigning_le (I : Word) (k : Fin numChains) :
+theorem afterSigning_le (I : IdxWord) (k : Fin numChains) :
     afterSigning P I k ≤ beforeSigning P k := Nat.sub_le _ _
 
 /-! ## The second stage after a successful signing, over all public fibers -/
@@ -192,8 +193,9 @@ def ΦA (v : PublicData P) (c : Cache) : ℝ≥0∞ :=
     ∑ ξ ∈ P.fiber₀ v, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
     sumW P (P.fiber₀ v) * P.encTerm c
 
-/-- The budget invariant of the index potential. -/
-def Inv (c : Cache) (b : ℕ) : Prop := P.encCount c + b ≤ 2 ^ 127
+/-- The budget invariant of the index potential: every index entry was paid by an index query of
+two compressions. -/
+def Inv (c : Cache) (b : ℕ) : Prop := 2 * P.encCount c + b ≤ 2 ^ 127
 
 /-- The first-stage invariant. -/
 def InvA (v : PublicData P) (c : Cache) (b : ℕ) : Prop :=
@@ -207,9 +209,13 @@ theorem Inv_fresh : ∀ c b q, P.Inv c b → c q = none → queryCost (.inr q) �
     ∀ u, P.Inv (c.cacheQuery q u) (b - queryCost (.inr q)) := by
   intro c b q hI _ hcost u
   unfold Inv at hI ⊢
-  have h1 := P.encCount_cacheQuery_le c q u
-  have h2 := one_le_queryCost q
-  omega
+  by_cases henc : ∃ u₀, q = P.encQuery u₀
+  · obtain ⟨u₀, rfl⟩ := henc
+    have h1 := P.encCount_cacheQuery_le c (P.encQuery u₀) u
+    have h2 : queryCost (.inr (P.encQuery u₀)) = 2 := queryCost_896 (by unfold Params.encQuery; rfl)
+    omega
+  · have h1 := P.encCount_cacheQuery_of_ne c (fun u' h => henc ⟨u', h⟩) u
+    omega
 
 theorem Inv_cached : ∀ c b q, P.Inv c b → (c q).isSome → queryCost (.inr q) ≤ b →
     P.Inv c (b - queryCost (.inr q)) := by
@@ -231,7 +237,7 @@ theorem InvA_cached (v : PublicData P) : ∀ c b q, P.InvA v c b → (c q).isSom
 /-- The hypotheses of the row potential. -/
 theorem rowHyp (hP : P.Hyp) : @RowPot.RowHyp ⟨P⟩ := by
   letI : RowPot.RowCtx := ⟨P⟩
-  refine ⟨by rw [RowPot.nonceBits_eq, RowPot.idxBits_eq],
+  refine ⟨by rw [RowPot.nonceBits_eq, RowPot.idxBits_eq]; omega,
     by rw [RowPot.idxBits_eq]; unfold hashBits; omega, ?_, ?_, ?_⟩
   · show 2 ≤ P.validSet.card
     rw [P.card_validSet]
@@ -240,7 +246,7 @@ theorem rowHyp (hP : P.Hyp) : @RowPot.RowHyp ⟨P⟩ := by
   · show 2 * P.validSet.card ≤ 2 ^ RowPot.idxBits
     rw [P.card_validSet, RowPot.idxBits_eq]
     exact hP.numValid_le
-  · show 24 * trials ≤ 2 ^ RowPot.idxBits
+  · show 64 * trials ≤ 2 ^ RowPot.idxBits
     rw [RowPot.idxBits_eq]
     unfold trials
     norm_num
@@ -267,7 +273,7 @@ theorem encTerm_charge (hP : P.Hyp) {c : Cache} {b : ℕ} (hI : P.Inv c b) (u₀
   unfold encTerm
   refine h.trans (le_of_eq ?_)
   congr 1
-  rw [RowPot.idxBits_eq, κ_eq, mul_comm]
+  rw [RowPot.idxBits_eq, κ_mul_two]
 
 theorem psi_zero_of_noEnc (c : Cache) (hc : ∀ u, c (P.encQuery u) = none) :
     P.encTerm c = 0 := by
@@ -337,9 +343,15 @@ theorem ΦA_charge (hP : P.Hyp) (v : PublicData P) : ∀ c b q, P.InvA v c b →
             sumW P (P.fiber₀ v) * (rate * queryCost (.inr q))) +
           sumW P (P.fiber₀ v) * P.encTerm c :=
           add_le_add (add_le_add h1 h2) (mul_le_mul' le_rfl (le_of_eq h3))
-      _ = _ := by
-          unfold κ fiber₀
+      _ = hiddenHitPotential (beforeSigning P) (P.fiber₀ v) c +
+            ∑ ξ ∈ P.fiber₀ v, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
+            sumW P (P.fiber₀ v) * P.encTerm c +
+            2 * rate * sumW P (P.fiber₀ v) * queryCost (.inr q) := by
+          unfold fiber₀
           ring
+      _ ≤ _ := by
+          gcongr
+          exact two_rate_le_κ
 
 theorem ΦA_initial (hP : P.Hyp) (v : PublicData P) (ζ₀ : Record P) (hζ₀ : ζ₀ ∈ P.fiber₀ v) :
     P.ΦA v (exposedCache (beforeSigning P) ζ₀) = 0 := by
@@ -381,8 +393,8 @@ theorem E_le_one' {α : Type} (p : ProbComp α) {f : α → ℝ≥0∞} (hf : �
 
 theorem psi_dom' (hP : P.Hyp) {d : Cache} {b : ℕ} (hI : P.Inv d b) (m : EMessage) (c : ℕ)
     (hc1 : (P.rowFresh d m).card ≤ c + trials) (hc2 : c ≤ (P.rowFresh d m).card) :
-    ((P.rowBad d m).card : ℝ≥0∞) + c * (((P.V d).card : ℝ≥0∞) / 2 ^ 128) ≤
-      P.encTerm d * ((P.rowAcc d m).card + c * ((P.numValid : ℝ≥0∞) / 2 ^ 128)) := by
+    ((P.rowBad d m).card : ℝ≥0∞) + c * (((P.V d).card : ℝ≥0∞) / 2 ^ 127) ≤
+      P.encTerm d * ((P.rowAcc d m).card + c * ((P.numValid : ℝ≥0∞) / 2 ^ 127)) := by
   letI : RowPot.RowCtx := ⟨P⟩
   have h := RowPot.psi_dom (P.rowHyp hP) (P.two_encCount_le hI) m c hc1 hc2
   rw [RowPot.idxBits_eq, RowPot.numValid_eq] at h
@@ -511,7 +523,7 @@ theorem stageA_master (hP : P.Hyp) (v : PublicData P) (ζ₀ : Record P) (hζ₀
     · rw [exposedCache_data_eq hP beforeSigning_valid ζ₀ ξ (hdata ξ hξ).symm]
       exact Cache.Sub.refl _
     · unfold Inv
-      rw [P.encCount_noEnc _ fun u => P.exposedCache_enc hP _ ζ₀ u, zero_add]
+      rw [P.encCount_noEnc _ fun u => P.exposedCache_enc hP _ ζ₀ u, mul_zero, zero_add]
       exact hb
   have h := master_family (α := Message × A.State) (β := Bool) (J := {ξ // ξ ∈ P.fiber₀ v})
     (κ * sumW P (P.fiber₀ v)) (P.ΦA v) (P.InvA v) (P.InvA_fresh v) (P.InvA_cached v)

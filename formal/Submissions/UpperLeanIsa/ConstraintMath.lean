@@ -101,9 +101,9 @@ theorem fixed_root (t : Fin numChains → Word) :
   rw [simulateQ_map, fixed_rootFrom, map_pure]
   rfl
 
-/-- The index under the table. -/
-def idxValue (m : Message) (η : Nonce) (pk : PublicKey) : Word :=
-  (ans f (P.idxInput m η pk)).extractLsb' 0 128
+/-- The index under the table: bits `1, …, 127` of the index answer. -/
+def idxValue (m : Message) (η : Nonce) (pk : PublicKey) : IdxWord :=
+  idxAns (ans f (P.idxInput m η pk))
 
 theorem fixed_index (m : Message) (η : Nonce) (pk : PublicKey) :
     simulateQ (unifFwdAnswerImpl f) (P.index m η pk) = pure (idxValue f P m η pk) := by
@@ -111,7 +111,7 @@ theorem fixed_index (m : Message) (η : Nonce) (pk : PublicKey) :
   rfl
 
 /-- The chain tops the verifier computes for index `I`. -/
-def topsOf (I : Word) (bits : List Bool) (k : Fin numChains) : Word :=
+def topsOf (I : IdxWord) (bits : List Bool) (k : Fin numChains) : Word :=
   chainValue f P k (P.len k - 1 - P.digit I k) (P.digit I k) (decodeWord bits k)
 
 open scoped Classical in

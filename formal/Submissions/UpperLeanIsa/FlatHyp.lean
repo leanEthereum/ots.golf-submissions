@@ -7,8 +7,8 @@ import Submissions.UpperLeanIsa.BasicProperties
 `Flat.hyp : Flat.params.Hyp`: the digit fields tile the index (digits determine the index), the
 tag symbols `sym (p % 7), sym (p / 7 % 7), sym (p / 49)` (`sym` is injective below `7`)
 determine the step position `p = off k + j` and hence `(k, j)`, and the metadata values `1`
-(chains), `10` (index) and `0, 2, 4, …, 128, 5504` (root calls) are pairwise distinct. Hence
-`Flat.admissible`, with the concrete budgets `keygen 638`, `sign 2 ^ 20` and `verify 232`.
+(chains), `5504` (index) and `0, 2, 4, …, 128, k0Md` (root calls) are pairwise distinct. Hence
+`Flat.admissible`, with the concrete budgets `keygen 622`, `sign 2 ^ 20` and `verify 226`.
 -/
 
 open OracleSpec OracleComp
@@ -23,14 +23,14 @@ namespace OptimalOTS.LeanIsaBaseline.Layer
 
 namespace Flat
 
-theorem len_eq (k : Fin numChains) : len k = if k.val < 40 then 8 else 16 := by
+theorem len_eq (k : Fin numChains) : len k = if k.val < 41 then 8 else 16 := by
   have hk := k.isLt
   unfold len wid
-  by_cases h : k.val < 40
+  by_cases h : k.val < 41
   · rw [if_pos h, if_pos h]; rfl
   · rw [if_neg h, if_pos (show k.val < 42 by omega), if_neg h]; rfl
 
-theorem digit_inj (I I' : Word) (h : ∀ k, digit I k = digit I' k) : I = I' := by
+theorem digit_inj (I I' : IdxWord) (h : ∀ k, digit I k = digit I' k) : I = I' := by
   apply BitVec.eq_of_toNat_eq
   have hI : I.toNat < 2 ^ posW wid 42 := by rw [pos_42]; exact I.isLt
   have hI' : I'.toNat < 2 ^ posW wid 42 := by rw [pos_42]; exact I'.isLt
@@ -80,29 +80,29 @@ theorem hyp : params.Hyp where
   numValid_ge := numValid_ge
   numValid_le := by rw [numValid_eq]; norm_num
   keygen_le := by
-    have : (∑ k : Fin numChains, (params.len k - 1)) = 310 := by
-      change (∑ k : Fin numChains, (len k - 1)) = 310
+    have : (∑ k : Fin numChains, (params.len k - 1)) = 302 := by
+      change (∑ k : Fin numChains, (len k - 1)) = 302
       simp only [len_eq]
       decide
     rw [this]; norm_num
-  verify_le := by change 20 + 2 * 106 ≤ 2 ^ 20; norm_num
+  verify_le := by change 20 + 2 * 103 ≤ 2 ^ 20; norm_num
   len_zero := by change 2 ≤ len 0; rw [len_eq]; decide
 
 /-- **Admissibility of HL-FLAT-A.** -/
 theorem admissible : scheme.Admissible := params.admissible hyp
 
-/-- Key generation of HL-FLAT-A costs 638 compressions on every path. -/
-theorem keygen_cost : CostAtMost params.keygen 638 := by
+/-- Key generation of HL-FLAT-A costs 622 compressions on every path. -/
+theorem keygen_cost : CostAtMost params.keygen 622 := by
   have h := params.cost_keygen
-  have : (∑ k : Fin numChains, (params.len k - 1)) = 310 := by
-    change (∑ k : Fin numChains, (len k - 1)) = 310
+  have : (∑ k : Fin numChains, (params.len k - 1)) = 302 := by
+    change (∑ k : Fin numChains, (len k - 1)) = 302
     simp only [len_eq]
     decide
   rwa [this] at h
 
-/-- Verification of HL-FLAT-A costs at most 232 compressions on every path. -/
+/-- Verification of HL-FLAT-A costs at most 226 compressions on every path. -/
 theorem verify_cost (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (params.verify pk m bits) 232 :=
+    CostAtMost (params.verify pk m bits) 226 :=
   params.cost_verify pk m bits
 
 end Flat

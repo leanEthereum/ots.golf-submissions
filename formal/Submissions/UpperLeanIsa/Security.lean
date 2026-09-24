@@ -6,11 +6,12 @@ import Submissions.UpperLeanIsa.StageA
 For every adversary `A` whose experiment costs at most `B ≤ 2 ^ 127` compressions on every path,
 
 ```
-probTrue (experiment P.scheme A) ≤ κ B = B / 2 ^ 128 < B / 2 ^ 127,
+probTrue (experiment P.scheme A) ≤ κ B = (19/20) · B / 2 ^ 127 < B / 2 ^ 127,
 ```
 
 where the strict inequality uses `2 ≤ B` (the first chain query of key generation); for larger
-budgets the bound is trivial.
+budgets the bound is trivial. `κ` is the charge per compression (`StageB.κ`): every query costs two
+compressions, and the largest charge per query is the index charge `(19/10) · 2 ^ -127`.
 
 The proof: key generation is a uniform record (`E_run_keygen`); the first attacker stage is
 coupled to a run in which only the exposed part of the keygen cache is present (`iub`); records
@@ -327,13 +328,11 @@ theorem main_bound (hP : P.Hyp) {B : ℕ}
 
 theorem κ_mul_lt {B : ℕ} (h2 : 2 ≤ B) : κ * (B : ℝ≥0∞) < (B : ℝ≥0∞) / 2 ^ securityBits := by
   have hsec : securityBits = 127 := rfl
-  rw [κ_eq, hsec, ENNReal.div_eq_inv_mul]
+  rw [hsec, ENNReal.div_eq_inv_mul]
   have hB0 : (B : ℝ≥0∞) ≠ 0 := by
     have hB : B ≠ 0 := by omega
     exact_mod_cast hB
-  have hlt : (2 : ℝ≥0∞) ^ 127 < 2 ^ 128 := by
-    exact_mod_cast (show (2 : ℕ) ^ 127 < 2 ^ 128 by norm_num)
-  exact ENNReal.mul_lt_mul_left hB0 (ENNReal.natCast_ne_top B) (ENNReal.inv_lt_inv.2 hlt)
+  exact ENNReal.mul_lt_mul_left hB0 (ENNReal.natCast_ne_top B) κ_lt
 
 theorem one_lt_div {B : ℕ} (h : 2 ^ 127 < B) :
     (1 : ℝ≥0∞) < (B : ℝ≥0∞) / 2 ^ securityBits := by

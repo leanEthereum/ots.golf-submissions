@@ -7,13 +7,16 @@ import Submissions.UpperLeanIsa.MachineCycles
 vector `s`, and agreeing with the loader on the pinned cells, certify a signature that
 `Flat.params.verify` accepts under the table.
 
-1. The prologue pins `Z, ONE, LEN, TIDX, g, K0` and `g ^ 2 … g ^ 7` (the cells of the tag
-   symbols and the root metadata); the length cell pins `|σ| = 5504`, so the loader's cells are
+1. The prologue pins `Z, ONE, LEN, g, K0` and `g ^ 2 … g ^ 7` (the cells of the tag
+   symbols and the metadata); the length cell pins `|σ| = 5504`, so the loader's cells are
    the 42 words and the nonce.
-2. The index `BLAKE2S` is the scheme's index query; its low half `I` is the index cell.
-3. The group ties accumulate the tie words into the index cell (`idx_of_facts`); the words' bit
-   fields are disjoint, so `I` is the digit vector (`tie_sum`) and `digit I k = s k`; the layer
-   products force `Σ s = 106` (`layer_of_facts`), so `I` is accepted.
+2. The index `BLAKE2S` is the scheme's index query; its low half is the index cell, and the
+   index `I` is bits `1 … 127` of it.
+3. The group ties accumulate the tie words into the index cell (`idx_of_facts`); group 0's word
+   carries the junk digit `s 42 < 2` at bit `0`, and the digits' bit fields are disjoint and start
+   at bit `1`, so the cell is `s 42 + 2 · I'` with `I'` the number of the digit vector
+   (`tie_sum`); hence `I = I'` and
+   `digit I k = s k`; the layer products force `Σ s = 103` (`layer_of_facts`), so `I` is accepted.
 4. The inline `BLAKE2S` compute the verifier's chain tops (`chain_top`; the last step of a
    high-top chain leaves its top in the high cell of its pair), the nine root calls compute its
    root (`root_state`), and the pk `XOR` compares it with the public key.
@@ -46,6 +49,10 @@ theorem cellBits_gV : cellBits gV = BitVec.ofNat 128 2 := by rw [gV, cellBits_of
 /-- The prologue powers `g ^ w`, `w < 8`, are the words `2 ^ w`. -/
 theorem cellBits_gpow {w : ℕ} (hw : w < 8) : cellBits (ofK (gpow w)) = BitVec.ofNat 128 (2 ^ w) := by
   rw [cellBits_ofK]; interval_cases w <;> decide +kernel
+
+/-- `K0 = g ^ rootSlot` is the metadata word of root call 8. -/
+theorem cellBits_k0V : cellBits k0V = BitVec.ofNat 128 Flat.k0Md := by
+  rw [k0V, cellBits_ofK]; decide +kernel
 
 theorem cellBits_symV {i : ℕ} (hi : i < 7) : cellBits (symV i) = Flat.sym i := by
   unfold symV Flat.sym
@@ -153,63 +160,77 @@ theorem sz_lt {s : ℕ → ℕ} (hV : Valid s) (k : ℕ) : sz s k < 2 ^ Flat.wid
   unfold sz Flat.wid
   by_cases hk : k < 42
   · rw [if_pos hk]
-    have := hV k hk
+    have := hV.1 k hk
     unfold W at this
     split_ifs at * <;> omega
   · rw [if_neg hk, if_neg (by omega), if_neg hk]; norm_num
 
-/-- The cells of `n` disjoint digit fields add up to the cell of their number. -/
+/-- A digit in its field of the index cell stays below the next field. -/
+theorem field_lt {N x k : ℕ} (hN : N < 2 ^ (1 + posW Flat.wid k)) (hx : x < 2 ^ Flat.wid k) :
+    N + x * 2 ^ (1 + posW Flat.wid k) < 2 ^ (1 + posW Flat.wid (k + 1)) := by
+  rw [posW_succ, ← Nat.add_assoc, pow_add 2 (1 + posW Flat.wid k) (Flat.wid k)]
+  have : (x + 1) * 2 ^ (1 + posW Flat.wid k) ≤ 2 ^ Flat.wid k * 2 ^ (1 + posW Flat.wid k) :=
+    Nat.mul_le_mul_right _ hx
+  rw [mul_comm (2 ^ (1 + posW Flat.wid k))]
+  nlinarith
+
+/-- The index-cell fields end at bit `128`. -/
+theorem field_end {k : ℕ} (hk : k ≤ 42) : 2 ^ (1 + posW Flat.wid k) ≤ 2 ^ 128 := by
+  have := posW_mono Flat.wid hk
+  rw [Flat.pos_42] at this
+  exact Nat.pow_le_pow_right (by norm_num) (by omega)
+
+theorem natV_field {N x k : ℕ} (hk : k < 42) (hN : N < 2 ^ (1 + posW Flat.wid k))
+    (hx : x < 2 ^ Flat.wid k) :
+    natV N + natV (x * 2 ^ (1 + posW Flat.wid k)) = natV (N + x * 2 ^ (1 + posW Flat.wid k)) := by
+  have h1 := field_lt hN hx
+  have h2 := field_end (show k + 1 ≤ 42 by omega)
+  exact natV_add_disjoint hN (by omega)
+
+/-- The cells of `n` disjoint digit fields, one bit up, add up to the cell of twice their number. -/
 theorem natV_digits_sum (c : ℕ → ℕ) (hc : ∀ k, c k < 2 ^ Flat.wid k) :
-    ∀ n, n ≤ 42 → ∑ k ∈ Finset.range n, natV (c k * 2 ^ posW Flat.wid k) =
-      natV (ofDigitsW Flat.wid c n) := by
+    ∀ n, n ≤ 42 → ∑ k ∈ Finset.range n, natV (c k * 2 ^ (1 + posW Flat.wid k)) =
+      natV (2 * ofDigitsW Flat.wid c n) := by
   intro n
   induction n with
-  | zero => intro _; rw [Finset.sum_range_zero, ofDigitsW_zero, natV_zero]
+  | zero => intro _; rw [Finset.sum_range_zero, ofDigitsW_zero, mul_zero, natV_zero]
   | succ n ih =>
     intro hn
     have hlt := ofDigitsW_lt Flat.wid c hc n
-    have hlt2 := ofDigitsW_lt Flat.wid c hc (n + 1)
-    have hpow : 2 ^ posW Flat.wid (n + 1) ≤ 2 ^ 128 :=
-      Nat.pow_le_pow_right (by norm_num) (by rw [← Flat.pos_42]; exact posW_mono Flat.wid hn)
-    rw [Finset.sum_range_succ, ih (by omega), ofDigitsW_succ] at *
-    rw [natV_add_disjoint hlt (by omega)]
-
-/-- A digit in its field stays below the next field. -/
-theorem field_lt {N x k : ℕ} (hN : N < 2 ^ posW Flat.wid k) (hx : x < 2 ^ Flat.wid k) :
-    N + x * 2 ^ posW Flat.wid k < 2 ^ posW Flat.wid (k + 1) := by
-  rw [posW_succ, pow_add]
-  have : (x + 1) * 2 ^ posW Flat.wid k ≤ 2 ^ Flat.wid k * 2 ^ posW Flat.wid k :=
-    Nat.mul_le_mul_right _ hx
-  rw [mul_comm (2 ^ posW Flat.wid k)]
-  nlinarith
-
-theorem natV_field {N x k : ℕ} (hk : k < 42) (hN : N < 2 ^ posW Flat.wid k)
-    (hx : x < 2 ^ Flat.wid k) :
-    natV N + natV (x * 2 ^ posW Flat.wid k) = natV (N + x * 2 ^ posW Flat.wid k) := by
-  have h1 := field_lt hN hx
-  have h2 : 2 ^ posW Flat.wid (k + 1) ≤ 2 ^ 128 :=
-    Nat.pow_le_pow_right (by norm_num) (by rw [← Flat.pos_42]; exact posW_mono Flat.wid (by omega))
-  exact natV_add_disjoint hN (by omega)
+    have h2 : 2 * ofDigitsW Flat.wid c n < 2 ^ (1 + posW Flat.wid n) := by
+      rw [pow_add, pow_one]; omega
+    rw [Finset.sum_range_succ, ih (by omega), natV_field (by omega) h2 (hc n), ofDigitsW_succ,
+      pow_add, pow_one]
+    congr 1
+    ring
 
 theorem gch_mono {g : ℕ} (hg : g < 14) : gch g 0 < gch g 1 ∧ gch g 1 < gch g 2 := by
   unfold gch; split_ifs <;> omega
 
-/-- The tie word of a group is the sum of its three fields. -/
-theorem natV_gword {g a b c : ℕ} (hg : g < 14) (ha : a < 2 ^ Flat.wid (gch g 0))
+/-- The tie word of a group is its junk digit plus the sum of its three fields. -/
+theorem natV_gword {g d a b c : ℕ} (hg : g < 14) (hd : d < 2) (ha : a < 2 ^ Flat.wid (gch g 0))
     (hb : b < 2 ^ Flat.wid (gch g 1)) (hc : c < 2 ^ Flat.wid (gch g 2)) :
-    natV (gword g a b c) = natV (a * 2 ^ posW Flat.wid (gch g 0)) +
-      natV (b * 2 ^ posW Flat.wid (gch g 1)) + natV (c * 2 ^ posW Flat.wid (gch g 2)) := by
+    natV (gword g d a b c) = natV d + (natV (a * 2 ^ (1 + posW Flat.wid (gch g 0))) +
+      natV (b * 2 ^ (1 + posW Flat.wid (gch g 1))) +
+        natV (c * 2 ^ (1 + posW Flat.wid (gch g 2)))) := by
   obtain ⟨h01, h12⟩ := gch_mono hg
   have hl2 := gch_lt hg (show 2 < 3 by omega)
-  have ha' := field_lt (N := 0) (Nat.two_pow_pos _) ha
-  rw [Nat.zero_add] at ha'
-  have ha1 : a * 2 ^ posW Flat.wid (gch g 0) < 2 ^ posW Flat.wid (gch g 1) :=
-    lt_of_lt_of_le ha' (Nat.pow_le_pow_right (by norm_num) (posW_mono Flat.wid h01))
-  have hb2 : a * 2 ^ posW Flat.wid (gch g 0) + b * 2 ^ posW Flat.wid (gch g 1) <
-      2 ^ posW Flat.wid (gch g 2) :=
-    lt_of_lt_of_le (field_lt ha1 hb) (Nat.pow_le_pow_right (by norm_num) (posW_mono Flat.wid h12))
+  have hd0 : d < 2 ^ (1 + posW Flat.wid (gch g 0)) :=
+    lt_of_lt_of_le hd (by
+      calc 2 = 2 ^ 1 := rfl
+        _ ≤ _ := Nat.pow_le_pow_right (by norm_num) (by omega))
+  have ha' := field_lt hd0 ha
+  have ha1 : d + a * 2 ^ (1 + posW Flat.wid (gch g 0)) < 2 ^ (1 + posW Flat.wid (gch g 1)) :=
+    lt_of_lt_of_le ha'
+      (Nat.pow_le_pow_right (by norm_num) (Nat.add_le_add_left (posW_mono Flat.wid h01) 1))
+  have hb2 : d + a * 2 ^ (1 + posW Flat.wid (gch g 0)) + b * 2 ^ (1 + posW Flat.wid (gch g 1)) <
+      2 ^ (1 + posW Flat.wid (gch g 2)) :=
+    lt_of_lt_of_le (field_lt ha1 hb)
+      (Nat.pow_le_pow_right (by norm_num) (Nat.add_le_add_left (posW_mono Flat.wid h12) 1))
   unfold gword
-  rw [← natV_field hl2 hb2 hc, ← natV_field (by omega) ha1 hb]
+  rw [← natV_field hl2 hb2 hc, ← natV_field (by omega) ha1 hb,
+    ← natV_field (by omega) hd0 ha]
+  abel
 
 /-- The groups partition the 42 chains. -/
 theorem sum_groups {M : Type*} [AddCommMonoid M] (e : ℕ → M) :
@@ -219,17 +240,23 @@ theorem sum_groups {M : Type*} [AddCommMonoid M] (e : ℕ → M) :
   norm_num
   abel
 
-/-- **The tie words.** The fourteen group words add up to the cell of the digit vector. -/
-theorem tie_sum (c : ℕ → ℕ) (hc : ∀ k, c k < 2 ^ Flat.wid k) :
-    ∑ j ∈ Finset.range 14, natV (gwordS c j) = natV (ofDigitsW Flat.wid c 42) := by
-  unfold gwordS
-  rw [Finset.sum_congr rfl fun j hj => natV_gword (Finset.mem_range.mp hj) (hc _) (hc _) (hc _),
-    sum_groups (fun k => natV (c k * 2 ^ posW Flat.wid k))]
-  exact natV_digits_sum c hc 42 le_rfl
+/-- **The tie words.** The fourteen group words, group 0's carrying the junk digit `b`, add up to
+the cell of `b` plus twice the number of the digit vector. -/
+theorem tie_sum (c : ℕ → ℕ) (hc : ∀ k, c k < 2 ^ Flat.wid k) {b : ℕ} (hb : b < 2) :
+    ∑ j ∈ Finset.range 14,
+        natV (gword j (if j = 0 then b else 0) (c (gch j 0)) (c (gch j 1)) (c (gch j 2))) =
+      natV b + natV (2 * ofDigitsW Flat.wid c 42) := by
+  rw [Finset.sum_congr rfl fun j hj => natV_gword (Finset.mem_range.mp hj)
+      (show (if j = 0 then b else 0) < 2 by split_ifs <;> omega) (hc _) (hc _) (hc _),
+    Finset.sum_add_distrib, sum_groups (fun k => natV (c k * 2 ^ (1 + posW Flat.wid k))),
+    natV_digits_sum c hc 42 le_rfl, Finset.sum_range_succ']
+  simp only [Nat.add_one_ne_zero, if_false, if_true, natV_zero, Finset.sum_const_zero, zero_add]
 
-/-- The group words of a digit vector only read the 42 chains. -/
-theorem gwordS_sz (s : ℕ → ℕ) {j : ℕ} (hj : j < 14) : gwordS (sz s) j = gwordS s j := by
-  unfold gwordS sz
+/-- The group words of a digit vector only read the 42 chains and the junk digit. -/
+theorem gwordS_sz (s : ℕ → ℕ) {j : ℕ} (hj : j < 14) :
+    gwordS s j = gword j (if j = 0 then s 42 else 0) (sz s (gch j 0)) (sz s (gch j 1))
+      (sz s (gch j 2)) := by
+  unfold gwordS sz jdig
   rw [if_pos (gch_lt hj (by omega)), if_pos (gch_lt hj (by omega)), if_pos (gch_lt hj (by omega))]
 
 
@@ -241,7 +268,7 @@ variable {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool} {v : 
   {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s)
 
 include hP in
-theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 29) (hc : cinstrAt t = ci) : ci.Rel f v := by
+theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 28) (hc : cinstrAt t = ci) : ci.Rel f v := by
   have := hP.pro t ht; rwa [hc] at this
 
 include hP in
@@ -255,15 +282,15 @@ include hP
 theorem v_z : v zCell = 0 := pro_rel hP (by omega) cinstrAt_set0
 theorem v_one : v oneCell = oneV := pro_rel hP (by omega) cinstrAt_set1
 theorem v_len : v lenCell = natV 5504 := pro_rel hP (by omega) cinstrAt_set2
-theorem v_tidx : v tidxCell = natV 10 := pro_rel hP (by omega) cinstrAt_set3
-theorem v_g : v gCell = gV := pro_rel hP (by omega) cinstrAt_set4
+theorem v_g : v gCell = gV := pro_rel hP (by omega) cinstrAt_set3
+theorem v_k0 : v k0Cell = k0V := pro_rel hP (by omega) cinstrAt_set4
 
 /-- The prologue constants `g ^ w`, `1 ≤ w ≤ 7`. -/
 theorem v_gp {w : ℕ} (h1 : 1 ≤ w) (h7 : w ≤ 7) : v (gpCell w) = ofK (gpow w) := by
   by_cases hw : w = 1
   · subst hw
     rw [show gpCell 1 = gCell from rfl, v_g hP, gV, gpow, pow_one]
-  · exact pro_rel hP (t := 18 + w) (by omega) (cinstrAt_gp (by omega) h7)
+  · exact pro_rel hP (t := 17 + w) (by omega) (cinstrAt_gp (by omega) h7)
 
 theorem v_sym {i : ℕ} (hi : i < 7) : v (symCell i) = symV i := by
   unfold symCell symV
@@ -309,7 +336,7 @@ theorem chain_top (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : ℕ} (
   have hR : ∀ t, (fun t => (cinstrAt t).Rel f v) t → (cinstrAt t).RelNH v :=
     fun _ h => CInstr.relNH_of_relB h
   have hz := v_z hP
-  have hs := hV k hk
+  have hs := hV.1 k hk
   by_cases h0 : s k = 0
   · rw [h0, zero_copy_of_facts hR hV hP hk h0, hz, add_zero]
     rfl
@@ -366,7 +393,7 @@ theorem rho_md {r : ℕ} (hr : r < 9) : cellBits (v (rhoCell r)) = FP.rootMd r :
   · rw [rhoCell_eq (by omega) h8, rootMd_eq (by omega) h8, v_gp hP (by omega) (by omega),
       cellBits_gpow h8]
   · obtain rfl : r = 8 := by omega
-    rw [show rhoCell 8 = lenCell from rfl, v_len hP, cellBits_natV]; rfl
+    rw [show rhoCell 8 = k0Cell from rfl, v_k0 hP, cellBits_k0V]; rfl
 
 /-- The root state sequence: the initial cv pair, then the states. -/
 def rootSeq (v : ℕ → E) (i : ℕ) : BitVec 256 :=
@@ -444,16 +471,17 @@ theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ
   -- the length
   have hlen : bits.length = 5504 :=
     length_of_inputWord_len pk m bits ((hpin 3 (by omega)).symm.trans (v_len hP))
-  -- the index
-  have hidx : idxValue f FP m (decodeNonce bits) pk = cellBits (v idxCell) := by
-    have h := pro_rel hP (by omega) cinstrAt_26
+  -- the index answer: its low half is the index cell
+  have hlo : cellBits (v idxCell) =
+      (f ⟨896, FP.idxInput m (decodeNonce bits) pk⟩).extractLsb' 0 128 := by
+    have h := pro_rel hP (by omega) cinstrAt_idx
     have hlo := oracle_lo h
     have hpk : cellBits (v pkCell) = pk := by
       rw [show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
       exact cellBits_cellOfBits pk
     have hq : blake2sQuery ![v msgLo, v msgHi, v nonceCell, v pkCell] (v zCell) (v (zCell + 1))
-        (v tidxCell) = FP.idxInput m (decodeNonce bits) pk := by
-      rw [blake2sQuery_eq, cb_cv hP, v_tidx hP, cellBits_natV,
+        (v lenCell) = FP.idxInput m (decodeNonce bits) pk := by
+      rw [blake2sQuery_eq, cb_cv hP, v_len hP, cellBits_natV,
         show nonceCell = 46 from rfl, show msgHi = 2 from rfl,
         show msgLo = 1 from rfl, hpin 46 (by omega), hpin 2 (by omega),
         hpin 1 (by omega), inputWord_nonce pk m bits hlen, inputWord_two,
@@ -462,24 +490,37 @@ theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ
         msg_split, hpk]
       rfl
     rw [hq] at hlo
-    exact hlo.symm
-  -- the tie
-  have hacc : v idxCell = natV (ofDigitsW Flat.wid (sz s) 42) := by
-    rw [idx_of_facts hR hV hP, ← tie_sum (sz s) (sz_lt hV)]
-    exact Finset.sum_congr rfl fun j hj => by rw [gwordS_sz s (Finset.mem_range.mp hj)]
-  have hI : (idxValue f FP m (decodeNonce bits) pk).toNat = ofDigitsW Flat.wid (sz s) 42 := by
-    rw [hidx, hacc, cellBits_natV, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
+    exact hlo
+  -- the tie: the index cell is `b + 2 · X`, `b = s 42` the junk digit
+  set X := ofDigitsW Flat.wid (sz s) 42 with hXdef
+  have hX : X < 2 ^ 127 := by
     have := ofDigitsW_lt Flat.wid (sz s) (sz_lt hV) 42
     rwa [Flat.pos_42] at this
+  set b := s 42 with hbdef
+  have hb : b < 2 := hV.2
+  have hacc : v idxCell = natV (b + X * 2 ^ 1) := by
+    rw [idx_of_facts hR hV hP,
+      ← natV_add_disjoint (N := b) (a := X) (n := 1) (by rw [pow_one]; omega)
+        (by rw [pow_one]; omega),
+      show X * 2 ^ 1 = 2 * X by ring, hXdef, ← tie_sum (sz s) (sz_lt hV) hb]
+    exact Finset.sum_congr rfl fun j hj => by rw [gwordS_sz s (Finset.mem_range.mp hj)]
+  have hI : (idxValue f FP m (decodeNonce bits) pk).toNat = X := by
+    have h1 := congrArg BitVec.toNat hlo
+    rw [hacc, cellBits_natV, BitVec.toNat_ofNat, BitVec.extractLsb'_toNat, Nat.shiftRight_zero,
+      Nat.mod_eq_of_lt (by rw [pow_one]; omega)] at h1
+    show (idxAns (f ⟨896, FP.idxInput m (decodeNonce bits) pk⟩)).toNat = X
+    rw [toNat_idxAns, ← Nat.mod_mul_right_div_self, show 2 * 2 ^ 127 = 2 ^ 128 by norm_num, ← h1,
+      pow_one]
+    omega
   have hdig : ∀ k : Fin numChains, FP.digit (idxValue f FP m (decodeNonce bits) pk) k = s k := by
     intro k
     show digitW Flat.wid _ k = _
-    rw [hI, digitW_ofDigitsW Flat.wid (sz s) (sz_lt hV) 42 k k.isLt]
+    rw [hI, hXdef, digitW_ofDigitsW Flat.wid (sz s) (sz_lt hV) 42 k k.isLt]
     unfold sz; rw [if_pos k.isLt]
   -- the layer
   have hsum := layer_of_facts hR hV hP
   refine ⟨hlen, ?_, ?_⟩
-  · show ∑ k : Fin numChains, FP.digit _ k = 106
+  · show ∑ k : Fin numChains, FP.digit _ k = 103
     rw [Finset.sum_congr rfl (fun k _ => hdig k)]
     rw [Fin.sum_univ_eq_sum_range (fun k => s k) 42]
     exact hsum
