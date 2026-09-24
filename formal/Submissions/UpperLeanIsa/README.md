@@ -1,33 +1,20 @@
-# leanISA — 33843 cycles (RT-MX)
+# leanISA — 1598 cycles (HL-FLAT-A)
 
-This root descends from RT (nconsigny, PR #35, 85343) and RT-128 (PR #36, 49335). It uses all 43
-signature words:
-- 41 message fields of 7 and 6 bits, aligned to the two message cells;
-- two 6-bit checksum digits.
+Replaces the 85343-cycle Winternitz record with a one-layer hypercube scheme and a
+straight-line bytecode whose every completing run costs exactly
+`308 + 10·117 + 120 = 1598` cycles (425 instructions, 117 `BLAKE2S`).
 
-A 6-bit field `d` is stored as the chain digit `e = 64 + d`, so every chain keeps 127 steps. The
-security proofs therefore change only by constants. `NOTES.md` has the design, the cost bound,
-the executable model and next steps.
+- **Scheme** (`SchemeFlat`, `Layer*`): 42 chains of 128-bit words, widths 3 (chains 0..39,
+  length 8) and 4 (chains 40, 41, length 16). A fresh uniform 128-bit nonce is ground until
+  the 128-bit index `H(m, pk, η)` has digits on layer 106; the signature is 42 words plus the
+  nonce, 5504 bits. Chain steps, the index and the 10 root calls are separated by metadata and
+  tags. Keygen 640, sign `2^20`, verify 234 compressions.
+- **Security** (`Records` … `Security`, `FlatHyp`, `FlatSecurity`): generic in `P : Params`
+  under `P.Hyp`; `Pr ≤ B/2^128 < B/2^127`. The index-grinding analysis is ported from UpperRiscv.
+- **Bytecode** (`MachineProgram`): `logSize = 18`, `memLog = 16`, hinted-landing dispatch with
+  digit-independent block costs, so `steps = 425` is constant.
+- **Machine proofs**: `MachineRun`/`MachinePath` (every completing run is one path),
+  `MachineCycles` (exponent identity `Σ s = 106`), `MachineSound`, `MachineProver`,
+  `MachineHonest`, `MachineFaithful`. `seededRows = 2^18 + 2^16 < 2^20`.
 
-- Scheme (`Encoding`): the field layout (`fieldWidth`, `fieldOff`, `digitOff`), injectivity via
-  contiguous fields, and a new `digits_incomparable` for the offset checksum digits. Every other
-  scheme and security file is RT-128 with 43 chains and 5504-bit signatures.
-- Bytecode (`MachineProgram`): `logSize = 16`, `memLog = 16`. It uses:
-  - Rice(1) `JUMP` trees on the leaf index (128 or 64 leaves);
-  - a 50-node unary `c_hi` tree;
-  - aligned ties;
-  - a constant zero pair;
-  - the checksum identity `Σ E + 64·(E 41 − 64) + E 42 = 5271`, checked in the exponent.
-- Cycles (`MachineCycles`): `totalCost E ≤ 33723` on every completing run. The exact worst case
-  is 33722 (the all-zero message: 3319 `BLAKE2S`).
-- Soundness and faithfulness (`ConstraintMath`, `MachineSound`, `MachineProver`, `MachineHonest`,
-  `MachineFaithful`): as in RT-128, with mixed-width packing lemmas for the ties.
-
-Build with `lake build Submissions.UpperLeanIsa.Solution`.
-
-`Checksum.lean` adapts VCVio's
-[`HashSig/SLHDSA/WotsChecksum.lean`](https://github.com/Verified-zkEVM/VCVio/blob/25f26bfee60d6700644eb1a69f091091948f15da/HashSig/SLHDSA/WotsChecksum.lean)
-(Apache-2.0; Vitalik Buterin, Nicolas Consigny, Alexander Hicks). The scheme, security and
-machine proofs derive from the leanISA records of scaraven (PR #31), nconsigny (PR #35) and
-lucemans (PR #36), which in turn adapt RISC-V proofs by Tom Wambsgans (PR #5) and Holindauer
-(PR #15).
+Build with `lake build Submissions.UpperLeanIsa.Solution`. Design, model and credits: `NOTES.md`.

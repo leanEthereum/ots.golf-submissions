@@ -1,291 +1,732 @@
-import Submissions.UpperLeanIsa.MachineWalk
+import Submissions.UpperLeanIsa.MachineRun
 
 /-!
-# The shape of every walk
+# The forced path of the HL-FLAT-A bytecode
 
-Chain-level and whole-program path lemmas (design `NOTES.md` §6 step 3, §9.2), for any
-slot predicate `R` implying the hash-free relation, on an image with `Lx L oneCell = oneV`:
+Every walk from slot `0` is the forced walk of one digit vector `s = digitOf v` (read off the
+landing hints): the prologue `0 … 56`, then for each chain `k` the dispatch at its control slot,
+the landing at `entryOf k (s k) = BASE k + 21 · s k`, the block's straight-line ops (`pre k`
+non-hash ops, the `s k` chain steps, `post k` non-hash ops), and finally the exit into the root
+segment `rootSlot … rootSlot + 10`, which falls through to the sentinel.
 
-* `walk_rice_chain`, `walk_hi`: a walk from a chain's base visits its dispatch, exactly one
-  leaf `e` and the body steps after it, and continues at the next segment;
-* `walk_full`: every walk from slot 0 is determined by a leaf vector `E` of chain digits with
-  `Valid E`: its
-  steps are `totalSteps E`, its cost `totalCost E`, and `R` holds on the constants, the leaves,
-  the bodies, the root and the pk check (`PathFacts`);
-* `walk_full_mk`: conversely `PathFacts` and the dispatch facts selecting `E`
-  (`DispatchFacts`) make a walk of `totalSteps E` steps and cost `totalCost E` from slot 0.
+* `walk_full`: a walk of any relation `R` implying the hash-free one yields the digit vector,
+  the relation at every slot of its path (`PathFacts`), the landings (`Landing`), and the exact
+  step count and cost `totalSteps s`, `totalCost s`.
+* `walk_full_mk`: conversely, those facts assemble the walk (the honest direction).
 -/
 
-namespace OptimalOTS.LeanIsaBaseline.Machine
+namespace OptimalOTS.HLFlat
 
-open LeanerVM.Parameters LeanerVM.Semantics
+open LeanerVM.Parameters LeanerVM.Semantics OracleComp
+open OptimalOTS.LeanIsaBaseline.Layer
 
 noncomputable section
 
-/-! ## Path predicates -/
+/-! ## Block shape -/
 
-/-- A leaf vector of chain digits: `off k ≤ E k < off k + nLeaves k` for each Rice chain, and
-`64 ≤ E 41 ≤ 114` for `c_hi`. -/
-def Valid (E : ℕ → ℕ) : Prop :=
-  (∀ k, (k < 41 ∨ k = 42) → off k ≤ E k ∧ E k < off k + nLeaves k) ∧ 64 ≤ E 41 ∧ E 41 ≤ 114
+/-- The entry slot of digit `s` of chain `k`. -/
+def entryOf (k s : ℕ) : ℕ := BASE k + 21 * s
 
-/-- `R` on the leaf ops of chain digit `e` of Rice chain `k` and on the body steps after it. -/
-def ChainFacts (R : ℕ → Prop) (k e : ℕ) : Prop :=
-  (∀ i < leafLen k e, R (leafSlot k e + i)) ∧ (∀ j, e < j → j ≤ 126 → R (s0 k + j))
+/-- Straight-line ops before the chain steps. -/
+def pre (k : ℕ) : ℕ := if k = 0 then 1 else 3
 
-/-- The dispatch facts of Rice chain `k` selecting chain digit `e` (leaf `e - off k`). -/
-def ChainDispatch (R : ℕ → Prop) {κ : ℕ} (L : MemImage κ) (k e : ℕ) : Prop :=
-  UnaryFacts R L (rBase k) 18 (nU k) (zuCell k) ((e - off k) / 2) ∧
-    GroupFacts R L k ((e - off k) / 2) ((e - off k) % 2)
+/-- Straight-line ops after the chain steps. -/
+def post (k : ℕ) : ℕ := if k = 0 then 2 else if k < 41 then 1 else 0
 
-/-- `R` on the ops of leaf `dh` of chain 41 and on the body steps after it. -/
-def HiFacts (R : ℕ → Prop) (dh : ℕ) : Prop :=
-  (∀ i < 5, R (leafSlotHi dh + i)) ∧ (∀ j, 64 + dh < j → j ≤ 126 → R (s0 41 + j))
+/-- The control slot after the block of digit `s` of chain `k`: the next dispatch, or the exit. -/
+def ctlAfter (k s : ℕ) : ℕ := entryOf k s + 1 + pre k + s + post k
 
-/-- The dispatch facts of chain 41 selecting leaf `dh`. -/
-def HiDispatch (R : ℕ → Prop) {κ : ℕ} (L : MemImage κ) (dh : ℕ) : Prop :=
-  UnaryFacts R L (rBase 41) 7 50 (zuCell 41) (50 - dh)
+/-- Walk steps of chain `k`'s segment (dispatch, block, and for chain 41 the exit). -/
+def segSteps (k s : ℕ) : ℕ := (if k = 0 then 5 else 6) + s
 
-/-- `R` on every non-dispatch slot of the walk with leaf vector `E`. -/
-structure PathFacts (R : ℕ → Prop) (E : ℕ → ℕ) : Prop where
-  const : ∀ s < 131, R s
-  leaf : ∀ k, (k < 41 ∨ k = 42) → ∀ i < leafLen k (E k), R (leafSlot k (E k) + i)
-  leafHi : ∀ i < 5, R (leafSlotHi (E 41 - 64) + i)
-  body : ∀ k < 43, ∀ j, E k < j → j ≤ 126 → R (s0 k + j)
-  root : ∀ t < 43, R (rootBase + t)
-  pk : R pkSlot
+/-- Cycles of chain `k`'s segment. -/
+def segCost (k s : ℕ) : ℕ := (if k = 0 then 5 else 6) + 10 * s
 
-/-- `R` on the dispatch nodes of the walk with leaf vector `E`, whose condition cells select `E`. -/
-structure DispatchFacts (R : ℕ → Prop) {κ : ℕ} (L : MemImage κ) (E : ℕ → ℕ) : Prop where
-  rice : ∀ k, (k < 41 ∨ k = 42) → ChainDispatch R L k (E k)
-  hi : HiDispatch R L (E 41 - 64)
+theorem pre_add_post (k : ℕ) (hk : k < 42) : 2 + pre k + post k + (if k = 41 then 1 else 0) =
+    (if k = 0 then 5 else 6) := by
+  unfold pre post; split_ifs <;> omega
 
-theorem const_shape {s : ℕ} (hs : s < 131) :
-    (cinstrAt s).isJump = false ∧ (cinstrAt s).cost = 1 := by
-  rw [cinstrAt_const_seg hs]; unfold constInstr; split_ifs <;> exact ⟨rfl, rfl⟩
+theorem pre_zero : pre 0 = 1 := rfl
+theorem post_zero : post 0 = 2 := rfl
+theorem pre_pos {k : ℕ} (h : k ≠ 0) : pre k = 3 := if_neg h
+theorem post_mid {k : ℕ} (h : k ≠ 0) (h41 : k < 41) : post k = 1 := by
+  unfold post; rw [if_neg h, if_pos h41]
+theorem post_41 : post 41 = 0 := rfl
 
-theorem root_shape {t : ℕ} (ht : t < 44) :
-    (cinstrAt (rootBase + t)).isJump = false ∧ (cinstrAt (rootBase + t)).cost = if t < 43 then 10 else 1 := by
-  rcases Nat.lt_or_ge t 43 with h | h
-  · rw [cinstrAt_root h, if_pos h]; exact ⟨rfl, rfl⟩
-  · rw [show t = 43 by omega, rootBase_add_43, cinstrAt_pk, if_neg (by omega)]; exact ⟨rfl, rfl⟩
+theorem blockOp_pre {k s i : ℕ} (hi : i < pre k) :
+    (blockOp k s (1 + i)).straight = true ∧ (blockOp k s (1 + i)).cost = 1 := by
+  unfold blockOp
+  by_cases h0 : k = 0
+  · subst h0
+    rw [pre_zero] at hi
+    obtain rfl : i = 0 := by omega
+    rw [if_pos rfl, if_pos rfl]; exact ⟨rfl, rfl⟩
+  · rw [pre_pos h0] at hi
+    rw [if_neg h0]
+    rcases (show i = 0 ∨ i = 1 ∨ i = 2 by omega) with rfl | rfl | rfl
+    · rw [if_pos rfl]; split_ifs <;> exact ⟨rfl, rfl⟩
+    · rw [if_neg (by omega), if_pos rfl]; exact ⟨rfl, rfl⟩
+    · rw [if_neg (by omega), if_neg (by omega), if_pos rfl]; exact ⟨rfl, rfl⟩
 
-theorem const_cost : ∑ i ∈ Finset.range 131, (cinstrAt (0 + i)).cost = 131 :=
-  seg_cost (w := 1) fun i hi => (const_shape (by omega)).2
+theorem blockOp_chain {k s t : ℕ} (ht : t < s) : blockOp k s (1 + pre k + t) = chainOp k s t := by
+  unfold blockOp
+  by_cases h0 : k = 0
+  · subst h0
+    rw [pre_zero, if_pos rfl, if_neg (by omega), if_pos (by omega),
+      show 1 + 1 + t - 2 = t by omega]
+  · rw [pre_pos h0, if_neg h0, if_neg (by omega), if_neg (by omega), if_neg (by omega),
+      if_pos (by omega), show 1 + 3 + t - 4 = t by omega]
 
-theorem root_cost : ∑ i ∈ Finset.range 44, (cinstrAt (rootBase + i)).cost = 431 := by
-  rw [Finset.sum_range_succ, seg_cost (w := 10) fun i hi => by
-    rw [(root_shape (by omega)).2, if_pos hi], (root_shape (by omega)).2, if_neg (by omega)]
+theorem chainOp_straight (k s t : ℕ) :
+    (chainOp k s t).straight = true ∧ (chainOp k s t).cost = 10 := by
+  unfold chainOp; exact ⟨rfl, rfl⟩
+
+theorem blockOp_post {k s i : ℕ} (hi : i < post k) :
+    (blockOp k s (1 + pre k + s + i)).straight = true ∧
+      (blockOp k s (1 + pre k + s + i)).cost = 1 := by
+  unfold blockOp
+  by_cases h0 : k = 0
+  · subst h0
+    rw [post_zero] at hi
+    rw [pre_zero, if_pos rfl]
+    rcases (show i = 0 ∨ i = 1 by omega) with rfl | rfl
+    · rw [if_neg (by omega), if_neg (by omega), if_pos (by omega)]; exact ⟨rfl, rfl⟩
+    · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos (by omega)]
+      exact ⟨rfl, rfl⟩
+  · have h41 : k < 41 := by
+      by_contra h
+      obtain rfl : k = 41 := by unfold post at hi; rw [if_neg h0, if_neg h] at hi; omega
+      rw [post_41] at hi; omega
+    rw [post_mid h0 h41] at hi
+    obtain rfl : i = 0 := by omega
+    rw [pre_pos h0, if_neg h0, if_neg (by omega), if_neg (by omega), if_neg (by omega),
+      if_neg (by omega), if_pos (by omega), if_pos h41]
+    exact ⟨rfl, rfl⟩
+
+/-- The last post op of chain `k < 41` is the next chain's `MUL(H_{k+1}, g, H'_{k+1})`. -/
+theorem blockOp_nextMul {k s : ℕ} (hk : k < 41) :
+    blockOp k s (1 + pre k + s + post k - 1) = .mul (hCell (k + 1)) gCell (h1Cell (k + 1)) := by
+  unfold blockOp
+  by_cases h0 : k = 0
+  · subst h0
+    rw [pre_zero, post_zero, if_pos rfl, if_neg (by omega), if_neg (by omega), if_neg (by omega),
+      if_pos (by omega)]
+  · rw [pre_pos h0, post_mid h0 hk, if_neg h0, if_neg (by omega), if_neg (by omega),
+      if_neg (by omega), if_neg (by omega), if_pos (by omega), if_pos hk]
+
+/-- The control op after the block of chain `k < 41`: the next dispatch. -/
+theorem blockOp_ctl_disp {k s : ℕ} (hk : k < 41) :
+    blockOp k s (1 + pre k + s + post k) = .dispatch (k + 1) := by
+  unfold blockOp
+  by_cases h0 : k = 0
+  · subst h0
+    rw [pre_zero, post_zero, if_pos rfl, if_neg (by omega), if_neg (by omega), if_neg (by omega),
+      if_neg (by omega), if_pos (by omega)]
+  · rw [pre_pos h0, post_mid h0 hk, if_neg h0, if_neg (by omega), if_neg (by omega),
+      if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos ⟨by omega, hk⟩]
+
+/-- The control op after the block of chain 41: the exit. -/
+theorem blockOp_ctl_exit {s : ℕ} : blockOp 41 s (1 + pre 41 + s + post 41) = .exit := by
+  unfold blockOp
+  rw [pre_pos (by omega), post_41, if_neg (by omega), if_neg (by omega), if_neg (by omega),
+    if_neg (by omega), if_neg (by omega), if_pos (by omega), if_neg (by omega)]
+
+theorem blockOp_ctl {k s : ℕ} (hk : k < 42) :
+    blockOp k s (1 + pre k + s + post k) = if k < 41 then .dispatch (k + 1) else .exit := by
+  by_cases h41 : k < 41
+  · rw [if_pos h41]; exact blockOp_ctl_disp h41
+  · obtain rfl : k = 41 := by omega
+    rw [if_neg h41]; exact blockOp_ctl_exit
+
+theorem blk_lt {k s : ℕ} (hk : k < 42) (hs : s < W k) : 1 + pre k + s + post k < 21 := by
+  unfold pre post W at *; split_ifs at * <;> omega
+
+theorem cinstrAt_blk {k s i : ℕ} (hk : k < 42) (hs : s < W k) (hi0 : 0 < i)
+    (hi : i ≤ 1 + pre k + s + post k) : cinstrAt (entryOf k s + i) = blockOp k s i :=
+  cinstrAt_block hk hs hi0 (lt_of_le_of_lt hi (blk_lt hk hs))
+
+/-! ## Prologue shape -/
+
+/-- Cycles of prologue op `t`. -/
+def proW (t : ℕ) : ℕ := if t = 55 then 10 else 1
+
+/-- Cycles of root op `t`. -/
+def rootW (t : ℕ) : ℕ := if t < 10 then 10 else 1
+
+theorem prologue_straight {t : ℕ} (ht : t < 57) :
+    (cinstrAt t).straight = true ∧ (cinstrAt t).cost = proW t := by
+  rw [cinstrAt_pro (by omega)]
+  unfold prologue proW
+  split_ifs <;> first | exact ⟨rfl, rfl⟩ | omega
+
+theorem cinstrAt_57 : cinstrAt 57 = .dispatch 0 := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_56 : cinstrAt 56 = .mul (hCell 0) gCell (h1Cell 0) := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_55 : cinstrAt 55 = .blake msgLo msgHi nonceCell pkCell zCell idxCell tidxCell := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_set0 : cinstrAt 0 = .setc zCell 0 := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_set1 : cinstrAt 1 = .setc oneCell oneV := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_set2 : cinstrAt 2 = .setc lenCell (natV 5504) := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_set3 : cinstrAt 3 = .setc tidxCell (natV 10) := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_set4 : cinstrAt 4 = .setc gCell gV := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_set5 : cinstrAt 5 = .setc k0Cell k0V := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
+
+theorem cinstrAt_sym {v : ℕ} (hv : v < 7) : cinstrAt (6 + v) = .setc (symCell v) (natV (v + 3)) := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue
+  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
+    if_neg (by omega), if_neg (by omega), if_pos (by omega),
+    show 6 + v - 6 = v by omega, show 6 + v - 3 = v + 3 by omega]
+
+theorem cinstrAt_frame {k : ℕ} (hk : k < 42) : cinstrAt (13 + k) = .setc (fCell k) (frameV k) := by
+  rw [cinstrAt_pro (by omega)]; unfold prologue
+  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
+    if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos (by omega),
+    show 13 + k - 13 = k by omega]
+
+/-- The root segment is straight: ten `BLAKE2S` and the pk `XOR`. -/
+theorem root_straight {t : ℕ} (ht : t < 11) :
+    (cinstrAt (rootSlot + t)).straight = true ∧
+      (cinstrAt (rootSlot + t)).cost = rootW t := by
+  rw [cinstrAt_root ht]; unfold rootOp rootW; split_ifs <;> exact ⟨rfl, rfl⟩
+
+/-! ## Walk lemmas -/
+
+section Walks
+
+variable {R : ℕ → Prop} {v : ℕ → E}
+
+theorem Walk.inv {n t c : ℕ} (h : Walk R v n t c) (ht : t ≠ sentinel) :
+    t < sentinel ∧ R t ∧ ∃ n' c', n = n' + (cinstrAt t).steps ∧ c = (cinstrAt t).cost + c' ∧
+      Walk R v n' (nextSlot v t) c' := by
+  cases h with
+  | done => exact absurd rfl ht
+  | step hs hR hw => exact ⟨hs, hR, _, _, rfl, rfl, hw⟩
+
+theorem Walk.at_sentinel {n c : ℕ} (h : Walk R v n sentinel c) : n = 0 ∧ c = 0 := by
+  cases h with
+  | done => exact ⟨rfl, rfl⟩
+  | step hs _ _ => exact absurd hs (lt_irrefl _)
+
+/-- A straight segment of `a` ops of cost `w` each. -/
+theorem walk_seg {a t w : ℕ} (hst : ∀ i < a, (cinstrAt (t + i)).straight = true ∧
+    (cinstrAt (t + i)).cost = w) (hta : t + a ≤ sentinel) :
+    ∀ {n c : ℕ}, Walk R v n t c → (∀ i < a, R (t + i)) ∧
+      ∃ n' c', n = n' + a ∧ c = a * w + c' ∧ Walk R v n' (t + a) c' := by
+  induction a generalizing t with
+  | zero => intro n c h; exact ⟨fun i hi => absurd hi (by omega), n, c, rfl, by simp, h⟩
+  | succ a ih =>
+    intro n c h
+    obtain ⟨hs1, hc1⟩ := hst 0 (by omega)
+    rw [Nat.add_zero] at hs1 hc1
+    obtain ⟨-, hR, n1, c1, rfl, rfl, hw⟩ := h.inv (by omega)
+    rw [nextSlot_straight v hs1] at hw
+    have hst' : ∀ i < a, (cinstrAt (t + 1 + i)).straight = true ∧
+        (cinstrAt (t + 1 + i)).cost = w := fun i hi => by
+      rw [show t + 1 + i = t + (i + 1) by omega]; exact hst (i + 1) (by omega)
+    obtain ⟨hRs, n2, c2, rfl, rfl, hw2⟩ := ih hst' (by omega) hw
+    refine ⟨fun i hi => ?_, n2, c2, ?_, ?_, ?_⟩
+    · rcases Nat.eq_zero_or_pos i with rfl | hi0
+      · rwa [Nat.add_zero]
+      · have := hRs (i - 1) (by omega)
+        rwa [show t + 1 + (i - 1) = t + i by omega] at this
+    · rw [straight_steps hs1]; ring
+    · rw [hc1]; ring
+    · rwa [show t + 1 + a = t + (a + 1) by omega] at hw2
+
+theorem walk_seg_mk {a t w : ℕ} (hst : ∀ i < a, (cinstrAt (t + i)).straight = true ∧
+    (cinstrAt (t + i)).cost = w) (hta : t + a ≤ sentinel) (hR : ∀ i < a, R (t + i))
+    {n c : ℕ} (h : Walk R v n (t + a) c) : Walk R v (n + a) t (a * w + c) := by
+  induction a generalizing t n c with
+  | zero => simpa using h
+  | succ a ih =>
+    obtain ⟨hs1, hc1⟩ := hst 0 (by omega)
+    rw [Nat.add_zero] at hs1 hc1
+    have hst' : ∀ i < a, (cinstrAt (t + 1 + i)).straight = true ∧
+        (cinstrAt (t + 1 + i)).cost = w := fun i hi => by
+      rw [show t + 1 + i = t + (i + 1) by omega]; exact hst (i + 1) (by omega)
+    have hR' : ∀ i < a, R (t + 1 + i) := fun i hi => by
+      rw [show t + 1 + i = t + (i + 1) by omega]; exact hR (i + 1) (by omega)
+    have hw := ih hst' (by omega) hR' (by rwa [show t + 1 + a = t + (a + 1) by omega])
+    rw [← nextSlot_straight v hs1] at hw
+    have := Walk.step (by omega) (by simpa using hR 0 (by omega)) hw
+    rw [straight_steps hs1, hc1] at this
+    convert this using 1 <;> ring
+
+end Walks
+
+/-! ## The digit vector of an image -/
+
+/-- The digit of chain `k` read off its landing hint. -/
+def digitOf (v : ℕ → E) (k : ℕ) : ℕ := (slotOf ((v (hCell k)).limb 0) - BASE k) / 21
+
+/-- The landing hints of the digit vector `s`. -/
+def Landing (v : ℕ → E) (s : ℕ → ℕ) : Prop := ∀ k < 42, v (hCell k) = ofK (gpow (entryOf k (s k)))
+
+/-- The digit vector is in range. -/
+def Valid (s : ℕ → ℕ) : Prop := ∀ k < 42, s k < W k
+
+/-- The relation holds at every slot of the path of `s`. -/
+structure PathFacts (R : ℕ → Prop) (s : ℕ → ℕ) : Prop where
+  pro : ∀ t < 58, R t
+  blk : ∀ k < 42, ∀ i, 0 < i → i ≤ 1 + pre k + s k + post k → R (entryOf k (s k) + i)
+  root : ∀ t < 11, R (rootSlot + t)
+
+/-- The dispatch slot of chain `j` on the path of `s`. -/
+def ctl (s : ℕ → ℕ) (j : ℕ) : ℕ := if j = 0 then 57 else ctlAfter (j - 1) (s (j - 1))
+
+theorem ctl_succ (s : ℕ → ℕ) (j : ℕ) : ctl s (j + 1) = ctlAfter j (s j) := by
+  unfold ctl; rw [if_neg (by omega), Nat.add_sub_cancel]
+
+theorem cinstrAt_ctl {s : ℕ → ℕ} {j : ℕ} (hj : j < 42) (hs : ∀ k < j, s k < W k) :
+    cinstrAt (ctl s j) = .dispatch j := by
+  rcases Nat.eq_zero_or_pos j with rfl | hj0
+  · exact cinstrAt_57
+  · obtain ⟨k, rfl⟩ : ∃ k, j = k + 1 := ⟨j - 1, by omega⟩
+    rw [ctl_succ, ctlAfter,
+      show entryOf k (s k) + 1 + pre k + s k + post k = entryOf k (s k) + (1 + pre k + s k + post k)
+        by ring, cinstrAt_blk (by omega) (hs k (by omega)) (by omega) le_rfl, blockOp_ctl (by omega),
+      if_pos (by omega)]
+
+theorem entryOf_lt {k s : ℕ} (hk : k < 42) (hs : s < W k) : entryOf k s + 21 ≤ 10142 := by
+  unfold entryOf BASE; unfold W at hs; split_ifs at * <;> omega
+
+theorem entryOf_ge (k s : ℕ) : 2740 ≤ entryOf k s := by
+  unfold entryOf; have := base_ge k; omega
+
+/-- A landing at an entry of chain `k` determines its digit. -/
+theorem digitOf_eq {v : ℕ → E} {k e : ℕ} (he : IsEntry k e) (hx : (v (hCell k)).limb 0 = gpow e) :
+    e = entryOf k (digitOf v k) ∧ digitOf v k < W k := by
+  have hlt := isEntry_lt he
+  unfold digitOf
+  rw [hx, slotOf_gpow (by omega)]
+  exact isEntry_eq he
 
 section Chains
 
-variable {κ : ℕ} {R : ℕ → Prop} {L : MemImage κ}
+variable {R : ℕ → Prop} {v : ℕ → E} (hR : ∀ t, R t → (cinstrAt t).RelNH v)
+include hR
 
-/-- **Rice chain.** From `rBase k`, a walk runs chain `k`'s dispatch to one chain digit `e`,
-the leaf, and the body steps after it, and continues at `s0 k + 127`. -/
-theorem walk_rice_chain (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {k n c : ℕ}
-    (hk : k < 41 ∨ k = 42) (h : Walk R L n (rBase k) c) :
-    ∃ e, off k ≤ e ∧ e < off k + nLeaves k ∧ ChainFacts R k e ∧ ChainDispatch R L k e ∧
-      ∃ n' c', n = chainSteps k e + n' ∧ c = chainCost k e + c' ∧
-        Walk R L n' (s0 k + 127) c' := by
-  obtain ⟨x, hx, hU, n1, c1, rfl, rfl, hw1⟩ := walk_unary hR (riceShape hk) h
-  rw [unaryExit_rice k hx] at hw1
-  obtain ⟨b, hb, hG, n2, c2, rfl, rfl, hw2⟩ := walk_group hR hk hx hw1
-  have he : off k + 2 * x + b < off k + nLeaves k := by rw [nLeaves_eq]; omega
-  have he' := off_add_nLeaves k
-  have hoff := off_le k
-  obtain ⟨hl, n3, c3, rfl, rfl, hw3⟩ := walk_leaf hR hone hk (by omega) he hw2
-  obtain ⟨hbd, n4, c4, rfl, rfl, hw4⟩ :=
-    walk_body (k := k) (j0 := min (off k + 2 * x + b) 126 + 1) (by omega)
-      (by unfold bodyFirst; omega) (by omega) (hw3.cast rfl (by omega) rfl)
-  have hd : off k + 2 * x + b - off k = 2 * x + b := by omega
-  have hq : (2 * x + b) / 2 = x := by omega
-  have hr : (2 * x + b) % 2 = b := by omega
-  refine ⟨off k + 2 * x + b, by omega, he, ⟨hl, fun j hj hj' => hbd j (by omega) hj'⟩,
-    ⟨by rw [hd, hq]; exact hU, by rw [hd, hq, hr]; exact hG⟩, n4, c4, ?_, ?_, hw4⟩
-  · unfold chainSteps riceDepth bodyLen; rw [hd, hq]; split_ifs <;> omega
-  · unfold chainCost riceDepth bodyLen; rw [hd, hq]; split_ifs <;> omega
+/-- The dispatch step: a landing on an entry of chain `k`, and the walk resumes after it. -/
+theorem walk_disp {d k n c : ℕ} (hci : cinstrAt d = .dispatch k) (hg : v gCell = gV)
+    (hmul : v (h1Cell k) = v (hCell k) * v gCell) (h : Walk R v n d c) :
+    R d ∧ digitOf v k < W k ∧ v (hCell k) = ofK (gpow (entryOf k (digitOf v k))) ∧
+      ∃ n' c', n = n' + 2 ∧ c = 2 + c' ∧ Walk R v n' (entryOf k (digitOf v k) + 1) c' := by
+  have hdne : d ≠ sentinel := fun e => by rw [e, cinstrAt_sentinel] at hci; cases hci
+  obtain ⟨-, hRd, n', c', rfl, rfl, hw⟩ := h.inv hdne
+  have hrel := hR d hRd
+  rw [hci] at hrel
+  obtain ⟨hH, -, e, he, hx⟩ := hrel
+  obtain ⟨he', hdig⟩ := digitOf_eq he hx
+  have hHv : v (hCell k) = ofK (gpow (entryOf k (digitOf v k))) := by
+    rw [ofK_limb hH, hx, ← he']
+  have hlt := entryOf_lt he.1 hdig
+  have hnext : nextSlot v d = entryOf k (digitOf v k) + 1 := by
+    unfold nextSlot; rw [hci]
+    show slotOf _ = _
+    rw [hmul, hHv, hg, gV, ← ofK_mul, limb_ofK_zero, mul_comm, g_mul_gpow, slotOf_gpow (by omega)]
+  rw [hnext] at hw
+  exact ⟨hRd, hdig, hHv, n', c', by rw [hci]; rfl, by rw [hci]; rfl, hw⟩
 
-theorem walk_rice_chain_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV)
-    {k e n c : ℕ} (hk : k < 41 ∨ k = 42) (he1 : off k ≤ e) (he2 : e < off k + nLeaves k)
-    (hF : ChainFacts R k e) (hD : ChainDispatch R L k e) (h : Walk R L n (s0 k + 127) c) :
-    Walk R L (chainSteps k e + n) (rBase k) (chainCost k e + c) := by
-  have he' := off_add_nLeaves k
-  have hoff := off_le k
-  have heU : (e - off k) / 2 ≤ nU k := by rw [nLeaves_eq] at he2; omega
-  have hw4 := walk_body_mk (k := k) (j0 := min e 126 + 1) (by omega) (by unfold bodyFirst; omega)
-    (by omega) (fun j hj hj' => hF.2 j (by omega) hj') h
-  have hw3 := walk_leaf_mk hR hone hk he1 he2 hF.1 (hw4.cast rfl (by omega) rfl)
-  have hw2 := walk_group_mk hR hk (q := (e - off k) / 2) (b := (e - off k) % 2) heU (by omega) hD.2
-    (hw3.cast rfl (by rw [show off k + 2 * ((e - off k) / 2) + (e - off k) % 2 = e by omega]) rfl)
-  have hw1 := walk_unary_mk hR (riceShape hk) (x := (e - off k) / 2) heU hD.1
-    (hw2.cast rfl (unaryExit_rice k heU).symm rfl)
-  refine hw1.cast ?_ rfl ?_
-  · unfold chainSteps riceDepth bodyLen; split_ifs <;> omega
-  · unfold chainCost riceDepth bodyLen; split_ifs <;> omega
-
-/-- **Chain 41.** From `rBase 41`, a walk runs the unary dispatch to one leaf `dh ≤ 50` (chain
-digit `64 + dh`), the leaf, and the body steps after it, and continues at `s0 41 + 127`. -/
-theorem walk_hi (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {n cost : ℕ}
-    (h : Walk R L n (rBase 41) cost) :
-    ∃ dh, dh ≤ 50 ∧ HiFacts R dh ∧ HiDispatch R L dh ∧ ∃ n' c',
-      n = hiSteps dh + n' ∧ cost = hiCost dh + c' ∧ Walk R L n' (s0 41 + 127) c' := by
-  obtain ⟨x, hx, hU, n1, c1, rfl, rfl, hw1⟩ := walk_unary hR hiShape h
-  obtain ⟨dh, hdh, rfl⟩ : ∃ dh, dh ≤ 50 ∧ x = 50 - dh := ⟨50 - x, by omega, by omega⟩
-  rw [unaryExit_hi hdh] at hw1
-  obtain ⟨hl, n3, c3, rfl, rfl, hw3⟩ := walk_leafHi hR hone hdh hw1
-  obtain ⟨hbd, n4, c4, rfl, rfl, hw4⟩ := walk_body (k := 41) (j0 := 64 + dh + 1)
-    (by omega) (by rw [show bodyFirst 41 = 65 from rfl]; omega) (by omega)
-    (hw3.cast rfl (by omega) rfl)
-  refine ⟨dh, hdh, ⟨hl, fun j hj hj' => hbd j (by omega) hj'⟩, hU, n4, c4, ?_, ?_, hw4⟩
-  · unfold hiSteps hiDepth; split_ifs <;> omega
-  · unfold hiCost hiDepth; split_ifs <;> omega
-
-theorem walk_hi_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {dh n cost : ℕ}
-    (hdh : dh ≤ 50) (hF : HiFacts R dh) (hD : HiDispatch R L dh)
-    (h : Walk R L n (s0 41 + 127) cost) :
-    Walk R L (hiSteps dh + n) (rBase 41) (hiCost dh + cost) := by
-  have hw4 := walk_body_mk (k := 41) (j0 := 64 + dh + 1) (by omega)
-    (by rw [show bodyFirst 41 = 65 from rfl]; omega) (by omega)
-    (fun j hj hj' => hF.2 j (by omega) hj') h
-  have hw3 := walk_leafHi_mk hR hone hdh hF.1 (hw4.cast rfl (by omega) rfl)
-  have hw1 := walk_unary_mk hR hiShape (x := 50 - dh) (by omega) hD
-    (hw3.cast rfl (unaryExit_hi hdh).symm rfl)
-  refine hw1.cast ?_ rfl ?_
-  · unfold hiSteps hiDepth; split_ifs <;> omega
-  · unfold hiCost hiDepth; split_ifs <;> omega
-
-/-- The 41 message chains in sequence, from `rBase 0`. -/
-theorem walk_chains (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) :
-    ∀ j, j ≤ 41 → ∀ {n c : ℕ}, Walk R L n (rBase 0) c →
-      ∃ E : ℕ → ℕ, (∀ k < j, off k ≤ E k ∧ E k < off k + nLeaves k ∧ ChainFacts R k (E k) ∧
-          ChainDispatch R L k (E k)) ∧
-        ∃ n' c', n = (∑ k ∈ Finset.range j, chainSteps k (E k)) + n' ∧
-          c = (∑ k ∈ Finset.range j, chainCost k (E k)) + c' ∧ Walk R L n' (rBase j) c' := by
-  intro j
-  induction j with
-  | zero =>
-    intro _ n c h
-    exact ⟨fun _ => 0, fun k hk => absurd hk (Nat.not_lt_zero _), n, c, by simp, by simp, h⟩
-  | succ j ih =>
-    intro hj n c h
-    obtain ⟨E, hE, n1, c1, rfl, rfl, hw1⟩ := ih (by omega) h
-    obtain ⟨e, he1, he2, hF, hD, n2, c2, rfl, rfl, hw2⟩ :=
-      walk_rice_chain hR hone (k := j) (Or.inl (by omega)) hw1
-    rw [s0_add_127 (by omega)] at hw2
-    have hE' : ∀ k < j, (if k = j then e else E k) = E k := fun k hk => if_neg (by omega)
-    have hsum : ∀ F : ℕ → ℕ → ℕ, ∑ k ∈ Finset.range (j + 1), F k (if k = j then e else E k) =
-        (∑ k ∈ Finset.range j, F k (E k)) + F j e := fun F => by
-      rw [Finset.sum_range_succ, if_pos rfl,
-        Finset.sum_congr rfl fun k hk => by rw [hE' k (Finset.mem_range.mp hk)]]
-    refine ⟨fun k => if k = j then e else E k, fun k hk => ?_, n2, c2, ?_, ?_, hw2⟩
-    · rcases (show k < j ∨ k = j by omega) with hk' | rfl
-      · simp only [hE' k hk']; exact hE k hk'
-      · simp only; exact ⟨he1, he2, hF, hD⟩
-    · rw [hsum chainSteps]; omega
-    · rw [hsum chainCost]; omega
-
-theorem walk_chains_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) (E : ℕ → ℕ) :
-    ∀ j, j ≤ 41 →
-      (∀ k < j, off k ≤ E k ∧ E k < off k + nLeaves k ∧ ChainFacts R k (E k) ∧
-        ChainDispatch R L k (E k)) →
-      ∀ {n c : ℕ}, Walk R L n (rBase j) c →
-        Walk R L ((∑ k ∈ Finset.range j, chainSteps k (E k)) + n) (rBase 0)
-          ((∑ k ∈ Finset.range j, chainCost k (E k)) + c) := by
-  intro j
-  induction j with
-  | zero => intro _ _ n c h; exact h.cast (by simp) rfl (by simp)
-  | succ j ih =>
-    intro hj hE n c h
-    obtain ⟨he1, he2, hF, hD⟩ := hE j (by omega)
-    have hw := walk_rice_chain_mk hR hone (Or.inl (by omega)) he1 he2 hF hD
-      (h.cast rfl (s0_add_127 (by omega)).symm rfl)
-    have hw' := ih (by omega) (fun k hk => hE k (by omega)) hw
-    refine hw'.cast ?_ rfl ?_
-    · rw [Finset.sum_range_succ]; omega
-    · rw [Finset.sum_range_succ]; omega
-
-/-- **Shape of every walk.** A walk from slot 0 is the walk of a leaf vector `E`: it has
-`totalSteps E` steps and cost `totalCost E`, and `R` holds on every non-dispatch slot of it. -/
-theorem walk_full (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {n c : ℕ}
-    (h : Walk R L n 0 c) :
-    ∃ E, Valid E ∧ n = totalSteps E ∧ c = totalCost E ∧ PathFacts R E := by
-  obtain ⟨hr0, n1, c1, rfl, hc1, hw1⟩ := walk_seg (a := 131) (s := 0)
-    (fun i hi => (const_shape (by omega)).1) (by rw [sentinel]; omega) h
-  rw [const_cost] at hc1
-  subst hc1
-  obtain ⟨E1, hE1, n2, c2, rfl, rfl, hw2⟩ :=
-    walk_chains hR hone 41 le_rfl (hw1.cast rfl rBase_zero.symm rfl)
-  obtain ⟨dh, hdh, hFHi, -, n3, c3, rfl, rfl, hw3⟩ := walk_hi hR hone hw2
-  rw [s0_add_127 le_rfl] at hw3
-  obtain ⟨e42, he42, he42', hF42, -, n4, c4, rfl, rfl, hw4⟩ :=
-    walk_rice_chain hR hone (Or.inr rfl) hw3
-  rw [s0_42_add_127] at hw4
-  obtain ⟨hrt, n5, c5, rfl, hc5, hw5⟩ := walk_seg (a := 44) (s := rootBase)
-    (fun i hi => (root_shape hi).1) (by rw [sentinel, rootBase]) hw4
-  rw [root_cost] at hc5
-  subst hc5
-  obtain ⟨rfl, rfl⟩ := (hw5.cast rfl (show rootBase + 44 = sentinel from rfl) rfl).at_sentinel
-  let E : ℕ → ℕ := fun k => if k < 41 then E1 k else if k = 41 then 64 + dh else e42
-  have hElt : ∀ k < 41, E k = E1 k := fun k hk => if_pos hk
-  have hE41 : E 41 - 64 = dh := by show 64 + dh - 64 = dh; omega
-  have hE41' : E 41 = 64 + dh := rfl
-  have hE42 : E 42 = e42 := rfl
-  have hsum : ∀ F : ℕ → ℕ → ℕ, ∑ k ∈ Finset.range 41, F k (E k) =
-      ∑ k ∈ Finset.range 41, F k (E1 k) := fun F =>
-    Finset.sum_congr rfl fun k hk => by rw [hElt k (Finset.mem_range.mp hk)]
-  refine ⟨E, ⟨fun k hk => ?_, by rw [hE41']; omega, by rw [hE41']; omega⟩, ?_, ?_,
-    ⟨fun s hs => rcast (hr0 s hs) (by omega), fun k hk i hi => ?_, by rw [hE41]; exact hFHi.1,
-    fun k hk j hj hj' => ?_, fun t ht => hrt t (by omega),
-    rcast (hrt 43 (by omega)) rootBase_add_43⟩⟩
-  · rcases hk with hk | rfl
-    · rw [hElt k hk]; exact ⟨(hE1 k hk).1, (hE1 k hk).2.1⟩
-    · exact ⟨he42, he42'⟩
-  · unfold totalSteps; rw [hsum chainSteps, hE41, hE42]; omega
-  · unfold totalCost; rw [hsum chainCost, hE41, hE42]; omega
-  · rcases hk with hk | rfl
-    · rw [hElt k hk] at hi ⊢; exact (hE1 k hk).2.2.1.1 i hi
-    · exact hF42.1 i hi
-  · rcases (show k < 41 ∨ k = 41 ∨ k = 42 by omega) with hk' | rfl | rfl
-    · rw [hElt k hk'] at hj; exact (hE1 k hk').2.2.1.2 j hj hj'
-    · exact hFHi.2 j hj hj'
-    · exact hF42.2 j hj hj'
-
-/-- **Walk of a leaf vector.** The path facts and the dispatch facts selecting `E` make a walk
-from slot 0 of `totalSteps E` steps and cost `totalCost E`. -/
-theorem walk_full_mk (hR : ∀ s, R s → HoldsNH L s) (hone : Lx L oneCell = oneV) {E : ℕ → ℕ}
-    (hE : Valid E) (hP : PathFacts R E) (hD : DispatchFacts R L E) :
-    Walk R L (totalSteps E) 0 (totalCost E) := by
-  have hw5 := walk_seg_mk (L := L) (a := 44) (fun i hi => (root_shape hi).1)
-    (by rw [sentinel, rootBase])
-    (fun i hi => by
-      rcases Nat.lt_or_ge i 43 with h | h
-      · exact hP.root i h
-      · exact rcast hP.pk (by rw [show i = 43 by omega, rootBase_add_43]))
-    ((Walk.done (R := R) (L := L)).cast rfl (show sentinel = rootBase + 44 from rfl) rfl)
-  rw [root_cost] at hw5
-  obtain ⟨h42a, h42b⟩ := hE.1 42 (Or.inr rfl)
-  have hw4 := walk_rice_chain_mk hR hone (k := 42) (Or.inr rfl) h42a h42b
-    ⟨hP.leaf 42 (Or.inr rfl), hP.body 42 (by omega)⟩ (hD.rice 42 (Or.inr rfl))
-    (hw5.cast rfl s0_42_add_127.symm rfl)
-  have hE41a := hE.2.1
-  have hE41b := hE.2.2
-  have hw3 := walk_hi_mk hR hone (dh := E 41 - 64) (by omega)
-    ⟨hP.leafHi, fun j hj hj' => hP.body 41 (by omega) j (by omega) hj'⟩ hD.hi
-    (hw4.cast rfl (s0_add_127 le_rfl).symm rfl)
-  have hw2 := walk_chains_mk hR hone E 41 le_rfl
-    (fun k hk => ⟨(hE.1 k (Or.inl hk)).1, (hE.1 k (Or.inl hk)).2,
-      ⟨hP.leaf k (Or.inl hk), hP.body k (by omega)⟩, hD.rice k (Or.inl hk)⟩) hw3
-  have hw1 := walk_seg_mk (a := 131) (s := 0) (fun i hi => (const_shape (by omega)).1)
-    (by rw [sentinel]; omega) (fun i hi => rcast (hP.const i hi) (by omega))
-    (hw2.cast rfl rBase_zero rfl)
-  rw [const_cost] at hw1
-  refine hw1.cast ?_ rfl ?_
-  · unfold totalSteps; omega
-  · unfold totalCost; omega
+/-- One chain segment, from its dispatch to the next control slot (or the root). -/
+theorem walk_chain {j n c : ℕ} (hj : j < 42) {d : ℕ} (hci : cinstrAt d = .dispatch j)
+    (hg : v gCell = gV) (hk0 : v k0Cell = k0V) (hmul : v (h1Cell j) = v (hCell j) * v gCell)
+    (h : Walk R v n d c) :
+    R d ∧ digitOf v j < W j ∧ v (hCell j) = ofK (gpow (entryOf j (digitOf v j))) ∧
+      (∀ i, 0 < i → i ≤ 1 + pre j + digitOf v j + post j → R (entryOf j (digitOf v j) + i)) ∧
+      ∃ n' c', n = n' + segSteps j (digitOf v j) ∧ c = segCost j (digitOf v j) + c' ∧
+        Walk R v n' (if j < 41 then ctlAfter j (digitOf v j) else rootSlot) c' := by
+  obtain ⟨hRd, hdig, hHv, n1, c1, rfl, rfl, hw1⟩ := walk_disp hR hci hg hmul h
+  set s := digitOf v j with hs
+  set e := entryOf j s with he
+  have hlt := entryOf_lt hj hdig
+  have hpre : ∀ i < pre j, (cinstrAt (e + 1 + i)).straight = true ∧ (cinstrAt (e + 1 + i)).cost = 1 :=
+    fun i hi => by
+      rw [Nat.add_assoc, cinstrAt_blk hj hdig (by omega) (by have := blk_lt hj hdig; omega)]
+      exact blockOp_pre hi
+  have hch : ∀ t < s, (cinstrAt (e + 1 + pre j + t)).straight = true ∧
+      (cinstrAt (e + 1 + pre j + t)).cost = 10 := fun t ht => by
+    rw [show e + 1 + pre j + t = e + (1 + pre j + t) by ring,
+      cinstrAt_blk hj hdig (by omega) (by omega), blockOp_chain ht]
+    exact chainOp_straight _ _ _
+  have hpo : ∀ i < post j, (cinstrAt (e + 1 + pre j + s + i)).straight = true ∧
+      (cinstrAt (e + 1 + pre j + s + i)).cost = 1 := fun i hi => by
+    rw [show e + 1 + pre j + s + i = e + (1 + pre j + s + i) by ring,
+      cinstrAt_blk hj hdig (by omega) (by omega)]
+    exact blockOp_post hi
+  have hb := blk_lt hj hdig
+  obtain ⟨hR1, n2, c2, rfl, rfl, hw2⟩ := walk_seg hpre (by unfold sentinel; omega) hw1
+  obtain ⟨hR2, n3, c3, rfl, rfl, hw3⟩ := walk_seg hch (by unfold sentinel; omega) hw2
+  obtain ⟨hR3, n4, c4, rfl, rfl, hw4⟩ := walk_seg hpo (by unfold sentinel; omega) hw3
+  have hctl : cinstrAt (e + 1 + pre j + s + post j) = if j < 41 then .dispatch (j + 1) else .exit := by
+    rw [show e + 1 + pre j + s + post j = e + (1 + pre j + s + post j) by ring,
+      cinstrAt_blk hj hdig (by omega) le_rfl, blockOp_ctl hj]
+  have hfacts : ∀ i, 0 < i → i ≤ 1 + pre j + s + post j → i < 1 + pre j + s + post j →
+      R (e + i) := fun i hi0 hi1 hi2 => by
+    by_cases a : i < 1 + pre j
+    · have := hR1 (i - 1) (by omega); rwa [show e + 1 + (i - 1) = e + i by omega] at this
+    by_cases b : i < 1 + pre j + s
+    · have := hR2 (i - 1 - pre j) (by omega)
+      rwa [show e + 1 + pre j + (i - 1 - pre j) = e + i by omega] at this
+    · have := hR3 (i - 1 - pre j - s) (by omega)
+      rwa [show e + 1 + pre j + s + (i - 1 - pre j - s) = e + i by omega] at this
+  by_cases h41 : j < 41
+  · rw [if_pos h41] at hctl ⊢
+    refine ⟨hRd, hdig, hHv, fun i hi0 hi1 => ?_, n4, c4, ?_, ?_, ?_⟩
+    · by_cases hi : i < 1 + pre j + s + post j
+      · exact hfacts i hi0 hi1 hi
+      · obtain rfl : i = 1 + pre j + s + post j := by omega
+        have hw4' := hw4
+        rw [show e + 1 + pre j + s + post j = e + (1 + pre j + s + post j) by ring] at hw4'
+        exact (hw4'.inv (by unfold sentinel; omega)).2.1
+    · unfold segSteps pre post; split_ifs <;> omega
+    · unfold segCost pre post; split_ifs <;> omega
+    · unfold ctlAfter; exact hw4
+  · obtain rfl : j = 41 := by omega
+    rw [if_neg h41] at hctl ⊢
+    have hne : e + 1 + pre 41 + s + post 41 ≠ sentinel := by unfold sentinel; omega
+    obtain ⟨-, hRx, n5, c5, rfl, rfl, hw5⟩ := hw4.inv hne
+    have hnext : nextSlot v (e + 1 + pre 41 + s + post 41) = rootSlot := by
+      unfold nextSlot; rw [hctl]
+      show slotOf _ = _
+      rw [hk0, k0V, limb_ofK_zero, slotOf_gpow (by unfold rootSlot; omega)]
+    rw [hnext] at hw5
+    refine ⟨hRd, hdig, hHv, fun i hi0 hi1 => ?_, n5, c5, ?_, ?_, hw5⟩
+    · by_cases hi : i < 1 + pre 41 + s + post 41
+      · exact hfacts i hi0 hi1 hi
+      · obtain rfl : i = 1 + pre 41 + s + post 41 := by omega
+        rwa [show e + (1 + pre 41 + s + post 41) = e + 1 + pre 41 + s + post 41 by ring]
+    · rw [hctl]; unfold segSteps pre post; simp [CInstr.steps]; omega
+    · rw [hctl]; unfold segCost pre post; simp [CInstr.cost]; omega
 
 end Chains
 
+/-! ## The full path -/
+
+/-- Steps of the whole path. -/
+def totalSteps (s : ℕ → ℕ) : ℕ := 57 + ∑ k ∈ Finset.range 42, segSteps k (s k) + 11
+
+/-- Cycles of the whole path. -/
+def totalCost (s : ℕ → ℕ) : ℕ := 66 + ∑ k ∈ Finset.range 42, segCost k (s k) + 101
+
+theorem prologue_cost : ∑ i ∈ Finset.range 57, proW i = 66 := by decide
+
+theorem root_cost : ∑ i ∈ Finset.range 11, rootW i = 101 := by decide
+
+section Full0
+
+variable {R : ℕ → Prop} {v : ℕ → E}
+
+/-- A straight segment of non-uniform costs. -/
+theorem walk_seg' {a t : ℕ} (w : ℕ → ℕ) (hst : ∀ i < a, (cinstrAt (t + i)).straight = true ∧
+    (cinstrAt (t + i)).cost = w i) (hta : t + a ≤ sentinel) :
+    ∀ {n c : ℕ}, Walk R v n t c → (∀ i < a, R (t + i)) ∧
+      ∃ n' c', n = n' + a ∧ c = (∑ i ∈ Finset.range a, w i) + c' ∧ Walk R v n' (t + a) c' := by
+  induction a generalizing t w with
+  | zero => intro n c h; exact ⟨fun i hi => absurd hi (by omega), n, c, rfl, by simp, h⟩
+  | succ a ih =>
+    intro n c h
+    obtain ⟨hs1, hc1⟩ := hst 0 (by omega)
+    rw [Nat.add_zero] at hs1 hc1
+    obtain ⟨-, hR0, n1, c1, rfl, rfl, hw⟩ := h.inv (by omega)
+    rw [nextSlot_straight v hs1] at hw
+    have hst' : ∀ i < a, (cinstrAt (t + 1 + i)).straight = true ∧
+        (cinstrAt (t + 1 + i)).cost = w (i + 1) := fun i hi => by
+      rw [show t + 1 + i = t + (i + 1) by omega]; exact hst (i + 1) (by omega)
+    obtain ⟨hRs, n2, c2, rfl, rfl, hw2⟩ := ih (fun i => w (i + 1)) hst' (by omega) hw
+    refine ⟨fun i hi => ?_, n2, c2, ?_, ?_, ?_⟩
+    · rcases Nat.eq_zero_or_pos i with rfl | hi0
+      · rwa [Nat.add_zero]
+      · have := hRs (i - 1) (by omega)
+        rwa [show t + 1 + (i - 1) = t + i by omega] at this
+    · rw [straight_steps hs1]; ring
+    · rw [hc1, Finset.sum_range_succ']; ring
+    · rwa [show t + 1 + a = t + (a + 1) by omega] at hw2
+
+end Full0
+
+section Full
+
+variable {R : ℕ → Prop} {v : ℕ → E} (hR : ∀ t, R t → (cinstrAt t).RelNH v)
+include hR
+
+/-- **The forced path.** Every walk from slot `0` is the path of the digit vector `digitOf v`,
+with its exact step count and cost. -/
+theorem walk_full {n c : ℕ} (h : Walk R v n 0 c) :
+    Valid (digitOf v) ∧ PathFacts R (digitOf v) ∧ Landing v (digitOf v) ∧
+      n = totalSteps (digitOf v) ∧ c = totalCost (digitOf v) := by
+  -- the prologue
+  obtain ⟨hRp, n0, c0, rfl, rfl, hw0⟩ := walk_seg' proW
+    (fun i hi => by simpa using prologue_straight (t := i) hi) (by unfold sentinel; omega) h
+  rw [Nat.zero_add] at hw0
+  simp only [Nat.zero_add] at hRp
+  have hg : v gCell = gV := by have := hR 4 (hRp 4 (by omega)); rwa [cinstrAt_set4] at this
+  have hk0 : v k0Cell = k0V := by have := hR 5 (hRp 5 (by omega)); rwa [cinstrAt_set5] at this
+  have hmul0 : v (h1Cell 0) = v (hCell 0) * v gCell := by
+    have := hR 56 (hRp 56 (by omega)); rwa [cinstrAt_56] at this
+  -- the chains, by induction
+  have key : ∀ j ≤ 42, (∀ k < j, digitOf v k < W k ∧ v (hCell k) = ofK (gpow (entryOf k (digitOf v k))) ∧
+      R (ctl (digitOf v) k) ∧ ∀ i, 0 < i → i ≤ 1 + pre k + digitOf v k + post k → R (entryOf k (digitOf v k) + i)) ∧
+      ∃ n' c', n0 = n' + ∑ k ∈ Finset.range j, segSteps k (digitOf v k) ∧
+        c0 = (∑ k ∈ Finset.range j, segCost k (digitOf v k)) + c' ∧
+        Walk R v n' (if j < 42 then ctl (digitOf v) j else rootSlot) c' ∧
+        (j < 42 → v (h1Cell j) = v (hCell j) * v gCell) := by
+    intro j
+    induction j with
+    | zero =>
+      intro _
+      refine ⟨fun k hk => absurd hk (by omega), n0, c0, by simp, by simp, ?_, fun _ => hmul0⟩
+      rw [if_pos (by omega)]; unfold ctl; rwa [if_pos rfl]
+    | succ j ih =>
+      intro hj
+      obtain ⟨hprev, n', c', hn, hc, hw, hm⟩ := ih (by omega)
+      rw [if_pos (by omega)] at hw
+      have hci := cinstrAt_ctl (s := digitOf v) (j := j) (by omega) (fun k hk => (hprev k hk).1)
+      obtain ⟨hRd, hdig, hHv, hblk, n'', c'', rfl, rfl, hw'⟩ :=
+        walk_chain hR (by omega) hci hg hk0 (hm (by omega)) hw
+      refine ⟨fun k hk => ?_, n'', c'', ?_, ?_, ?_, fun hj' => ?_⟩
+      · by_cases hkj : k < j
+        · exact hprev k hkj
+        · obtain rfl : k = j := by omega
+          exact ⟨hdig, hHv, hRd, hblk⟩
+      · rw [hn, Finset.sum_range_succ]; ring
+      · rw [hc, Finset.sum_range_succ]; ring
+      · by_cases h41 : j < 41
+        · rw [if_pos h41] at hw'; rw [if_pos (by omega), ctl_succ]; exact hw'
+        · rw [if_neg h41] at hw'; rw [if_neg (by omega)]; exact hw'
+      · have hlast := hblk (1 + pre j + digitOf v j + post j - 1)
+          (by unfold pre post; split_ifs <;> omega) (by omega)
+        have := hR _ hlast
+        rw [show entryOf j (digitOf v j) + (1 + pre j + digitOf v j + post j - 1) =
+            entryOf j (digitOf v j) + (1 + pre j + digitOf v j + post j - 1) from rfl,
+          cinstrAt_blk (by omega) hdig (by unfold pre post; split_ifs <;> omega) (by omega),
+          blockOp_nextMul (by omega)] at this
+        exact this
+  have hk42 := key 42 (le_refl 42)
+  obtain ⟨hall, n1, c1, hn1, hc1, hw1, -⟩ := hk42
+  rw [if_neg (by omega)] at hw1
+  -- the root
+  obtain ⟨hRr, n2, c2, hn2, hc2, hw2⟩ := walk_seg' rootW
+    (fun i hi => root_straight hi) (by unfold rootSlot sentinel; omega) hw1
+  rw [show rootSlot + 11 = sentinel from rfl] at hw2
+  obtain ⟨h0n, h0c⟩ := hw2.at_sentinel
+  refine ⟨fun k hk => (hall k hk).1, ⟨fun t ht => ?_, fun k hk => (hall k hk).2.2.2, hRr⟩,
+    fun k hk => (hall k hk).2.1, ?_, ?_⟩
+  · by_cases h57 : t < 57
+    · exact hRp t h57
+    · obtain rfl : t = 57 := by omega
+      have := (hall 0 (by omega)).2.2.1
+      unfold ctl at this; rwa [if_pos rfl] at this
+  · unfold totalSteps; omega
+  · rw [root_cost] at hc2; rw [prologue_cost]; unfold totalCost; omega
+
+end Full
+
+/-! ## Assembling a walk (the honest direction) -/
+
+section Mk
+
+variable {R : ℕ → Prop} {v : ℕ → E}
+
+/-- A straight segment whose relations hold extends a walk backwards. -/
+theorem walk_seg_ex {a t : ℕ} (hst : ∀ i < a, (cinstrAt (t + i)).straight = true)
+    (hR : ∀ i < a, R (t + i)) (hta : t + a ≤ sentinel)
+    (h : ∃ n c, Walk R v n (t + a) c) : ∃ n c, Walk R v n t c := by
+  induction a generalizing t with
+  | zero => simpa using h
+  | succ a ih =>
+    have h1 := ih (t := t + 1) (fun i hi => by
+        rw [show t + 1 + i = t + (i + 1) by omega]; exact hst (i + 1) (by omega))
+      (fun i hi => by rw [show t + 1 + i = t + (i + 1) by omega]; exact hR (i + 1) (by omega))
+      (by omega) (by rwa [show t + 1 + a = t + (a + 1) by omega])
+    obtain ⟨n, c, hw⟩ := h1
+    have hs0 : (cinstrAt t).straight = true := by simpa using hst 0 (by omega)
+    rw [← nextSlot_straight v hs0] at hw
+    exact ⟨_, _, Walk.step (by omega) (by simpa using hR 0 (by omega)) hw⟩
+
+/-- One chain segment, assembled backwards from its successor. -/
+theorem chain_mk {s : ℕ → ℕ} {k : ℕ} (hk : k < 42) (hs : ∀ j ≤ k, s j < W j)
+    (hblk : ∀ i, 0 < i → i ≤ 1 + pre k + s k + post k → R (entryOf k (s k) + i))
+    (hRd : R (ctl s k)) (hH1 : v (h1Cell k) = ofK (gpow (entryOf k (s k) + 1)))
+    (hk0 : v k0Cell = k0V)
+    (h : ∃ n c, Walk R v n (if k < 41 then ctlAfter k (s k) else rootSlot) c) :
+    ∃ n c, Walk R v n (ctl s k) c := by
+  have hsk := hs k le_rfl
+  set e := entryOf k (s k) with he
+  have hlt := entryOf_lt hk hsk
+  have hb := blk_lt hk hsk
+  -- the control slot after the block
+  have hctl : ∃ n c, Walk R v n (e + 1 + pre k + s k + post k) c := by
+    by_cases h41 : k < 41
+    · rw [if_pos h41] at h; exact h
+    · obtain rfl : k = 41 := by omega
+      rw [if_neg h41] at h
+      obtain ⟨n, c, hw⟩ := h
+      have hci : cinstrAt (e + 1 + pre 41 + s 41 + post 41) = .exit := by
+        rw [show e + 1 + pre 41 + s 41 + post 41 = e + (1 + pre 41 + s 41 + post 41) by ring,
+          cinstrAt_blk hk hsk (by omega) le_rfl, blockOp_ctl_exit]
+      have hnext : nextSlot v (e + 1 + pre 41 + s 41 + post 41) = rootSlot := by
+        unfold nextSlot; rw [hci]
+        show slotOf _ = _
+        rw [hk0, k0V, limb_ofK_zero, slotOf_gpow (by unfold rootSlot; omega)]
+      rw [← hnext] at hw
+      have hR' := hblk (1 + pre 41 + s 41 + post 41) (by omega) le_rfl
+      rw [show e + (1 + pre 41 + s 41 + post 41) = e + 1 + pre 41 + s 41 + post 41 by ring] at hR'
+      exact ⟨_, _, Walk.step (by unfold sentinel; omega) hR' hw⟩
+  -- the post, chain and pre segments
+  have h3 := walk_seg_ex (t := e + 1 + pre k + s k) (a := post k)
+    (fun i hi => by
+      rw [show e + 1 + pre k + s k + i = e + (1 + pre k + s k + i) by ring,
+        cinstrAt_blk hk hsk (by omega) (by omega)]
+      exact (blockOp_post hi).1)
+    (fun i hi => by
+      have := hblk (1 + pre k + s k + i) (by omega) (by omega)
+      rwa [show e + (1 + pre k + s k + i) = e + 1 + pre k + s k + i by ring] at this)
+    (by unfold sentinel; omega) hctl
+  have h2 := walk_seg_ex (t := e + 1 + pre k) (a := s k)
+    (fun i hi => by
+      rw [show e + 1 + pre k + i = e + (1 + pre k + i) by ring,
+        cinstrAt_blk hk hsk (by omega) (by omega), blockOp_chain hi]
+      exact (chainOp_straight _ _ _).1)
+    (fun i hi => by
+      have := hblk (1 + pre k + i) (by omega) (by omega)
+      rwa [show e + (1 + pre k + i) = e + 1 + pre k + i by ring] at this)
+    (by unfold sentinel; omega) h3
+  have h1 := walk_seg_ex (t := e + 1) (a := pre k)
+    (fun i hi => by
+      rw [Nat.add_assoc, cinstrAt_blk hk hsk (by omega) (by omega)]
+      exact (blockOp_pre hi).1)
+    (fun i hi => by
+      have := hblk (1 + i) (by omega) (by omega)
+      rwa [← Nat.add_assoc] at this)
+    (by unfold sentinel; omega) h2
+  -- the dispatch
+  obtain ⟨n, c, hw⟩ := h1
+  have hci := cinstrAt_ctl (s := s) (j := k) hk (fun j hj => hs j (by omega))
+  have hnext : nextSlot v (ctl s k) = e + 1 := by
+    unfold nextSlot; rw [hci]
+    show slotOf _ = _
+    rw [hH1, limb_ofK_zero, slotOf_gpow (by omega)]
+  have hctlk : ctl s k < sentinel := by
+    unfold ctl ctlAfter
+    split_ifs
+    · unfold sentinel; omega
+    · have := entryOf_lt (k := k - 1) (s := s (k - 1)) (by omega) (hs (k - 1) (by omega))
+      have := blk_lt (k := k - 1) (s := s (k - 1)) (by omega) (hs (k - 1) (by omega))
+      unfold sentinel; omega
+  rw [← hnext] at hw
+  exact ⟨_, _, Walk.step hctlk hRd hw⟩
+
+/-- **Assembling the forced path.** The relations along the path of `s`, with its return
+hints and `K0`, give a walk from slot `0`. -/
+theorem walk_mk {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts R s)
+    (hH1 : ∀ k < 42, v (h1Cell k) = ofK (gpow (entryOf k (s k) + 1)))
+    (hk0 : v k0Cell = k0V) : ∃ n c, Walk R v n 0 c := by
+  -- the root
+  have hroot : ∃ n c, Walk R v n rootSlot c :=
+    walk_seg_ex (a := 11) (fun i hi => (root_straight hi).1) hP.root
+      (by unfold rootSlot sentinel; omega) ⟨0, 0, Walk.done⟩
+  -- the chains, backwards
+  have key : ∀ d ≤ 42, ∃ n c, Walk R v n (if 42 - d < 42 then ctl s (42 - d) else rootSlot) c := by
+    intro d
+    induction d with
+    | zero => intro _; simpa using hroot
+    | succ d ih =>
+      intro hd
+      obtain ⟨n, c, hw⟩ := ih (by omega)
+      rw [if_pos (by omega)]
+      have hk : 42 - (d + 1) < 42 := by omega
+      refine chain_mk hk (fun j _ => hV j (by omega)) (hP.blk _ hk) ?_ (hH1 _ hk) hk0 ?_
+      · rcases Nat.eq_zero_or_pos (42 - (d + 1)) with h0 | h0
+        · rw [h0]; unfold ctl; rw [if_pos rfl]; exact hP.pro 57 (by omega)
+        · obtain ⟨j, hj⟩ : ∃ j, 42 - (d + 1) = j + 1 := ⟨42 - (d + 1) - 1, by omega⟩
+          rw [hj, ctl_succ]
+          have := hP.blk j (by omega) (1 + pre j + s j + post j) (by omega) le_rfl
+          rwa [show entryOf j (s j) + (1 + pre j + s j + post j) = ctlAfter j (s j) by
+            unfold ctlAfter; ring] at this
+      · by_cases h41 : 42 - (d + 1) < 41
+        · rw [if_pos h41]
+          have hd' : 42 - d = 42 - (d + 1) + 1 := by omega
+          rw [hd', if_pos (by omega), ctl_succ] at hw
+          exact ⟨n, c, hw⟩
+        · rw [if_neg h41]
+          rw [show 42 - d = 42 by omega, if_neg (by omega)] at hw
+          exact ⟨n, c, hw⟩
+  obtain ⟨n, c, hw⟩ := key 42 le_rfl
+  rw [if_pos (by omega), show 42 - 42 = 0 from rfl] at hw
+  unfold ctl at hw
+  rw [if_pos rfl] at hw
+  -- the prologue
+  have := walk_seg_ex (t := 0) (a := 57) (fun i hi => (prologue_straight (t := 0 + i) (by omega)).1)
+    (fun i hi => hP.pro _ (by omega)) (by unfold sentinel; omega) ⟨n, c, hw⟩
+  exact this
+
+end Mk
+
+/-! ## The pinned constants of a completing run -/
+
+section Prefix
+
+variable {κ : ℕ} {L : MemImage κ}
+
+/-- The relations of a straight prefix of a completing run. -/
+theorem rel_prefix (Sm : Sem) (B : BlakeRel)
+    (hst : ∀ s pc x, (cinstrAt s).straight = true →
+      x ∈ Sm.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr) →
+        x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).RelB B (Lx L))) :
+    ∀ a t n c, (∀ i < a, (cinstrAt (t + i)).straight = true) → t + a < sentinel →
+      some c ∈ Sm.S (LeanIsa.runCost program L n ⟨gpow t, 1⟩) →
+        ∀ i < a, (cinstrAt (t + i)).RelB B (Lx L) := by
+  intro a
+  induction a with
+  | zero => intro t n c _ _ _ i hi; omega
+  | succ a ih =>
+    intro t n c hstr hta h i hi
+    cases n with
+    | zero => rw [runCost_zero_slot L (by omega)] at h; exact absurd h Sm.some_not_pure_none
+    | succ m =>
+      have hs0 : (cinstrAt t).straight = true := by simpa using hstr 0 (by omega)
+      rw [runCost_slot L m (by omega), Sm.bind_iff] at h
+      obtain ⟨x, hx, hc⟩ := h
+      rcases hst t _ x hs0 hx with rfl | ⟨rfl, hrel⟩
+      · exact absurd hc Sm.some_not_pure_none
+      · rw [Option.elim_some, g_mul_gpow] at hc
+        obtain ⟨c', -, hc'⟩ := Sm.some_map_add hc
+        rcases Nat.eq_zero_or_pos i with rfl | hi0
+        · simpa using hrel
+        · have := ih (t + 1) m c' (fun j hj => by
+            rw [show t + 1 + j = t + (j + 1) by omega]; exact hstr (j + 1) (by omega))
+            (by omega) hc' (i - 1) (by omega)
+          rwa [show t + 1 + (i - 1) = t + i by omega] at this
+
+/-- A completing run from slot `0` has the constants `ONE` and `F_k` pinned. -/
+theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
+    (hst : ∀ s pc x, (cinstrAt s).straight = true →
+      x ∈ Sm.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr) →
+        x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).RelB B (Lx L)))
+    {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost program L n ⟨gpow 0, 1⟩)) : Pinned (Lx L) := by
+  have hp := rel_prefix Sm B hst 57 0 n c
+    (fun i hi => (prologue_straight (t := 0 + i) (by omega)).1) (by unfold sentinel; omega) h
+  refine ⟨?_, fun k hk => ?_⟩
+  · have := hp 1 (by omega); rwa [Nat.zero_add, cinstrAt_set1] at this
+  · have := hp (13 + k) (by omega); rwa [Nat.zero_add, cinstrAt_frame hk] at this
+
+end Prefix
+
 end
 
-end OptimalOTS.LeanIsaBaseline.Machine
+end OptimalOTS.HLFlat

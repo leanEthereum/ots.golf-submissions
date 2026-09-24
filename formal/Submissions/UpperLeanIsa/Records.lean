@@ -1,119 +1,313 @@
-import Submissions.UpperLeanIsa.QueryLayout
+import Submissions.UpperLeanIsa.LayerWire
 import Submissions.UpperLeanIsa.Cache
 
-/-! Independent source/output records and their programmed oracle points.
-The position tags make distinct locations disjoint for every record, without a
-probabilistic collision exception. -/
+/-!
+# Records of a layer scheme and their oracle points
 
-namespace OptimalOTS.LeanIsaBaseline
+A *record* is the randomness of key generation laid out by location: the 42 seeds and the full
+256-bit answer at every keygen query. Chain step `(k, j)` (`j + 1 < len k`) and root call `r < 10`
+are the locations. Distinct locations have distinct inputs in every pair of records
+(`location_eq_of_input_eq`), because the three tag cells and the metadata separate them
+syntactically (`Params.Hyp`); no probabilistic collision exception is needed.
 
-open OracleComp OracleSpec
+`Params.Hyp` collects the facts about the parameters used by the security proof.
+-/
+
+open OracleSpec OracleComp
+
+noncomputable section
+
 open scoped Classical
 
-abbrev ChainLocation := Fin 43 × Fin 127
-abbrev HashLocation := ChainLocation ⊕ Fin 43
-abbrev Record := Words × (HashLocation → BitVec hashBits)
+namespace OptimalOTS.LeanIsaBaseline.Layer
 
-def Record.word (ξ : Record) (i : Fin 43) (j : Fin 128) : Word :=
-  if h : j.val = 0 then ξ.1 i
-  else (ξ.2 (.inl (i, ⟨j.val - 1, by have := j.isLt; omega⟩))).extractLsb' 0 128
+namespace Params
 
-def Record.endpoint (ξ : Record) (i : Fin 43) : Word := ξ.word i 127
+variable (P : Params)
 
-def Record.rootBefore (ξ : Record) (i : Fin 43) : BitVec 256 :=
-  if h : i.val = 0 then 0
-  else ξ.2 (.inr ⟨i.val - 1, by have := i.isLt; omega⟩)
+/-- The standing hypotheses of the security proof. -/
+structure Hyp : Prop where
+  len_pos : ∀ k, 1 ≤ P.len k
+  digit_lt : ∀ I k, P.digit I k < P.len k
+  digit_inj : ∀ I I' : Word, (∀ k, P.digit I k = P.digit I' k) → I = I'
+  layer_pos : 1 ≤ P.layer
+  tag_inj : ∀ (k k' : Fin numChains) (j j' : ℕ), j + 1 < P.len k → j' + 1 < P.len k' →
+    P.tag k j 0 = P.tag k' j' 0 → P.tag k j 1 = P.tag k' j' 1 → P.tag k j 2 = P.tag k' j' 2 →
+    k = k' ∧ j = j'
+  chain_idx : P.chainMd ≠ P.idxMd
+  chain_root : ∀ r < 10, P.chainMd ≠ P.rootMd r
+  root_idx : ∀ r < 10, P.rootMd r ≠ P.idxMd
+  root_inj : ∀ r s, r < 10 → s < 10 → P.rootMd r = P.rootMd s → r = s
+  numValid_ge : 200 * 2 ^ 108 ≤ P.numValid
+  numValid_le : 2 * P.numValid ≤ 2 ^ 128
+  keygen_le : 2 * (∑ k, (P.len k - 1)) + 20 ≤ 2 ^ 20
+  verify_le : 22 + 2 * P.layer ≤ 2 ^ 20
+  len_zero : 2 ≤ P.len 0
 
-def rootTag (i : Fin 43) : Fin 43 := ⟨42 - i.val, by omega⟩
+end Params
 
-theorem rootTag_injective : Function.Injective rootTag := by
-  intro i j h
-  have hn := congrArg Fin.val h
-  apply Fin.ext
-  have hi := i.isLt
-  have hj := j.isLt
-  change 42 - i.val = 42 - j.val at hn
-  omega
+/-! ## Injectivity of the query layouts -/
 
-def Record.input (ξ : Record) : HashLocation → BitVec 896
-  | .inl (i, j) => chainInput i.val j.val (ξ.word i j.castSucc)
-  | .inr i => rootInput (rootTag i) (ξ.rootBefore i) (ξ.endpoint i)
+theorem append_inj {a b : ℕ} {x x' : BitVec a} {y y' : BitVec b}
+    (h : x ++ y = x' ++ y') : x = x' ∧ y = y' := by
+  constructor
+  · simpa only [BitVec.extractLsb'_append_eq_left] using
+      congrArg (fun z : BitVec (a + b) => z.extractLsb' b a) h
+  · simpa only [BitVec.extractLsb'_append_eq_right] using
+      congrArg (fun z : BitVec (a + b) => z.extractLsb' 0 b) h
 
-def Record.query (ξ : Record) (a : HashLocation) : Query := ⟨896, ξ.input a⟩
+theorem query_inj {a b : BitVec 896} (h : (⟨896, a⟩ : Query) = ⟨896, b⟩) : a = b :=
+  eq_of_heq (Sigma.mk.inj_iff.mp h).2
+
+namespace Params
+
+variable {P : Params}
+
+theorem chainInput_eq_iff (hP : P.Hyp) {k k' : Fin numChains} {j j' : ℕ}
+    (hj : j + 1 < P.len k) (hj' : j' + 1 < P.len k') (x y : Word) :
+    P.chainInput k j x = P.chainInput k' j' y ↔ k = k' ∧ j = j' ∧ x = y := by
+  constructor
+  · intro h
+    have hb := ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.1
+    obtain ⟨h1, hx⟩ := append_inj hb
+    obtain ⟨h2, h0⟩ := append_inj h1
+    obtain ⟨h3, h1'⟩ := append_inj h2
+    obtain ⟨hk, hjj⟩ := hP.tag_inj k k' j j' hj hj' h0 h1' h3
+    exact ⟨hk, hjj, hx⟩
+  · rintro ⟨rfl, rfl, rfl⟩
+    rfl
+
+theorem chainInput_same_iff (k : Fin numChains) (j : ℕ) (x y : Word) :
+    P.chainInput k j x = P.chainInput k j y ↔ x = y := by
+  constructor
+  · intro h
+    have hb := ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.1
+    exact (append_inj hb).2
+  · rintro rfl
+    rfl
+
+theorem rootInput_eq_iff (hP : P.Hyp) {r s : ℕ} (hr : r < 10) (hs : s < 10)
+    (t t' : Fin numChains → Word) (st st' : BitVec 256) :
+    P.rootInput t r st = P.rootInput t' s st' ↔
+      r = s ∧ st = st' ∧
+        Params.topAt t (4 * r + 5) ++ Params.topAt t (4 * r + 4) ++ Params.topAt t (4 * r + 3) ++
+            Params.topAt t (4 * r + 2) =
+          Params.topAt t' (4 * s + 5) ++ Params.topAt t' (4 * s + 4) ++ Params.topAt t' (4 * s + 3) ++
+            Params.topAt t' (4 * s + 2) := by
+  unfold rootInput
+  rw [hashInput_eq_iff]
+  constructor
+  · rintro ⟨h1, h2, h3⟩
+    exact ⟨hP.root_inj r s hr hs h3, h1, h2⟩
+  · rintro ⟨rfl, h1, h2⟩
+    exact ⟨h1, h2, rfl⟩
+
+theorem chainInput_ne_rootInput (hP : P.Hyp) {r : ℕ} (hr : r < 10) (k : Fin numChains) (j : ℕ)
+    (x : Word) (t : Fin numChains → Word) (st : BitVec 256) :
+    P.chainInput k j x ≠ P.rootInput t r st := by
+  intro h
+  exact hP.chain_root r hr ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.2
+
+theorem chainInput_ne_idxInput (hP : P.Hyp) (k : Fin numChains) (j : ℕ) (x : Word)
+    (m : Message) (η : Nonce) (pk : PublicKey) : P.chainInput k j x ≠ P.idxInput m η pk := by
+  intro h
+  exact hP.chain_idx ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.2
+
+theorem rootInput_ne_idxInput (hP : P.Hyp) {r : ℕ} (hr : r < 10) (t : Fin numChains → Word)
+    (st : BitVec 256) (m : Message) (η : Nonce) (pk : PublicKey) :
+    P.rootInput t r st ≠ P.idxInput m η pk := by
+  intro h
+  exact hP.root_idx r hr ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.2
+
+end Params
+
+/-! ## Locations and records -/
+
+/-- Chain step `(k, j)`: the query at position `j < len k - 1` of chain `k`. -/
+abbrev ChainLoc (P : Params) := (k : Fin numChains) × Fin (P.len k - 1)
+
+/-- The keygen locations: chain steps and the 10 root calls. -/
+abbrev Loc (P : Params) := ChainLoc P ⊕ Fin 10
+
+/-- The seeds and the full answer at every keygen location. -/
+abbrev Record (P : Params) := (Fin numChains → Word) × (Loc P → BitVec hashBits)
+
+variable {P : Params}
+
+/-- The word of chain `k` at position `j` (zero past the end). -/
+def Record.word (ξ : Record P) (k : Fin numChains) : ℕ → Word
+  | 0 => ξ.1 k
+  | j + 1 => if h : j < P.len k - 1 then (ξ.2 (.inl ⟨k, ⟨j, h⟩⟩)).extractLsb' 0 128 else 0
+
+theorem Record.word_zero (ξ : Record P) (k : Fin numChains) : ξ.word k 0 = ξ.1 k := rfl
+
+theorem Record.word_succ (ξ : Record P) (k : Fin numChains) (j : ℕ) (h : j < P.len k - 1) :
+    ξ.word k (j + 1) = (ξ.2 (.inl ⟨k, ⟨j, h⟩⟩)).extractLsb' 0 128 := by
+  simp only [Record.word, dif_pos h]
+
+/-- The tops: the last word of every chain. -/
+def Record.top (ξ : Record P) (k : Fin numChains) : Word := ξ.word k (P.len k - 1)
+
+/-- The root state before call `r`. -/
+def Record.rootState (ξ : Record P) : ℕ → BitVec 256
+  | 0 => Params.rootInit ξ.top
+  | r + 1 => if h : r < 10 then ξ.2 (.inr ⟨r, h⟩) else 0
+
+theorem Record.rootState_succ (ξ : Record P) (r : Fin 10) :
+    ξ.rootState (r.val + 1) = ξ.2 (.inr r) := by
+  unfold Record.rootState
+  exact dif_pos r.isLt
+
+theorem Record.rootState_zero (ξ : Record P) : ξ.rootState 0 = Params.rootInit ξ.top := rfl
+
+theorem Record.rootState_succ_lt (ξ : Record P) (r : ℕ) (hr : r < 10) :
+    ξ.rootState (r + 1) = ξ.2 (.inr ⟨r, hr⟩) := by
+  unfold Record.rootState
+  exact dif_pos hr
+
+theorem Record.rootState_succ_ge (ξ : Record P) (r : ℕ) (hr : ¬ r < 10) :
+    ξ.rootState (r + 1) = 0 := by
+  unfold Record.rootState
+  exact dif_neg hr
+
+/-- The input of the keygen query at a location. -/
+def Record.input (ξ : Record P) : Loc P → BitVec 896
+  | .inl ⟨k, j⟩ => P.chainInput k j.val (ξ.word k j.val)
+  | .inr r => P.rootInput ξ.top r.val (ξ.rootState r.val)
+
+/-- The keygen query at a location. -/
+def Record.query (ξ : Record P) (a : Loc P) : Query := ⟨896, ξ.input a⟩
+
+theorem Record.query_inl (ξ : Record P) (k : Fin numChains) (j : Fin (P.len k - 1)) :
+    ξ.query (.inl ⟨k, j⟩) = ⟨896, P.chainInput k j.val (ξ.word k j.val)⟩ := rfl
+
+theorem Record.query_inr (ξ : Record P) (r : Fin 10) :
+    ξ.query (.inr r) = ⟨896, P.rootInput ξ.top r.val (ξ.rootState r.val)⟩ := rfl
+
+/-- The public key: the low half of the last root answer. -/
+def Record.pk (ξ : Record P) : PublicKey := (ξ.2 (.inr 9)).extractLsb' 0 128
+
+/-- The chain table of chain `k`: its words at positions `0, …, len k - 1`. -/
+def Record.table (ξ : Record P) (k : Fin numChains) : List Word :=
+  (List.range (P.len k)).map (ξ.word k)
+
+/-- The secret key of the record. -/
+def Record.sk (ξ : Record P) : SecretKey := ⟨ξ.table, ξ.pk⟩
+
+theorem ChainLoc.ext' {a b : ChainLoc P} (hk : a.1 = b.1) (hj : a.2.val = b.2.val) : a = b := by
+  rcases a with ⟨k, j⟩
+  rcases b with ⟨k', j'⟩
+  dsimp only at hk hj
+  subst hk
+  exact congrArg (Sigma.mk k) (Fin.ext hj)
 
 /-- Even different records cannot place different locations at the same oracle input. -/
-theorem location_eq_of_input_eq (ξ ζ : Record) (a b : HashLocation)
+theorem location_eq_of_input_eq (hP : P.Hyp) (ξ ζ : Record P) (a b : Loc P)
     (h : ξ.input a = ζ.input b) : a = b := by
   cases a with
   | inl a =>
+    rcases a with ⟨k, j⟩
     cases b with
     | inl b =>
-      have hs := (chainInput_eq_iff a.1 b.1 a.2 b.2 _ _).mp h
-      exact congrArg Sum.inl (Prod.ext hs.1 hs.2.1)
-    | inr b => exact (chainInput_ne_rootInput _ _ _ _ _ _ h).elim
-  | inr a =>
+      rcases b with ⟨k', j'⟩
+      have hs := (Params.chainInput_eq_iff hP (by have := j.isLt; omega)
+        (by have := j'.isLt; omega) _ _).mp h
+      exact congrArg Sum.inl (ChainLoc.ext' hs.1 hs.2.1)
+    | inr r => exact (Params.chainInput_ne_rootInput hP r.isLt _ _ _ _ _ h).elim
+  | inr r =>
     cases b with
-    | inl b => exact (chainInput_ne_rootInput _ _ _ _ _ _ h.symm).elim
-    | inr b =>
-      have hs := (rootInput_eq_iff _ _ _ _ _ _).mp h
-      exact congrArg Sum.inr (rootTag_injective hs.1)
+    | inl b =>
+      rcases b with ⟨k', j'⟩
+      exact (Params.chainInput_ne_rootInput hP r.isLt _ _ _ _ _ h.symm).elim
+    | inr s =>
+      have hs := (Params.rootInput_eq_iff hP r.isLt s.isLt _ _ _ _).mp h
+      exact congrArg Sum.inr (Fin.ext hs.1)
 
-theorem location_eq_of_query_eq (ξ ζ : Record) (a b : HashLocation)
-    (h : ξ.query a = ζ.query b) : a = b := by
-  apply location_eq_of_input_eq ξ ζ a b
-  exact eq_of_heq (Sigma.mk.inj_iff.mp h).2
+theorem location_eq_of_query_eq (hP : P.Hyp) (ξ ζ : Record P) (a b : Loc P)
+    (h : ξ.query a = ζ.query b) : a = b :=
+  location_eq_of_input_eq hP ξ ζ a b (query_inj h)
 
-theorem Record.query_injective (ξ : Record) : Function.Injective ξ.query :=
-  fun a b h => location_eq_of_query_eq ξ ξ a b h
-
-/-- The domain decoder depends only on the query, never on a particular sampled record. -/
-noncomputable def queryLocation (q : Query) : Option HashLocation :=
-  @dite (Option HashLocation) (∃ p : Record × HashLocation, p.1.query p.2 = q)
+/-- The location decoder: it depends only on the query, never on a particular record. -/
+def queryLocation (P : Params) (q : Query) : Option (Loc P) :=
+  @dite (Option (Loc P)) (∃ p : Record P × Loc P, p.1.query p.2 = q)
     (Classical.propDecidable _)
     (fun h => some (Classical.choose h).2) (fun _ => none)
 
-theorem queryLocation_query (ξ : Record) (a : HashLocation) : queryLocation (ξ.query a) = some a := by
+theorem queryLocation_query (hP : P.Hyp) (ξ : Record P) (a : Loc P) :
+    queryLocation P (ξ.query a) = some a := by
   unfold queryLocation
-  have hex : ∃ p : Record × HashLocation, p.1.query p.2 = ξ.query a := ⟨(ξ, a), rfl⟩
+  have hex : ∃ p : Record P × Loc P, p.1.query p.2 = ξ.query a := ⟨(ξ, a), rfl⟩
   rw [dif_pos hex]
-  exact congrArg some (location_eq_of_query_eq _ _ _ _ (Classical.choose_spec hex))
+  exact congrArg some (location_eq_of_query_eq hP _ _ _ _ (Classical.choose_spec hex))
 
-theorem queryLocation_some_width {q : Query} {a : HashLocation}
-    (h : queryLocation q = some a) : q.1 = 896 := by
+theorem queryLocation_some {q : Query} {a : Loc P} (h : queryLocation P q = some a) :
+    ∃ ζ : Record P, ζ.query a = q := by
   unfold queryLocation at h
   split at h
   · rename_i hex
-    have he := congrArg Sigma.fst (Classical.choose_spec hex)
-    exact he.symm
+    refine ⟨(Classical.choose hex).1, ?_⟩
+    have ha := Option.some.inj h
+    rw [← ha]
+    exact Classical.choose_spec hex
   · simp at h
+
+theorem queryLocation_some_width {q : Query} {a : Loc P}
+    (h : queryLocation P q = some a) : q.1 = 896 := by
+  obtain ⟨ζ, rfl⟩ := queryLocation_some h
+  rfl
+
+theorem queryLocation_eq_none {q : Query} (h : ∀ (ζ : Record P) (a : Loc P), ζ.query a ≠ q) :
+    queryLocation P q = none := by
+  unfold queryLocation
+  rw [dif_neg]
+  rintro ⟨p, hp⟩
+  exact h p.1 p.2 hp
 
 attribute [local irreducible] Record.query queryLocation
 
-noncomputable def Record.cache (ξ : Record) : Cache :=
-  letI : DecidableEq Query := Classical.decEq Query
-  fun q => match queryLocation q with
-    | none => none
-    | some a => if ξ.query a = q then some (ξ.2 a) else none
+/-- The programmed cache of a record: every keygen query with its recorded answer. -/
+def Record.cache (ξ : Record P) : Cache := fun q =>
+  match queryLocation P q with
+  | none => none
+  | some a => if ξ.query a = q then some (ξ.2 a) else none
 
-theorem Record.cache_query (ξ : Record) (a : HashLocation) :
+theorem Record.cache_query (hP : P.Hyp) (ξ : Record P) (a : Loc P) :
     ξ.cache (ξ.query a) = some (ξ.2 a) := by
   unfold Record.cache
-  rw [queryLocation_query]
+  rw [queryLocation_query hP]
   exact if_pos rfl
 
-theorem Record.cache_some_iff (ξ : Record) (q : Query) (u : BitVec hashBits) :
+theorem Record.cache_some_iff (hP : P.Hyp) (ξ : Record P) (q : Query) (u : BitVec hashBits) :
     ξ.cache q = some u ↔ ∃ a, ξ.query a = q ∧ ξ.2 a = u := by
   constructor
   · intro h
-    cases hl : queryLocation q with
+    cases hl : queryLocation P q with
     | none => simp only [Record.cache, hl, reduceCtorEq] at h
     | some a =>
       by_cases ha : ξ.query a = q
       · exact ⟨a, ha, Option.some.inj (by simpa only [Record.cache, hl, if_pos ha] using h)⟩
       · simp only [Record.cache, hl, if_neg ha, reduceCtorEq] at h
   · rintro ⟨a, rfl, rfl⟩
-    exact ξ.cache_query a
+    exact ξ.cache_query hP a
 
-def Record.publicKey (ξ : Record) : PublicKey := (ξ.2 (.inr 42)).extractLsb' 0 128
+theorem Record.cache_isSome_iff (hP : P.Hyp) (ξ : Record P) (q : Query) :
+    (ξ.cache q).isSome ↔ ∃ a, ξ.query a = q := by
+  rw [Option.isSome_iff_exists]
+  constructor
+  · rintro ⟨u, hu⟩
+    obtain ⟨a, ha, -⟩ := (ξ.cache_some_iff hP q u).mp hu
+    exact ⟨a, ha⟩
+  · rintro ⟨a, ha⟩
+    exact ⟨ξ.2 a, (ξ.cache_some_iff hP q _).mpr ⟨a, ha, rfl⟩⟩
 
-end OptimalOTS.LeanIsaBaseline
+/-- Record caches hold no index entry. -/
+theorem Record.query_ne_idx (hP : P.Hyp) (ξ : Record P) (a : Loc P) (m : Message) (η : Nonce)
+    (pk : PublicKey) : ξ.query a ≠ ⟨896, P.idxInput m η pk⟩ := by
+  intro h
+  unfold Record.query at h
+  have h' := query_inj h
+  cases a with
+  | inl a => exact Params.chainInput_ne_idxInput hP _ _ _ _ _ _ h'
+  | inr r => exact Params.rootInput_ne_idxInput hP r.isLt _ _ _ _ _ h'
+
+end OptimalOTS.LeanIsaBaseline.Layer
