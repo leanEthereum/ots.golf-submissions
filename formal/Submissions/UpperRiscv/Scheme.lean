@@ -4,7 +4,7 @@ import Submissions.UpperRiscv.GScheme
 /-!
 # The bare-chain forest
 
-A family of cuts indexed by the accepted indices, with four 160-bit, sixteen 152-bit and twelve 192-bit values. Verification
+A family of cuts indexed by the accepted indices, with sixteen 144-bit and sixteen 192-bit values. Verification
 costs 202 compressions.
 -/
 

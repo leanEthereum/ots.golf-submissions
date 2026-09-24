@@ -9,7 +9,7 @@ open Riscv2Program (W W_toNat)
 open Forest
 
 /-- Cursor in the graph's payload order, including the final cursor at chain 32. -/
-def cursor (k : ℕ) : ℕ := if k < 4 then 160*k else if k < 20 then 640+152*(k-4) else 3072+192*(k-20)
+def cursor (k : ℕ) : ℕ := if k < 16 then 144*k else 2304+192*(k-16)
 /-- Offset in the wire payload, in bits. -/
 def wireOffset (k : ℕ) : ℕ := 8 * wireByte k
 
@@ -39,7 +39,7 @@ theorem output_bounds (k : Fin 32) :
   unfold outAddr; omega
 
 /-- The state of every chain begins `truncOff k / 8` bytes into its answer buffer: byte 8 for a
-chain in its cell, byte 13 for the four chains hashed in place five bytes above their cells. -/
+chain in its cell, byte 14 for the four chains hashed in place six bytes above their cells. -/
 theorem work_eq' : ∀ k : Fin 32, work k = outAddr k + truncOff k / 8 := by
   decide +kernel
 
@@ -79,6 +79,16 @@ theorem completed_disjoint (j k : Fin 32) (hjk : j.val < k.val) :
 
 theorem payload_index (k : Fin 32) (i : ℕ) (hi : i < chainBits k) :
     Payload.index 5376 (cursor k + i) = wireOffset k + i := by
-  revert i k; decide +kernel
+  have narrow : ∀ j : Fin 32, j.val < 16 → wireOffset j = 144 * Payload.order j := by
+    decide +kernel
+  have wide : ∀ j : Fin 32, 16 ≤ j.val → wireOffset j = 2304 + 192 * (j.val - 16) := by
+    decide +kernel
+  by_cases hk : k.val < 16
+  · have hw : chainBits k = 144 := by simp [chainBits, hk]
+    rw [hw] at hi
+    rw [cursor, if_pos hk, Payload.index, if_pos ⟨rfl, by omega⟩]
+    rw [show (144 * k.val + i) / 144 = k.val by omega,
+      show (144 * k.val + i) % 144 = i by omega, narrow k hk]
+  · rw [cursor, if_neg hk, Payload.index, if_neg (by omega), wide k (by omega)]
 
 end OptimalOTS.RiscvMixedProgram

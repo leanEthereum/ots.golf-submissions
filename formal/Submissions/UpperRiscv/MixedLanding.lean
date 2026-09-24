@@ -10,7 +10,7 @@ def leftChain (q : Fin 16) : Fin 32 := ⟨2*q.val, by have := q.isLt; omega⟩
 def rightChain (q : Fin 16) : Fin 32 := ⟨2*q.val+1, by have := q.isLt; omega⟩
 def nextCode (q : ℕ) : Code := if q=15 then root ++ decision else prologue (q+1)
 def lengthSetup (q : ℕ) : Code :=
-  if q=2 then [.ADDI .x11 .x0 152] else if q=10 then [.ADDI .x11 .x0 192] else []
+  if q=8 then [.ADDI .x11 .x0 192] else []
 
 theorem prologue_parts (q : Fin 16) : prologue q = lengthSetup q ++
     enter (leftChain q) (prevInput (leftChain q)) ++ dispatchCode q := by

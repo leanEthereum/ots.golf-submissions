@@ -10,7 +10,7 @@ For every adversary `A` whose experiment costs at most `B ≤ 2 ^ 127` on every 
 probTrue (GScheme.experiment forestScheme A) ≤ 2 ε (B - 1036) + 2 δ,  ε = 2 ^ (-128),
 ```
 
-where `δ = 2 · 1025² · 2 ^ (-152)` bounds the weight of the bad records (`GoodRec.lean`).
+where `δ = 2 · 1025² · 2 ^ (-144)` bounds the weight of the bad records (`GoodRec.lean`).
 
 The proof follows `DESIGN.md`: key generation is a uniform record (`E_run_keygen_le`, up to the
 records whose keygen points collide); the bad records are given up at once; the

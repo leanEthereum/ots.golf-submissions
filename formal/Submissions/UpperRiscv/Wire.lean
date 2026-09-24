@@ -41,7 +41,7 @@ theorem reveal_positive (i : Idx) :
     exact ⟨0, rfl⟩
   have bound := Finset.single_le_sum (s := Forest.setsName i)
     (f := fun n => n.len) (fun _ _ => Nat.zero_le _) present
-  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 160 := Forest.chainNode_len _ _
+  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 144 := Forest.chainNode_len _ _
   rw [len] at bound
   omega
 

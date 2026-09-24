@@ -4,16 +4,15 @@ import Submissions.UpperRiscv.Semantics
 /-!
 # The mixed-width chain graph
 
-There are 32 chains of 32 hash steps. Chains 0–3 carry 160-bit states, chains 4–19
-carry 152-bit states and chains 20–31 carry 192-bit states. Chains are indexed in
-execution order, which is also the order of their 24-byte working cells; sixteen of
-the wire values already sit on that grid and need no expansion, and four more (chains
-7, 11, 15, 19) are hashed in place five bytes above their cells. Every hash returns
-256 bits; the next state is the slice starting at bit `truncOff k`: bit 64, or bit 104
+There are 32 chains of 32 hash steps. Chains 0–15 carry 144-bit states and chains
+16–31 carry 192-bit states. Chains are indexed in execution order, which is also
+the order of their 24-byte working cells. Twenty wire values sit on that grid;
+four more (chains 6, 9, 12, 15) are hashed in place six bytes above their cells.
+Every hash returns 256 bits; the next state starts at bit `truncOff k`: 64, or 112
 for the four chains hashed in place above their cells. A source is already state-width.
 
 The root commits to the low 192 bits of all 32 tops, in cell order, for 6144 bits
-(`rootCat`). The key-generation input lengths 152, 160, 192 and 6144 differ from the
+(`rootCat`). The key-generation input lengths 144, 192 and 6144 differ from the
 512-bit index input.
 -/
 
@@ -31,23 +30,22 @@ namespace Forest
 
 /-- Width of chain states, indexed in execution order. -/
 def chainBits (k : Fin 32) : ℕ :=
-  if k.val < 4 then 160 else if k.val < 20 then 152 else 192
+  if k.val < 16 then 144 else 192
 
 theorem chainBits_cases (k : Fin 32) :
-    chainBits k = 160 ∨ chainBits k = 152 ∨ chainBits k = 192 := by
+    chainBits k = 144 ∨ chainBits k = 192 := by
   unfold chainBits; split_ifs <;> simp
 
-theorem chainBits_ge (k : Fin 32) : 152 ≤ chainBits k := by
-  rcases chainBits_cases k with h | h | h <;> omega
+theorem chainBits_ge (k : Fin 32) : 144 ≤ chainBits k := by
+  rcases chainBits_cases k with h | h <;> omega
 
 theorem chainBits_le (k : Fin 32) : chainBits k ≤ 192 := by
-  rcases chainBits_cases k with h | h | h <;> omega
+  rcases chainBits_cases k with h | h <;> omega
 
 /-- Bit offset of a chain's next state inside a 256-bit answer: the answer is written eight
-bytes below the state, except for chains 7, 11, 15 and 19, which are hashed in place and whose
-answer starts thirteen bytes below it. -/
+bytes below the state, except for chains 6, 9, 12 and 15, whose answer starts fourteen bytes below it. -/
 def truncOff (k : Fin 32) : ℕ :=
-  if k.val = 7 ∨ k.val = 11 ∨ k.val = 15 ∨ k.val = 19 then 104 else 64
+  if k.val = 6 ∨ k.val = 9 ∨ k.val = 12 ∨ k.val = 15 then 112 else 64
 
 theorem truncOff_add_le' : ∀ k : Fin 32, truncOff k + chainBits k ≤ 256 := by
   decide +kernel

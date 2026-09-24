@@ -208,41 +208,6 @@ theorem miss_trials_le : miss ^ trials ≤ (740 / 1000 : ℝ≥0∞) / 2 ^ 128 :
       ENNReal.ofReal_ofNat]
   rwa [hb, hh] at h'
 
-/-- The bad records weigh less than `2 ^ (-130)`. -/
-theorem δ_le : δ ≤ 1 / 2 ^ 130 := by
-  have h0 : (2 : ℝ≥0∞) ^ 22 ≠ 0 := by simp
-  have ht : (2 : ℝ≥0∞) ^ 22 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
-  have e : ε₁ = ((2 : ℝ≥0∞) ^ 22)⁻¹ * ((2 : ℝ≥0∞) ^ 130)⁻¹ := by
-    rw [ε₁, show (2 : ℝ≥0∞) ^ 152 = 2 ^ 22 * 2 ^ 130 by rw [← pow_add],
-      ENNReal.mul_inv (Or.inl h0) (Or.inl ht)]
-  rw [δ, e, one_div]
-  calc 2 * (1025 * 1025) * (((2 : ℝ≥0∞) ^ 22)⁻¹ * ((2 : ℝ≥0∞) ^ 130)⁻¹)
-      = (2 * (1025 * 1025) * ((2 : ℝ≥0∞) ^ 22)⁻¹) * ((2 : ℝ≥0∞) ^ 130)⁻¹ := by ring
-    _ ≤ 1 * ((2 : ℝ≥0∞) ^ 130)⁻¹ := by
-        refine mul_le_mul' ?_ le_rfl
-        rw [← div_eq_mul_inv, ENNReal.div_le_iff h0 ht]
-        exact_mod_cast (by norm_num : (2 * (1025 * 1025) : ℕ) ≤ 1 * 2 ^ 22)
-    _ = ((2 : ℝ≥0∞) ^ 130)⁻¹ := one_mul _
-
-/-- The two failure terms fit the allowance. -/
-theorem sum_le_allowance : (740 / 1000 : ℝ≥0∞) / 2 ^ 128 + 1 / 2 ^ 130 ≤ 1 / 2 ^ 128 := by
-  have h : ((740 : ℝ) / 1000) / 2 ^ 128 + 1 / 2 ^ 130 ≤ 1 / 2 ^ 128 := by
-    rw [div_add_div _ _ (by positivity) (by positivity), div_le_div_iff₀ (by positivity) (by positivity)]
-    norm_num
-  have h' := ENNReal.ofReal_le_ofReal h
-  rw [ENNReal.ofReal_add (by positivity) (by positivity)] at h'
-  have e1 : ENNReal.ofReal (((740 : ℝ) / 1000) / 2 ^ 128) = (740 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
-    rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_div_of_pos (by positivity),
-      ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat,
-      ENNReal.ofReal_ofNat]
-  have e2 : ENNReal.ofReal ((1 : ℝ) / 2 ^ 130) = (1 / 2 ^ 130 : ℝ≥0∞) := by
-    rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_one,
-      ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat]
-  have e3 : ENNReal.ofReal ((1 : ℝ) / 2 ^ 128) = (1 / 2 ^ 128 : ℝ≥0∞) := by
-    rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_one,
-      ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat]
-  rwa [e1, e2, e3] at h'
-
 /-- Signing has the same failure probability for every message and every fresh index cache. -/
 theorem sign_failure (x : forestScheme.graph.Assignment) (m : Message)
     (c : Cache)

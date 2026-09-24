@@ -25,7 +25,7 @@ theorem lengthSetup_ready (s : MachineState) (q : ℕ) : Riscv.LinearReady s (le
   unfold lengthSetup
   split_ifs <;> simp [Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
-theorem prevBits_left (q : Fin 16) (h2 : q.val ≠ 2) (h10 : q.val ≠ 10) :
+theorem prevBits_left (q : Fin 16) (h8 : q.val ≠ 8) :
     prevBits (leftChain q) = chainBits (leftChain q) := by
   revert q; decide
 
@@ -35,22 +35,15 @@ theorem prevBits_right (q : Fin 16) : prevBits (rightChain q) = chainBits (right
 theorem lengthSetup_effect (s : MachineState) (q : Fin 16)
     (h : s.getReg .x11 = W (prevBits (leftChain q))) :
     LengthEffect s ((lengthSetup q).foldl execInstrBr s) q := by
-  by_cases hq : q.val=2
-  · have he : q=2 := Fin.ext hq
+  by_cases hq : q.val=8
+  · have he : q=8 := Fin.ext hq
     subst q
     refine ⟨?_, ?_, rfl, rfl⟩
     · simp [lengthSetup, execInstrBr, getReg_setReg_ite, chainBits, leftChain, W, getReg_x0']
       decide
     · intro r hr; simp [lengthSetup, execInstrBr, getReg_setReg_ite, hr]
-  by_cases hq' : q.val=10
-  · have he : q=10 := Fin.ext hq'
-    subst q
-    refine ⟨?_, ?_, rfl, rfl⟩
-    · simp [lengthSetup, execInstrBr, getReg_setReg_ite, chainBits, leftChain, W, getReg_x0']
-      decide
-    · intro r hr; simp [lengthSetup, execInstrBr, getReg_setReg_ite, hr]
-  · have hw := prevBits_left q hq hq'
-    simp only [lengthSetup, if_neg hq, if_neg hq', List.foldl_nil]
+  · have hw := prevBits_left q hq
+    simp only [lengthSetup, if_neg hq, List.foldl_nil]
     exact ⟨h.trans (congrArg W hw), fun _ _ => rfl, rfl, rfl⟩
 
 theorem pairCost_eq (q : Fin 16) : pairCost index q =
