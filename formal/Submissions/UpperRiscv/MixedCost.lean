@@ -41,7 +41,7 @@ theorem pair_landing (index : Idx) (q : ℕ) (hq : q < 16) :
       4*(2^fineWidth q-1-digit index.val (2*q)) := by
   have hc := coarseDigit_lt_copies index q hq
   have hf := fineDigit_lt index q hq
-  have e : copyStart q 0 = copyStart q (coarseDigit index q)+512*coarseDigit index q := by
+  have e : copyStart q 0 = copyStart q (coarseDigit index q)+1024*coarseDigit index q := by
     unfold copyStart
     omega
   unfold landing0 dispatch
@@ -62,7 +62,7 @@ theorem chainsCost_eq (index : Idx) : chainsCost index = 299 := by
   have he : ∑ k : Fin 32, earlyHash k = 12 := by decide +kernel
   rw [chainsCost, all_chain_hashes, he]
 
-theorem totalCost (index : Idx) : 39+chainsCost index+21 = 359 := by
+theorem totalCost (index : Idx) : 38+chainsCost index+21 = 358 := by
   rw [chainsCost_eq]
 
 end OptimalOTS.RiscvMixedProgram

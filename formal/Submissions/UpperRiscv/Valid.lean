@@ -163,11 +163,11 @@ theorem numValid_avail : 750 * 2 ^ 105 ≤ numValid := by
 /-! ## The machine's reading of the digits -/
 
 /-- Unread bits preceding each digit. Sixteen 16-bit lanes each hold a pair,
-with the fine digit at bit 2 and the coarse digit at bit 9. Cell 32 is trailing junk. -/
+with the fine digit at bit 2 and the coarse digit at bit 10. Cell 32 is trailing junk. -/
 def jw (k : ℕ) : ℕ :=
   if k = 0 then 2 else if k < 32 then
-    (if k % 2 = 1 then 3 else 5)
-  else if k = 32 then 3 else 0
+    4
+  else if k = 32 then 2 else 0
 
 /-- Cell widths. -/
 def cw (k : ℕ) : ℕ := jw k + wid k

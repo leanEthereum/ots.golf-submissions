@@ -8,29 +8,47 @@ open Riscv2Program
 
 /-- Position of a copy in the concrete instruction image. -/
 def copyOffset (q d : ℕ) : ℕ :=
-  51 + groupOffset (group q) + 128*(copies q-1-d) + 40*withinGroup q
+  50 + groupOffset (group q) + 256*(copies q-1-d) + slotOffset q
 
 theorem copyStart_eq (q d : ℕ) : copyStart q d = 4096+4*copyOffset q d := by
   unfold copyStart copiesStart copyOffset
   omega
 
-theorem copyCode_length' : ∀ q : Fin 16, ∀ d : Fin (copies q), (copyCode q d).length = copyCapacity q := by
-  decide +kernel
+def wellPlaced (cursor : ℕ) : List (ℕ × Code) → Bool
+  | [] => true
+  | (off, body) :: rest => decide (cursor ≤ off) && wellPlaced (off+body.length) rest
 
-theorem group_image' : ∀ g : Fin 6,
-    (verifier.drop (51+groupOffset g)).take (groupCode g).length = groupCode g := by
-  decide +kernel
+theorem fragments_placed : wellPlaced 0 fragments = true := by decide +kernel
 
-theorem copy_group' : ∀ q : Fin 16, ∀ d : Fin (copies q),
-    ((groupCode (group q)).drop (128*(copies q-1-d)+40*withinGroup q)).take (copyCapacity q) =
-      copyCode q d := by
-  decide +kernel
+theorem keys_complete : ∀ q : Fin 16, ∀ d : Fin (copies q),
+    (q.val, d.val) ∈ fragmentKeys := by decide +kernel
 
-theorem copy_in_group_bounds' : ∀ q : Fin 16, ∀ d : Fin (copies q),
-    128*(copies q-1-d)+40*withinGroup q+copyCapacity q ≤ (groupCode (group q)).length := by
-  decide +kernel
-
-theorem group_lt' : ∀ q : Fin 16, group q < 6 := by decide +kernel
+/-- Generic placement proof: checking the small fragment metadata is enough; do not
+reduce the whole image once for every copy. -/
+theorem assemble_located (s : MachineState) (base : ℕ) (parts : List (ℕ × Code)) :
+    ∀ cursor, wellPlaced cursor parts = true →
+    Riscv.CodeAt s (W (base+4*cursor)) (assemble cursor parts) →
+    ∀ off body, (off, body) ∈ parts → Riscv.CodeAt s (W (base+4*off)) body := by
+  induction parts with
+  | nil => intro cursor placed located off body mem; simp at mem
+  | cons part rest ih =>
+    rcases part with ⟨pos, code⟩
+    intro cursor placed located off body mem
+    have hp : cursor ≤ pos ∧ wellPlaced (pos+code.length) rest = true := by
+      simpa only [wellPlaced, Bool.and_eq_true, decide_eq_true_eq] using placed
+    rw [assemble, List.append_assoc] at located
+    have hc := located.append_right
+    rw [List.length_replicate, W_add] at hc
+    have addr : base+4*cursor+4*(pos-cursor) = base+4*pos := by omega
+    rw [addr] at hc
+    rcases List.mem_cons.mp mem with same | later
+    · cases same
+      exact hc.append_left
+    · have ht := hc.append_right
+      rw [W_add] at ht
+      have addr2 : base+4*pos+4*code.length = base+4*(pos+code.length) := by omega
+      rw [addr2] at ht
+      exact ih (pos+code.length) hp.2 ht off body later
 
 theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
     (located : Riscv.CodeAt s pc code) (i : ℕ) :
@@ -42,21 +60,11 @@ theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
 theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (q : Fin 16) (d : Fin (copies q)) :
     Riscv.CodeAt s (W (copyStart q d)) (copyCode q d) := by
-  have hg := CodeAt.drop global (51+groupOffset (group q))
-  have eg := List.take_append_drop (groupCode (group q)).length
-    (verifier.drop (51+groupOffset (group q)))
-  rw [group_image' ⟨group q, group_lt' q⟩] at eg
-  rw [← eg] at hg
-  have hc := CodeAt.drop hg.append_left (128*(copies q-1-d)+40*withinGroup q)
-  have ec := List.take_append_drop (copyCapacity q)
-    ((groupCode (group q)).drop (128*(copies q-1-d)+40*withinGroup q))
-  rw [copy_group' q d] at ec
-  rw [← ec] at hc
-  have h := hc.append_left
-  rw [W_add, W_add] at h
-  have e : 4096+4*(51+groupOffset (group q))+4*(128*(copies q-1-d)+40*withinGroup q) =
-      copyStart q d := by rw [copyStart_eq]; unfold copyOffset; omega
-  rw [e] at h
+  have ht := global.append_right (first := indexPhase ++ prologue 0) (last := tables)
+  rw [show (indexPhase ++ prologue 0).length = 50 by decide, W_add] at ht
+  have mem : (groupOffset (group q)+256*(15-d.val)+slotOffset q, copyCode q d) ∈ fragments :=
+    List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩
+  have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
   exact h
 
 end OptimalOTS.RiscvMixedProgram

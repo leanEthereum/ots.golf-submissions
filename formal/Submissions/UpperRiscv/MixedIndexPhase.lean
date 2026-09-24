@@ -18,20 +18,20 @@ open RiscvZkvm.Rv64 OracleComp
 
 /-! ## The data image -/
 
-theorem dataImage_length : dataImage.length = 96 := by decide
+theorem dataImage_length : dataImage.length = 88 := by decide
 
-/-- The eight constant words of the data image, after the 32-byte answer buffer. -/
+/-- The seven constant words of the data image, after the 32-byte answer buffer. -/
 def dataWord (j : ℕ) : ℕ :=
-  [firstMask, broadcast 0x1e3c, broadcast 0x1fc, 65535, 0, 5504,
-    baseWord 0, baseWord 1].getD j 0
+  [firstMask, broadcast 0x3c3c, broadcast 0x1fc, 65535, 0, 5504,
+    baseWord 0].getD j 0
 
-theorem dataImage_word (j : ℕ) (hj : j < 8) :
+theorem dataImage_word (j : ℕ) (hj : j < 7) :
     bytesToWordLE ((dataImage.drop (8 * (4 + j))).take 8) = W (dataWord j) := by
   interval_cases j <;> decide
 
-theorem initial_data_word (pk : PublicKey) (m : Message) (bits : List Bool) (j : ℕ) (hj : j < 8) :
+theorem initial_data_word (pk : PublicKey) (m : Message) (bits : List Bool) (j : ℕ) (hj : j < 7) :
     (Riscv.initialState image pk m bits).getMem (W (dataAddr + 32 + 8 * j)) = W (dataWord j) := by
-  have hlen : image.data.length = 96 := dataImage_length
+  have hlen : image.data.length = 88 := dataImage_length
   have ha : (W (dataAddr + 32 + 8 * j)).toNat = dataAddr + 32 + 8 * j :=
     W_toNat _ (by unfold dataAddr; omega)
   rw [initialState_getMem, getMem_load_outside, loaderMessage, getMem_load_outside, loaderPublic,
@@ -240,7 +240,7 @@ theorem S2_frame (addr : Word) (h : addr.toNat < dataAddr ∨ dataAddr + 32 ≤ 
   omega
 
 /-- The constants of the data image are still in place after the index query. -/
-theorem S2_const (j : ℕ) (hj : j < 8) :
+theorem S2_const (j : ℕ) (hj : j < 7) :
     (S2 pk m bits answer).getMem (W (dataAddr + 32 + 8 * j)) = W (dataWord j) := by
   rw [S2_frame _ _ _ _ _ (Or.inr (by rw [W_toNat _ (by unfold dataAddr; omega)]; omega)),
     (prefix_effect pk m bits).frame, initial_data_word pk m bits j hj]
@@ -295,11 +295,10 @@ structure LoadEffect (a b : MachineState) : Prop where
   x21 : b.getReg .x21 = wordOf answer 1
   x22 : b.getReg .x22 = wordOf answer 2
   x23 : b.getReg .x23 = wordOf answer 3
-  x25 : b.getReg .x25 = W (broadcast 0x1e3c)
+  x25 : b.getReg .x25 = W (broadcast 0x3c3c)
   x1 : b.getReg .x1 = W (broadcast 0x1fc)
   x2 : b.getReg .x2 = W (65535)
   x3 : b.getReg .x3 = W (baseWord 0)
-  x4 : b.getReg .x4 = W (baseWord 1)
   regs : ∀ r, r ≠ .x20 → r ≠ .x21 → r ≠ .x22 → r ≠ .x23 → r ≠ .x24 → r ≠ .x25 → r ≠ .x1 →
     r ≠ .x2 → r ≠ .x3 → r ≠ .x4 → r ≠ .x7 → b.getReg r = a.getReg r
   mem : ∀ addr, b.getMem addr = a.getMem addr
@@ -327,7 +326,7 @@ theorem loadWords_ready : Riscv.LinearReady (S4 pk m bits answer) loadWords := b
     show ¬ (Reg.x12 = Reg.x1) by decide, show ¬ (Reg.x12 = Reg.x2) by decide,
     show ¬ (Reg.x12 = Reg.x3) by decide, show ¬ (Reg.x12 = Reg.x4) by decide,
     false_and, if_false, h12]
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> (unfold dataAddr; decide)
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> (unfold dataAddr; decide)
 
 theorem loadWords_effect :
     LoadEffect answer (S4 pk m bits answer) (loadWords.foldl execInstrBr (S4 pk m bits answer)) := by
@@ -335,13 +334,13 @@ theorem loadWords_effect :
   have mw : ∀ off : ℕ, off < 2048 → (S4 pk m bits answer).getReg .x12 +
       signExtend12 (BitVec.ofNat 12 off) = W (dataAddr + off) := by
     intro off hoff; rw [h12, signExtend12_nat _ hoff, W_add]
-  have c : ∀ j, j < 8 → (S4 pk m bits answer).getMem (W (dataAddr + (32 + 8 * j))) = W (dataWord j) := by
+  have c : ∀ j, j < 7 → (S4 pk m bits answer).getMem (W (dataAddr + (32 + 8 * j))) = W (dataWord j) := by
     intro j hj; rw [S4_mem, ← Nat.add_assoc, S2_const _ _ _ _ j hj]
   have a : ∀ j, j < 4 → (S4 pk m bits answer).getMem (W (dataAddr + 8 * j)) = wordOf answer j := by
     intro j hj; rw [S4_mem]; exact S2_answer pk m bits answer j hj
   have a0 := a 0 (by norm_num)
   simp only [Nat.mul_zero, Nat.add_zero] at a0
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   all_goals simp only [loadWords, List.foldl_cons, List.foldl_nil, execInstrBr,
     MachineState.getReg_setPC, getReg_setReg_ite, MachineState.getMem_setPC,
     MachineState.getMem_setReg]
@@ -353,7 +352,6 @@ theorem loadWords_effect :
   · simp [mw 48 (by norm_num), c 2 (by norm_num), dataWord]
   · simp [mw 56 (by norm_num), c 3 (by norm_num), dataWord]
   · simp [mw 80 (by norm_num), c 6 (by norm_num), dataWord]
-  · simp [mw 88 (by norm_num), c 7 (by norm_num), dataWord]
   · intro r h20 h21 h22 h23 h24 h25 h1 h2 h3 h4 h7
     simp [h20, h21, h22, h23, h24, h25, h1, h2, h3, h4, h7]
   · intro addr; trivial
@@ -397,7 +395,7 @@ theorem S45_bases (g : ℕ) (hg : g < 4) :
   have LE := loadWords_effect pk m bits answer
   interval_cases g
   · exact LE.x3
-  · exact LE.x4
+  · rw [baseWord_second]; exact LE.x3
   · rw [baseWord_third]; exact LE.x3
   · rw [baseWord_last]; exact LE.x3
 
@@ -645,9 +643,9 @@ theorem indexPhase_parts : indexPhase = indexPrefix ++ ([.ECALL] ++ (lenBlock ++
       setup))))) := by
   simp only [indexPhase, lengthCheck_parts, sumCheck_parts, mainBlock, lanes, lanesUpTo, setup, List.append_assoc]
 
-theorem indexPhase_length : indexPhase.length = 45 := by decide
+theorem indexPhase_length : indexPhase.length = 44 := by decide
 
-theorem mainBlock_length : mainBlock.length = 29 := by decide
+theorem mainBlock_length : mainBlock.length = 28 := by decide
 
 section Refine
 
@@ -657,7 +655,7 @@ theorem pc_add (p : Word) (a b : ℕ) : p + W a + W b = p + W (a + b) := by
   rw [BitVec.add_assoc, W_add]
 
 /-- The index phase: the specified first query, the length and sum rejections, and otherwise the
-continuation from `afterIndex`, at 39 cycles plus the continuation. -/
+continuation from `afterIndex`, at 38 cycles plus the continuation. -/
 theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (q : BitVec hashBits → OracleComp Spec (Option Bool)) (c : ℕ) (hc : 3 ≤ c)
     (located : Riscv.CodeAt (S0 pk m bits) (S0 pk m bits).pc (indexPhase ++ tail))
@@ -667,7 +665,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     Riscv.Refines fuel (S0 pk m bits) (do
       let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits bits))
       if Accepted (pack answer) ∧ bits.length = 5504 then q answer
-      else pure (some false)) (c + 39) := by
+      else pure (some false)) (c + 38) := by
   rw [indexPhase_length] at bound
   rw [indexPhase_parts] at located
   simp only [List.append_assoc] at located
@@ -675,7 +673,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
   -- the prefix
   have ready := indexPrefix_ready pk m bits
   rw [show fuel = indexPrefix.length + ((fuel - 6) + 1) by rw [indexPrefix_length]; omega,
-    show c + 39 = indexPrefix.length + (1 + (c + 33)) by rw [indexPrefix_length]; omega]
+    show c + 38 = indexPrefix.length + (1 + (c + 32)) by rw [indexPrefix_length]; omega]
   apply Riscv.Refines.linear _ located.append_left ready
   have callLocated : Riscv.CodeAt (afterPrefix pk m bits) (afterPrefix pk m bits).pc
       ([.ECALL] ++ (lenBlock ++ ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
@@ -686,7 +684,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [e]
     simpa only [List.append_assoc] using h.code_eq P.code
   have hashed := Riscv.Refines.hash (fuel := fuel - 6) callLocated.head P.x5
-    (prefix_hashValid pk m bits) (c := c + 33)
+    (prefix_hashValid pk m bits) (c := c + 32)
     (k := fun answer => if Accepted (pack answer) ∧ bits.length = 5504 then q answer
       else pure (some false)) ?_
   · rw [prefix_hashInput pk m bits] at hashed
@@ -706,7 +704,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     exact dword_ok _ (by unfold dataAddr; omega) (by unfold dataAddr; omega)
       (by unfold dataAddr; omega)
   rw [show fuel - 6 = lenBlock.length + (fuel - 7) by simp [lenBlock]; omega,
-    show c + 33 = lenBlock.length + (c + 32) by simp [lenBlock]; omega]
+    show c + 32 = lenBlock.length + (c + 31) by simp [lenBlock]; omega]
   apply Riscv.Refines.linear _ S2code.append_left lenReady
   have S3code : Riscv.CodeAt (S3 pk m bits answer) (S3 pk m bits answer).pc
       ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
@@ -726,7 +724,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
       · rw [if_pos ⟨ha, hl⟩, if_pos ((sum_iff pk m bits answer).mpr ha)]
       · rw [if_neg (fun h => ha h.1), if_neg (fun h => ha ((sum_iff pk m bits answer).mp h))]
     · rw [if_neg (fun h => hl h.2), if_neg (fun h => hl ((length_iff pk m bits answer).mp h))]
-  rw [reorder, show c + 32 = (c + 31) + 1 by omega]
+  rw [reorder, show c + 31 = (c + 30) + 1 by omega]
   apply beq_refines _ _ _ _ _ S3code (by omega) (by omega)
   intro hlenEq
   have hl := (length_iff pk m bits answer).mp hlenEq
@@ -737,8 +735,8 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [show (4 * ([Instr.BEQ .x13 .x6 16] ++ reject).length) = 16 from rfl] at h
     exact h.code_eq (by simp [S4])
   have mReady := mainBlock_ready pk m bits answer
-  rw [show fuel - 7 - 1 = mainBlock.length + (fuel - 37) by rw [mainBlock_length]; omega,
-    show c + 31 = mainBlock.length + (c + 2) by rw [mainBlock_length]; omega]
+  rw [show fuel - 7 - 1 = mainBlock.length + (fuel - 36) by rw [mainBlock_length]; omega,
+    show c + 30 = mainBlock.length + (c + 2) by rw [mainBlock_length]; omega]
   apply Riscv.Refines.linear _ (S4code.append_left) mReady
   have S5code : Riscv.CodeAt (S5 pk m bits answer) (S5 pk m bits answer).pc
       ([.BEQ .x27 .x0 16] ++ reject ++ (setup ++ tail)) := by
@@ -755,7 +753,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     have h := S5code.append_right (first := [.BEQ .x27 .x0 16] ++ reject)
     rw [show (4 * ([Instr.BEQ .x27 .x0 16] ++ reject).length) = 16 from rfl] at h
     exact h.code_eq (by simp [S6])
-  rw [show fuel - 37 - 1 = setup.length + (fuel - 39) by simp [setup]; omega,
+  rw [show fuel - 36 - 1 = setup.length + (fuel - 38) by simp [setup]; omega,
     show c + 1 = setup.length + c by simp only [setup, List.length_cons, List.length_nil]; omega]
   apply Riscv.Refines.linear _ S6code.append_left (setup_ready _)
   exact continuation answer ha hl _ (by omega)
