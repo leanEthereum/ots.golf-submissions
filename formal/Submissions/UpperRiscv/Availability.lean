@@ -1,6 +1,7 @@
 import Submissions.UpperRiscv.Assembly
 import Submissions.UpperRiscv.Scheme
 import Submissions.UpperRiscv.Adapter
+import Submissions.UpperRiscv.FreshKeygen
 
 /-!
 # Signing availability of the forest algorithm
@@ -252,6 +253,24 @@ theorem sign_failure (x : forestScheme.graph.Assignment) (m : Message)
   simp only [Option.isNone_map]
   exact loop_failure (emsg m (forestScheme.publicKey x)) _ ∅ c (by norm_num [nonceBits, idxBits, numCuts, trials, idxCost, blockCost, signBudget, msgBits, pkBits, blockBits]) (fun η _ => hfresh η)
 
+attribute [local irreducible] graph
+
+/-- Exact failure probability, including keygen runs with repeated oracle inputs.
+Length separation makes the ideal-record collision penalty unnecessary. -/
+theorem signingFailure_exact (message : PublicKey → Message) :
+    probTrue (do
+      let kg ← forestScheme.keygen
+      let σ ← forestScheme.sign kg.2 (message kg.1)
+      pure σ.isNone) = miss ^ trials := by
+  rw [probTrue_eq_E_run, run_bind, E_bind, E_run_keygen_real]
+  simp only [run_bind, E_bind, run_pure, E_pure]
+  calc
+    _ = ∑ _ξ : forestScheme.graph.Rec,
+        (Fintype.card forestScheme.graph.Rec : ℝ≥0∞)⁻¹ * miss ^ trials := by
+      refine Finset.sum_congr rfl fun ξ _ => congrArg _ ?_
+      exact sign_failure _ _ _ (fun η => realRun_enc_fresh ξ _)
+    _ = miss ^ trials := sum_inv_card_mul' _
+
 /-- Failure remains bounded even when the message is chosen after seeing the public key. -/
 theorem signingFailure_strong :
     forestScheme.toAlgorithm.SigningFailureAtMost (1 / 2 ^ 128 : ℝ≥0∞) := by
@@ -260,19 +279,11 @@ theorem signingFailure_strong :
     let kg ← forestScheme.keygen
     let σ ← forestScheme.sign kg.2 (message kg.1)
     pure σ.isNone) ≤ _
-  rw [probTrue_eq_E_run, run_bind, E_bind]
-  refine (E_run_keygen_forest _ fun a => E_le_one _ fun p => ?_).trans ?_
-  · split_ifs <;> simp
-  simp only [run_bind, E_bind, run_pure, E_pure]
-  have hs : ∀ ξ : Rec,
-      E (run (forestScheme.sign (graph.evalRec ξ) (message (pkOf ξ))) (kc ξ))
-        (fun p => if p.1.isNone then 1 else 0) = miss ^ trials := by
-    intro ξ
-    exact sign_failure _ _ _ (fun η => kc_enc ξ _)
-  simp_rw [hs]
-  simp only [mul_add, Finset.sum_add_distrib]
-  rw [← Finset.sum_mul, sum_w, one_mul]
-  exact (add_le_add miss_trials_le (sum_w_ind_not_distinctRec_le.trans δ_le)).trans sum_le_allowance
+  rw [signingFailure_exact]
+  have h : (740 / 1000 : ℝ≥0∞) ≤ 1 := by
+    rw [ENNReal.div_le_iff (by norm_num) (by finiteness)]
+    norm_num
+  exact miss_trials_le.trans (ENNReal.div_le_div_right h _)
 
 end OptimalOTS.Forest.Availability
 
