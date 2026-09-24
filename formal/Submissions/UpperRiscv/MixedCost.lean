@@ -62,7 +62,7 @@ theorem chainsCost_eq (index : Idx) : chainsCost index = 299 := by
   have he : ∑ k : Fin 32, earlyHash k = 12 := by decide +kernel
   rw [chainsCost, all_chain_hashes, he]
 
-theorem totalCost (index : Idx) : 40+chainsCost index+21 = 360 := by
+theorem totalCost (index : Idx) : 39+chainsCost index+21 = 359 := by
   rw [chainsCost_eq]
 
 end OptimalOTS.RiscvMixedProgram

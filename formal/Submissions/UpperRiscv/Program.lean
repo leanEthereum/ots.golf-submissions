@@ -120,7 +120,7 @@ def wordReg (g : ℕ) : Reg := match g with | 0 => .x20 | 1 => .x21 | 2 => .x22 
 def maskReg (g : ℕ) : Reg := if g < 3 then .x24 else .x25
 
 /-- The jump-base register of lane word `g`. -/
-def baseReg (g : ℕ) : Reg := match g with | 0 => .x3 | 1 => .x4 | _ => .x7
+def baseReg (g : ℕ) : Reg := match g with | 1 => .x4 | _ => .x3
 
 /-- Lane word `g`: mask, accumulate, subtract from the jump base, store. -/
 def laneWord (g : ℕ) : Code :=

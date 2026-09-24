@@ -1,3 +1,19 @@
+# RISC-V upper bound: 359 cycles with two dispatch bases
+
+This candidate extends the verified 360-cycle image from PR #30. Repacking its
+pair bodies lets index words 0, 2 and 3 share one dispatch-base word, while index
+word 1 uses the other. One constant load is removed. The signature scheme and
+every oracle query are unchanged.
+
+The certificate bounds every execution by **359 = 39 + 299 + 21** cycles. The
+fixed image is 12,339 instructions plus 96 embedded bytes, or 49,452 bytes.
+The full Lean certificate builds locally and the pinned development comparator
+accepts it. The official verifier cannot launch on this host because its Landlock
+preflight fails. No hosted verdict is claimed.
+See `NOTES.md` for validation, code placement, and attribution.
+
+---
+
 # RISC-V upper bound: 360 cycles, four more chains hashed in place
 
 This candidate extends dhsorens's 364-cycle ascending cell grid (PR #28), which builds on the
