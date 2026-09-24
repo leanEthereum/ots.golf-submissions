@@ -1,74 +1,83 @@
-# HL-FLAT-A: design notes
+# HL-TRI: three chains per landing, 1439 cycles
 
-Claim **1598** cycles (planned 1629; `MachineFaithful.machine_cycles_1629` also holds).
-Previous record: 85343 (Winternitz w=256, Rice-tree dispatch).
+Lineage: HL-FLAT-A (1598, this root's previous contents) → HL-TRI (this root, claim 1439).
+**The scheme and security half is byte-identical to HL-FLAT-A.** Only the bytecode and the
+machine proofs (`MachineProgram`, `MachineRun`, `MachinePath`, `MachineCycles`, `MachineSound`,
+`MachineProver`, `MachineHonest`, `MachineFaithful`) and `Solution.lean` changed.
 
-## 1. Scheme (`SchemeFlat.lean`, `LayerScheme`, `LayerBits`, `LayerWire`, `LayerDigits`, `LayerCount`, `LayerAvailability`)
+## 1. Where HL-FLAT-A's cycles were
 
-- 42 chains, `wid k = 3` for `k < 40` and `4` for `k ∈ {40, 41}`; `len k = 2^wid k`.
-  Digits are consecutive `wid`-bit fields of the 128-bit index (`digitW`, `pos_42 = 128`);
-  chain positions are numbered from `off k = 7k` / `280 + 15(k−40)`.
-- The accepted layer is `Σ_k s_k = 106`, with `s_k` the verifier's remaining steps. The layer
-  below 106 is certified to fail availability (`LayerAvailability`, exact integer counts from
-  `LayerCount`).
-- Signing samples fresh uniform 128-bit nonces (never a counter; a counter admits a birthday
-  search on signed classes) until the index lands on the layer, for at most `2^19` trials;
-  `Flat.signingFailure` bounds the failure probability.
-- Every query is 896 bits. Chain step `(k, j)`: metadata 1, tags `sym` in 3 cells (7 symbols,
-  343 ≥ 310 positions). Index: metadata 10. Root: a tagged 10-call Merkle–Damgård absorption
-  (R10) whose first call uses two XOR-copied tops as its cv pair; metadata `0, 2, …, 9, 5504`.
-- Costs (`Resources`): keygen `2·310 + 20 = 640`, sign `2^20`, verify `2·106 + 2 + 20 = 234`.
+`1598 = 308 + 10·117 + 120`. The 117 `BLAKE2S` (1 index, 106 chain steps on layer 106, 10 root
+calls) are fixed by the scheme. An exhaustive search over all 689,249 digit-width mixes with
+Σ widths = 128 and at most 42 chains (24 processes) confirms that 40×3 + 2×4 bits on layer 106
+is optimal: no mix reaches the availability bound `200·2^108` on a lower layer. So the gain
+has to come from the 308 non-hash instructions.
 
-## 2. Security (Tier A, κ = 2^-128 per compression)
+Of those, 42 × 7 were per-chain dispatch: a frame `SET`, `MUL(H,g,H')`, the dispatch `JUMP`,
+the frame-shifted entry `I0`, the tie `SET T; XOR`, and the landing product `MUL(G, H)`.
 
-Generic in `P : Params` under the hypothesis bundle `Params.Hyp` (`Records.lean`), discharged by
-`Flat.hyp` (`FlatHyp.lean`): digit and tag injectivity, metadata separation, `1 ≤ layer`,
-`2 ≤ len 0`, `200·2^108 ≤ numValid ≤ 2^127`, and keygen/verify costs `≤ 2^20`.
+## 2. Idea: dispatch a group of three chains per landing
 
-- `Correctness` (fixed-table semantics `verifyValue` / `fixed_verify`, `correct`), `Resources`,
-  `BasicProperties` (`encode_decode`, determinism, `admissible`).
-- `Records` (`location_eq_of_input_eq` by tags and metadata, no collision exception), `IdxBase`
-  (index queries are content-separated from records), `KeygenBridge` (`E_run_keygen`).
-- `Events` (`root_binding` for R10, `accept_core`, antichain `digits_eq_of_le`).
-- `Exposure`, `Targets`: chain steps are charged hidden-input + second-preimage, `2·2^-129` per
-  compression; root calls second-preimage only.
-- `IdxLoop`, `IdxCharges`, `IdxRho`, `IdxRows`, `RowIneq`, `RowPotential`: the UpperRiscv index
-  analysis (`signRho_bound`, `psi_charge`, `psi_dom`), charging `θψ` at `2·2^-128` per index
-  query before signing and `IdxPost` at `2^-128` per query after.
-- `StageB` (`ΦB`, split by query shape), `StageA` (`ΦA` with `θψ`), `Security`:
-  `Pr ≤ B/2^128 < B/2^127` (keygen's first chain query gives `B ≥ 2`).
+- 14 groups: `(3g, 3g+1, 3g+2)` for `g < 12`, then `(36, 37, 40)` and `(38, 39, 41)`. This
+  balances the two 4-bit chains so that every group fits a uniform entry spacing inside 2^18 slots.
+- One frame per group (`F_g = g^((g+1)·2^33)`, 14 `SET`s instead of 42), one dispatch
+  (`MUL(H_g, g, H'_g); JUMP(ONE, H_g, F_g)`) and one entry `I0_g = JUMP(ONE, H'_g, ONE)` per group.
+  Entry of tuple `t` is `BASE g + SP g · rank t` (mixed radix over the group's digits).
+- One tie word per group: `SET T_g := Σ s_k·2^pos_k; XOR(acc_{g−1}, T_g, acc_g)`, `acc_13 = idx`.
+- The layer is checked by a product of per-group factors `g^σ` (`σ` = the group's digit sum),
+  `L_13 = K0 = g^rootSlot`. Six precomputed constants `g^2..g^7` (plus `gCell = g^1`) let most
+  groups use one `MUL` with no `SET`; `σ > 7` pays `SET C_g; MUL`.
+- Zero digits copy the revealed word into the root's top cell (`XOR(W_k, Z, rootTop k)`), as in
+  HL-FLAT-A. The contract's `steps` must not depend on the oracle's index answer, so every block
+  of a group pads with `XOR(Z, Z, Z)` to the group's maximum non-hash count
+  (`[6]*12 + [7, 7]` before the tail).
+- Every completing run: 266 instructions, 117 `BLAKE2S`: `149 + 1170 = 1319`, claim
+  `1319 + 120 = 1439`.
 
-## 3. Bytecode (`MachineProgram.lean`, UNI layout)
+## 3. A tempting design that is unsound
 
-`logSize = 18`, `memLog = 16`, 58-slot prologue. Frames `F_k = g^((k+1)·2^33)` (indexed from 1;
-`e_0 = 0` would give a universal forgery). Chain `k` is dispatched by
-`MUL(H_k, g, H'_k); JUMP(ONE, H_k, F_k)` with `H_k` a prover hint; only the frame-shifted entries
-`JUMP(ONE, H'_k, ONE)` of chain `k` can execute in frame `F_k`. Entry `s` sits at
-`BASE k + 21·s`. A block is the tie into the accumulator, the landing-encoded product
-`MUL(G_{k−1}, H_k, G_k)`, the `s` inline chain `BLAKE2S` steps and the next dispatch; chain 41 exits
-by `JUMP(ONE, K0, ONE)` with `K0 = g^rootSlot`. The root is 10 tagged `BLAKE2S` and an `XOR` into
-the pk cell, falling through to the sentinel.
+A cheaper variant (1425) ran each block entirely in its group's frame and ended the block with
+an entry assertion `SET(H_g, g^entry)` instead of the `I0` jump and the `MUL(H, g, H')`. It fails:
+the block's tail `JUMP` is itself group-`g` code, so a dispatch can land on the tail and skip the
+whole block (tie, layer factor, copies, chain steps). The skipped cells become free image cells,
+and a forged signature follows. Any design in which some executable slot of a group's code is a
+jump has this hole unless landings are pinned by the frame, as `I0` does. The attack script
+completes on the 1425 model and is rejected on this one.
 
-The plan's model (`hlflat_model.py`) has one extra non-hash op in a zero-digit block, so its
-instruction count depends on the oracle's index answer, while the contract's `steps` is a pure
-function of `(pk, m, σ)`. The UNI variant makes every block's non-hash cost digit-independent:
+## 4. How it was built
 
-- chain `k ≥ 1` with `s = 0`: `XOR(W_k, Z, rootTop k)` replaces `SET T_k`, and
-  `XOR(acc_{k−1}, Z, acc_k)` replaces the tie XOR;
-- chain 0: the root's first XOR copy moves into the block (`XOR(TOP_0, Z, CV)` if `s ≥ 1`,
-  `XOR(W_0, Z, CV)` if `s = 0`); chain 1's last `BLAKE2S` writes straight to `(CV+1, CV+2)`;
-- the root segment is 10 `BLAKE2S` plus the pk XOR, `rootSlot = 262132`;
-- `BASE k = 2740 + 168k` for `k ≤ 40`, `BASE 41 = 9806`; `Σ BASE + 21·106 = rootSlot`
-  (`decide`). All cells have closed-form addresses below `2^16`.
+1. Cost breakdown, then the width search (section 1).
+2. An exact executable model (appendix) that builds all 2^18 slots, checks the frame lemma
+   exhaustively for every slot and frame, runs honest signatures and tampered inputs through the
+   leanVM semantics, runs 400 random layer vectors in support mode (constant 1319 / 266), rejects
+   off-layer vectors, and rejects mid-block landings with adversarial cell fills.
+3. A Python mirror of the Lean `cinstrAt` matched the model on all 262,144 slots.
+4. Two agents: machine core (`MachineProgram` → `MachineCycles`) and machine proofs
+   (`MachineSound`, `MachineProver`, `MachineHonest`, `MachineFaithful`, `Solution`).
 
-Every completing run: 425 instructions, `308 + 1170 + 120 = 1598` cycles. `MachineCycles`
-derives `Σ s = 106` from hash-free relations (`layer_of_facts`); `MachineSound.fixed_sound`
-shows a completing run forces length 5504, an accepted index and root = pk;
-`MachineFaithful.faithful` shows the honest image completes in exactly 425 steps iff the
-verifier accepts. No program is evaluated over index ranges in the kernel: builders are
-`@[irreducible]` and slots are decoded by arithmetic lemmas and `omega`.
+## 5. Validation
 
-## 4. Credits
+- `lake build Submissions.UpperLeanIsa.Solution` from a clean copy of the pinned contract.
+- `check_submission.py upper-leanisa`: ok, claim 1439.
+- `certificate : submission.Certificate 1439` and `seeded_rows` type-check against the stub's
+  statements; axioms are `propext`, `Classical.choice`, `Quot.sound` only.
+- No `sorry`, `native_decide` or `admit` in the root.
+
+## 6. What next
+
+- **Tag and metadata constants (model: 1433).** Tag symbols `{0, 1, 2, 4, 8, 16, 32}` are
+  exactly the existing cells `Z, ONE, g, g^2..g^5`, and the root metadata can use
+  `0, 2, 4, …, 128, 5504` plus one new constant. That removes the seven symbol `SET`s and nets −6.
+  It changes only `SchemeFlat`'s `sym`/`rootMd`/`idxMd` and `FlatHyp`'s decidable facts; the
+  security proof is generic in `Params`.
+- **Nine root calls (about −10).** A 128-bit chaining state in `m` absorbs five tops per call if
+  the cv pair holds two tops. Two tops can sit in adjacent cells without a copy if one chain's top
+  is the *high* half of its last output (output pair `(c−1, c)`) and the other's the low half
+  (`(c+1, c+2)`). That needs a per-chain answer slice in the scheme, as the RISC-V track's
+  `truncOff` does.
+- Larger groups do not fit: a quadruple of 3-bit chains needs about 90k slots.
+
+## 7. Credits (carried over from HL-FLAT-A)
 
 - Adapted from the 85343-cycle leanISA record (this root's previous contents) and its
   predecessors; see that record's README for the earlier chain of credit.
@@ -79,281 +88,44 @@ verifier accepts. No program is evaluated over index ranges in the kernel: build
   Fable 5.1, PR #15). Namespaces and imports are local to this root.
 - HL-FLAT-A design, security layer, UNI bytecode and machine proofs prepared with Claude Opus 5.5.
 
-## Appendix A. Executable model (`hlflat_uni_model.py`)
+- HL-TRI grouped bytecode and machine proofs: prepared with Claude Opus 5.5, building on the HL-FLAT-A machine proofs.
 
-Exact-integer model of the UNI layout: builds the image, runs the frame lemma exhaustively,
-checks honest and tampered runs against the verifier, and checks constant cost (1478 + 120) and
-steps (425). Output: `honest costs {1478} steps(trace) {425}` … `RESULT: PASS`.
+## Appendix A. Layout of the model (`hltri_i0_layout.py`)
+
+The field arithmetic, the scheme spec and the leanVM simulator are HL-FLAT-A's model (this root's
+previous `NOTES.md`, Appendix A, lines up to `B'. UNI layout` and its `Machine` class). This
+appendix replaces its layout and checks.
 
 ```python
-#!/usr/bin/env python3
-"""HL-FLAT-A executable model (milestone M1 + scheme spec for S-1).
+# ============================================================================ HL-TRI layout
+# Same scheme as HL-FLAT-A. The machine dispatches three chains per landing: one frame, one
+# hinted landing, one tie word and one layer factor per group of chains.
+import os
+from multiprocessing import Pool
 
-Exact model of the leanISA image for HL-FLAT-A (FLAT-42 scheme, 128-bit index, tagged R10 root,
-hinted-landing dispatch), executed with the leanerVM semantics of `Semantics/Step.lean` and the
-contract's `LeanIsaMachine.runCost` (oracle BLAKE2S, sentinel test, weights 1 / 10), over the real
-fields K = GF(2)[x]/(x^64+x^4+x^3+x+1), g = x, E = K[y]/(y^3+y+1).
-
-Everything is exact integer arithmetic.  Run: python3 hlflat_model.py  (exit code 0 = all pass).
-
-Checks:
-  A. scheme spec (mirrors SchemeFlat.lean): N_106 numeral, layer 105 fails, availability
-     certificate, budgets, tag injectivity, md separation;
-  B. image: every slot, every cell, frames F_k = g^((k+1)*2^33), entry spacing 21,
-     K0 = g^(root slot), operand ranges, frame-range lemma (exhaustive over every non-pad slot and
-     every frame), no pad on any walk;
-  C. honest runs: machine completes iff scheme verify accepts (random-oracle mock), cycles;
-  D. worst case: exact DP over the layer + walks of every entry-vector class in support mode
-     (incoherent oracle), max = CLAIM;
-  E. adversarial simulator: random malicious hints / images / kappa; every completing run is the
-     forced walk of a layer vector and verify accepts it.
-"""
-import hashlib, random, sys
-from fractions import Fraction
-
-random.seed(20260924)
-FAIL = []
-def check(cond, msg):
-    if not cond:
-        FAIL.append(msg); print("FAIL:", msg)
-
-# ============================================================================ fields
-POLY = (1 << 64) | 0b11011          # x^64 + x^4 + x^3 + x + 1
-M = (1 << 64) - 1                   # |K*|
-
-def kmul(a, b):
-    r = 0
-    while b:
-        if b & 1: r ^= a
-        b >>= 1; a <<= 1
-        if a >> 64: a ^= POLY
-    return r
-
-def kpow(a, e):
-    r = 1
-    while e:
-        if e & 1: r = kmul(r, a)
-        a = kmul(a, a); e >>= 1
-    return r
-
-G = 2
-PRIMES = [3, 5, 17, 257, 641, 65537, 6700417]
-assert eval('*'.join(map(str, PRIMES))) == M
-
-DLOG = {1: 0}
-def dlog(h):
-    """Pohlig-Hellman + BSGS discrete log base g (order M, squarefree smooth); cached."""
-    assert h != 0
-    if h in DLOG: return DLOG[h]
-    rs, ms = [], []
-    for p in PRIMES:
-        gp = kpow(G, M // p); hp = kpow(h, M // p)
-        m = int(p ** 0.5) + 1
-        table = {}; cur = 1
-        for j in range(m):
-            table.setdefault(cur, j); cur = kmul(cur, gp)
-        step = kpow(gp, p - m % p if m % p else 0)   # gp^(-m)
-        step = kpow(gp, (p - m) % p)
-        cur = hp
-        for i in range(m + 1):
-            if cur in table:
-                rs.append((i * m + table[cur]) % p); break
-            cur = kmul(cur, step)
-        else:
-            raise ValueError
-        ms.append(p)
-    x = 0
-    for r, p in zip(rs, ms):
-        Mi = M // p
-        x = (x + r * Mi * pow(Mi, -1, p)) % M
-    assert kpow(G, x) == h
-    DLOG[h] = x
-    return x
-
-def gpow(e):
-    v = kpow(G, e % M); DLOG[v] = e % M; return v
-
-# E elements: (l0, l1, l2); y^3 = y + 1
-def eadd(a, b): return (a[0] ^ b[0], a[1] ^ b[1], a[2] ^ b[2])
-def emul(a, b):
-    if a[1] == a[2] == b[1] == b[2] == 0:
-        v = kmul(a[0], b[0])
-        if a[0] in DLOG and b[0] in DLOG: DLOG[v] = (DLOG[a[0]] + DLOG[b[0]]) % M
-        return (v, 0, 0)
-    c = [0] * 5
-    for i in range(3):
-        for j in range(3):
-            c[i + j] ^= kmul(a[i], b[j])
-    # y^4 = y^2 + y, y^3 = y + 1
-    c[2] ^= c[4]; c[1] ^= c[4]
-    c[1] ^= c[3]; c[0] ^= c[3]
-    return (c[0], c[1], c[2])
-def ofK(a): return (a, 0, 0)
-def isK(x): return x[1] == 0 and x[2] == 0
-def canon(x): return x[2] == 0
-def cellBits(x): return x[0] | (x[1] << 64)
-def cellOf(b): return (b & M, b >> 64, 0)
-ZERO = (0, 0, 0)
-
-# ============================================================================ scheme constants
-N_CHAINS = 42
-W = [8] * 40 + [16] * 2                      # positions per chain; digit s_k < W[k]
-BITS = [3] * 40 + [4] * 2
-POS = [sum(BITS[:k]) for k in range(N_CHAINS)]
-LAYER = 106
-STEPS = [w - 1 for w in W]                   # 310 chain positions (steps)
-OFF = [sum(STEPS[:k]) for k in range(N_CHAINS)]
-assert sum(BITS) == 128 and sum(STEPS) == 310
-SYM = lambda v: v + 3                        # symbol cell values 3..9
-def tag(k, j):
-    p = OFF[k] + j
-    return (SYM(p % 7), SYM(p // 7 % 7), SYM(p // 49))
-CHAIN_MD, IDX_MD = 1, 10
-RHO = [0, 2, 3, 4, 5, 6, 7, 8, 9, 5504]      # Z, g, SYM_0..6, LEN: existing constant cells
-CV_CONST = 0 | (1 << 128)                    # cv pair (Z, ONE): cv0 = 0, cv1 = 1
-NONCE_BITS = 128
-TRIALS = 2 ** 19
-SIG_BITS = 43 * 128
-
-def hashInput(cv, block, md): return cv | (block << 256) | (md << 768)
-ORACLE = {}
-def H(q):
-    if q not in ORACLE:
-        ORACLE[q] = int.from_bytes(hashlib.blake2s(q.to_bytes(112, 'little'), digest_size=32).digest(), 'little')
-    return ORACLE[q]
-LO = lambda y: y & ((1 << 128) - 1)
-
-def chainQuery(k, j, x):
-    a, b, c = tag(k, j)
-    return hashInput(CV_CONST, x | (a << 128) | (b << 256) | (c << 384), CHAIN_MD)
-def chain(k, j, n, x):
-    for t in range(n):
-        x = LO(H(chainQuery(k, j + t, x)))
-    return x
-def idxQuery(m, eta, pk): return hashInput(CV_CONST, m | (eta << 256) | (pk << 384), IDX_MD)
-def digits(I): return [(I >> POS[k]) % (1 << BITS[k]) for k in range(N_CHAINS)]
-def accepted(I): return sum(digits(I)) == LAYER
-def rootQueries(tops):
-    qs = []
-    q = hashInput(tops[0] | (tops[1] << 128),
-                  tops[2] | (tops[3] << 128) | (tops[4] << 256) | (tops[5] << 384), RHO[0])
-    st = H(q); qs.append(q)
-    for r in range(1, 10):
-        t = tops[6 + 4 * (r - 1): 10 + 4 * (r - 1)]
-        q = hashInput(st, t[0] | (t[1] << 128) | (t[2] << 256) | (t[3] << 384), RHO[r])
-        st = H(q); qs.append(q)
-    return LO(st), qs
-def root(tops): return rootQueries(tops)[0]
-
-def keygen(rng):
-    seeds = [rng.getrandbits(128) for _ in range(N_CHAINS)]
-    table = [[seeds[k]] for k in range(N_CHAINS)]
-    for k in range(N_CHAINS):
-        for j in range(STEPS[k]):
-            table[k].append(LO(H(chainQuery(k, j, table[k][j]))))
-    pk = root([table[k][W[k] - 1] for k in range(N_CHAINS)])
-    return pk, (table, pk)
-def toBits(x, n): return [(x >> i) & 1 for i in range(n)]
-def ofBits(bits): return sum(b << i for i, b in enumerate(bits))
-def sign(sk, m, rng, trials=TRIALS):
-    table, pk = sk
-    tried = set()
-    for _ in range(trials):
-        eta = rng.getrandbits(128)
-        while eta in tried: eta = rng.getrandbits(128)
-        tried.add(eta)
-        I = LO(H(idxQuery(m, eta, pk)))
-        if accepted(I):
-            s = digits(I)
-            words = [table[k][W[k] - 1 - s[k]] for k in range(N_CHAINS)]
-            bits = []
-            for x in words: bits += toBits(x, 128)
-            return bits + toBits(eta, 128)
-    return None
-def verify(pk, m, bits):
-    if len(bits) != SIG_BITS: return False
-    xs = [ofBits(bits[128 * i:128 * i + 128]) for i in range(42)]
-    eta = ofBits(bits[128 * 42:])
-    I = LO(H(idxQuery(m, eta, pk)))
-    if not accepted(I): return False
-    s = digits(I)
-    tops = [chain(k, W[k] - 1 - s[k], s[k], xs[k]) for k in range(N_CHAINS)]
-    return root(tops) == pk
-
-# ============================================================================ A. scheme checks
-def layer_counts(radices):
-    p = [1]
-    for w in radices:
-        q = [0] * (len(p) + w - 1)
-        for i, x in enumerate(p):
-            for j in range(w): q[i + j] += x
-        p = q
-    return p
-CNT = layer_counts(W)
-N106 = CNT[106]
-check(N106 == 69117521303608168194311003377855640, "N_106 numeral")
-print("N_106 =", N106)
-
-def pow_rounded(m, P, L, up):
-    result = 1 << P; base = m; e = L; first = True
-    while e > 0:
-        if e & 1:
-            if first: result = base; first = False
-            else:
-                num = result * base
-                result = -((-num) >> P) if up else (num >> P)
-        e >>= 1
-        if e:
-            num = base * base
-            base = -((-num) >> P) if up else (num >> P)
-    return result
-def miss_bounds(N, L, P=1024):
-    m = (2 ** 128 - N) << (P - 128)
-    return pow_rounded(m, P, L, True), pow_rounded(m, P, L, False), P
-up, lo, P = miss_bounds(N106, TRIALS)
-check(up <= 1 << (P - 128), "availability: (1-N106/2^128)^(2^19) <= 2^-128")
-up5, lo5, _ = miss_bounds(CNT[105], TRIALS)
-check(lo5 > 1 << (P - 128), "layer 105 certified to fail")
-# the Lean certificate (SchemeAvailability.lean): p >= PLO/2^20, block 2^9, x^32 <= R1, R1^32 <= 2^-128
-PLO = 212
-check(N106 * 2 ** 20 >= PLO * 2 ** 128, "Lean cert: N106/2^128 >= 212/2^20")
-X = Fraction(2 ** 20, 2 ** 20 + 2 ** 9 * PLO)          # (1-p)^(2^9) <= 1/(1 + 2^9 p)
-R1 = Fraction(428, 10000)
-check(X ** 32 <= R1, "Lean cert: x^32 <= 428/10000")
-check(R1 ** 32 <= Fraction(1, 2 ** 128), "Lean cert: (428/10000)^32 <= 2^-128")
-check(2 ** 9 * 32 * 32 == TRIALS, "Lean cert: 2^9*32*32 = 2^19")
-# budgets (blockCost 896 = 2)
-bc = max(1, (896 + 511) // 512)
-check(bc == 2, "blockCost 896 = 2")
-check(bc * (310 + 10) == 640, "keygen 640")
-check(bc * TRIALS == 2 ** 20, "sign = 2^20 exactly")
-check(bc * (1 + LAYER + 10) == 234, "verify 234")
-check(SIG_BITS == 5504, "sig bits")
-# tags / md separation
-alltags = {tag(k, j) for k in range(42) for j in range(STEPS[k])}
-check(len(alltags) == 310, "chain tags injective on 310 positions")
-check(len(set(RHO)) == 10 and CHAIN_MD not in RHO and IDX_MD not in RHO and CHAIN_MD != IDX_MD,
-      "md separation chain/index/root")
-check(all(v < 2 ** 128 for v in RHO), "root tags 128-bit")
-# ============================================================================ B'. UNI layout (constant per-block cost)
 LOG_SIZE = 18
 NSLOTS = 1 << LOG_SIZE
 SENT = NSLOTS - 1
 MEMLOG = 16
-SPACING = 21
+GROUPS = [tuple(range(3 * g, 3 * g + 3)) for g in range(12)] + [(36, 37, 40), (38, 39, 41)]
+NG = len(GROUPS)
 C_PK, C_M0, C_M1, C_LEN = 0, 1, 2, 3
 C_W = [4 + k for k in range(42)]
 C_NONCE = 46
 C_Z, C_ONE, C_TIDX, C_G, C_K0 = 47, 48, 49, 50, 51
 C_SYM = [52 + v for v in range(7)]
-C_F = [59 + k for k in range(42)]
+C_F = [59 + g for g in range(NG)]
 C_IDX = 101
-C_T = [103 + k for k in range(42)]
-C_ACC = [145 + k for k in range(41)] + [C_IDX]
-C_H = [186 + k for k in range(42)]
-C_H1 = [228 + k for k in range(42)]
-C_GP = [C_H[0]] + [270 + k for k in range(1, 41)] + [C_K0]
+C_T = [103 + g for g in range(NG)]
+C_ACC = [145 + g for g in range(NG - 1)] + [C_IDX]
+C_H = [186 + g for g in range(NG)]
+C_H1 = [228 + g for g in range(NG)]
+C_C = [270 + g for g in range(NG)]
+C_L = [290 + g for g in range(NG - 1)] + [C_K0]
 C_TOP = [320 + 2 * k for k in range(42)]
+PRE_MAX = int("7")
+C_GP = {1: 50}
+C_GP.update({v: 440 + v for v in range(2, PRE_MAX + 1)})
 C_CV = 410
 def XC(k, t): return 1024 + 32 * k + 2 * t
 C_S = [2400 + 2 * r for r in range(10)]
@@ -363,36 +135,35 @@ RHO_CELL = [C_Z, C_G] + C_SYM + [C_LEN]
 check([cellBits(v) for v in [(0,0,0), ofK(G)] + [cellOf(SYM(v)) for v in range(7)] + [cellOf(5504)]] == RHO, "rho")
 ROOT_LEN = 11
 R_SLOT = SENT - ROOT_LEN
-BASE = [2740 + 168 * k if k < 41 else 9806 for k in range(42)]
-check(sum(BASE) + SPACING * LAYER == R_SLOT, "sum base")
-E_FRAME = [(k + 1) * 2 ** 33 for k in range(42)]
+E_FRAME = [(g + 1) * 2 ** 33 for g in range(NG)]
 OPB = lambda a: a % M
-prog = {}
-def emit(slot, ins):
-    assert slot not in prog and 0 <= slot < SENT, slot
-    prog[slot] = ins
 def op(a): return ('g', OPB(a))
 def X_(a, b, c): return ('xor', op(a), op(b), op(c))
 def MUL(a, b, c): return ('mul', op(a), op(b), op(c))
 def SET(a, v): return ('set', op(a), v)
 def JMP(c, d, f): return ('jump', op(c), op(d), op(f))
 def BLK(m, cv, out, md): return ('blake', tuple(op(x) for x in m), op(cv), op(out), op(md))
-def I0(k): return ('jump', ('g', (C_ONE - E_FRAME[k]) % M), ('g', (C_H1[k] - E_FRAME[k]) % M),
-                   ('g', (C_ONE - E_FRAME[k]) % M))
+def I0(g): return ('jump', ('g', (C_ONE - E_FRAME[g]) % M), ('g', (C_H1[g] - E_FRAME[g]) % M),
+                   ('g', (C_ONE - E_FRAME[g]) % M))
 PAD = ('xor', ('zero',), ('zero',), ('zero',))
+NOP = X_(C_Z, C_Z, C_Z)
 K0_VAL = ofK(gpow(R_SLOT))
 F_VAL = [ofK(gpow(e)) for e in E_FRAME]
-def fpat(k, s): return cellOf(s << POS[k])
-PRO = []
-PRO += [SET(C_Z, ZERO), SET(C_ONE, ofK(1)), SET(C_LEN, cellOf(5504)), SET(C_TIDX, cellOf(IDX_MD)),
-        SET(C_G, ofK(G)), SET(C_K0, K0_VAL)]
+prog = {}
+def emit(slot, ins):
+    assert slot not in prog and 0 <= slot < SENT, slot
+    prog[slot] = ins
+
+PRO = [SET(C_Z, ZERO), SET(C_ONE, ofK(1)), SET(C_LEN, cellOf(5504)), SET(C_TIDX, cellOf(IDX_MD)),
+       SET(C_G, ofK(G)), SET(C_K0, K0_VAL)]
 PRO += [SET(C_SYM[v], cellOf(SYM(v))) for v in range(7)]
-PRO += [SET(C_F[k], F_VAL[k]) for k in range(42)]
+PRO += [SET(C_F[g], F_VAL[g]) for g in range(NG)]
+PRO += [SET(C_GP[v], ofK(gpow(v))) for v in range(2, PRE_MAX + 1)]
 PRO += [BLK([C_M0, C_M1, C_NONCE, C_PK], C_Z, C_IDX, C_TIDX), MUL(C_H[0], C_G, C_H1[0]),
         JMP(C_ONE, C_H[0], C_F[0])]
 for i, x in enumerate(PRO): emit(i, x)
 PROLOGUE_LEN = len(PRO)
-check(PROLOGUE_LEN == 58, "prologue 58")
+
 def chain_ops(k, s):
     j0 = W[k] - 1 - s
     ops = []
@@ -402,42 +173,89 @@ def chain_ops(k, s):
         a, bb, c = tag(k, j0 + t)
         ops.append(BLK([src, C_SYM[a - 3], C_SYM[bb - 3], C_SYM[c - 3]], C_Z, dst, C_ONE))
     return ops
-def block(k, s):
-    ops = [I0(k)]
-    if k == 0:
-        ops.append(SET(C_ACC[0], fpat(0, s)))
-        ops += chain_ops(0, s)
-        ops.append(X_(C_W[0] if s == 0 else C_TOP[0], C_Z, C_CV))
+
+def tuples(g):
+    ks = GROUPS[g]
+    out = [()]
+    for k in ks:
+        out = [t + (s,) for t in out for s in range(W[k])]
+    return out
+
+def nonhash(g, tup):
+    ks = GROUPS[g]
+    word = sum(s << POS[k] for k, s in zip(ks, tup))
+    sigma = sum(tup)
+    ops = [I0(g)]
+    if g == 0:
+        ops.append(SET(C_ACC[0], cellOf(word)))
+    elif word:
+        ops += [SET(C_T[g], cellOf(word)), X_(C_ACC[g - 1], C_T[g], C_ACC[g])]
     else:
-        ops.append(X_(C_W[k], C_Z, ROOT_TOP[k]) if s == 0 else SET(C_T[k], fpat(k, s)))
-        ops.append(X_(C_ACC[k - 1], C_Z if s == 0 else C_T[k], C_ACC[k]))
-        ops.append(MUL(C_GP[k - 1], C_H[k], C_GP[k]))
-        ops += chain_ops(k, s)
-    if k < 41: ops += [MUL(C_H[k + 1], C_G, C_H1[k + 1]), JMP(C_ONE, C_H[k + 1], C_F[k + 1])]
-    else: ops.append(JMP(C_ONE, C_K0, C_ONE))
+        ops.append(X_(C_ACC[g - 1], C_Z, C_ACC[g]))
+    for k, s in zip(ks, tup):
+        if s == 0:
+            ops.append(X_(C_W[k], C_Z, ROOT_TOP[k]))
+        elif k == 0:
+            ops.append(X_(C_TOP[0], C_Z, C_CV))
+    if g == 0:
+        ops.append(SET(C_L[0], ofK(gpow(R_SLOT - LAYER + sigma))))
+    elif sigma in C_GP:
+        ops.append(MUL(C_L[g - 1], C_GP[sigma], C_L[g]))
+    elif sigma:
+        ops += [SET(C_C[g], ofK(gpow(sigma))), MUL(C_L[g - 1], C_C[g], C_L[g])]
+    else:
+        ops.append(MUL(C_L[g - 1], C_ONE, C_L[g]))
     return ops
+
+def tail(g):
+    if g < NG - 1:
+        return [MUL(C_H[g + 1], C_G, C_H1[g + 1]), JMP(C_ONE, C_H[g + 1], C_F[g + 1])]
+    return [JMP(C_ONE, C_K0, C_ONE)]
+
+NH_MAX = [max(len(nonhash(g, t)) for t in tuples(g)) for g in range(NG)]
+
+def block(g, tup):
+    ks = GROUPS[g]
+    head = nonhash(g, tup)
+    # chain 0's top copy must follow its steps; keep all copies/ties before the steps except that one
+    pre = [x for x in head if not (x == X_(C_TOP[0], C_Z, C_CV))]
+    post = [x for x in head if x == X_(C_TOP[0], C_Z, C_CV)]
+    pad = [NOP] * (NH_MAX[g] - len(head))
+    steps = [b for k, s in zip(ks, tup) for b in chain_ops(k, s)]
+    return pre + pad + steps + post + tail(g)
+
 ENTRY = {}
 BLOCK_LEN = {}
-for k in range(42):
-    for s in range(W[k]):
-        e = BASE[k] + SPACING * s
-        ENTRY[e] = (k, s)
-        ops = block(k, s)
-        BLOCK_LEN[(k, s)] = len(ops)
-        check(len(ops) <= SPACING, "fits")
+SP = [max(len(block(g, t)) for t in tuples(g)) for g in range(NG)]
+BASE = []
+slot = PROLOGUE_LEN
+for g in range(NG):
+    BASE.append(slot); slot += SP[g] * len(tuples(g))
+LAST_CODE = slot
+def rank(g, tup):
+    r = 0
+    for k, s in zip(GROUPS[g], tup): r = r * W[k] + s
+    return r
+for g in range(NG):
+    for tup in tuples(g):
+        e = BASE[g] + SP[g] * rank(g, tup)
+        ops = block(g, tup)
+        ENTRY[e] = (g, tup); BLOCK_LEN[(g, tup)] = len(ops)
         for i, x in enumerate(ops): emit(e + i, x)
-check(BASE[0] >= PROLOGUE_LEN and BASE[41] + SPACING * W[41] <= R_SLOT, "regions")
-p = R_SLOT
+print("SP", SP, "BASE", BASE)
+check(LAST_CODE <= R_SLOT, f"code fits: {LAST_CODE} <= {R_SLOT}")
+ENTRY_OF = {(g, tup): e for e, (g, tup) in ENTRY.items()}
 ROOT = [BLK([ROOT_TOP[2], ROOT_TOP[3], ROOT_TOP[4], ROOT_TOP[5]], C_CV, C_S[0], RHO_CELL[0])]
 for r in range(1, 10):
     ROOT.append(BLK([ROOT_TOP[6 + 4 * (r - 1) + i] for i in range(4)], C_S[r - 1], C_S[r], RHO_CELL[r]))
 ROOT.append(X_(C_S[9], C_Z, C_PK))
 for i, x in enumerate(ROOT): emit(R_SLOT + i, x)
 check(R_SLOT + len(ROOT) == SENT, "root to sentinel")
-SENT_INS = PAD
+print("prologue", PROLOGUE_LEN, "code end", LAST_CODE, "entries", len(ENTRY), "NH_MAX", NH_MAX)
+
 def fetch(i):
     if not (0 <= i < NSLOTS): return None
-    if i == SENT: return SENT_INS
+    if i == SENT: return PAD
     return prog.get(i, PAD)
 def operands(ins):
     t = ins[0]
@@ -452,129 +270,78 @@ def reads_ok(ins, fe, kappa=32):
         if o[0] == 'zero': return False
         if (o[1] + fe) % M >= 2 ** kappa: return False
     return True
-bad = 0
-for i, ins in list(prog.items()) + [(SENT, SENT_INS)]:
-    for fi, fe in enumerate(FRAMES):
-        ok = reads_ok(ins, fe)
-        want = (fi == 0 and i not in ENTRY and i != SENT) or (fi > 0 and ENTRY.get(i, (None,))[0] == fi - 1)
-        if ok != want: bad += 1
-check(bad == 0, f"frame lemma bad={bad}")
-# every non-entry frame-1 operand < 2^16
-for i, ins in prog.items():
-    if i not in ENTRY:
-        check(all(o[1] < 2 ** 16 for o in operands(ins)), "ops < 2^16")
-# output cells written once per path: cells distinct families
-print("image", len(prog), "R", R_SLOT, "BASE", BASE[0], BASE[40], BASE[41])
-class Stop(Exception): pass
-class Machine:
-    """runCost over a (lazily committed) image.  `choose(cell, ctx)` is the prover's choice for an
-    unassigned cell read as an input; outputs of relations are solved when unassigned."""
-    def __init__(self, pinned, kappa=MEMLOG, choose=None, image=None, support=False):
-        self.mem = dict(image or {}); self.mem.update(pinned)
-        self.kappa = kappa; self.choose = choose; self.support = support
-        self.trace = []; self.cost = 0
-    def addr(self, fe, o):
-        if o[0] == 'zero': raise Stop('read 0')
-        a = (o[1] + fe) % M
-        if a >= 2 ** self.kappa: raise Stop('read out of range')
-        return a
-    def rd(self, a, ctx):
-        if a not in self.mem:
-            v = self.choose(a, ctx) if self.choose else None
-            if v is None: return None
-            self.mem[a] = v
-        return self.mem[a]
-    def solve(self, a, v):
-        if a not in self.mem: self.mem[a] = v
-        if self.mem[a] != v: raise Stop('relation')
-    def run(self, max_steps=5000):
-        pc, fe = 0, 0                        # (g^0, fp = g^0)
-        for _ in range(max_steps):
-            if pc == SENT:
-                if fe == 0: return self.cost
-                raise Stop('sentinel with fp != 1')
-            ins = fetch(pc)
-            if ins is None: raise Stop('fetch')
-            self.trace.append((pc, fe))
-            t = ins[0]
-            if t in ('xor', 'mul'):
-                a, b, c = (self.addr(fe, o) for o in ins[1:4])
-                va, vb = self.rd(a, ('in', pc)), self.rd(b, ('in', pc))
-                if va is None or vb is None: raise Stop('unassigned')
-                self.solve(c, eadd(va, vb) if t == 'xor' else emul(va, vb))
-                pc += 1; self.cost += 1
-            elif t == 'set':
-                self.solve(self.addr(fe, ins[1]), ins[2]); pc += 1; self.cost += 1
-            elif t == 'jump':
-                c, d, f = (self.addr(fe, o) for o in ins[1:4])
-                vc, vd, vf = (self.rd(x, ('jump', pc, i)) for i, x in enumerate((c, d, f)))
-                if None in (vc, vd, vf) or not (isK(vc) and isK(vd) and isK(vf)): raise Stop('jump guard')
-                self.cost += 1
-                if vc[0] == 0: pc += 1
-                else:
-                    if vd[0] == 0 or vf[0] == 0: raise Stop('jump to 0')
-                    pc_e, fe_n = dlog(vd[0]), dlog(vf[0])
-                    if pc_e >= NSLOTS: raise Stop('fetch')
-                    pc, fe = pc_e, fe_n
-            elif t == 'blake':
-                m, cv, out, md = ins[1:]
-                ms = [self.rd(self.addr(fe, o), ('in', pc)) for o in m]
-                cva = self.addr(fe, cv); cvb = (cva + 1) % M
-                oa = self.addr(fe, out); ob = (oa + 1) % M
-                for x in (cvb, ob):
-                    if x >= 2 ** self.kappa: raise Stop('read out of range')
-                cv0, cv1 = self.rd(cva, ('in', pc)), self.rd(cvb, ('in', pc))
-                mdv = self.rd(self.addr(fe, md), ('in', pc))
-                if None in ms or None in (cv0, cv1, mdv): raise Stop('unassigned')
-                if not all(canon(x) for x in ms + [cv0, cv1, mdv]): raise Stop('canonical')
-                q = hashInput(cellBits(cv0) | (cellBits(cv1) << 128),
-                              sum(cellBits(x) << (128 * i) for i, x in enumerate(ms)), cellBits(mdv))
-                if self.support:                 # incoherent oracle: answer = committed output
-                    if oa not in self.mem: self.mem[oa] = cellOf(random.getrandbits(128))
-                    if ob not in self.mem: self.mem[ob] = cellOf(random.getrandbits(128))
-                    if not (canon(self.mem[oa]) and canon(self.mem[ob])): raise Stop('canonical')
-                else:
-                    y = H(q)
-                    self.solve(oa, cellOf(LO(y))); self.solve(ob, cellOf(y >> 128))
-                pc += 1; self.cost += 10
-            else:
-                raise AssertionError
-        raise Stop('steps')
+def frame_chunk(items):
+    bad = 0
+    for i, ins in items:
+        for fi, fe in enumerate(FRAMES):
+            ok = reads_ok(ins, fe)
+            want = (fi == 0 and i not in ENTRY and i != SENT) or (fi > 0 and i in ENTRY and ENTRY[i][0] == fi - 1)
+            if ok != want: bad += 1
+    return bad
+```
 
-def loader(pk, m, bits):
-    L = min(len(bits), SIG_BITS + 1)
-    st = toBits(pk, 128) + toBits(m, 256) + toBits(L, 128) + bits[:SIG_BITS]
-    return {i: cellOf(ofBits(st[128 * i:128 * i + 128])) for i in range(4 + 43)}
+## Appendix B. Checks (`hltri2_checks.py`)
+
+```python
+# ============================================================================ HL-TRI checks
+def split_groups(svec):
+    return [tuple(svec[k] for k in GROUPS[g]) for g in range(NG)]
 
 def entry_choice(svec):
-    """Prover strategy: H_k := g^(entry of (k, s_k))."""
+    tups = split_groups(svec)
     def ch(a, ctx):
-        if a in C_H: return ofK(gpow(BASE[C_H.index(a)] + SPACING * svec[C_H.index(a)]))
+        if a in C_H:
+            g = C_H.index(a)
+            return ofK(gpow(ENTRY_OF[(g, tups[g])]))
         return None
     return ch
 
 def forced_walk(svec):
     tr = list(range(PROLOGUE_LEN))
-    for k in range(42):
-        e = BASE[k] + SPACING * svec[k]
-        tr += list(range(e, e + BLOCK_LEN[(k, svec[k])]))
+    for g, tup in enumerate(split_groups(svec)):
+        e = ENTRY_OF[(g, tup)]
+        tr += list(range(e, e + BLOCK_LEN[(g, tup)]))
     tr += list(range(R_SLOT, SENT))
     return tr
-rng = random.Random(7)
-pk, sk = keygen(rng)
-costs = set(); steps = set()
-for trial in range(6):
+
+def layer_vector(rng):
+    v = [rng.randrange(W[k]) for k in range(42)]
+    while sum(v) != LAYER:
+        k = rng.randrange(42)
+        if sum(v) < LAYER and v[k] < W[k] - 1: v[k] += 1
+        elif sum(v) > LAYER and v[k] > 0: v[k] -= 1
+    return v
+
+def support_run(v, seed):
+    random.seed(seed)
+    img = {C_IDX: cellOf(sum(v[k] << POS[k] for k in range(42)))}
+    mac = Machine(loader(7, 0, [0] * SIG_BITS), choose=entry_choice(v), image=img, support=True)
+    mac.mem[C_S[9]] = cellOf(7)
+    cost = mac.run()
+    return cost, len(mac.trace), [pc for pc, _ in mac.trace] == forced_walk(v)
+
+def offlayer_run(v, seed):
+    random.seed(seed)
+    img = {C_IDX: cellOf(sum(v[k] << POS[k] for k in range(42)))}
+    mac = Machine(loader(1, 0, [0] * SIG_BITS), choose=entry_choice(v), image=img, support=True)
+    mac.mem[C_S[9]] = cellOf(1)
+    try:
+        mac.run(); return 'completed'
+    except Stop as e:
+        return str(e)
+
+def honest_trial(seed):
+    rng = random.Random(seed)
+    pk, sk = keygen(rng)
+    out = []
     m = rng.getrandbits(256)
     bits = sign(sk, m, rng)
-    check(verify(pk, m, bits), "honest verify")
+    ok = verify(pk, m, bits)
     I = LO(H(idxQuery(m, ofBits(bits[128 * 42:]), pk)))
     s = digits(I)
     mac = Machine(loader(pk, m, bits), choose=entry_choice(s))
-    try:
-        cost = mac.run(); costs.add(cost); steps.add(len(mac.trace))
-        check([pc for pc, _ in mac.trace] == forced_walk(s), "forced walk")
-    except Stop as e:
-        check(False, f"honest stop {e}")
+    cost = mac.run()
+    out.append((ok, cost, len(mac.trace), [pc for pc, _ in mac.trace] == forced_walk(s)))
     for what in ('word', 'nonce', 'msg', 'pk'):
         b2, m2, pk2 = list(bits), m, pk
         if what == 'word': b2[rng.randrange(42 * 128)] ^= 1
@@ -584,48 +351,65 @@ for trial in range(6):
         v = verify(pk2, m2, b2)
         s2 = digits(LO(H(idxQuery(m2, ofBits(b2[128 * 42:]), pk2))))
         mac = Machine(loader(pk2, m2, b2), choose=entry_choice(s2))
-        try: mac.run(); ok = True
-        except Stop: ok = False
-        check(ok == v, f"agree {what}")
-print("honest costs", costs, "steps(trace)", steps)
-# all layer classes in support mode: constant cost
-allc = set()
-for trial in range(300):
-    v = [rng.randrange(W[k]) for k in range(42)]
-    while sum(v) != LAYER:
-        k = rng.randrange(42)
-        if sum(v) < LAYER and v[k] < W[k] - 1: v[k] += 1
-        elif sum(v) > LAYER and v[k] > 0: v[k] -= 1
-    if trial % 3 == 0:
-        for k in range(42):
-            if sum(v) > LAYER - 0: pass
+        try: mac.run(); ok2 = True
+        except Stop: ok2 = False
+        out.append((what, ok2 == v))
+    return out
+
+
+def midblock_run(v, seed):
+    rng = random.Random(seed)
+    tups = split_groups(v)
+    g = rng.randrange(NG)
+    delta = rng.randrange(1, BLOCK_LEN[(g, tups[g])])
+    def ch(a, ctx):
+        if a in C_H:
+            gg = C_H.index(a)
+            e = ENTRY_OF[(gg, tups[gg])]
+            return ofK(gpow(e + (delta if gg == g else 0)))
+        return cellOf(rng.getrandbits(128))
+    random.seed(seed)
     img = {C_IDX: cellOf(sum(v[k] << POS[k] for k in range(42)))}
-    pk_s = rng.getrandbits(128)
-    mac = Machine(loader(pk_s, 0, [0] * SIG_BITS), choose=entry_choice(v), image=img, support=True)
-    mac.mem[C_S[9]] = cellOf(pk_s)
+    mac = Machine(loader(7, 0, [0] * SIG_BITS), choose=ch, image=img, support=True)
+    mac.mem[C_S[9]] = cellOf(7)
     try:
-        cost = mac.run(); allc.add((cost, len(mac.trace)))
-        check([pc for pc, _ in mac.trace] == forced_walk(v), "support forced walk")
+        mac.run(); return 'completed'
     except Stop as e:
-        check(False, f"support stop {e}")
-# many zeros vector
-v = [0] * 42; v[40] = 15; v[41] = 15; rest = 76
-for k in range(40):
-    a = min(7, rest); v[k] = a; rest -= a
-assert sum(v) == 106
-img = {C_IDX: cellOf(sum(v[k] << POS[k] for k in range(42)))}
-mac = Machine(loader(5, 0, [0] * SIG_BITS), choose=entry_choice(v), image=img, support=True)
-mac.mem[C_S[9]] = cellOf(5)
-cost = mac.run(); allc.add((cost, len(mac.trace)))
-print("support (cost, trace len) set:", allc)
-check(len(allc) == 1, "constant cost")
-for trial in range(60):
-    v = [rng.randrange(W[k]) for k in range(42)]
-    if sum(v) == LAYER: continue
-    img = {C_IDX: cellOf(sum(v[k] << POS[k] for k in range(42)))}
-    mac = Machine(loader(1, 0, [0] * SIG_BITS), choose=entry_choice(v), image=img, support=True)
-    mac.mem[C_S[9]] = cellOf(1)
-    try: mac.run(); check(False, "off-layer completed")
-    except Stop as e: check(str(e) == 'relation', f"offlayer {e}")
-print("RESULT:", "PASS" if not FAIL else f"FAIL {FAIL[:5]}")
+        return str(e)
+
+if __name__ == "__main__":
+    items = list(prog.items()) + [(SENT, PAD)]
+    chunks = [items[i::24] for i in range(24)]
+    with Pool(24) as pool:
+        bad = sum(pool.map(frame_chunk, chunks))
+        check(bad == 0, f"frame lemma bad={bad}")
+        rng = random.Random(11)
+        vecs = [layer_vector(rng) for _ in range(400)]
+        z = [0] * 42; z[40] = 15; z[41] = 15; rest = 76
+        for k in range(40):
+            a = min(7, rest); z[k] = a; rest -= a
+        vecs.append(z)
+        sup = pool.starmap(support_run, [(v, i) for i, v in enumerate(vecs)])
+        check(all(f for _, _, f in sup), "support forced walk")
+        costs = {(c, n) for c, n, _ in sup}
+        print("support (cost, steps):", costs)
+        check(len(costs) == 1, "constant cost and steps")
+        off = []
+        for i in range(80):
+            v = [rng.randrange(W[k]) for k in range(42)]
+            if sum(v) != LAYER: off.append(v)
+        offr = pool.starmap(offlayer_run, [(v, i) for i, v in enumerate(off)])
+        check(all(r == 'relation' for r in offr), f"off-layer rejected {set(offr)}")
+        mids = pool.starmap(midblock_run, [(v, 1000 + i) for i, v in enumerate(vecs[:200])])
+        check(all(r != 'completed' for r in mids), "mid-block landings never complete")
+        print("mid-block outcomes", set(mids))
+        hon = pool.map(honest_trial, range(8))
+        for h in hon:
+            ok, cost, n, fw = h[0]
+            check(ok and fw, "honest verify/forced walk")
+            check(all(x[1] for x in h[1:]), "tamper agree")
+        print("honest (cost, steps):", {(h[0][1], h[0][2]) for h in hon})
+    c = next(iter(costs))[0]
+    print("claim", c + 120)
+    print("RESULT:", "PASS" if not FAIL else f"FAIL {FAIL[:5]}")
 ```

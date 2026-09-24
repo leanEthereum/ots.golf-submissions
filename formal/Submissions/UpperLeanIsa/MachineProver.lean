@@ -1,14 +1,14 @@
 import Submissions.UpperLeanIsa.MachineSound
 
 /-!
-# The honest HL-FLAT-A prover
+# The honest HL-TRI prover
 
 The honest prover queries the oracle exactly as the verifier does: the index, then for each chain
 `k` its `d k` steps from the revealed word (`d = digits of the index`), then the ten root calls.
 It commits the image whose every cell is a pure function of the input and those answers
-(`hcell`): the constants, the index pair, the tie patterns and accumulators, the landing hints
-`H_k = g ^ entryOf k (d k)`, `H'_k = H_k · g`, the landing products, the chain pairs and the root
-states. Under a fixed table the prover is `imageF` (`fixed_prover`).
+(`hcell`): the constants, the index pair, per group the tie word, accumulator, landing hints
+`H_g = g ^ entryOf g d`, `H'_g = H_g · g`, layer constant and layer product, the chain pairs and
+the root states. Under a fixed table the prover is `imageF` (`fixed_prover`).
 -/
 
 namespace OptimalOTS.HLFlat
@@ -139,7 +139,9 @@ def loC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 0 128)
 def hiC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 128 128)
 
 /-- The honest value of cell `c ≥ 47`, from the index answer `y0`, the chain answers `A` and the
-root answers `RA`. -/
+root answers `RA`. Per group `g` (digits `d` of the index): the tie word `T_g`, the accumulator
+`acc_g`, the landing hints `H_g = g ^ entryOf g d`, `H'_g = H_g · g`, the layer constant
+`C_g = g ^ σ_g` and the layer product `L_g`. -/
 def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (RA : ℕ → BitVec 256)
     (c : ℕ) : E :=
   if c < 48 then 0
@@ -148,15 +150,22 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if c = 50 then gV
   else if c = 51 then k0V
   else if c < 59 then natV (c - 49)
-  else if c < 101 then frameV (c - 59)
+  else if c < 73 then frameV (c - 59)
+  else if c < 101 then 0
   else if c = 101 then loC y0
   else if c = 102 then hiC y0
-  else if c < 145 then fpat (c - 103) (dg (idxOf y0) (c - 103))
-  else if c < 186 then natV (ofDigitsW Flat.wid (dg (idxOf y0)) (c - 144))
-  else if c < 228 then ofK (gpow (entryOf (c - 186) (dg (idxOf y0) (c - 186))))
-  else if c < 270 then ofK (gpow (entryOf (c - 228) (dg (idxOf y0) (c - 228)) + 1))
-  else if c < 311 then
-    ofK (gpow (∑ j ∈ Finset.range (c - 269), entryOf j (dg (idxOf y0) j)))
+  else if c < 117 then natV (gwordS (dg (idxOf y0)) (c - 103))
+  else if c < 145 then 0
+  else if c < 158 then ∑ j ∈ Finset.range (c - 144), natV (gwordS (dg (idxOf y0)) j)
+  else if c < 186 then 0
+  else if c < 200 then ofK (gpow (entryOf (c - 186) (dg (idxOf y0))))
+  else if c < 228 then 0
+  else if c < 242 then ofK (gpow (entryOf (c - 228) (dg (idxOf y0)) + 1))
+  else if c < 270 then 0
+  else if c < 284 then ofK (gpow (sig (dg (idxOf y0)) (c - 270)))
+  else if c < 290 then 0
+  else if c < 303 then
+    ofK (gpow (rootSlot - 106 + ∑ j ∈ Finset.range (c - 289), sig (dg (idxOf y0)) j))
   else if c < 320 then 0
   else if c < 404 then
     (if (c - 320) % 2 = 0 then cellOfBits (topOf bits y0 A ((c - 320) / 2))
@@ -165,6 +174,8 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if c = 410 then cellOfBits (topOf bits y0 A 0)
   else if c = 411 then cellOfBits (topOf bits y0 A 1)
   else if c = 412 then hiOf y0 A 1
+  else if c < 442 then 0
+  else if c < 448 then ofK (gpow (c - 440))
   else if c < 1024 then 0
   else if c < 2368 then
     (if (c - 1024) % 2 = 0 then loC (A ((c - 1024) / 32) ((c - 1024) % 32 / 2))

@@ -2,14 +2,14 @@ import Submissions.UpperLeanIsa.MachineProgram
 import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 /-!
-# Running the HL-FLAT-A bytecode
+# Running the HL-TRI bytecode
 
 The execution framework for `HLFlat.program`:
 
 * the relation of a cell-level instruction on cell values, `CInstr.RelB B v`, parametric in the
   `BLAKE2S` relation `B`: `Rel f` (answers from a fixed table `f`) and `RelNH` (`BLAKE2S ↦ True`,
   all a run in the cache-free `support` semantics yields). A dispatch's relation records the
-  landing: `[H_k] ∈ K` is `g ^ e` for an entry `e` of chain `k`, and `[H'_k] ∈ K`;
+  landing: `[H_k] ∈ K` is `g ^ e` for an entry `e` of group `k`, and `[H'_k] ∈ K`;
 * frame-1 normal forms of every instruction (`exec_xor` … `exec_blake`), and the composite
   dispatch step `runCost_dispatch`: the landing in frame `F_k` and the entry's return are
   collapsed into one deterministic two-instruction step (`frame_fail` rules out every other
@@ -65,8 +65,8 @@ theorem CInstr.relNH_of_relB {B : BlakeRel} {v : ℕ → E} {ci : CInstr} (h : c
   cases ci
   all_goals first | exact h | trivial
 
-/-- The constants every jump relies on: `ONE` and the 42 frames. -/
-def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 42, v (fCell k) = frameV k
+/-- The constants every jump relies on: `ONE` and the 14 group frames. -/
+def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 14, v (fCell k) = frameV k
 
 /-! ## The successor slot -/
 
@@ -142,7 +142,7 @@ theorem read_one_g {c : ℕ} (hc : c + 1 < 2 ^ 16) :
   rw [g_mul_gpow]; exact read_one h16 hκ L hc
 
 /-- In frame `F_k`, the shifted operand `sop k c` reads cell `c`. -/
-theorem read_frame_sop {k c : ℕ} (hk : k < 42) (hc : c < 2 ^ 16) :
+theorem read_frame_sop {k c : ℕ} (hk : k < 14) (hc : c < 2 ^ 16) :
     L.read (frame k * sop k c) = some (Lx L c) := by
   rw [frame, sop, gpow_mul_gpow]
   refine read_gpow_some hκ L ?_ (lt_of_lt_of_le hc (Nat.pow_le_pow_right (by norm_num) h16))
@@ -211,7 +211,7 @@ theorem exec_blake {m0 m1 m2 m3 cv out md : ℕ} (hb : (CInstr.blake m0 m1 m2 m3
   rfl
 
 /-- The dispatch `JUMP(ONE, H_k, F_k)` in frame `1`. -/
-theorem exec_dispatch {k : ℕ} (hk : k < 42) (hpin : Pinned (Lx L)) :
+theorem exec_dispatch {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
     LeanIsa.execute L ⟨pc, 1⟩ (CInstr.dispatch k).toInstr =
       pure (if IsInK (Lx L (hCell k)) then some ⟨(Lx L (hCell k)).limb 0, frame k⟩ else none) := by
   show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
@@ -256,7 +256,7 @@ theorem exec_exit (hpin : Pinned (Lx L)) :
     rfl
 
 /-- The entry `I0_k` in its own frame returns to frame `1` at `[H'_k]`. -/
-theorem exec_entry_own {k : ℕ} (hk : k < 42) (hpin : Pinned (Lx L)) :
+theorem exec_entry_own {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
     LeanIsa.execute L ⟨pc, frame k⟩ (CInstr.entry k).toInstr =
       pure (if IsInK (Lx L (h1Cell k)) then some ⟨(Lx L (h1Cell k)).limb 0, 1⟩ else none) := by
   show pure (LeanerVM.Semantics.execute L ⟨pc, frame k⟩
@@ -326,8 +326,8 @@ theorem runCost_succ_sentinel (L : MemImage κ) (n : ℕ) (fp : K) :
     LeanIsa.runCost program L (n + 1) ⟨gpow sentinel, fp⟩ = pure none := by
   rw [LeanIsa.runCost.eq_2]; exact if_pos finalPc_eq.symm
 
-/-- A landed state `⟨h, F_k⟩` never completes unless `h` is an entry of chain `k`. -/
-theorem runCost_frame_none (hκ : κ ≤ 32) (L : MemImage κ) {k : ℕ} (hk : k < 42) {h : K}
+/-- A landed state `⟨h, F_k⟩` never completes unless `h` is an entry of group `k`. -/
+theorem runCost_frame_none (hκ : κ ≤ 32) (L : MemImage κ) {k : ℕ} (hk : k < 14) {h : K}
     (hno : ∀ e, IsEntry k e → h ≠ gpow e) (n : ℕ) :
     LeanIsa.runCost program L n ⟨h, frame k⟩ = pure none := by
   cases n with
@@ -365,7 +365,7 @@ theorem runCost_dispatch (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
       if (CInstr.dispatch k).RelNH (Lx L) then
         Option.map (2 + ·) <$> LeanIsa.runCost program L n ⟨(Lx L (h1Cell k)).limb 0, 1⟩
       else pure none := by
-  have hk : k < 42 := by have := cinstrAt_bounded s; rw [hci] at this; exact this
+  have hk : k < 14 := by have := cinstrAt_bounded s; rw [hci] at this; exact this
   rw [runCost_slot L (n + 1) hs, hci, exec_dispatch h16 hκ L _ hk hpin]
   by_cases hH : IsInK (Lx L (hCell k))
   · rw [if_pos hH, pure_bind, Option.elim_some]
@@ -388,7 +388,7 @@ theorem runCost_dispatch (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
 theorem runCost_dispatch_one (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
     (hci : cinstrAt s = .dispatch k) :
     LeanIsa.runCost program L 1 ⟨gpow s, 1⟩ = pure none := by
-  have hk : k < 42 := by have := cinstrAt_bounded s; rw [hci] at this; exact this
+  have hk : k < 14 := by have := cinstrAt_bounded s; rw [hci] at this; exact this
   rw [runCost_slot L 0 hs, hci, exec_dispatch h16 hκ L _ hk hpin]
   split_ifs
   · rw [pure_bind, Option.elim_some, LeanIsa.runCost.eq_1,
