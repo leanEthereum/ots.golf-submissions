@@ -3,7 +3,7 @@ import Submissions.UpperLeanIsa.Correctness
 import OptimalOTS.LeanIsa
 
 /-!
-# Running the RT bytecode
+# Running the RT-128 bytecode
 
 The execution framework for `Machine.program` (design `NOTES.md` §9.2):
 
@@ -46,7 +46,7 @@ theorem Lx_of_not_lt {κ : ℕ} (L : MemImage κ) {c : ℕ} (h : ¬ c < 2 ^ κ) 
 theorem lt64_of_le_maxLogMem {κ : ℕ} (hκ : κ ≤ maxLogMem) : κ < 64 :=
   lt_of_le_of_lt hκ (by decide)
 
-theorem lt_order_of_lt {c : ℕ} (h : c < 131072) : c < 2 ^ 64 - 1 :=
+theorem lt_order_of_lt {c : ℕ} (h : c < 65536) : c < 2 ^ 64 - 1 :=
   lt_of_lt_of_le h (by norm_num)
 
 theorem read_op_of_lt {κ : ℕ} (hκ : κ < 64) (L : MemImage κ) {c : ℕ} (h : c < 2 ^ κ) :
@@ -605,10 +605,10 @@ theorem runCost_succ_eq (L : MemImage κ) (m s : ℕ) (hs : s < sentinel) :
 theorem gpow_sentinel : gpow sentinel = program.finalPc := by
   rw [finalPc_eq]; rfl
 
-theorem eq_sentinel_of_gpow {s : ℕ} (hs : s < 2 ^ 17) (h : gpow s = program.finalPc) :
+theorem eq_sentinel_of_gpow {s : ℕ} (hs : s < 2 ^ 16) (h : gpow s = program.finalPc) :
     s = sentinel := by
   rw [finalPc_eq] at h
-  exact gpow_injOn (lt_of_lt_of_le hs (by norm_num)) (show 2 ^ 17 - 1 < 2 ^ 64 - 1 by norm_num) h
+  exact gpow_injOn (lt_of_lt_of_le hs (by norm_num)) (show 2 ^ 16 - 1 < 2 ^ 64 - 1 by norm_num) h
 
 theorem finalPc_ne_of_lt {s : ℕ} (hs : s < sentinel) : gpow s ≠ program.finalPc :=
   gpow_ne_finalPc hs
@@ -617,19 +617,19 @@ end Loop
 
 /-! ## Slots, successors and walks -/
 
-/-- The slot index of a program counter: `i` when `pc = g ^ i` with `i < 2 ^ 17`, else `2 ^ 17`
+/-- The slot index of a program counter: `i` when `pc = g ^ i` with `i < 2 ^ 16`, else `2 ^ 16`
 (past the sentinel, where no walk lives). -/
 def slotOf (pc : K) : ℕ :=
-  if h : ∃ i, i < 2 ^ 17 ∧ pc = gpow i then Classical.choose h else 2 ^ 17
+  if h : ∃ i, i < 2 ^ 16 ∧ pc = gpow i then Classical.choose h else 2 ^ 16
 
-theorem slotOf_gpow {i : ℕ} (hi : i < 2 ^ 17) : slotOf (gpow i) = i := by
+theorem slotOf_gpow {i : ℕ} (hi : i < 2 ^ 16) : slotOf (gpow i) = i := by
   unfold slotOf
-  have h : ∃ j, j < 2 ^ 17 ∧ gpow i = gpow j := ⟨i, hi, rfl⟩
+  have h : ∃ j, j < 2 ^ 16 ∧ gpow i = gpow j := ⟨i, hi, rfl⟩
   rw [dif_pos h]
   obtain ⟨hj, hji⟩ := Classical.choose_spec h
   exact (gpow_injOn (lt_of_lt_of_le hi (by norm_num)) (lt_of_lt_of_le hj (by norm_num)) hji).symm
 
-theorem slotOf_spec {pc : K} (h : slotOf pc < 2 ^ 17) : pc = gpow (slotOf pc) := by
+theorem slotOf_spec {pc : K} (h : slotOf pc < 2 ^ 16) : pc = gpow (slotOf pc) := by
   unfold slotOf at h ⊢
   split_ifs at h ⊢ with hex
   · exact (Classical.choose_spec hex).2
@@ -706,15 +706,15 @@ theorem bounded64 (s : ℕ) : (cinstrAt s).Bounded (2 ^ 64 - 1) :=
   (cinstrAt_bounded s).mono (by norm_num)
 
 theorem cinstrAt_zero : cinstrAt 0 = .setc oneCell oneV := by
-  rw [cinstrAt_const (show 0 < 255 by decide), Nat.zero_add, posCell_one, posV_one]
+  rw [cinstrAt_const (show 0 < 127 by decide), Nat.zero_add, posCell_one, posV_one]
 
 /-- A completing run under a fixed table starts at a slot of the program. -/
 theorem runCost_pc_valid_sim (f : HashTable) (L : MemImage κ) {n c : ℕ} {r : Regs K}
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost program L n r))) :
-    ∃ i, i < 2 ^ 17 ∧ r.pc = gpow i := by
+    ∃ i, i < 2 ^ 16 ∧ r.pc = gpow i := by
   by_contra hno
   have hne : r.pc ≠ program.finalPc := fun e =>
-    hno ⟨2 ^ 17 - 1, by norm_num, e.trans finalPc_eq⟩
+    hno ⟨2 ^ 16 - 1, by norm_num, e.trans finalPc_eq⟩
   cases n with
   | zero =>
     rw [runCost_zero_eq, if_neg (fun e => hne e.1), simulateQ_pure, mem_support_pure_iff] at h
@@ -728,10 +728,10 @@ theorem runCost_pc_valid_sim (f : HashTable) (L : MemImage κ) {n c : ℕ} {r : 
 /-- A completing run in the `support` semantics starts at a slot of the program. -/
 theorem runCost_pc_valid_supp (L : MemImage κ) {n c : ℕ} {r : Regs K}
     (h : some c ∈ support (LeanIsa.runCost program L n r)) :
-    ∃ i, i < 2 ^ 17 ∧ r.pc = gpow i := by
+    ∃ i, i < 2 ^ 16 ∧ r.pc = gpow i := by
   by_contra hno
   have hne : r.pc ≠ program.finalPc := fun e =>
-    hno ⟨2 ^ 17 - 1, by norm_num, e.trans finalPc_eq⟩
+    hno ⟨2 ^ 16 - 1, by norm_num, e.trans finalPc_eq⟩
   cases n with
   | zero =>
     rw [runCost_zero_eq, if_neg (fun e => hne e.1), mem_support_pure_iff] at h
@@ -785,7 +785,7 @@ theorem one_of_supp (hκ : κ ≤ maxLogMem) {L : MemImage κ} {n c : ℕ}
       exact absurd hc (Option.some_ne_none c)
     · exact hrel.2
 
-theorem lt_sentinel_of_mem_sim (f : HashTable) (L : MemImage κ) {n s c : ℕ} (hs : s < 2 ^ 17)
+theorem lt_sentinel_of_mem_sim (f : HashTable) (L : MemImage κ) {n s c : ℕ} (hs : s < 2 ^ 16)
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
       (LeanIsa.runCost program L (n + 1) ⟨gpow s, 1⟩))) : s < sentinel := by
   by_contra hge
@@ -794,7 +794,7 @@ theorem lt_sentinel_of_mem_sim (f : HashTable) (L : MemImage κ) {n s c : ℕ} (
     rw [hs']; exact gpow_sentinel), simulateQ_pure, mem_support_pure_iff] at h
   exact Option.some_ne_none c h
 
-theorem lt_sentinel_of_mem_supp (L : MemImage κ) {n s c : ℕ} (hs : s < 2 ^ 17)
+theorem lt_sentinel_of_mem_supp (L : MemImage κ) {n s c : ℕ} (hs : s < 2 ^ 16)
     (h : some c ∈ support (LeanIsa.runCost program L (n + 1) ⟨gpow s, 1⟩)) : s < sentinel := by
   by_contra hge
   have hs' : s = sentinel := by rw [sentinel] at hge ⊢; omega
@@ -804,7 +804,7 @@ theorem lt_sentinel_of_mem_supp (L : MemImage κ) {n s c : ℕ} (hs : s < 2 ^ 17
 
 /-- The successor slot of a `JUMP` from a valid program counter. -/
 theorem nextSlot_of_jumpPc (L : MemImage κ) {s a b c i : ℕ} (hci : cinstrAt s = .jump a b c)
-    (hs : s < sentinel) (hi : i < 2 ^ 17) (hpc : jumpPc L a b s = gpow i) : nextSlot L s = i := by
+    (hs : s < sentinel) (hi : i < 2 ^ 16) (hpc : jumpPc L a b s = gpow i) : nextSlot L s = i := by
   rw [nextSlot_of_jump L hci]
   unfold jumpPc at hpc
   split_ifs at hpc ⊢
@@ -824,7 +824,7 @@ theorem jumpPc_of_le (L : MemImage κ) {s a b c : ℕ} (hci : cinstrAt s = .jump
 /-- **Walk of a fixed-table run.** A completing run under a fixed table from slot `s` is a walk
 along which every executed slot's relation holds. -/
 theorem walk_of_sim (hκ : κ ≤ maxLogMem) {f : HashTable} {L : MemImage κ}
-    (hone : Lx L oneCell = oneV) {n s c : ℕ} (hs : s < 2 ^ 17)
+    (hone : Lx L oneCell = oneV) {n s c : ℕ} (hs : s < 2 ^ 16)
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
       (LeanIsa.runCost program L n ⟨gpow s, 1⟩))) : Walk (Holds f L) L n s c := by
   have hκ' := lt64_of_le_maxLogMem hκ
@@ -886,7 +886,7 @@ theorem walk_of_sim (hκ : κ ≤ maxLogMem) {f : HashTable} {L : MemImage κ}
 /-- **Walk of a `support` run.** A completing run in the `support` semantics from slot `s` is a
 walk along which every executed slot's hash-free relation holds. -/
 theorem walk_of_supp (hκ : κ ≤ maxLogMem) {L : MemImage κ} (hone : Lx L oneCell = oneV)
-    {n s c : ℕ} (hs : s < 2 ^ 17)
+    {n s c : ℕ} (hs : s < 2 ^ 16)
     (h : some c ∈ support (LeanIsa.runCost program L n ⟨gpow s, 1⟩)) :
     Walk (HoldsNH L) L n s c := by
   have hκ' := lt64_of_le_maxLogMem hκ

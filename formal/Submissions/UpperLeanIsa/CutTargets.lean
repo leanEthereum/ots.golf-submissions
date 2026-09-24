@@ -44,9 +44,9 @@ def Boundary (d : Cut) : HashLocation → Prop
 /-- Every chain location is hidden before signing. -/
 theorem hiddenBefore_inl (x : ChainLocation) : Hidden beforeSigning (.inl x) := by
   rcases x with ⟨i, j⟩
-  have h255 : (beforeSigning i).val = 255 := rfl
+  have h127 : (beforeSigning i).val = 127 := rfl
   show j.val < (beforeSigning i).val
-  rw [h255]
+  rw [h127]
   exact j.isLt
 
 theorem hiddenBefore_of_hidden {d : Cut} {a : HashLocation} (h : Hidden d a) :
@@ -180,8 +180,8 @@ theorem matchingAnswers_congr {ξ ζ : Record} {a : HashLocation} (h : ξ.2 a = 
   cases a with
   | inl x => exact congrArg lowAnswers h
   | inr i =>
-    change (if i = 33 then lowAnswers (ξ.2 (.inr i)) else {ξ.2 (.inr i)}) =
-      (if i = 33 then lowAnswers (ζ.2 (.inr i)) else {ζ.2 (.inr i)})
+    change (if i = 38 then lowAnswers (ξ.2 (.inr i)) else {ξ.2 (.inr i)}) =
+      (if i = 38 then lowAnswers (ζ.2 (.inr i)) else {ζ.2 (.inr i)})
     rw [h]
 
 /-- The matching answers at an exposed or boundary location are public. -/

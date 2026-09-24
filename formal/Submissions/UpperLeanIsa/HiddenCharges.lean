@@ -30,11 +30,11 @@ theorem uniform_low_rate :
     ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), mul_assoc,
     ENNReal.inv_mul_cancel (by simp) (by simp), mul_one]
 
-private theorem word_putSource_zero (ξ : Record) (i : Fin 34) (x : Word) :
+private theorem word_putSource_zero (ξ : Record) (i : Fin 39) (x : Word) :
     (ξ.putSource i x).word i 0 = x := by
   simp only [Record.word, Fin.val_zero, dite_true, Record.putSource, Function.update_self]
 
-private theorem word_putAnswer_prev (ξ : Record) (i : Fin 34) (j : Fin 256)
+private theorem word_putAnswer_prev (ξ : Record) (i : Fin 39) (j : Fin 128)
     (hj : j.val ≠ 0) (x : BitVec hashBits) :
     (ξ.putAnswer (.inl (i, ⟨j.val - 1, by have := j.isLt; omega⟩)) x).word i j =
       x.setWidth 128 := by
@@ -43,7 +43,7 @@ private theorem word_putAnswer_prev (ξ : Record) (i : Fin 34) (j : Fin 256)
 
 /-- Every word strictly before the cut retains a uniform 128-bit marginal,
 even after conditioning on the complete public data of that cut. -/
-theorem hidden_word_charge (d : Cut) (v : PublicData) (i : Fin 34) (j : Fin 256)
+theorem hidden_word_charge (d : Cut) (v : PublicData) (i : Fin 39) (j : Fin 128)
     (hj : j.val < (d i).val) (x : Word) (w : ℝ≥0∞) :
     (∑ ξ ∈ publicFiber d v, if ξ.word i j = x then w else 0) ≤
       wordGuessRate * ∑ _ξ ∈ publicFiber d v, w := by
@@ -60,7 +60,7 @@ theorem hidden_word_charge (d : Cut) (v : PublicData) (i : Fin 34) (j : Fin 256)
     simp only [word_putSource_zero]
     rw [Finset.sum_ite_eq', if_pos (Finset.mem_univ x)]
     exact le_of_eq (by rw [Fintype.card_bitVec]; simp only [Nat.cast_pow, Nat.cast_ofNat]; rfl)
-  · let p : Fin 255 := ⟨j.val - 1, by have := j.isLt; omega⟩
+  · let p : Fin 127 := ⟨j.val - 1, by have := j.isLt; omega⟩
     have hp : p.val + 1 < (d i).val := by dsimp [p]; omega
     rw [sum_resample (fun ξ : Record => ξ.2 (.inl (i, p)))
       (fun ξ y => ξ.putAnswer (.inl (i, p)) y)
@@ -81,7 +81,7 @@ theorem hidden_word_charge (d : Cut) (v : PublicData) (i : Fin 34) (j : Fin 256)
         mul_le_mul' le_rfl (mul_le_mul' (Nat.cast_le.mpr hc) le_rfl)
       _ = wordGuessRate * w := by rw [← mul_assoc, uniform_low_rate]
 
-theorem record_chain_query_eq_iff (ξ ζ : Record) (i : Fin 34) (j : Fin 255) :
+theorem record_chain_query_eq_iff (ξ ζ : Record) (i : Fin 39) (j : Fin 127) :
     ξ.query (.inl (i, j)) = ζ.query (.inl (i, j)) ↔
       ξ.word i j.castSucc = ζ.word i j.castSucc := by
   constructor

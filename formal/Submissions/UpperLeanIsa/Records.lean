@@ -10,21 +10,21 @@ namespace OptimalOTS.LeanIsaBaseline
 open OracleComp OracleSpec
 open scoped Classical
 
-abbrev ChainLocation := Fin 34 × Fin 255
-abbrev HashLocation := ChainLocation ⊕ Fin 34
+abbrev ChainLocation := Fin 39 × Fin 127
+abbrev HashLocation := ChainLocation ⊕ Fin 39
 abbrev Record := Words × (HashLocation → BitVec hashBits)
 
-def Record.word (ξ : Record) (i : Fin 34) (j : Fin 256) : Word :=
+def Record.word (ξ : Record) (i : Fin 39) (j : Fin 128) : Word :=
   if h : j.val = 0 then ξ.1 i
   else (ξ.2 (.inl (i, ⟨j.val - 1, by have := j.isLt; omega⟩))).extractLsb' 0 128
 
-def Record.endpoint (ξ : Record) (i : Fin 34) : Word := ξ.word i 255
+def Record.endpoint (ξ : Record) (i : Fin 39) : Word := ξ.word i 127
 
-def Record.rootBefore (ξ : Record) (i : Fin 34) : BitVec 256 :=
+def Record.rootBefore (ξ : Record) (i : Fin 39) : BitVec 256 :=
   if h : i.val = 0 then 0
   else ξ.2 (.inr ⟨i.val - 1, by have := i.isLt; omega⟩)
 
-def rootTag (i : Fin 34) : Fin 34 := ⟨33 - i.val, by omega⟩
+def rootTag (i : Fin 39) : Fin 39 := ⟨38 - i.val, by omega⟩
 
 theorem rootTag_injective : Function.Injective rootTag := by
   intro i j h
@@ -32,7 +32,7 @@ theorem rootTag_injective : Function.Injective rootTag := by
   apply Fin.ext
   have hi := i.isLt
   have hj := j.isLt
-  change 33 - i.val = 33 - j.val at hn
+  change 38 - i.val = 38 - j.val at hn
   omega
 
 def Record.input (ξ : Record) : HashLocation → BitVec 896
@@ -114,6 +114,6 @@ theorem Record.cache_some_iff (ξ : Record) (q : Query) (u : BitVec hashBits) :
   · rintro ⟨a, rfl, rfl⟩
     exact ξ.cache_query a
 
-def Record.publicKey (ξ : Record) : PublicKey := (ξ.2 (.inr 33)).extractLsb' 0 128
+def Record.publicKey (ξ : Record) : PublicKey := (ξ.2 (.inr 38)).extractLsb' 0 128
 
 end OptimalOTS.LeanIsaBaseline

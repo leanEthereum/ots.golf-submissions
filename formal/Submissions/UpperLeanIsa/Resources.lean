@@ -77,40 +77,40 @@ theorem cost_rootFold (xs : List Word) (cv : BitVec 256) :
     convert h using 1
     omega
 
-theorem cost_root (xs : Words) : CostAtMost (root xs) 68 := by
+theorem cost_root (xs : Words) : CostAtMost (root xs) 78 := by
   change CostAtMost ((fun y : BitVec 256 => y.extractLsb' 0 128) <$>
-    rootFold (List.ofFn xs) 0) 68
+    rootFold (List.ofFn xs) 0) 78
   have h := cost_map (cost_rootFold (List.ofFn xs) 0) (fun y => y.extractLsb' 0 128)
   simpa only [List.length_ofFn] using h
 
 theorem keygen_cost : scheme.KeygenCostAtMost keygenBudget := by
-  apply CostAtMost.mono (b := 17408)
-  · change CostAtMost keygen 17408
+  apply CostAtMost.mono (b := 9984)
+  · change CostAtMost keygen 9984
     unfold keygen
-    have first := cost_tabulate 34 0 (fun _ => sampleBits 128) (fun _ => cost_sample 128)
-    have endpoints (sk : Words) := cost_tabulate 34 510
-      (fun i => chain i.val 0 255 (sk i)) (fun i => cost_chain i.val 0 255 (sk i))
+    have first := cost_tabulate 39 0 (fun _ => sampleBits 128) (fun _ => cost_sample 128)
+    have endpoints (sk : Words) := cost_tabulate 39 254
+      (fun i => chain i.val 0 127 (sk i)) (fun i => cost_chain i.val 0 127 (sk i))
     exact cost_bind first (fun sk => cost_bind (endpoints sk) (fun xs =>
       cost_bind (cost_root xs) (fun pk => cost_pure (pk, sk) 0)))
   · norm_num [keygenBudget]
 
 theorem sign_cost : scheme.SignCostAtMost signBudget := by
   intro sk m
-  apply CostAtMost.mono (b := 17340)
+  apply CostAtMost.mono (b := 9906)
   · unfold scheme sign
-    exact cost_bind (cost_tabulate 34 510 _ (fun i =>
+    exact cost_bind (cost_tabulate 39 254 _ (fun i =>
       CostAtMost.mono (cost_chain i.val 0 (digit m i) (sk i))
         (Nat.mul_le_mul_left 2 (digit_le m i)))) (fun xs => cost_pure _ 0)
   · norm_num [signBudget]
 
-theorem verify_cost : scheme.VerifyCostAtMost 17408 := by
+theorem verify_cost : scheme.VerifyCostAtMost 9984 := by
   intro pk m bits
-  change CostAtMost (verify pk m bits) 17408
+  change CostAtMost (verify pk m bits) 9984
   unfold verify
   split
   · exact cost_pure _ _
-  · exact cost_bind (cost_tabulate 34 510 _ (fun i =>
-      CostAtMost.mono (cost_chain i.val (digit m i) (255 - digit m i) (decode bits i))
+  · exact cost_bind (cost_tabulate 39 254 _ (fun i =>
+      CostAtMost.mono (cost_chain i.val (digit m i) (127 - digit m i) (decode bits i))
         (Nat.mul_le_mul_left 2 (Nat.sub_le _ _)))) (fun xs =>
       cost_bind (cost_root xs) (fun _ => cost_pure _ 0))
 
