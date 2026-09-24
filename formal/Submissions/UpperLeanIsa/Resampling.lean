@@ -45,19 +45,19 @@ theorem sum_resample {R V : Type} [Fintype V] [Nonempty V]
   simp only [Finset.sum_const, Finset.card_univ, nsmul_eq_mul]
   rw [← Finset.mul_sum, ← mul_assoc, ENNReal.inv_mul_cancel hc0 hct, one_mul]
 
-def Record.putSource (ξ : Record) (i : Fin 39) (x : Word) : Record :=
+def Record.putSource (ξ : Record) (i : Fin 43) (x : Word) : Record :=
   (Function.update ξ.1 i x, ξ.2)
 
 def Record.putAnswer (ξ : Record) (a : HashLocation) (x : BitVec hashBits) : Record :=
   (ξ.1, Function.update ξ.2 a x)
 
-theorem putSource_get (ξ : Record) (i : Fin 39) (x : Word) : (ξ.putSource i x).1 i = x :=
+theorem putSource_get (ξ : Record) (i : Fin 43) (x : Word) : (ξ.putSource i x).1 i = x :=
   Function.update_self _ _ _
 
 theorem putAnswer_get (ξ : Record) (a : HashLocation) (x : BitVec hashBits) :
     (ξ.putAnswer a x).2 a = x := Function.update_self _ _ _
 
-theorem putSource_restore (ξ : Record) (i : Fin 39) (x : Word) :
+theorem putSource_restore (ξ : Record) (i : Fin 43) (x : Word) :
     (ξ.putSource i x).putSource i (ξ.1 i) = ξ := by
   apply Prod.ext
   · funext j
@@ -71,8 +71,8 @@ theorem putAnswer_restore (ξ : Record) (a : HashLocation) (x : BitVec hashBits)
   · funext b
     by_cases h : b = a <;> simp [Record.putAnswer, h]
 
-abbrev Cut := Fin 39 → Fin 128
-abbrev PublicData := (Fin 39 → Option Word) × (HashLocation → Option (BitVec hashBits))
+abbrev Cut := Fin 43 → Fin 128
+abbrev PublicData := (Fin 43 → Option Word) × (HashLocation → Option (BitVec hashBits))
 
 def beforeSigning : Cut := fun _ => 127
 
@@ -97,7 +97,7 @@ attribute [local irreducible] finiteFiber
 
 def publicFiber (d : Cut) (v : PublicData) : Finset Record := finiteFiber (publicData d) v
 
-theorem publicData_putSource (d : Cut) (ξ : Record) (i : Fin 39) (x : Word)
+theorem publicData_putSource (d : Cut) (ξ : Record) (i : Fin 43) (x : Word)
     (hi : 0 < (d i).val) : publicData d (ξ.putSource i x) = publicData d ξ := by
   apply Prod.ext
   · funext j
@@ -107,7 +107,7 @@ theorem publicData_putSource (d : Cut) (ξ : Record) (i : Fin 39) (x : Word)
     · simp [publicData, Record.putSource, Function.update_of_ne h]
   · rfl
 
-theorem publicData_putAnswer (d : Cut) (ξ : Record) (i : Fin 39) (j : Fin 127)
+theorem publicData_putAnswer (d : Cut) (ξ : Record) (i : Fin 43) (j : Fin 127)
     (x : BitVec hashBits) (hj : j.val + 1 < (d i).val) :
     publicData d (ξ.putAnswer (.inl (i, j)) x) = publicData d ξ := by
   apply Prod.ext
@@ -128,14 +128,14 @@ theorem mem_publicFiber (d : Cut) (v : PublicData) (ξ : Record) :
 
 attribute [local irreducible] publicFiber
 
-theorem fiber_closed_source (d : Cut) (v : PublicData) (i : Fin 39) (hi : 0 < (d i).val) :
+theorem fiber_closed_source (d : Cut) (v : PublicData) (i : Fin 43) (hi : 0 < (d i).val) :
     ∀ ξ ∈ publicFiber d v, ∀ x, ξ.putSource i x ∈ publicFiber d v := by
   intro ξ h x
   apply (mem_publicFiber _ _ _).mpr
   rw [publicData_putSource d ξ i x hi]
   exact (mem_publicFiber _ _ _).mp h
 
-theorem fiber_closed_answer (d : Cut) (v : PublicData) (i : Fin 39) (j : Fin 127)
+theorem fiber_closed_answer (d : Cut) (v : PublicData) (i : Fin 43) (j : Fin 127)
     (hj : j.val + 1 < (d i).val) :
     ∀ ξ ∈ publicFiber d v, ∀ x, ξ.putAnswer (.inl (i, j)) x ∈ publicFiber d v := by
   intro ξ h x

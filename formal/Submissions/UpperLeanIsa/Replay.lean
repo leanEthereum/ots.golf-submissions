@@ -18,12 +18,12 @@ theorem run_hash_hit {n : ℕ} (x : BitVec n) (c : Cache) (y : BitVec hashBits)
   rw [simulateQ_spec_query]
   exact oracleImpl_run_inr_some hc
 
-theorem Record.word_next (ξ : Record) (i : Fin 39) (j : Fin 127) :
+theorem Record.word_next (ξ : Record) (i : Fin 43) (j : Fin 127) :
     ξ.word i j.succ = (ξ.2 (.inl (i, j))).extractLsb' 0 128 := by
   simp only [Record.word, Fin.val_succ, dif_neg (Nat.succ_ne_zero j.val), Nat.add_sub_cancel]
 
 theorem run_chain_record (ξ : Record) (c : Cache) (hc : Cache.Sub ξ.cache c)
-    (i : Fin 39) (j n : ℕ) (hj : j + n ≤ 127) :
+    (i : Fin 43) (j n : ℕ) (hj : j + n ≤ 127) :
     run (chain i.val j n (ξ.word i ⟨j, by omega⟩)) c =
       pure (ξ.word i ⟨j + n, by omega⟩, c) := by
   induction n generalizing j with
@@ -70,7 +70,7 @@ theorem run_sign_record (ξ : Record) (c : Cache) (hc : Cache.Sub ξ.cache c) (m
     run (sign ξ.1 m) c = pure (some (ξ.signature m), c) := by
   unfold sign
   rw [run_bind]
-  have ht : run (tabulate (fun i : Fin 39 => chain i.val 0 (digit m i) (ξ.1 i))) c =
+  have ht : run (tabulate (fun i : Fin 43 => chain i.val 0 (digit m i) (ξ.1 i))) c =
       pure ((fun i => ξ.word i (afterSigning m i)), c) := by
     apply run_tabulate_pure
     intro i

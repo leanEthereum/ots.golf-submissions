@@ -156,9 +156,9 @@ theorem record_cache_sub_extend_hidden (d : Cut) (ξ : Record) (c : Cache)
 
 /-! ## Cuts and public data -/
 
-theorem beforeSigning_val_stg (i : Fin 39) : (beforeSigning i).val = 127 := rfl
+theorem beforeSigning_val_stg (i : Fin 43) : (beforeSigning i).val = 127 := rfl
 
-theorem afterSigning_val_stg (m : Message) (i : Fin 39) : (afterSigning m i).val = digit m i := rfl
+theorem afterSigning_val_stg (m : Message) (i : Fin 43) : (afterSigning m i).val = digit m i := rfl
 
 /-- Every point hidden after signing was already hidden before signing. -/
 theorem hiddenCache_mono (m : Message) (ξ : Record) (q : Query)
@@ -176,7 +176,7 @@ theorem hiddenCache_mono (m : Message) (ξ : Record) (q : Query)
 
 theorem publicKey_data_eq (d : Cut) (ξ ζ : Record) (h : publicData d ξ = publicData d ζ) :
     ξ.publicKey = ζ.publicKey := by
-  have ha : ξ.2 (.inr 38) = ζ.2 (.inr 38) := exposed_answer_eq d ξ ζ h (.inr 38) (fun hh => hh)
+  have ha : ξ.2 (.inr 42) = ζ.2 (.inr 42) := exposed_answer_eq d ξ ζ h (.inr 42) (fun hh => hh)
   unfold Record.publicKey
   simp only [ha]
   all_goals with_unfolding_all rfl
@@ -185,13 +185,13 @@ theorem publicKey_data_eq (d : Cut) (ξ ζ : Record) (h : publicData d ξ = publ
 theorem publicData_before_of_after (m : Message) (ξ ζ : Record)
     (h : publicData (afterSigning m) ξ = publicData (afterSigning m) ζ) :
     publicData beforeSigning ξ = publicData beforeSigning ζ := by
-  have hchain : ∀ (i : Fin 39) (j : Fin 127), (afterSigning m i).val ≤ j.val + 1 →
+  have hchain : ∀ (i : Fin 43) (j : Fin 127), (afterSigning m i).val ≤ j.val + 1 →
       ξ.2 (.inl (i, j)) = ζ.2 (.inl (i, j)) := by
     intro i j hj
     have he := congrArg (fun v : PublicData => v.2 (.inl (i, j))) h
     simp only [publicData, if_pos hj, Option.some.injEq] at he
     exact he
-  have hroot : ∀ k : Fin 39, ξ.2 (.inr k) = ζ.2 (.inr k) := fun k =>
+  have hroot : ∀ k : Fin 43, ξ.2 (.inr k) = ζ.2 (.inr k) := fun k =>
     Option.some.inj (congrArg (fun v : PublicData => v.2 (.inr k)) h)
   apply Prod.ext
   · funext i

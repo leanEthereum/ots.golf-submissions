@@ -10,7 +10,7 @@ namespace OptimalOTS.LeanIsaBaseline
 open OracleComp
 
 abbrev Word := BitVec 128
-abbrev Words := Fin 39 → Word
+abbrev Words := Fin 43 → Word
 
 def tabulate {α : Type} : {n : ℕ} → (Fin n → OracleComp Spec α) →
     OracleComp Spec (Fin n → α)
@@ -35,7 +35,7 @@ def chain (i j : ℕ) : ℕ → Word → OracleComp Spec Word
     chain i (j + 1) n y
 
 /-- Root absorption includes the number of remaining words in its metadata.
-The 39 root positions use tags 40 down to 2; chain steps use tag 1. -/
+The 43 root positions use tags 44 down to 2; chain steps use tag 1. -/
 def absorb (remaining : ℕ) (cv : BitVec 256) (x : Word) : OracleComp Spec (BitVec 256) :=
   hash (LeanIsa.hashInput cv (x.setWidth 512) (BitVec.ofNat 128 (2 + remaining)))
 
@@ -54,19 +54,19 @@ def decode (bits : List Bool) : Words :=
   fun i => ofBits 128 ((bits.drop (128 * i.val)).take 128)
 
 def keygen : OracleComp Spec (PublicKey × Words) := do
-  let sk ← tabulate (fun _ : Fin 39 => sampleBits 128)
-  let endpoints ← tabulate (fun i : Fin 39 => chain i.val 0 127 (sk i))
+  let sk ← tabulate (fun _ : Fin 43 => sampleBits 128)
+  let endpoints ← tabulate (fun i : Fin 43 => chain i.val 0 127 (sk i))
   let pk ← root endpoints
   pure (pk, sk)
 
 def sign (sk : Words) (m : Message) : OracleComp Spec (Option (List Bool)) := do
-  let xs ← tabulate (fun i : Fin 39 => chain i.val 0 (digit m i) (sk i))
+  let xs ← tabulate (fun i : Fin 43 => chain i.val 0 (digit m i) (sk i))
   pure (some (encode xs))
 
 def verify (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp Spec Bool := do
-  if bits.length ≠ 4992 then return false
+  if bits.length ≠ 5504 then return false
   let xs := decode bits
-  let endpoints ← tabulate (fun i : Fin 39 =>
+  let endpoints ← tabulate (fun i : Fin 43 =>
     chain i.val (digit m i) (127 - digit m i) (xs i))
   let reconstructed ← root endpoints
   pure (reconstructed == pk)

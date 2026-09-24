@@ -27,10 +27,10 @@ theorem hashInput_eq_iff (cv cv' : BitVec 256) (block block' : BitVec 512)
   · rintro ⟨rfl, rfl, rfl⟩
     rfl
 
-def rootInput (remaining : Fin 39) (cv : BitVec 256) (x : Word) : BitVec 896 :=
+def rootInput (remaining : Fin 43) (cv : BitVec 256) (x : Word) : BitVec 896 :=
   LeanIsa.hashInput cv (x.setWidth 512) (BitVec.ofNat 128 (2 + remaining.val))
 
-private theorem root_tag_injective {r s : Fin 39}
+private theorem root_tag_injective {r s : Fin 43}
     (h : BitVec.ofNat 128 (2 + r.val) = BitVec.ofNat 128 (2 + s.val)) : r = s := by
   have hr : 2 + r.val < 2 ^ 128 := by have := r.isLt; omega
   have hs : 2 + s.val < 2 ^ 128 := by have := s.isLt; omega
@@ -39,7 +39,7 @@ private theorem root_tag_injective {r s : Fin 39}
   apply Fin.ext
   omega
 
-theorem rootInput_eq_iff (r s : Fin 39) (cv dv : BitVec 256) (x y : Word) :
+theorem rootInput_eq_iff (r s : Fin 43) (cv dv : BitVec 256) (x y : Word) :
     rootInput r cv x = rootInput s dv y ↔ r = s ∧ cv = dv ∧ x = y := by
   rw [rootInput, rootInput, hashInput_eq_iff]
   constructor
@@ -50,7 +50,7 @@ theorem rootInput_eq_iff (r s : Fin 39) (cv dv : BitVec 256) (x y : Word) :
   · rintro ⟨rfl, rfl, rfl⟩
     exact ⟨rfl, rfl, rfl⟩
 
-theorem chainInput_ne_rootInput (i j : ℕ) (x : Word) (r : Fin 39)
+theorem chainInput_ne_rootInput (i j : ℕ) (x : Word) (r : Fin 43)
     (cv : BitVec 256) (y : Word) : chainInput i j x ≠ rootInput r cv y := by
   intro h
   have ht := ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.2
@@ -73,7 +73,7 @@ private theorem nat128_injective {a b : ℕ} (ha : a < 2 ^ 128) (hb : b < 2 ^ 12
   have hn := congrArg BitVec.toNat h
   simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hb] using hn
 
-theorem chainInput_eq_iff (i k : Fin 39) (j l : Fin 127) (x y : Word) :
+theorem chainInput_eq_iff (i k : Fin 43) (j l : Fin 127) (x y : Word) :
     chainInput i.val j.val x = chainInput k.val l.val y ↔ i = k ∧ j = l ∧ x = y := by
   constructor
   · intro h

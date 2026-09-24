@@ -15,8 +15,8 @@ noncomputable def submission : LeanIsa.Submission := Honest.machineSubmission
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`49335` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 49335 where
+`33843` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 33843 where
   admissible := LeanIsaBaseline.admissible
   secure := LeanIsaBaseline.secure
   valid := Machine.valid

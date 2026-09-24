@@ -141,52 +141,59 @@ theorem oneV_mul (x : E) : oneV * x = x := by
 
 /-! ## Honest tie and checksum values -/
 
-theorem dig_lt37 (m : Message) {i : ℕ} (hi : i < 37) :
-    dig m i = m.toNat / 128 ^ (36 - i) % 128 :=
-  (dig_fin m ⟨i, by omega⟩).trans (digit_of_lt m ⟨i, by omega⟩ hi)
+/-- The honest leaf indices lie below the field widths. -/
+theorem fld_lt (m : Message) {k : ℕ} (hk : k < 41) : fld m k < 2 ^ fieldWidth k := by
+  rw [fld_msg m hk]
+  exact field_lt m k
 
-theorem dig_37 (m : Message) : dig m 37 = Checksum.wotsChecksumValue 128 (messageDigits m) / 128 :=
-  (dig_fin m ⟨37, by norm_num⟩).trans (digit_hi_checksum m ⟨37, by norm_num⟩ rfl)
-
-theorem dig_38 (m : Message) : dig m 38 = Checksum.wotsChecksumValue 128 (messageDigits m) % 128 :=
-  (dig_fin m ⟨38, by norm_num⟩).trans (digit_lo_checksum m ⟨38, by norm_num⟩ rfl)
-
-/-- The honest digits satisfy the checksum identity `Σ_{k<37} d_k + 128 d_37 + d_38 = 4699`. -/
+/-- The honest digits satisfy the checksum identity `Σ_{k<41} e_k + 64 (e_41 − 64) + e_42 = 5271`. -/
 theorem honest_digit_sum (m : Message) :
-    ∑ i ∈ Finset.range 37, dig m i + 128 * dig m 37 + dig m 38 = 4699 := by
-  rw [dig_37, dig_38]
+    ∑ i ∈ Finset.range 41, dig m i + 64 * (dig m 41 - 64) + dig m 42 = 5271 := by
+  have h41 : dig m 41 - 64 = Checksum.wotsChecksumValue 128 (messageDigits m) / 64 := by
+    rw [← fld_41, fld, off_41]
+  have h42 : dig m 42 = 64 + Checksum.wotsChecksumValue 128 (messageDigits m) % 64 := by
+    rw [← fld_42, ← off_42, off_add_fld m (by norm_num)]
+  rw [h41, h42]
   exact checksum_honest_sum m (dig m) (fun k hk => dig_fin m ⟨k, by omega⟩)
 
-theorem dig_37_le (m : Message) : dig m 37 ≤ 36 := by
-  rw [dig_37]
-  have := wotsChecksum_le m
-  omega
+theorem fld_41_le (m : Message) : fld m 41 ≤ 50 := by
+  rw [fld_41]
+  exact checksum_hi_le m
 
-theorem dig_0_lt (m : Message) : dig m 0 < 16 :=
-  (dig_fin m ⟨0, by norm_num⟩).trans_lt (digit_zero_lt m)
+theorem dig_41 (m : Message) : dig m 41 = 64 + fld m 41 := by
+  rw [← off_41, off_add_fld m (by norm_num)]
 
-theorem dig_lt_nLeaves (m : Message) (k : ℕ) : dig m k < nLeaves k := by
-  rcases Nat.eq_zero_or_pos k with rfl | h
-  · rw [nLeaves_zero]; exact dig_0_lt m
-  · rw [nLeaves_of (by omega)]; have := dig_le m k; omega
-
-theorem honest_valid (m : Message) : Valid (dig m) :=
-  ⟨fun k _ => dig_lt_nLeaves m k, dig_37_le m⟩
+theorem honest_valid (m : Message) : Valid (dig m) := by
+  refine ⟨fun k hk => ?_, ?_, ?_⟩
+  · have h := off_add_fld m (k := k) (by omega)
+    have hlt : fld m k < nLeaves k := by
+      rcases hk with hk | rfl
+      · rw [nLeaves_eq_pow]
+        exact fld_lt m hk
+      · rw [fld_42]
+        exact Nat.mod_lt _ (by norm_num)
+    omega
+  · rw [dig_41]
+    omega
+  · have := fld_41_le m
+    rw [dig_41]
+    omega
 
 /-- The honest tie sums are the message cells (`tie_iff`). -/
 theorem honest_tie (m : Message) :
-    tieHi (dig m) = cellOfBits (m.extractLsb' 128 128) ∧
-      tieLo (dig m) = cellOfBits (m.extractLsb' 0 128) :=
-  (tie_iff m (dig m) (fun k _ => Nat.lt_succ_of_le (dig_le m k)) (dig_0_lt m)).mpr
-    (fun k hk => dig_fin m ⟨k, by omega⟩)
+    tieHi (fld m) = cellOfBits (m.extractLsb' 128 128) ∧
+      tieLo (fld m) = cellOfBits (m.extractLsb' 0 128) :=
+  (tie_iff m (fld m) (fun k hk => fld_lt m hk)).mpr fun k hk => by
+    rw [← off_eq_digitOff, off_add_fld m (by omega), dig_fin m ⟨k, by omega⟩]
 
-/-- The honest checksum target: `K0 = gExp 37 + (s0 38 + d_38 + 1)`. -/
-theorem honest_K0 (m : Message) : K0 = gExp m 37 + (s0 38 + dig m 38 + 1) := by
-  have hs : ∑ i ∈ Finset.range 37, (s0 i + dig m i + 1) =
-      ∑ i ∈ Finset.range 37, (s0 i + 1) + ∑ i ∈ Finset.range 37, dig m i := by
+/-- The honest checksum target: `K0 = gExp 41 + (s0 42 + e_42 + 1)`. -/
+theorem honest_K0 (m : Message) : K0 = gExp m 41 + (s0 42 + dig m 42 + 1) := by
+  have hs : ∑ i ∈ Finset.range 41, (s0 i + dig m i + 1) =
+      ∑ i ∈ Finset.range 41, (s0 i + 1) + ∑ i ∈ Finset.range 41, dig m i := by
     rw [← Finset.sum_add_distrib]
     exact Finset.sum_congr rfl (fun i _ => by omega)
   have hd := honest_digit_sum m
+  have h41 := dig_41 m
   unfold K0 gExp
   rw [if_neg (by norm_num), hs]
   omega
@@ -211,23 +218,19 @@ theorem hv_posPos {j : ℕ} (h1 : 1 ≤ j) (h2 : j ≤ 127) : hv f pk m bits (po
   unfold cellVal
   rw [if_pos (by omega), Nat.add_sub_cancel_left]
 
-theorem hv_zero (hlen : bits.length = 4992) {c : ℕ} (h1 : 43 ≤ c) (h2 : c < 47) :
-    hv f pk m bits c = 0 := by
-  rw [hv_lt h2]
-  exact inputWord_of_ge_43 pk m bits hlen h1
+/-- The zero pair holds zero: the honest image puts `posV 0` there. -/
+theorem hv_zero {c : ℕ} (h1 : 48 ≤ c) (h2 : c ≤ 49) : hv f pk m bits c = 0 := by
+  rw [hv_cell (by omega)]
+  unfold cellVal
+  rw [if_pos (by omega), show c - 100 = 0 by omega, posV_zero]
 
-theorem hv_z0 (hlen : bits.length = 4992) : hv f pk m bits zCell = 0 :=
-  hv_zero hlen (by decide) (by decide)
+theorem hv_z0 : hv f pk m bits zCell = 0 := hv_zero (by decide) (by decide)
 
-theorem hv_z1 (hlen : bits.length = 4992) : hv f pk m bits (zCell + 1) = 0 :=
-  hv_zero hlen (by decide) (by decide)
+theorem hv_z1 : hv f pk m bits (zCell + 1) = 0 := hv_zero (by decide) (by decide)
 
-theorem posV_zero : posV 0 = 0 := Machine.cellOfBits_zero
-
-theorem hv_pos (hlen : bits.length = 4992) {j : ℕ} (hj : j ≤ 127) :
-    hv f pk m bits (posCell j) = posV j := by
+theorem hv_pos {j : ℕ} (hj : j ≤ 127) : hv f pk m bits (posCell j) = posV j := by
   rcases Nat.eq_zero_or_pos j with rfl | h
-  · rw [posCell_zero, hv_z0 hlen, posV_zero]
+  · rw [posCell_zero, hv_z0, posV_zero]
   · exact hv_posPos h hj
 
 theorem hv_one : hv f pk m bits oneCell = oneV := by
@@ -238,34 +241,34 @@ theorem hv_k0 : hv f pk m bits k0Cell = tgtV K0 := by
   unfold cellVal k0Cell
   rw [if_neg (by norm_num), if_pos rfl]
 
-theorem hv_len (hlen : bits.length = 4992) : hv f pk m bits lenCell = lenV := by
+theorem hv_len (hlen : bits.length = 5504) : hv f pk m bits lenCell = lenV := by
   rw [hv_lt (by decide)]
   show inputWord pk m bits 3 = lenV
-  rw [inputWord_three]
+  rw [inputWord_len]
   unfold lenV
   congr 2
   rw [hlen]
   unfold maxSignatureBits
   norm_num
 
-theorem hv_sig (hlen : bits.length = 4992) {i : ℕ} (hi : i < 39) :
+theorem hv_sig (hlen : bits.length = 5504) {i : ℕ} (hi : i < 43) :
     hv f pk m bits (sigCell i) = cellOfBits (sigW bits i) := by
   rw [hv_lt (by unfold sigCell; omega)]
   exact inputWord_sig pk m bits hlen i
 
 theorem hv_pk : hv f pk m bits pkCell = cellOfBits pk := by
   rw [hv_lt (by decide)]
-  exact inputWord_zero pk m bits
+  exact inputWord_pk pk m bits
 
 /-- Message cell 2 is the honest high tie sum. -/
-theorem hv_two : hv f pk m bits 2 = tieHi (dig m) := by
+theorem hv_two : hv f pk m bits 2 = tieHi (fld m) := by
   rw [hv_lt (by norm_num), inputWord_two, (honest_tie m).1]
 
 /-- Message cell 1 is the honest low tie sum. -/
-theorem hv_one' : hv f pk m bits 1 = tieLo (dig m) := by
+theorem hv_one' : hv f pk m bits 1 = tieLo (fld m) := by
   rw [hv_lt (by norm_num), inputWord_one, (honest_tie m).2]
 
-theorem hv_scr {k o : ℕ} (hk : k < 39) (ho : o < 160) :
+theorem hv_scr {k o : ℕ} (hk : k < 43) (ho : o < 160) :
     hv f pk m bits (scr k + o) = scrVal m k o := by
   rw [hv_cell (by unfold scr; omega)]
   unfold cellVal scr
@@ -273,78 +276,78 @@ theorem hv_scr {k o : ℕ} (hk : k < 39) (ho : o < 160) :
     show (1024 + 160 * k + o - 1024) / 160 = k by omega,
     show (1024 + 160 * k + o - 1024) % 160 = o by omega]
 
-theorem hv_zu {k i : ℕ} (hk : k < 39) (hk37 : k ≠ 37) (hi : i < 64) :
-    hv f pk m bits (zuCell k i) = if i < dig m k / 2 then oneV else 0 := by
+theorem hv_zu {k i : ℕ} (hk : k < 43) (hk41 : k ≠ 41) (hi : i < 64) :
+    hv f pk m bits (zuCell k i) = if i < fld m k / 2 then oneV else 0 := by
   unfold zuCell
   rw [hv_scr hk (by omega)]
   unfold scrVal
-  rw [if_pos (by omega), if_neg hk37]
+  rw [if_pos (by omega), if_neg hk41]
 
-theorem hv_zuHi {i : ℕ} (hi : i < 36) :
-    hv f pk m bits (zuCell 37 i) = if i < 36 - dig m 37 then oneV else 0 := by
+theorem hv_zuHi {i : ℕ} (hi : i < 50) :
+    hv f pk m bits (zuCell 41 i) = if i < 50 - fld m 41 then oneV else 0 := by
   unfold zuCell
   rw [hv_scr (by norm_num) (by omega)]
   unfold scrVal
   rw [if_pos (by omega), if_pos rfl]
 
-theorem hv_tu {k i : ℕ} (hk : k < 39) (hk37 : k ≠ 37) (hi : i < 64) :
+theorem hv_tu {k i : ℕ} (hk : k < 43) (hk41 : k ≠ 41) (hi : i < 64) :
     hv f pk m bits (tuCell k i) = tgtV (rBase k + 18 * (i + 1)) := by
   unfold tuCell
   rw [show scr k + 64 + i = scr k + (64 + i) by omega, hv_scr hk (by omega)]
   unfold scrVal
-  rw [if_neg (by omega), if_pos (by omega), if_neg hk37, show 64 + i - 64 = i by omega]
+  rw [if_neg (by omega), if_pos (by omega), if_neg hk41, show 64 + i - 64 = i by omega]
 
-theorem hv_tuHi {i : ℕ} (hi : i < 36) :
-    hv f pk m bits (tuCell 37 i) = tgtV (rBase 37 + 7 * (i + 1)) := by
+theorem hv_tuHi {i : ℕ} (hi : i < 50) :
+    hv f pk m bits (tuCell 41 i) = tgtV (rBase 41 + 7 * (i + 1)) := by
   unfold tuCell
-  rw [show scr 37 + 64 + i = scr 37 + (64 + i) by omega, hv_scr (by norm_num) (by omega)]
+  rw [show scr 41 + 64 + i = scr 41 + (64 + i) by omega, hv_scr (by norm_num) (by omega)]
   unfold scrVal
   rw [if_neg (by omega), if_pos (by omega), if_pos rfl, show 64 + i - 64 = i by omega]
 
-theorem hv_zb {k : ℕ} (hk : k < 39) :
-    hv f pk m bits (zbCell k) = if dig m k % 2 = 1 then oneV else 0 := by
+theorem hv_zb {k : ℕ} (hk : k < 43) :
+    hv f pk m bits (zbCell k) = if fld m k % 2 = 1 then oneV else 0 := by
   unfold zbCell
   rw [hv_scr hk (by norm_num)]
   unfold scrVal
   rw [if_neg (by norm_num), if_neg (by norm_num), if_pos rfl]
 
-theorem hv_tb {k : ℕ} (hk : k < 39) :
-    hv f pk m bits (tbCell k) = tgtV (gBase k (dig m k / 2) + 9) := by
+theorem hv_tb {k : ℕ} (hk : k < 43) :
+    hv f pk m bits (tbCell k) = tgtV (gBase k (fld m k / 2) + 9) := by
   unfold tbCell
   rw [hv_scr hk (by norm_num)]
   unfold scrVal
   rw [if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num), if_pos rfl]
 
-theorem hv_t {k : ℕ} (hk : k < 39) : hv f pk m bits (tCell k) = tgtV (s0 k + dig m k + 1) := by
+theorem hv_t {k : ℕ} (hk : k < 43) : hv f pk m bits (tCell k) = tgtV (s0 k + dig m k + 1) := by
   unfold tCell
   rw [hv_scr hk (by norm_num)]
   unfold scrVal
   rw [if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num),
     if_pos rfl]
 
-theorem hv_v {k : ℕ} (hk : k < 39) : hv f pk m bits (vCell k) = tgtV (s0 k + 127) := by
+theorem hv_v {k : ℕ} (hk : k < 43) : hv f pk m bits (vCell k) = tgtV (s0 k + 127) := by
   unfold vCell
   rw [hv_scr hk (by norm_num)]
   unfold scrVal
   rw [if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num),
     if_neg (by norm_num), if_pos rfl]
 
-theorem hv_g {k : ℕ} (hk : k < 39) : hv f pk m bits (gCell k) = tgtV (gExp m k) := by
+theorem hv_g {k : ℕ} (hk : k < 43) : hv f pk m bits (gCell k) = tgtV (gExp m k) := by
   unfold gCell
   rw [hv_scr hk (by norm_num)]
   unfold scrVal
   rw [if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num),
     if_neg (by norm_num), if_neg (by norm_num), if_pos rfl]
 
-theorem hv_f {k : ℕ} (hk : k < 39) :
-    hv f pk m bits (fCell k) = vV (tieShift k) (dig m k) := by
+theorem hv_f {k : ℕ} (hk : k < 43) :
+    hv f pk m bits (fCell k) = vV (tieShift k) (fld m k) := by
   unfold fCell
   rw [hv_scr hk (by norm_num)]
   unfold scrVal
   rw [if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num),
     if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num), if_pos rfl]
 
-theorem hv_acc {k : ℕ} (hk : k < 39) : hv f pk m bits (accCell k) = accV m k := by
+theorem hv_acc {k : ℕ} (hk : k < 43) : hv f pk m bits (accCell k) = accV m k := by
   unfold accCell
   rw [hv_scr hk (by norm_num)]
   unfold scrVal
@@ -352,7 +355,7 @@ theorem hv_acc {k : ℕ} (hk : k < 39) : hv f pk m bits (accCell k) = accV m k :
     if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num),
     if_pos rfl]
 
-theorem hv_u : hv f pk m bits uCell = tgtV (128 * dig m 37) := by
+theorem hv_u : hv f pk m bits uCell = tgtV (64 * fld m 41) := by
   unfold uCell
   rw [hv_scr (by norm_num) (by norm_num)]
   unfold scrVal
@@ -360,15 +363,15 @@ theorem hv_u : hv f pk m bits uCell = tgtV (128 * dig m 37) := by
     if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num), if_neg (by norm_num),
     if_neg (by norm_num)]
 
-theorem hv_xv {k o : ℕ} (hk : k < 39) (ho : o < 256) :
-    hv f pk m bits (8192 + 256 * k + o) = xVal m bits (chainTab f m bits) k o := by
+theorem hv_xv {k o : ℕ} (hk : k < 43) (ho : o < 256) :
+    hv f pk m bits (9000 + 256 * k + o) = xVal m bits (chainTab f m bits) k o := by
   rw [hv_cell (by omega)]
   unfold cellVal
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
-    if_neg (by omega), show (8192 + 256 * k + o - 8192) / 256 = k by omega,
-    show (8192 + 256 * k + o - 8192) % 256 = o by omega]
+    if_neg (by omega), show (9000 + 256 * k + o - 9000) / 256 = k by omega,
+    show (9000 + 256 * k + o - 9000) % 256 = o by omega]
 
-theorem hv_x {k j : ℕ} (hk : k < 39) (hj : j ≤ 127) :
+theorem hv_x {k j : ℕ} (hk : k < 43) (hj : j ≤ 127) :
     hv f pk m bits (xCell k j) =
       cellOfBits (inW (dig m k) (sigW bits k) (tabN (chainTab f m bits) k) j) := by
   unfold xCell
@@ -376,48 +379,48 @@ theorem hv_x {k j : ℕ} (hk : k < 39) (hj : j ≤ 127) :
   unfold xVal
   rw [if_pos (by omega), show 2 * j / 2 = j by omega]
 
-theorem hv_xh {k j : ℕ} (hk : k < 39) (hj : j < 127) :
+theorem hv_xh {k j : ℕ} (hk : k < 43) (hj : j < 127) :
     hv f pk m bits (xCell k (j + 1) + 1) = highE (tabN (chainTab f m bits) k) j := by
   unfold xCell
-  rw [show 8192 + 256 * k + 2 * (j + 1) + 1 = 8192 + 256 * k + (2 * j + 3) by omega,
+  rw [show 9000 + 256 * k + 2 * (j + 1) + 1 = 9000 + 256 * k + (2 * j + 3) by omega,
     hv_xv hk (by omega)]
   unfold xVal
   rw [if_neg (by omega), show (2 * j + 3) / 2 - 1 = j by omega]
 
-theorem hv_rootv {o : ℕ} (h1 : 2 ≤ o) (h2 : o < 792) :
-    hv f pk m bits (7400 + o) = rootVal (rootTab f m bits) o := by
+theorem hv_rootv {o : ℕ} (h1 : 2 ≤ o) (h2 : o < 1000) :
+    hv f pk m bits (8000 + o) = rootVal (rootTab f m bits) o := by
   rw [hv_cell (by omega)]
   unfold cellVal
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
     if_pos (by omega), Nat.add_sub_cancel_left]
 
-theorem hv_stLo {t : ℕ} (ht : t < 39) :
+theorem hv_stLo {t : ℕ} (ht : t < 43) :
     hv f pk m bits (rootStateCell (t + 1)) = lowE (rootTab f m bits) t := by
   rw [rootStateCell_of_pos (by omega), hv_rootv (by omega) (by omega)]
   unfold rootVal
   rw [if_pos (by omega), show 2 * (t + 1) / 2 - 1 = t by omega]
 
-theorem hv_stHi {t : ℕ} (ht : t < 39) :
+theorem hv_stHi {t : ℕ} (ht : t < 43) :
     hv f pk m bits (rootStateCell (t + 1) + 1) = highE (rootTab f m bits) t := by
   rw [rootStateCell_of_pos (by omega), Nat.add_assoc, hv_rootv (by omega) (by omega)]
   unfold rootVal
   rw [if_neg (by omega), show (2 * (t + 1) + 1) / 2 - 1 = t by omega]
 
-theorem hv_st_canon (hlen : bits.length = 4992) {t : ℕ} (ht : t ≤ 39) :
+theorem hv_st_canon {t : ℕ} (ht : t ≤ 43) :
     IsCanonical128 (hv f pk m bits (rootStateCell t)) ∧
       IsCanonical128 (hv f pk m bits (rootStateCell t + 1)) := by
   rcases Nat.eq_zero_or_pos t with rfl | h
-  · rw [rootStateCell_zero, hv_z0 hlen, hv_z1 hlen]
+  · rw [rootStateCell_zero, hv_z0, hv_z1]
     exact ⟨isCanonical_zero, isCanonical_zero⟩
   · obtain ⟨t', rfl⟩ : ∃ t', t = t' + 1 := ⟨t - 1, by omega⟩
     rw [hv_stLo (by omega), hv_stHi (by omega)]
     exact ⟨isCanonical_cellOfBits _, isCanonical_cellOfBits _⟩
 
-theorem hv_stPair (hlen : bits.length = 4992) {t : ℕ} (ht : t ≤ 39) :
+theorem hv_stPair {t : ℕ} (ht : t ≤ 43) :
     cellBits (hv f pk m bits (rootStateCell t + 1)) ++ cellBits (hv f pk m bits (rootStateCell t)) =
       stOf (rootTab f m bits) t := by
   rcases Nat.eq_zero_or_pos t with rfl | h
-  · rw [rootStateCell_zero, hv_z0 hlen, hv_z1 hlen, cellBits_zero]
+  · rw [rootStateCell_zero, hv_z0, hv_z1, cellBits_zero]
     exact zero_append_zero_128
   · obtain ⟨t', rfl⟩ : ∃ t', t = t' + 1 := ⟨t - 1, by omega⟩
     rw [hv_stLo (by omega), hv_stHi (by omega)]
@@ -431,9 +434,9 @@ section Honest
 
 variable {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool}
 
-/-- A chain step (the leaf's first hash at `j = d`, or a body step `j > d`): the hashed cell
+/-- A chain step (the leaf's first hash at `j = e`, or a body step `j > e`): the hashed cell
 holds `inW`, and the output pair is the honest answer. -/
-theorem vrel_step (hlen : bits.length = 4992) {k j cin : ℕ} (hk : k < 39) (hj : j < 127)
+theorem vrel_step {k j cin : ℕ} (hk : k < 43) (hj : j < 127)
     (hdj : dig m k ≤ j)
     (hin : hv f pk m bits cin =
       cellOfBits (inW (dig m k) (sigW bits k) (tabN (chainTab f m bits) k) j)) :
@@ -447,8 +450,8 @@ theorem vrel_step (hlen : bits.length = 4992) {k j cin : ℕ} (hk : k < 39) (hj 
     (f ⟨896, blake2sQuery ![hv f pk m bits cin, hv f pk m bits (posCell k),
       hv f pk m bits (posCell j), hv f pk m bits zCell] (hv f pk m bits zCell)
       (hv f pk m bits (zCell + 1)) (hv f pk m bits oneCell)⟩)
-  rw [hin, hv_pos hlen (by omega : k ≤ 127), hv_pos hlen (by omega : j ≤ 127), hv_z0 hlen,
-    hv_z1 hlen, hv_x hk (by omega : j + 1 ≤ 127), hv_xh hk hj, hv_one,
+  rw [hin, hv_pos (by omega : k ≤ 127), hv_pos (by omega : j ≤ 127), hv_z0,
+    hv_z1, hv_x hk (by omega : j + 1 ≤ 127), hv_xh hk hj, hv_one,
     tabN_chainTab f m bits hk]
   have hq : blake2sQuery ![cellOfBits (inW (dig m k) (sigW bits k)
       (cutAns 127 (chainAnsF f k (dig m k) (sigW bits k))) j), posV k, posV j, 0] 0 0 oneV =
@@ -469,15 +472,15 @@ theorem vrel_step (hlen : bits.length = 4992) {k j cin : ℕ} (hk : k < 39) (hj 
     cellBits_cellOfBits _, cellBits_cellOfBits _⟩
 
 /-- The leaf's hashed cell is `σ`: `inW` at the digit itself. -/
-theorem hin_sig (hlen : bits.length = 4992) {k : ℕ} (hk : k < 39) :
+theorem hin_sig (hlen : bits.length = 5504) {k : ℕ} (hk : k < 43) :
     hv f pk m bits (sigCell k) =
       cellOfBits (inW (dig m k) (sigW bits k) (tabN (chainTab f m bits) k) (dig m k)) := by
   rw [hv_sig hlen hk]
   unfold inW
   rw [if_pos (le_refl _)]
 
-/-- The checksum product step of chain `k ∈ {0..36, 38}`. -/
-theorem vrel_gmul {k : ℕ} (hk : k < 37 ∨ k = 38) :
+/-- The checksum product step of chain `k ∈ {0..40, 42}`. -/
+theorem vrel_gmul {k : ℕ} (hk : k < 41 ∨ k = 42) :
     VRel f (hv f pk m bits) (.mul (gPrev k) (tCell k) (gOut k)) := by
   show hv f pk m bits (gOut k) = hv f pk m bits (gPrev k) * hv f pk m bits (tCell k)
   rw [hv_t (by omega)]
@@ -490,7 +493,7 @@ theorem vrel_gmul {k : ℕ} (hk : k < 37 ∨ k = 38) :
     · rw [gPrev_of (by omega), hv_g (by omega), tgtV_mul]
       unfold gExp
       rw [if_pos hk, if_pos (by omega), show k - 1 + 1 = k by omega, Finset.sum_range_succ]
-  · rw [gOut_38, gPrev_38, hv_k0, hv_g (by norm_num), tgtV_mul, honest_K0]
+  · rw [gOut_42, gPrev_42, hv_k0, hv_g (by norm_num), tgtV_mul, honest_K0]
 
 theorem vrel_jump {a b : ℕ} (ha : IsInK (hv f pk m bits a)) (hb : IsInK (hv f pk m bits b)) :
     VRel f (hv f pk m bits) (.jump a b oneCell) := by
@@ -498,98 +501,92 @@ theorem vrel_jump {a b : ℕ} (ha : IsInK (hv f pk m bits a)) (hb : IsInK (hv f 
   rw [hv_one]
   exact isInK_oneV
 
-/-- The honest tie accumulators obey the tie ops of chains `1 … 35` other than 18. -/
-theorem accV_mid {k : ℕ} (h1 : 1 ≤ k) (h35 : k ≤ 35) (h18 : k ≠ 18) :
-    accV m k = accV m (k - 1) + vV (tieShift k) (dig m k) := by
+/-- The honest tie accumulators obey the middle tie ops. -/
+theorem accV_mid {k : ℕ} (h1 : 1 ≤ k) (h39 : k ≤ 39) (h20 : k ≠ 20) :
+    accV m k = accV m (k - 1) + vV (tieShift k) (fld m k) := by
   unfold accV
-  rcases Nat.lt_or_ge k 18 with h | h
-  · rw [tieAcc_succ_lo _ h1 (by omega), tieShift_of_lt h,
-      show 7 * (36 - k) - 128 = 124 - 7 * k by omega]
-    rfl
-  · rw [tieAcc_succ_hi _ (by omega), tieShift_of_ge h]
-    rfl
+  rw [tieAcc_succ _ h1 h20, vV_tieShift (fld m) (by omega)]
 
-/-- Every tie op of the leaf of chain `k < 37` at its digit. -/
-theorem honest_tieOp (hlen : bits.length = 4992) {k i : ℕ} (hk : k < 37) (hi : i < tieLen k) :
+/-- Every tie op of the leaf of chain `k < 41` at its digit. -/
+theorem honest_tieOp {k i : ℕ} (hk : k < 41) (hi : i < tieLen k) :
     VRel f (hv f pk m bits) (leafOp k (dig m k) i) := by
-  by_cases h0 : k = 0
-  · subst h0
-    rw [tieLen_one (Or.inl rfl)] at hi
+  by_cases h1 : k = 0 ∨ k = 19 ∨ k = 20 ∨ k = 40
+  · rw [tieLen_one h1] at hi
     obtain rfl : i = 0 := by omega
-    rw [leafOp_tie0]
-    show hv f pk m bits (accCell 0) = _
-    rw [hv_acc (by norm_num), tieShift_zero]
-    exact tieAcc_zero _
-  by_cases h36 : k = 36
-  · subst h36
-    rw [tieLen_one (Or.inr rfl)] at hi
-    obtain rfl : i = 0 := by omega
-    rw [leafOp_tie36]
-    show hv f pk m bits 1 = hv f pk m bits (accCell 35) + hv f pk m bits (posCell (dig m 36))
-    rw [hv_one', hv_acc (by norm_num), hv_pos hlen (dig_le m 36), tieLo_acc]
-    rfl
-  rw [tieLen_two (by omega) (by omega)] at hi
-  by_cases h18 : k = 18
-  · subst h18
-    rcases (show i = 0 ∨ i = 1 by omega) with rfl | rfl
-    · rw [leafOp_tie18a]
-      show hv f pk m bits 2 = hv f pk m bits (accCell 17) + hv f pk m bits (posCell (dig m 18 / 4))
-      rw [hv_two, hv_acc (by norm_num), hv_pos hlen (by have := dig_le m 18; omega), tieHi_acc]
-      rfl
-    · rw [leafOp_tie18b]
-      show hv f pk m bits (accCell 18) = _
+    rcases h1 with rfl | rfl | rfl | rfl
+    · rw [leafOp_tie0]
+      show hv f pk m bits (accCell 0) = _
       rw [hv_acc (by norm_num)]
-      exact tieAcc_18 _
+      exact (tieAcc_zero _).trans (vV_tieShift (fld m) (by norm_num)).symm
+    · rw [leafOp_tie19]
+      show hv f pk m bits 2 = hv f pk m bits (accCell 18) + hv f pk m bits (posCell (fld m 19))
+      rw [hv_two, hv_acc (by norm_num), hv_pos (by have := dig_le m 19; unfold fld; omega),
+        tieHi_acc, tieWord_last _ (Or.inl rfl)]
+      rfl
+    · rw [leafOp_tie20]
+      show hv f pk m bits (accCell 20) = _
+      rw [hv_acc (by norm_num)]
+      exact (tieAcc_20 _).trans (vV_tieShift (fld m) (by norm_num)).symm
+    · rw [leafOp_tie40]
+      show hv f pk m bits 1 = hv f pk m bits (accCell 39) + hv f pk m bits (posCell (fld m 40))
+      rw [hv_one', hv_acc (by norm_num), hv_pos (by have := dig_le m 40; unfold fld; omega),
+        tieLo_acc, tieWord_last _ (Or.inr rfl)]
+      rfl
+  simp only [not_or] at h1
+  obtain ⟨h0, h19, h20, h40⟩ := h1
+  rw [tieLen_two (by omega) (by omega) h19 h20] at hi
   rcases (show i = 0 ∨ i = 1 by omega) with rfl | rfl
-  · rw [leafOp_mid0 (by omega) (by omega) h18]
+  · rw [leafOp_mid0 (by omega) (by omega) h19 h20]
     show hv f pk m bits (fCell k) = _
     rw [hv_f (by omega)]
-  · rw [leafOp_mid1 (by omega) (by omega) h18]
+    rfl
+  · rw [leafOp_mid1 (by omega) (by omega) h19 h20]
     show hv f pk m bits (accCell k) = hv f pk m bits (accCell (k - 1)) + hv f pk m bits (fCell k)
-    rw [hv_acc (by omega), hv_acc (by omega), hv_f (by omega), accV_mid (by omega) (by omega) h18]
+    rw [hv_acc (by omega), hv_acc (by omega), hv_f (by omega),
+      accV_mid (by omega) (by omega) h20]
 
-/-- Every core op of the leaf of chain `k ∈ {0..36, 38}` at its digit. -/
-theorem honest_coreOp (hlen : bits.length = 4992) {k i : ℕ} (hk : k < 37 ∨ k = 38)
+/-- Every core op of the leaf of chain `k ∈ {0..40, 42}` at its digit. -/
+theorem honest_coreOp (hlen : bits.length = 5504) {k i : ℕ} (hk : k < 41 ∨ k = 42)
     (hi : i < if dig m k < 127 then 4 else 5) :
     VRel f (hv f pk m bits) (coreOp k (dig m k) i) := by
-  have hk39 : k < 39 := by omega
+  have hk43 : k < 43 := by omega
   by_cases he : dig m k < 127
   · rw [if_pos he] at hi
     rcases (show i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 by omega) with rfl | rfl | rfl | rfl
     · rw [coreOp_blake he]
-      exact vrel_step hlen hk39 he (le_refl _) (hin_sig hlen hk39)
+      exact vrel_step hk43 he (le_refl _) (hin_sig hlen hk43)
     · rw [coreOp_mul he]
       exact vrel_gmul hk
     · rw [coreOp_set he]
-      exact hv_t hk39
+      exact hv_t hk43
     · rw [coreOp_jmp he]
-      exact vrel_jump (by rw [hv_one]; exact isInK_oneV) (by rw [hv_t hk39]; exact isInK_tgtV _)
+      exact vrel_jump (by rw [hv_one]; exact isInK_oneV) (by rw [hv_t hk43]; exact isInK_tgtV _)
   · have he' : dig m k = 127 := by have := dig_le m k; omega
     rw [if_neg he] at hi
     rcases (show i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 ∨ i = 4 by omega) with rfl | rfl | rfl | rfl | rfl
     · rw [coreOp127_xor (by omega)]
       show hv f pk m bits (xCell k 127) = hv f pk m bits (sigCell k) + hv f pk m bits zCell
-      rw [hv_x hk39 (le_refl _), hv_sig hlen hk39, hv_z0 hlen, add_zero]
+      rw [hv_x hk43 (le_refl _), hv_sig hlen hk43, hv_z0, add_zero]
       unfold inW
       rw [if_pos (by omega)]
     · rw [coreOp127_setT (by omega)]
       show hv f pk m bits (tCell k) = _
-      rw [hv_t hk39, he']
+      rw [hv_t hk43, he']
     · rw [coreOp127_mul (by omega)]
       exact vrel_gmul hk
     · rw [coreOp127_setV (by omega)]
-      exact hv_v hk39
+      exact hv_v hk43
     · rw [coreOp127_jmp (by omega)]
-      exact vrel_jump (by rw [hv_one]; exact isInK_oneV) (by rw [hv_v hk39]; exact isInK_tgtV _)
+      exact vrel_jump (by rw [hv_one]; exact isInK_oneV) (by rw [hv_v hk43]; exact isInK_tgtV _)
 
-theorem honest_leafOp (hlen : bits.length = 4992) {k i : ℕ} (hk : k < 37 ∨ k = 38)
+theorem honest_leafOp (hlen : bits.length = 5504) {k i : ℕ} (hk : k < 41 ∨ k = 42)
     (hi : i < leafLen k (dig m k)) : VRel f (hv f pk m bits) (leafOp k (dig m k) i) := by
   by_cases hti : i < tieLen k
-  · have hk37 : k < 37 := by
+  · have hk41 : k < 41 := by
       rcases hk with hk | rfl
       · exact hk
       · rw [tieLen_of_ge (by norm_num)] at hti; omega
-    exact honest_tieOp hlen hk37 hti
+    exact honest_tieOp hk41 hti
   · obtain ⟨i', rfl⟩ : ∃ i', i = tieLen k + i' := ⟨i - tieLen k, by omega⟩
     rw [leafOp_core]
     unfold leafLen at hi
@@ -600,55 +597,63 @@ variable (f pk m bits)
 /-- The loaded honest image. -/
 local notation "LH" => LeanIsa.loadInput pk m bits (imageF f pk m bits)
 
-theorem honest_const (hlen : bits.length = 4992) : ∀ s < 129, Holds f LH s := by
+theorem honest_const (hlen : bits.length = 5504) : ∀ s < 131, Holds f LH s := by
   intro s hs
   apply holds_of_vrel
   rcases Nat.lt_or_ge s 127 with h | h
   · rw [cinstrAt_const h]
     exact hv_posPos (by omega) (by omega)
-  · rcases (show s = 127 ∨ s = 128 by omega) with rfl | rfl
+  · rcases (show s = 127 ∨ s = 128 ∨ s = 129 ∨ s = 130 by omega) with rfl | rfl | rfl | rfl
     · rw [cinstrAt_k0]
       exact hv_k0
     · rw [cinstrAt_len]
       exact hv_len hlen
+    · rw [cinstrAt_z0]
+      exact hv_z0
+    · rw [cinstrAt_z1]
+      exact hv_z1
 
-theorem honest_leaf (hlen : bits.length = 4992) :
-    ∀ k, (k < 37 ∨ k = 38) → ∀ i < leafLen k (dig m k), Holds f LH (leafSlot k (dig m k) + i) := by
+theorem honest_leaf (hlen : bits.length = 5504) :
+    ∀ k, (k < 41 ∨ k = 42) → ∀ i < leafLen k (dig m k), Holds f LH (leafSlot k (dig m k) + i) := by
   intro k hk i hi
   apply holds_of_vrel
-  rw [cinstrAt_leaf hk (dig_lt_nLeaves m k) (lt_of_lt_of_le hi (leafLen_le k _))]
+  have hv := (honest_valid m).1 k hk
+  rw [cinstrAt_leaf hk hv.1 hv.2 (lt_of_lt_of_le hi (leafLen_le k _))]
   exact honest_leafOp hlen hk hi
 
-theorem honest_leafHi (hlen : bits.length = 4992) :
-    ∀ i < 5, Holds f LH (leafSlotHi (dig m 37) + i) := by
+theorem honest_leafHi (hlen : bits.length = 5504) :
+    ∀ i < 5, Holds f LH (leafSlotHi (dig m 41 - 64) + i) := by
   intro i hi
   apply holds_of_vrel
-  rw [cinstrAt_hileaf (dig_37_le m) hi]
+  have hdh : dig m 41 - 64 = fld m 41 := by rw [fld, off_41]
+  have he : 64 + fld m 41 = dig m 41 := (dig_41 m).symm
+  rw [hdh, cinstrAt_hileaf (fld_41_le m) hi]
   rcases (show i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 ∨ i = 4 by omega) with rfl | rfl | rfl | rfl | rfl
-  · rw [hiLeafOp_blake]
-    exact vrel_step hlen (by norm_num) (by have := dig_37_le m; omega) (le_refl _)
+  · rw [hiLeafOp_blake, he]
+    exact vrel_step (by norm_num) (by have := fld_41_le m; omega) (le_refl _)
       (hin_sig hlen (by norm_num))
   · rw [hiLeafOp_setU]
     exact hv_u
   · rw [hiLeafOp_mul]
-    show hv f pk m bits (gCell 37) = hv f pk m bits (gCell 36) * hv f pk m bits uCell
+    show hv f pk m bits (gCell 41) = hv f pk m bits (gCell 40) * hv f pk m bits uCell
     rw [hv_g (by norm_num), hv_g (by norm_num), hv_u, tgtV_mul]
     unfold gExp
     rw [if_neg (by norm_num), if_pos (by norm_num)]
-  · rw [hiLeafOp_setT]
+  · rw [hiLeafOp_setT, he]
     exact hv_t (by norm_num)
   · rw [hiLeafOp_jmp]
     exact vrel_jump (by rw [hv_one]; exact isInK_oneV)
       (by rw [hv_t (by norm_num)]; exact isInK_tgtV _)
 
-theorem honest_body (hlen : bits.length = 4992) :
-    ∀ k < 39, ∀ j, dig m k < j → j ≤ 126 → Holds f LH (s0 k + j) := by
+theorem honest_body :
+    ∀ k < 43, ∀ j, dig m k < j → j ≤ 126 → Holds f LH (s0 k + j) := by
   intro k hk j hj1 hj2
   apply holds_of_vrel
-  rw [cinstrAt_body hk (by omega) hj2]
-  exact vrel_step hlen hk (by omega) (by omega) (hv_x hk (by omega))
+  have := off_le_dig m hk
+  rw [cinstrAt_body hk (by unfold bodyFirst; omega) hj2]
+  exact vrel_step hk (by omega) (by omega) (hv_x hk (by omega))
 
-theorem honest_root (hlen : bits.length = 4992) : ∀ t < 39, Holds f LH (rootBase + t) := by
+theorem honest_root : ∀ t < 43, Holds f LH (rootBase + t) := by
   intro t ht
   apply holds_of_vrel
   rw [cinstrAt_root ht]
@@ -657,20 +662,20 @@ theorem honest_root (hlen : bits.length = 4992) : ∀ t < 39, Holds f LH (rootBa
       hv f pk m bits zCell]
     (hv f pk m bits (rootStateCell t)) (hv f pk m bits (rootStateCell t + 1))
     (hv f pk m bits (rootStateCell (t + 1))) (hv f pk m bits (rootStateCell (t + 1) + 1))
-    (hv f pk m bits (posCell (40 - t)))
+    (hv f pk m bits (posCell (44 - t)))
     (f ⟨896, blake2sQuery ![hv f pk m bits (xCell t 127), hv f pk m bits zCell,
       hv f pk m bits zCell, hv f pk m bits zCell] (hv f pk m bits (rootStateCell t))
-      (hv f pk m bits (rootStateCell t + 1)) (hv f pk m bits (posCell (40 - t)))⟩)
+      (hv f pk m bits (rootStateCell t + 1)) (hv f pk m bits (posCell (44 - t)))⟩)
   have hz : cellBits (hv f pk m bits zCell) = 0 := by
-    rw [hv_z0 hlen]
+    rw [hv_z0]
     exact cellBits_zero
-  have hmd : cellBits (hv f pk m bits (posCell (40 - t))) = BitVec.ofNat 128 (2 + (38 - t)) := by
-    rw [hv_pos hlen (by omega)]
-    show cellBits (cellOfBits (BitVec.ofNat 128 (40 - t))) = _
-    rw [cellBits_cellOfBits, show 40 - t = 2 + (38 - t) by omega]
-  have hq := blake2sQuery_absorb (38 - t) (hv f pk m bits (xCell t 127)) (hv f pk m bits zCell)
+  have hmd : cellBits (hv f pk m bits (posCell (44 - t))) = BitVec.ofNat 128 (2 + (42 - t)) := by
+    rw [hv_pos (by omega)]
+    show cellBits (cellOfBits (BitVec.ofNat 128 (44 - t))) = _
+    rw [cellBits_cellOfBits, show 44 - t = 2 + (42 - t) by omega]
+  have hq := blake2sQuery_absorb (42 - t) (hv f pk m bits (xCell t 127)) (hv f pk m bits zCell)
     (hv f pk m bits zCell) (hv f pk m bits zCell) (hv f pk m bits (rootStateCell t))
-    (hv f pk m bits (rootStateCell t + 1)) (hv f pk m bits (posCell (40 - t))) hz hz hz hmd
+    (hv f pk m bits (rootStateCell t + 1)) (hv f pk m bits (posCell (44 - t))) hz hz hz hmd
   have hend : cellBits (hv f pk m bits (xCell t 127)) = endsOf m bits (chainTab f m bits) t := by
     rw [hv_x (by omega) (le_refl _), cellBits_cellOfBits]
     unfold endsOf endW inW
@@ -678,69 +683,76 @@ theorem honest_root (hlen : bits.length = 4992) : ∀ t < 39, Holds f LH (rootBa
     · rw [if_neg (by omega), if_pos hd]
     · rw [if_pos (by have := dig_le m t; omega), if_neg hd]
   have hans : f ⟨896, hashInput (stOf (rootTab f m bits) t)
-      ((endsOf m bits (chainTab f m bits) t).setWidth 512) (BitVec.ofNat 128 (2 + (38 - t)))⟩ =
+      ((endsOf m bits (chainTab f m bits) t).setWidth 512) (BitVec.ofNat 128 (2 + (42 - t)))⟩ =
       rootTab f m bits t :=
     root_answer f (endsOf m bits (chainTab f m bits)) ht
-  have hcanon := hv_st_canon (f := f) (pk := pk) (m := m) hlen (show t ≤ 39 by omega)
+  have hcanon := hv_st_canon (f := f) (pk := pk) (m := m) (bits := bits) (show t ≤ 43 by omega)
   have hzc : IsCanonical128 (hv f pk m bits zCell) := by
-    rw [hv_z0 hlen]
+    rw [hv_z0]
     exact isCanonical_zero
-  have hmdc : IsCanonical128 (hv f pk m bits (posCell (40 - t))) := by
-    rw [hv_pos hlen (by omega)]
+  have hmdc : IsCanonical128 (hv f pk m bits (posCell (44 - t))) := by
+    rw [hv_pos (by omega)]
     exact isCanonical_cellOfBits _
   have hxc : IsCanonical128 (hv f pk m bits (xCell t 127)) := by
     rw [hv_x (by omega) (le_refl _)]
     exact isCanonical_cellOfBits _
-  rw [hq, hv_stPair hlen (show t ≤ 39 by omega), hend, hans, hv_stLo ht, hv_stHi ht]
+  rw [hq, hv_stPair (show t ≤ 43 by omega), hend, hans, hv_stLo ht, hv_stHi ht]
   exact ⟨canon4 hxc hzc hzc hzc, hcanon.1, hcanon.2, isCanonical_cellOfBits _,
     isCanonical_cellOfBits _, hmdc, cellBits_cellOfBits _, cellBits_cellOfBits _⟩
 
-theorem honest_pk (hlen : bits.length = 4992)
-    (hpk : rootValue f (reconstructedWords f m bits) = pk) : Holds f LH pkSlot := by
+theorem honest_pk (hpk : rootValue f (reconstructedWords f m bits) = pk) : Holds f LH pkSlot := by
   apply holds_of_vrel
   rw [cinstrAt_pk]
-  show hv f pk m bits pkCell = hv f pk m bits (rootStateCell 39) + hv f pk m bits zCell
+  show hv f pk m bits pkCell = hv f pk m bits (rootStateCell 43) + hv f pk m bits zCell
   have hr : (rootValueFold f (List.ofFn (reconstructedWords f m bits)) 0).extractLsb' 0 128 =
       pk := hpk
-  rw [hv_pk, show rootStateCell 39 = rootStateCell (38 + 1) from rfl, hv_stLo (by norm_num),
-    hv_z0 hlen, add_zero]
-  show cellOfBits pk = cellOfBits ((rootTab f m bits 38).extractLsb' 0 128)
-  rw [rootTab_38, hr]
+  rw [hv_pk, show rootStateCell 43 = rootStateCell (42 + 1) from rfl, hv_stLo (by norm_num),
+    hv_z0, add_zero]
+  show cellOfBits pk = cellOfBits ((rootTab f m bits 42).extractLsb' 0 128)
+  rw [rootTab_42, hr]
 
-/-- The honest Rice dispatch of chain `k` selects leaf `dig m k`. -/
+/-- The honest Rice dispatch of chain `k` selects leaf `fld m k`. -/
 theorem honest_dispatch :
-    ∀ k, (k < 37 ∨ k = 38) → ChainDispatch (Holds f LH) LH k (dig m k) := by
+    ∀ k, (k < 41 ∨ k = 42) → ChainDispatch (Holds f LH) LH k (dig m k) := by
   intro k hk
-  have hk39 : k < 39 := by omega
-  have hk37 : k ≠ 37 := by omega
+  have hk43 : k < 43 := by omega
+  have hk41 : k ≠ 41 := by omega
   have hn := nU_le k
-  have hq : dig m k / 2 ≤ nU k := by
-    have h1 := dig_lt_nLeaves m k
+  have hq : fld m k / 2 ≤ nU k := by
+    have h1 := (honest_valid m).1 k hk
+    have h2 := off_add_fld m hk43
     rw [nLeaves_eq] at h1
     omega
+  have hf : fld m k = dig m k - off k := rfl
   refine ⟨fun i hi hix => ⟨?_, ?_, ?_⟩, ?_, ?_, ?_⟩
   · apply holds_of_vrel
     rw [cinstrAt_uset hk hi]
-    exact hv_tu hk39 hk37 (by omega)
+    exact hv_tu hk43 hk41 (by omega)
   · apply holds_of_vrel
     rw [cinstrAt_ujmp hk hi]
-    exact vrel_jump (by rw [hv_zu hk39 hk37 (by omega)]; exact isInK_ite _)
-      (by rw [hv_tu hk39 hk37 (by omega)]; exact isInK_tgtV _)
-  · rw [Lx_honest f pk m bits (by unfold zuCell scr; omega), hv_zu hk39 hk37 (by omega),
+    exact vrel_jump (by rw [hv_zu hk43 hk41 (by omega)]; exact isInK_ite _)
+      (by rw [hv_tu hk43 hk41 (by omega)]; exact isInK_tgtV _)
+  · rw [Lx_honest f pk m bits (by unfold zuCell scr; omega), hv_zu hk43 hk41 (by omega),
       ite_eq_zero_iff]
+    show ¬ i < fld m k / 2 ↔ _
     omega
   · apply holds_of_vrel
+    show VRel f _ (cinstrAt (gBase k (fld m k / 2)))
     rw [cinstrAt_gset hk hq]
-    exact hv_tb hk39
+    exact hv_tb hk43
   · apply holds_of_vrel
+    show VRel f _ (cinstrAt (gBase k (fld m k / 2) + 1))
     rw [cinstrAt_gjmp hk hq]
-    exact vrel_jump (by rw [hv_zb hk39]; exact isInK_ite _)
-      (by rw [hv_tb hk39]; exact isInK_tgtV _)
-  · rw [Lx_honest f pk m bits (by unfold zbCell scr; omega), hv_zb hk39, ite_eq_zero_iff]
+    exact vrel_jump (by rw [hv_zb hk43]; exact isInK_ite _)
+      (by rw [hv_tb hk43]; exact isInK_tgtV _)
+  · rw [Lx_honest f pk m bits (by unfold zbCell scr; omega), hv_zb hk43, ite_eq_zero_iff]
+    show ¬ fld m k % 2 = 1 ↔ _
     omega
 
-/-- The honest unary dispatch of chain 37 selects leaf `dig m 37`. -/
-theorem honest_hi : HiDispatch (Holds f LH) LH (dig m 37) := by
+/-- The honest unary dispatch of chain 41 selects leaf `dh = e_41 − 64`. -/
+theorem honest_hi : HiDispatch (Holds f LH) LH (dig m 41 - 64) := by
+  have hdh : dig m 41 - 64 = fld m 41 := by rw [fld, off_41]
+  rw [hdh]
   intro i hi hix
   refine ⟨?_, ?_, ?_⟩
   · apply holds_of_vrel
@@ -755,16 +767,16 @@ theorem honest_hi : HiDispatch (Holds f LH) LH (dig m 37) := by
 
 /-- **The honest path.** Under an accepting fixed table, every slot on the walk selected by the
 digits `dig m` holds on the loaded honest image, and its hints select exactly those digits. -/
-theorem holds_honest_path (hlen : bits.length = 4992)
+theorem holds_honest_path (hlen : bits.length = 5504)
     (hpk : rootValue f (reconstructedWords f m bits) = pk) :
     PathFacts (Holds f LH) (dig m) ∧ DispatchFacts (Holds f LH) LH (dig m) :=
   ⟨⟨honest_const f pk m bits hlen, honest_leaf f pk m bits hlen, honest_leafHi f pk m bits hlen,
-    honest_body f pk m bits hlen, honest_root f pk m bits hlen, honest_pk f pk m bits hlen hpk⟩,
+    honest_body f pk m bits, honest_root f pk m bits, honest_pk f pk m bits hpk⟩,
     ⟨honest_dispatch f pk m bits, honest_hi f pk m bits⟩⟩
 
 /-- **Honest run.** When the verifier accepts under the fixed table `f`, the honest image drives
 the run to the sentinel in exactly `totalSteps (dig m)` steps, at cost `totalCost (dig m)`. -/
-theorem honest_run (hlen : bits.length = 4992)
+theorem honest_run (hlen : bits.length = 5504)
     (hpk : rootValue f (reconstructedWords f m bits) = pk) :
     simulateQ (unifFwdAnswerImpl f)
         (LeanIsa.runCost program LH (totalSteps (dig m)) Regs.initial) =
@@ -777,7 +789,6 @@ theorem honest_run (hlen : bits.length = 4992)
     (walk_full_mk (fun _ h => holdsNH_of_holds h) hone (honest_valid m) hP hD)
 
 end Honest
-
 
 /-! ## The faithfulness clause -/
 
@@ -796,7 +807,7 @@ theorem faithful_clause (S : LeanIsa.Submission)
     (hfs : ∀ (f : HashTable) pk m bits c, some c ∈ support (simulateQ (unifFwdAnswerImpl f)
       (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits))
         (totalSteps (dig m)) Regs.initial)) →
-      bits.length = 4992 ∧ rootValue f (reconstructedWords f m bits) = pk) :
+      bits.length = 5504 ∧ rootValue f (reconstructedWords f m bits) = pk) :
     ∀ pk m bits, probTrue (do
       let completed ← S.honestRun pk m bits
       let accepted ← S.scheme.verify pk m bits
@@ -819,16 +830,16 @@ theorem faithful_clause (S : LeanIsa.Submission)
   obtain ⟨o, ho, hb⟩ := hb
   rw [Function.comp_apply, mem_support_pure_iff] at hb
   subst hb
-  by_cases hacc : bits.length = 4992 ∧ rootValue f (reconstructedWords f m bits) = pk
+  by_cases hacc : bits.length = 5504 ∧ rootValue f (reconstructedWords f m bits) = pk
   · rw [hh hacc.1 hacc.2, mem_support_pure_iff] at ho
     subst ho
     rw [if_pos hacc.1, hacc.2] at hmem
     simp at hmem
   · cases o with
     | none =>
-      have hverd : (if bits.length = 4992 then rootValue f (reconstructedWords f m bits) == pk
+      have hverd : (if bits.length = 5504 then rootValue f (reconstructedWords f m bits) == pk
           else false) = false := by
-        by_cases hl : bits.length = 4992
+        by_cases hl : bits.length = 5504
         · rw [if_pos hl]
           cases hbq : (rootValue f (reconstructedWords f m bits) == pk)
           · rfl

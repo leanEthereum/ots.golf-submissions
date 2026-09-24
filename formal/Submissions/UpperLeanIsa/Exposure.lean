@@ -12,26 +12,26 @@ noncomputable section
 attribute [local irreducible] queryLocation Record.query
 
 private theorem data_source_eq (d : Cut) (ξ ζ : Record)
-    (h : publicData d ξ = publicData d ζ) (i : Fin 39) (hi : (d i).val = 0) :
+    (h : publicData d ξ = publicData d ζ) (i : Fin 43) (hi : (d i).val = 0) :
     ξ.1 i = ζ.1 i := by
   have he := congrArg (fun v : PublicData => v.1 i) h
   simp only [publicData, hi, if_true, Option.some.injEq] at he
   exact he
 
 private theorem data_chain_eq (d : Cut) (ξ ζ : Record)
-    (h : publicData d ξ = publicData d ζ) (i : Fin 39) (j : Fin 127)
+    (h : publicData d ξ = publicData d ζ) (i : Fin 43) (j : Fin 127)
     (hj : (d i).val ≤ j.val + 1) : ξ.2 (.inl (i, j)) = ζ.2 (.inl (i, j)) := by
   have he := congrArg (fun v : PublicData => v.2 (.inl (i, j))) h
   simp only [publicData, if_pos hj, Option.some.injEq] at he
   exact he
 
 private theorem data_root_eq (d : Cut) (ξ ζ : Record)
-    (h : publicData d ξ = publicData d ζ) (i : Fin 39) :
+    (h : publicData d ξ = publicData d ζ) (i : Fin 43) :
     ξ.2 (.inr i) = ζ.2 (.inr i) := by
   exact Option.some.inj (congrArg (fun v : PublicData => v.2 (.inr i)) h)
 
 theorem data_word_eq (d : Cut) (ξ ζ : Record)
-    (h : publicData d ξ = publicData d ζ) (i : Fin 39) (j : Fin 128)
+    (h : publicData d ξ = publicData d ζ) (i : Fin 43) (j : Fin 128)
     (hj : (d i).val ≤ j.val) : ξ.word i j = ζ.word i j := by
   unfold Record.word
   split
@@ -62,7 +62,7 @@ theorem exposed_query_eq (d : Cut) (ξ ζ : Record)
     · have hx : ξ.rootBefore i = (0 : BitVec 256) := dif_pos hi
       have hz : ζ.rootBefore i = (0 : BitVec 256) := dif_pos hi
       exact hx.trans hz.symm
-    · let p : Fin 39 := ⟨i.val - 1, by have := i.isLt; omega⟩
+    · let p : Fin 43 := ⟨i.val - 1, by have := i.isLt; omega⟩
       have hx : ξ.rootBefore i = ξ.2 (.inr p) := dif_neg hi
       have hz : ζ.rootBefore i = ζ.2 (.inr p) := dif_neg hi
       exact hx.trans ((data_root_eq d ξ ζ h p).trans hz.symm)

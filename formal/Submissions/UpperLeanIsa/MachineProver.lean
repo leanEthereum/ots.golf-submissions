@@ -8,7 +8,7 @@ import Mathlib.Tactic.LinearCombination
 # The honest leanISA prover
 
 The honest prover queries the oracle exactly as the machine will: 127 chain steps per chain
-(the positions below the digit hash the revealed word as dummies) and 39 root absorptions. It
+(the positions below the digit hash the revealed word as dummies) and 43 root absorptions. It
 then commits the image whose every cell is a pure function of the input and the answers.
 
 This file collects the answers (`chainAnswers`, `rootAnswers`), gives their fixed-table
@@ -212,18 +212,18 @@ theorem stOf_congr {R R' : Answers} {k : ℕ} (h : ∀ t < k, R' t = R t) :
   | zero => rfl
   | succ k => exact h k (Nat.lt_succ_self k)
 
-/-- The oracle input of absorb `k`: 38 - k words remain after it. -/
+/-- The oracle input of absorb `k`: 42 - k words remain after it. -/
 def rootQ (ends : ℕ → Word) (k : ℕ) (R : Answers) : BitVec 896 :=
-  LeanIsa.hashInput (stOf R k) ((ends k).setWidth 512) (BitVec.ofNat 128 (2 + (38 - k)))
+  LeanIsa.hashInput (stOf R k) ((ends k).setWidth 512) (BitVec.ofNat 128 (2 + (42 - k)))
 
-/-- The honest machine's 39 root absorptions. -/
-def rootAnswers (ends : ℕ → Word) : OracleComp Spec Answers := seqAnswers (rootQ ends) 39
+/-- The honest machine's 43 root absorptions. -/
+def rootAnswers (ends : ℕ → Word) : OracleComp Spec Answers := seqAnswers (rootQ ends) 43
 
 /-- The root state before absorb `k` under a fixed table. -/
 def rootStF (f : HashTable) (ends : ℕ → Word) : ℕ → BitVec 256
   | 0 => 0
   | k + 1 => f ⟨896, LeanIsa.hashInput (rootStF f ends k) ((ends k).setWidth 512)
-      (BitVec.ofNat 128 (2 + (38 - k)))⟩
+      (BitVec.ofNat 128 (2 + (42 - k)))⟩
 
 /-- The honest answer of absorb `k` under a fixed table. -/
 def rootAnsF (f : HashTable) (ends : ℕ → Word) (k : ℕ) : BitVec 256 := rootStF f ends (k + 1)
@@ -236,7 +236,7 @@ theorem stOf_rootAnsF (f : HashTable) (ends : ℕ → Word) (k : ℕ) :
 
 theorem rootStF_succ (f : HashTable) (ends : ℕ → Word) (k : ℕ) :
     rootStF f ends (k + 1) = f ⟨896, LeanIsa.hashInput (rootStF f ends k)
-      ((ends k).setWidth 512) (BitVec.ofNat 128 (2 + (38 - k)))⟩ := rfl
+      ((ends k).setWidth 512) (BitVec.ofNat 128 (2 + (42 - k)))⟩ := rfl
 
 theorem rootAnsF_spec (f : HashTable) (ends : ℕ → Word) (k : ℕ) :
     rootAnsF f ends k = f ⟨896, rootQ ends k (rootAnsF f ends)⟩ := by
@@ -244,9 +244,9 @@ theorem rootAnsF_spec (f : HashTable) (ends : ℕ → Word) (k : ℕ) :
   rw [stOf_rootAnsF, rootAnsF, rootStF_succ]
 
 theorem fixed_rootAnswers (f : HashTable) (ends : ℕ → Word) :
-    simulateQ (unifFwdAnswerImpl f) (rootAnswers ends) = pure (cutAns 39 (rootAnsF f ends)) :=
+    simulateQ (unifFwdAnswerImpl f) (rootAnswers ends) = pure (cutAns 43 (rootAnsF f ends)) :=
   fixed_seqAnswers f (rootQ ends) (rootAnsF f ends)
-    (fun _ _ h => by unfold rootQ; rw [stOf_congr h]) (rootAnsF_spec f ends) 39
+    (fun _ _ h => by unfold rootQ; rw [stOf_congr h]) (rootAnsF_spec f ends) 43
 
 theorem rootValueFold_cons (f : HashTable) (x : Word) (xs : List Word) (cv : BitVec 256) :
     rootValueFold f (x :: xs) cv = rootValueFold f xs
@@ -254,16 +254,16 @@ theorem rootValueFold_cons (f : HashTable) (x : Word) (xs : List Word) (cv : Bit
   rfl
 
 theorem rootValueFold_states_aux (f : HashTable) (ends : ℕ → Word) (S : ℕ → BitVec 256)
-    (hS : ∀ k < 39, S (k + 1) = f ⟨896, LeanIsa.hashInput (S k) ((ends k).setWidth 512)
-      (BitVec.ofNat 128 (2 + (38 - k)))⟩) :
-    ∀ (n k : ℕ) (v : Fin n → Word), k + n = 39 → (∀ t : Fin n, v t = ends (k + t)) →
-      rootValueFold f (List.ofFn v) (S k) = S 39
+    (hS : ∀ k < 43, S (k + 1) = f ⟨896, LeanIsa.hashInput (S k) ((ends k).setWidth 512)
+      (BitVec.ofNat 128 (2 + (42 - k)))⟩) :
+    ∀ (n k : ℕ) (v : Fin n → Word), k + n = 43 → (∀ t : Fin n, v t = ends (k + t)) →
+      rootValueFold f (List.ofFn v) (S k) = S 43
   | 0, k, v, h, _ => by
-    obtain rfl : k = 39 := by omega
+    obtain rfl : k = 43 := by omega
     simp only [List.ofFn_zero, rootValueFold]
   | n + 1, k, v, h, hv => by
     have hv0 : v 0 = ends k := hv 0
-    have hlen : 2 + (List.ofFn fun t : Fin n => v t.succ).length = 2 + (38 - k) := by
+    have hlen : 2 + (List.ofFn fun t : Fin n => v t.succ).length = 2 + (42 - k) := by
       rw [List.length_ofFn]
       omega
     rw [List.ofFn_succ, rootValueFold_cons, hlen, hv0, ← hS k (by omega)]
@@ -274,56 +274,32 @@ theorem rootValueFold_states_aux (f : HashTable) (ends : ℕ → Word) (S : ℕ 
 
 /-- Root states obeying the absorb recursion end at the verifier's root fold. Shared by the
 honest prover and by soundness. -/
-theorem rootValueFold_states (f : HashTable) (w : Fin 39 → Word) (ends : ℕ → Word)
-    (hw : ∀ t : Fin 39, w t = ends t) (S : ℕ → BitVec 256) (h0 : S 0 = 0)
-    (hS : ∀ k < 39, S (k + 1) = f ⟨896, LeanIsa.hashInput (S k) ((ends k).setWidth 512)
-      (BitVec.ofNat 128 (2 + (38 - k)))⟩) :
-    rootValueFold f (List.ofFn w) 0 = S 39 := by
-  have h := rootValueFold_states_aux f ends S hS 39 0 w rfl
+theorem rootValueFold_states (f : HashTable) (w : Fin 43 → Word) (ends : ℕ → Word)
+    (hw : ∀ t : Fin 43, w t = ends t) (S : ℕ → BitVec 256) (h0 : S 0 = 0)
+    (hS : ∀ k < 43, S (k + 1) = f ⟨896, LeanIsa.hashInput (S k) ((ends k).setWidth 512)
+      (BitVec.ofNat 128 (2 + (42 - k)))⟩) :
+    rootValueFold f (List.ofFn w) 0 = S 43 := by
+  have h := rootValueFold_states_aux f ends S hS 43 0 w rfl
     (fun t => by rw [Nat.zero_add]; exact hw t)
   rwa [h0] at h
 
-theorem rootValue_states (f : HashTable) (w : Fin 39 → Word) (ends : ℕ → Word)
-    (hw : ∀ t : Fin 39, w t = ends t) (S : ℕ → BitVec 256) (h0 : S 0 = 0)
-    (hS : ∀ k < 39, S (k + 1) = f ⟨896, LeanIsa.hashInput (S k) ((ends k).setWidth 512)
-      (BitVec.ofNat 128 (2 + (38 - k)))⟩) :
-    rootValue f w = (S 39).extractLsb' 0 128 := by
+theorem rootValue_states (f : HashTable) (w : Fin 43 → Word) (ends : ℕ → Word)
+    (hw : ∀ t : Fin 43, w t = ends t) (S : ℕ → BitVec 256) (h0 : S 0 = 0)
+    (hS : ∀ k < 43, S (k + 1) = f ⟨896, LeanIsa.hashInput (S k) ((ends k).setWidth 512)
+      (BitVec.ofNat 128 (2 + (42 - k)))⟩) :
+    rootValue f w = (S 43).extractLsb' 0 128 := by
   unfold rootValue
   rw [rootValueFold_states f w ends hw S h0 hS]
 
-theorem rootValueFold_rootStF (f : HashTable) (w : Fin 39 → Word) (ends : ℕ → Word)
-    (hw : ∀ t : Fin 39, w t = ends t) :
-    rootValueFold f (List.ofFn w) 0 = rootStF f ends 39 :=
+theorem rootValueFold_rootStF (f : HashTable) (w : Fin 43 → Word) (ends : ℕ → Word)
+    (hw : ∀ t : Fin 43, w t = ends t) :
+    rootValueFold f (List.ofFn w) 0 = rootStF f ends 43 :=
   rootValueFold_states f w ends hw (rootStF f ends) rfl (fun k _ => rootStF_succ f ends k)
 
 /-! ## The cells the loader pins -/
 
-theorem inputWord_zero (pk : PublicKey) (msg : Message) (σ : List Bool) :
-    inputWord pk msg σ 0 = cellOfBits pk := by
-  have h : ((statementBits pk msg σ).drop (0 * 128)).take 128 = toBits pk := by
-    unfold statementBits
-    rw [Nat.zero_mul, List.drop_zero, List.append_assoc, List.append_assoc]
-    exact List.take_left' (length_bits pk)
-  unfold inputWord
-  rw [h]
-  exact congrArg cellOfBits (ofBits_bits pk)
-
-theorem inputWord_three (pk : PublicKey) (msg : Message) (σ : List Bool) :
-    inputWord pk msg σ 3 =
-      cellOfBits (BitVec.ofNat 128 (min σ.length (maxSignatureBits + 1))) := by
-  have hpre : (toBits pk ++ toBits msg).length = 3 * 128 := by
-    rw [List.length_append, length_bits, length_bits]
-    all_goals rfl
-  have h : ((statementBits pk msg σ).drop (3 * 128)).take 128 =
-      toBits (BitVec.ofNat 128 (min σ.length (maxSignatureBits + 1))) := by
-    unfold statementBits
-    rw [List.append_assoc, List.drop_left' hpre]
-    exact List.take_left' (length_bits _)
-  unfold inputWord
-  rw [h, ofBits_bits]
-
 /-- For a signature of the admitted length, cell `4 + i` holds the `i`-th 128-bit word. -/
-theorem inputWord_sig (pk : PublicKey) (msg : Message) (σ : List Bool) (hlen : σ.length = 4992)
+theorem inputWord_sig (pk : PublicKey) (msg : Message) (σ : List Bool) (hlen : σ.length = 5504)
     (i : ℕ) :
     inputWord pk msg σ (4 + i) = cellOfBits (ofBits 128 ((σ.drop (128 * i)).take 128)) := by
   have hpre : (toBits pk ++ toBits msg ++
@@ -334,46 +310,6 @@ theorem inputWord_sig (pk : PublicKey) (msg : Message) (σ : List Bool) (hlen : 
     List.take_of_length_le (by rw [hlen]; unfold maxSignatureBits; omega)
   unfold inputWord statementBits
   rw [show (4 + i) * 128 = 512 + 128 * i by omega, ← List.drop_drop, List.drop_left' hpre, htake]
-
-theorem inputWord_decode (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 4992) (i : Fin 39) :
-    inputWord pk msg σ (4 + i.val) = cellOfBits (decode σ i) :=
-  inputWord_sig pk msg σ hlen i.val
-
-/-- The length cell pins the admitted length: `4992 < 5505`, so the capped length is exact. -/
-theorem length_of_inputWord_three (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (h : inputWord pk msg σ 3 = lenV) : σ.length = 4992 := by
-  unfold lenV at h
-  rw [inputWord_three] at h
-  have hb := congrArg cellBits h
-  rw [cellBits_cellOfBits, cellBits_cellOfBits] at hb
-  have hn := congrArg BitVec.toNat hb
-  rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat] at hn
-  unfold maxSignatureBits at hn
-  have h1 : min σ.length (5504 + 1) < 2 ^ 128 := by
-    have : min σ.length (5504 + 1) ≤ 5505 := Nat.min_le_right _ _
-    have h2 : (5505 : ℕ) < 2 ^ 128 := by norm_num
-    omega
-  have h3 : (4992 : ℕ) < 2 ^ 128 := by norm_num
-  rw [Nat.mod_eq_of_lt h1, Nat.mod_eq_of_lt h3] at hn
-  omega
-
-
-/-- Above the statement (`43 · 128 = 5504` bits for an admitted signature) the loader pins zero:
-cells `43 … 46`, in particular the zero pair `(zCell, zCell + 1)`. -/
-theorem inputWord_of_ge_43 (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 4992) {i : ℕ} (hi : 43 ≤ i) : inputWord pk msg σ i = 0 := by
-  have hl : (statementBits pk msg σ).length = 5504 := by
-    unfold statementBits
-    rw [List.length_append, List.length_append, List.length_append, length_bits, length_bits,
-      length_bits, List.length_take, hlen]
-    unfold maxSignatureBits pkBits msgBits
-    omega
-  have hd : (statementBits pk msg σ).drop (i * 128) = [] :=
-    List.drop_eq_nil_of_le (by rw [hl]; omega)
-  unfold inputWord
-  rw [hd, List.take_nil]
-  exact Machine.cellOfBits_zero
 
 /-! ## Cell arithmetic -/
 
@@ -412,16 +348,16 @@ theorem cellOfBits_cellBits {x : E} (hx : IsCanonical128 x) : cellOfBits (cellBi
 /-! ## Honest values -/
 
 /-- The digit of chain `i`, natural-number indexed. -/
-def dig (m : Message) (i : ℕ) : ℕ := if h : i < 39 then digit m ⟨i, h⟩ else 0
+def dig (m : Message) (i : ℕ) : ℕ := if h : i < 43 then digit m ⟨i, h⟩ else 0
 
 /-- The revealed word of chain `i`. -/
 def sigW (bits : List Bool) (i : ℕ) : Word := ofBits 128 ((bits.drop (128 * i)).take 128)
 
 /-- Chain `i`'s answer table. -/
-def tabN (CA : Fin 39 → Answers) (i : ℕ) : Answers :=
-  if h : i < 39 then CA ⟨i, h⟩ else fun _ => 0
+def tabN (CA : Fin 43 → Answers) (i : ℕ) : Answers :=
+  if h : i < 43 then CA ⟨i, h⟩ else fun _ => 0
 
-theorem dig_fin (m : Message) (i : Fin 39) : dig m i.val = digit m i := by
+theorem dig_fin (m : Message) (i : Fin 43) : dig m i.val = digit m i := by
   unfold dig
   rw [dif_pos i.isLt]
 
@@ -431,83 +367,87 @@ theorem dig_le (m : Message) (i : ℕ) : dig m i ≤ 127 := by
   · exact digit_le m _
   · exact Nat.zero_le _
 
-theorem sigW_fin (bits : List Bool) (i : Fin 39) : sigW bits i.val = decode bits i := rfl
+theorem sigW_fin (bits : List Bool) (i : Fin 43) : sigW bits i.val = decode bits i := rfl
 
-theorem tabN_fin (CA : Fin 39 → Answers) (i : Fin 39) : tabN CA i.val = CA i := by
+theorem tabN_fin (CA : Fin 43 → Answers) (i : Fin 43) : tabN CA i.val = CA i := by
   unfold tabN
   rw [dif_pos i.isLt]
 
-/-- The honest tie accumulator of chain `k ≤ 35` (`tieAcc` of the digits). -/
-def accV (m : Message) (k : ℕ) : E := tieAcc (dig m) k
+/-- The leaf index of chain `i`: the digit less its offset (`dh` for `c_hi`). -/
+def fld (m : Message) (i : ℕ) : ℕ := dig m i - off i
 
-/-- The honest checksum-product exponent held by `gCell k`: `Σ_{i ≤ k} (s0 i + d_i + 1)` for
-`k < 37`, and that sum over the 37 message chains plus `128 · d_37` for `k = 37`. -/
+/-- The honest tie accumulator of chain `k ≤ 39` (`tieAcc` of the leaf indices). -/
+def accV (m : Message) (k : ℕ) : E := tieAcc (fld m) k
+
+/-- The honest checksum-product exponent held by `gCell k`: `Σ_{i ≤ k} (s0 i + e_i + 1)` for
+`k < 41`, and that sum over the 41 message chains plus `64 · dh` for `k = 41`. -/
 def gExp (m : Message) (k : ℕ) : ℕ :=
-  if k < 37 then ∑ i ∈ Finset.range (k + 1), (s0 i + dig m i + 1)
-  else (∑ i ∈ Finset.range 37, (s0 i + dig m i + 1)) + 128 * dig m 37
+  if k < 41 then ∑ i ∈ Finset.range (k + 1), (s0 i + dig m i + 1)
+  else (∑ i ∈ Finset.range 41, (s0 i + dig m i + 1)) + 64 * fld m 41
 
-/-- The honest value at offset `o < 160` of chain `k`'s scratch block (§7): the unary and group
-hints selecting leaf `d_k`, all node targets, and the leaf cells. -/
+/-- The honest value at offset `o < 160` of chain `k`'s scratch block: the unary and group
+hints selecting leaf `fld m k`, all node targets, and the leaf cells. -/
 def scrVal (m : Message) (k o : ℕ) : E :=
   if o < 64 then
-    (if k = 37 then (if o < 36 - dig m k then oneV else 0)
-     else (if o < dig m k / 2 then oneV else 0))
+    (if k = 41 then (if o < 50 - fld m k then oneV else 0)
+     else (if o < fld m k / 2 then oneV else 0))
   else if o < 128 then
-    (if k = 37 then tgtV (rBase 37 + 7 * (o - 64 + 1)) else tgtV (rBase k + 18 * (o - 64 + 1)))
-  else if o = 128 then (if dig m k % 2 = 1 then oneV else 0)
-  else if o = 129 then tgtV (gBase k (dig m k / 2) + 9)
+    (if k = 41 then tgtV (rBase 41 + 7 * (o - 64 + 1)) else tgtV (rBase k + 18 * (o - 64 + 1)))
+  else if o = 128 then (if fld m k % 2 = 1 then oneV else 0)
+  else if o = 129 then tgtV (gBase k (fld m k / 2) + 9)
   else if o = 132 then tgtV (s0 k + dig m k + 1)
   else if o = 133 then tgtV (s0 k + 127)
   else if o = 134 then tgtV (gExp m k)
-  else if o = 135 then vV (tieShift k) (dig m k)
+  else if o = 135 then vV (tieShift k) (fld m k)
   else if o = 136 then accV m k
-  else tgtV (128 * dig m k)
+  else tgtV (64 * fld m k)
 
-/-- The honest value at `7400 + o`: the root state pairs `S_{t+1}` (low cell at `o = 2t + 2`). -/
+/-- The honest value at `8000 + o`: the root state pairs `S_{t+1}` (low cell at `o = 2t + 2`). -/
 def rootVal (RA : Answers) (o : ℕ) : E :=
   if o % 2 = 0 then lowE RA (o / 2 - 1) else highE RA (o / 2 - 1)
 
 /-- The honest value at offset `o < 256` of chain `k`'s word block: `x_{k,j}` at `o = 2j` (the
 hashed word `inW`: `σ` up to the digit, the chain after it), `h_{k,j-1}` at `o = 2j + 1`. -/
-def xVal (m : Message) (bits : List Bool) (CA : Fin 39 → Answers) (k o : ℕ) : E :=
+def xVal (m : Message) (bits : List Bool) (CA : Fin 43 → Answers) (k o : ℕ) : E :=
   if o % 2 = 0 then cellOfBits (inW (dig m k) (sigW bits k) (tabN CA k) (o / 2))
   else highE (tabN CA k) (o / 2 - 1)
 
-/-- The honest value of every cell. The loader overwrites cells `0 … 46`. -/
-def cellVal (m : Message) (bits : List Bool) (CA : Fin 39 → Answers) (RA : Answers)
+/-- The honest value of every cell. The loader overwrites cells `0 … 46`; below 400 the position
+constants, with the zero pair `(48, 49)` at `posV 0 = 0`. -/
+def cellVal (m : Message) (bits : List Bool) (CA : Fin 43 → Answers) (RA : Answers)
     (c : ℕ) : E :=
   if c < 400 then posV (c - 100)
   else if c = 400 then tgtV K0
   else if c < 1024 then 0
-  else if c < 7264 then scrVal m ((c - 1024) / 160) ((c - 1024) % 160)
-  else if c < 8192 then rootVal RA (c - 7400)
-  else xVal m bits CA ((c - 8192) / 256) ((c - 8192) % 256)
+  else if c < 8000 then scrVal m ((c - 1024) / 160) ((c - 1024) % 160)
+  else if c < 9000 then rootVal RA (c - 8000)
+  else xVal m bits CA ((c - 9000) / 256) ((c - 9000) % 256)
 
 /-- The honest image over given answer tables (`memLog = 16`). -/
 def imageOf (_pk : PublicKey) (m : Message) (bits : List Bool)
-    (CA : Fin 39 → Answers) (RA : Answers) : MemImage 16 :=
+    (CA : Fin 43 → Answers) (RA : Answers) : MemImage 16 :=
   fun c => cellVal m bits CA RA c.val
 
 /-! ## The prover -/
 
 /-- The endpoint words the honest prover absorbs. -/
-def endsOf (m : Message) (bits : List Bool) (CA : Fin 39 → Answers) (k : ℕ) : Word :=
+def endsOf (m : Message) (bits : List Bool) (CA : Fin 43 → Answers) (k : ℕ) : Word :=
   endW (dig m k) (sigW bits k) (tabN CA k)
 
 /-- The honest prover: query the chains as the machine will, then the root, then commit. -/
 def prover (pk : PublicKey) (m : Message) (bits : List Bool) :
     OracleComp Spec (MemImage 16) := do
-  let CA ← tabulate (fun i : Fin 39 => chainAnswers i.val (digit m i) (decode bits i))
+  let CA ← tabulate (fun i : Fin 43 => chainAnswers i.val (digit m i) (decode bits i))
   let RA ← rootAnswers (endsOf m bits CA)
   pure (imageOf pk m bits CA RA)
 
 /-- The chain answer tables under a fixed table. -/
-def chainTab (f : HashTable) (m : Message) (bits : List Bool) (i : Fin 39) : Answers :=
+def chainTab (f : HashTable) (m : Message) (bits : List Bool) (i : Fin 43) : Answers :=
   cutAns 127 (chainAnsF f i.val (digit m i) (decode bits i))
 
 /-- The root answer table under a fixed table. -/
 def rootTab (f : HashTable) (m : Message) (bits : List Bool) : Answers :=
-  cutAns 39 (rootAnsF f (endsOf m bits (chainTab f m bits)))
+  cutAns 43 (rootAnsF f (endsOf m bits (chainTab f m bits)))
 
 /-- The honest image under a fixed table. -/
 def imageF (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) : MemImage 16 :=
@@ -517,13 +457,13 @@ theorem fixed_prover (f : HashTable) (pk : PublicKey) (m : Message) (bits : List
     simulateQ (unifFwdAnswerImpl f) (prover pk m bits) = pure (imageF f pk m bits) := by
   unfold prover imageF rootTab
   simp only [simulateQ_bind, simulateQ_pure]
-  rw [fixed_tabulate f (fun i : Fin 39 => chainAnswers i.val (digit m i) (decode bits i))
+  rw [fixed_tabulate f (fun i : Fin 43 => chainAnswers i.val (digit m i) (decode bits i))
       (chainTab f m bits) (fun i => fixed_chainAnswers f i.val (digit m i) (decode bits i)),
     pure_bind, fixed_rootAnswers f (endsOf m bits (chainTab f m bits)), pure_bind]
 
 /-! ## Honest facts under a fixed table -/
 
-theorem tabN_chainTab (f : HashTable) (m : Message) (bits : List Bool) {i : ℕ} (hi : i < 39) :
+theorem tabN_chainTab (f : HashTable) (m : Message) (bits : List Bool) {i : ℕ} (hi : i < 43) :
     tabN (chainTab f m bits) i = cutAns 127 (chainAnsF f i (dig m i) (sigW bits i)) := by
   have h1 : tabN (chainTab f m bits) i = chainTab f m bits ⟨i, hi⟩ := tabN_fin _ ⟨i, hi⟩
   have h2 : digit m ⟨i, hi⟩ = dig m i := (dig_fin m ⟨i, hi⟩).symm
@@ -533,7 +473,7 @@ theorem tabN_chainTab (f : HashTable) (m : Message) (bits : List Bool) {i : ℕ}
   rw [h2, h3]
 
 /-- The honest endpoint word is the verifier's reconstructed word. -/
-theorem endsOf_honest (f : HashTable) (m : Message) (bits : List Bool) (i : Fin 39) :
+theorem endsOf_honest (f : HashTable) (m : Message) (bits : List Bool) (i : Fin 43) :
     endsOf m bits (chainTab f m bits) i.val = reconstructedWords f m bits i := by
   show endW (dig m i.val) (sigW bits i.val) (tabN (chainTab f m bits) i.val) =
     chainValue f i.val (digit m i) (127 - digit m i) (decode bits i)
@@ -541,10 +481,10 @@ theorem endsOf_honest (f : HashTable) (m : Message) (bits : List Bool) (i : Fin 
     sigW_fin]
 
 /-- The honest final root state is the verifier's root fold. -/
-theorem rootTab_38 (f : HashTable) (m : Message) (bits : List Bool) :
-    rootTab f m bits 38 = rootValueFold f (List.ofFn (reconstructedWords f m bits)) 0 := by
+theorem rootTab_42 (f : HashTable) (m : Message) (bits : List Bool) :
+    rootTab f m bits 42 = rootValueFold f (List.ofFn (reconstructedWords f m bits)) 0 := by
   unfold rootTab
-  rw [cutAns_of_lt _ (show 38 < 39 by norm_num)]
+  rw [cutAns_of_lt _ (show 42 < 43 by norm_num)]
   rw [rootValueFold_rootStF f (reconstructedWords f m bits) (endsOf m bits (chainTab f m bits))
     (fun t => (endsOf_honest f m bits t).symm)]
   try rfl
@@ -563,13 +503,74 @@ theorem chain_answer (f : HashTable) (i d : ℕ) (σ : Word) {j : ℕ} (hj : j <
   rw [hq', cutAns_of_lt _ hj, chainAnsF_spec f i d σ j]
 
 /-- The honest root answer of absorption `t` is the table's answer to its query. -/
-theorem root_answer (f : HashTable) (ends : ℕ → Word) {t : ℕ} (ht : t < 39) :
-    f ⟨896, rootQ ends t (cutAns 39 (rootAnsF f ends))⟩ = cutAns 39 (rootAnsF f ends) t := by
-  have hq : rootQ ends t (cutAns 39 (rootAnsF f ends)) = rootQ ends t (rootAnsF f ends) := by
+theorem root_answer (f : HashTable) (ends : ℕ → Word) {t : ℕ} (ht : t < 43) :
+    f ⟨896, rootQ ends t (cutAns 43 (rootAnsF f ends))⟩ = cutAns 43 (rootAnsF f ends) t := by
+  have hq : rootQ ends t (cutAns 43 (rootAnsF f ends)) = rootQ ends t (rootAnsF f ends) := by
     unfold rootQ
-    rw [stOf_congr (R := rootAnsF f ends) (R' := cutAns 39 (rootAnsF f ends)) (k := t)
-      (fun s hs => cutAns_of_lt _ (show s < 39 by omega))]
+    rw [stOf_congr (R := rootAnsF f ends) (R' := cutAns 43 (rootAnsF f ends)) (k := t)
+      (fun s hs => cutAns_of_lt _ (show s < 43 by omega))]
   rw [hq, cutAns_of_lt _ ht, rootAnsF_spec f ends t]
+
+/-! ## The machine's field layout is the scheme's -/
+
+theorem off_eq_digitOff (k : ℕ) : off k = digitOff k := by
+  unfold off digitOff fieldWidth
+  split_ifs <;> omega
+
+theorem mFieldWidth_eq (k : ℕ) : mFieldWidth k = fieldWidth k := by
+  unfold mFieldWidth fieldWidth
+  split_ifs <;> omega
+
+theorem tieShift_eq {k : ℕ} (hk : k < 41) : tieShift k = fieldShift k := by
+  have h : mFieldOff k = fieldOff k := by
+    unfold mFieldOff fieldOff
+    split_ifs <;> omega
+  unfold tieShift fieldShift
+  rw [h]
+
+theorem nLeaves_eq_pow (k : ℕ) : nLeaves k = 2 ^ fieldWidth k := by
+  rw [nLeaves_pow, mFieldWidth_eq]
+
+/-- The machine's tie word of a leaf index is the scheme-side `tieWord`. -/
+theorem vV_tieShift (d : ℕ → ℕ) {k : ℕ} (hk : k < 41) : vV (tieShift k) (d k) = tieWord d k := by
+  unfold vV tieWord
+  rw [tieShift_eq hk]
+
+/-- A message leaf index is the message field. -/
+theorem fld_msg (m : Message) {k : ℕ} (hk : k < 41) :
+    fld m k = m.toNat / 2 ^ fieldOff k % 2 ^ fieldWidth k := by
+  unfold fld
+  rw [dig_fin m ⟨k, by omega⟩, digit_of_lt m ⟨k, by omega⟩ hk, off_eq_digitOff]
+  exact Nat.add_sub_cancel_left _ _
+
+theorem off_le_dig (m : Message) {k : ℕ} (hk : k < 43) : off k ≤ dig m k := by
+  rcases Nat.lt_or_ge k 41 with h | h
+  · rw [dig_fin m ⟨k, by omega⟩, digit_of_lt m ⟨k, by omega⟩ h, off_eq_digitOff]
+    exact Nat.le_add_right _ _
+  · rcases (show k = 41 ∨ k = 42 by omega) with rfl | rfl
+    · rw [off_41, dig_fin m ⟨41, by norm_num⟩, show (⟨41, by norm_num⟩ : Fin 43) = 41 from rfl,
+        digit_hi]
+      exact Nat.le_add_right _ _
+    · rw [off_42, dig_fin m ⟨42, by norm_num⟩, show (⟨42, by norm_num⟩ : Fin 43) = 42 from rfl,
+        digit_lo]
+      exact Nat.le_add_right _ _
+
+theorem off_add_fld (m : Message) {k : ℕ} (hk : k < 43) : off k + fld m k = dig m k := by
+  have := off_le_dig m hk
+  unfold fld
+  omega
+
+theorem fld_41 (m : Message) :
+    fld m 41 = Checksum.wotsChecksumValue 128 (messageDigits m) / 64 := by
+  unfold fld
+  rw [off_41, dig_fin m ⟨41, by norm_num⟩, show (⟨41, by norm_num⟩ : Fin 43) = 41 from rfl,
+    digit_hi, Nat.add_sub_cancel_left]
+
+theorem fld_42 (m : Message) :
+    fld m 42 = Checksum.wotsChecksumValue 128 (messageDigits m) % 64 := by
+  unfold fld
+  rw [off_42, dig_fin m ⟨42, by norm_num⟩, show (⟨42, by norm_num⟩ : Fin 43) = 42 from rfl,
+    digit_lo, Nat.add_sub_cancel_left]
 
 end
 

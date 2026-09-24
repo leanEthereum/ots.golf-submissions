@@ -67,11 +67,11 @@ def ForgeryEvent (f : HashTable) (sk : Words) (signedMessage forgedMessage : Mes
   RootSecondPreimage f (List.ofFn (reconstructedWords f forgedMessage bits)) 0
       (List.ofFn (endpoints f sk)) 0 ∨
     ChainForgeryEvent f sk forgedMessage bits ∨
-    (∃ i : Fin 39, digit forgedMessage i < digit signedMessage i ∧
+    (∃ i : Fin 43, digit forgedMessage i < digit signedMessage i ∧
       decode bits i = honestWord f sk i (digit forgedMessage i))
 
 theorem accepted_forgery_event (f : HashTable) (sk : Words) (m₁ m₂ : Message) (bits : List Bool)
-    (hlen : bits.length = 4992)
+    (hlen : bits.length = 5504)
     (hroot : rootValue f (reconstructedWords f m₂ bits) = rootValue f (endpoints f sk))
     (hfresh : (m₁, encode (signedWords f sk m₁)) ≠ (m₂, bits)) :
     ForgeryEvent f sk m₁ m₂ bits := by
