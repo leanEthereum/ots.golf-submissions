@@ -1,29 +1,34 @@
-# leanISA baseline — 170549 cycles
+# leanISA — 85343 cycles
 
-This root completes the leanISA Winternitz baseline started in PR #23 by Tom Wambsgans. The
-scheme (`Algorithms.lean`) is unchanged: 34 chains of 128-bit words, 32 base-256 message digits
-plus two checksum digits, every chain step tagged with its chain and position, and an MD-style
-root fold with distinct metadata. What this root adds:
+This root replaces the bytecode of the 170549-cycle baseline (PR #31) with a forced-dispatch
+design; the design notes and the executable cost model are in `NOTES.md`. The scheme
+and its proofs (`Algorithms`, `Encoding`, `Checksum`, `Correctness`, `Security` and its
+dependencies, `Wire`, `Resources`, `BasicProperties`) are unchanged.
 
-- **Strong unforgeability** (`Security.lean`, `theorem secure`), assembled from PR #23's
-  ingredients in two stages: `Stages`, `Budget`, `KeygenBridge` (key generation as a uniform
-  average over records), `Transcript`, `CutTargets`, `Events` (an accepted fresh forgery is a
-  hidden-word hit or a cut-target hit on the exposed run), `StageB`, `StageA` (supermartingale
-  via `master_family`). Two charges of `2^-129` per compression give `B / 2^128 < B / 2^127`.
-- **Bytecode** (`MachineProgram.lean`): straight-line, `fp = 1` throughout, one final `JUMP`.
-  Each chain runs all 255 steps; a thermometer mux feeds the signature word in at the signed
-  digit and hashes it as a dummy before. Digits are tied to the pinned message cells by
-  XOR-accumulating shifted byte constants; the checksum is checked in the exponent
-  (`g^C = g^(256·c_hi) · g^(c_lo)`). 92093 instructions, 8704 `BLAKE2S`.
-- **Execution** (`MachineRun.lean`): every completing run executes exactly the 92093
-  instructions, so the cost is `92093 + 9 · 8704 = 170429`, plus the 120-cycle boundary charge.
-- **Soundness and faithfulness** (`ConstraintMath`, `MachineProver`, `MachineSound`,
-  `MachineFaithful`): the constraints force the verifier's chain values, digits and root on any
-  committed image; the honest prover's image satisfies all of them exactly when the verifier
-  accepts.
-- `seededRows = 2^17 + 2^17 < 2^20`.
+- **Bytecode** (`MachineProgram.lean`): `logSize = 17`, `memLog = 16`, only `XOR`, `MUL`, `SET`,
+  `BLAKE2S` and `JUMP`. Each of the 34 chains starts with a `JUMP` tree that selects the signed
+  digit: a Rice(2) prefix tree for chains 0..31 and 33 (depth `⌊e/4⌋ + 3`), a unary tree
+  31, 30, …, 0 for `c_hi`. Every `JUMP` target is a `SET` constant in the slot just before it.
+  The reached leaf hashes the pinned signature word, then the chain runs its remaining
+  `254 − e` steps; unused slots are `.pad` traps. Digits are tied to the pinned message cells
+  by XOR-accumulated byte words, and the checksum is checked in the exponent as a product of
+  the leaves' landing constants. The halt falls through into the sentinel.
+- **Execution** (`MachineRun`, `MachineWalk`, `MachinePath`): every completing run, on any
+  image, is the walk of one leaf vector `E`, with `totalSteps E` instructions and cost
+  `totalCost E`.
+- **Cycles** (`MachineCycles`): the hash-free relations force the checksum identity
+  `Σ_{k<32} E k + 256·E 32 + E 33 = 8160`, and under it `totalCost E ≤ 85223`, so every
+  completing run costs at most `85223 + 120 = 85343`. The bound is attained by the honest run
+  on the all-zero message (733 non-hash instructions and 8449 `BLAKE2S`; checked by
+  `rt_model.py`, not in Lean).
+- **Soundness** (`ConstraintMath`, `MachineSound`, `MachineFaithful.fixed_sound`): the path
+  relations force the verifier's digits, chain values and root on any committed image.
+- **Faithfulness** (`MachineProver`, `MachineHonest`, `MachineFaithful`): the honest image
+  satisfies every relation on the path of `dig m` exactly when the verifier accepts, and the
+  run then completes in `totalSteps (dig m)` steps.
+- `seededRows = 2^17 + 2^16 < 2^20`.
 
-The design is deliberately simple rather than cycle-optimal; it is a baseline.
+Build with `lake build Submissions.UpperLeanIsa.Solution`.
 
 ---
 

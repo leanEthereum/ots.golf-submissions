@@ -11,19 +11,20 @@ import Submissions.UpperLeanIsa.Correctness
 /-!
 # Constraint mathematics for the leanISA verifier
 
-The machine program (design `M-machine-design.md`, §2–§4) checks a Winternitz signature with
-straight-line `MUL` / `XOR` / `BLAKE2S` constraints. This file proves, over plain functions and
-values, the facts that turn those constraints into the scheme's fixed-table verifier. Nothing
-here mentions the program or its execution, so the lemmas can be glued to any layout.
+The machine program (design `NOTES.md`, §4 and §6) checks a Winternitz signature with
+`MUL` / `XOR` / `SET` / `BLAKE2S` constraints along a dispatched path. This file proves, over plain
+functions and values, the facts that turn those constraints into the scheme's fixed-table
+verifier. Nothing here mentions the program or its execution, so the lemmas can be glued to any
+layout.
 
-1. `E` has characteristic two, and a Boolean cell (`t = t * t`) is `0` or `1`.
-2. Boolean and monotone cells form a thermometer with zero-count `d`.
-3. A thermometer-weighted accumulator telescopes to `U d`.
-4. The multiplexer `σ + t · (x + σ)` selects `σ` or `x`.
-5. The chain cells compute `chainValue`; `BLAKE2S` operands give `chainInput` and absorb inputs.
-6. The absorb states compute `rootValue`.
-7. Packing the `V` links recovers message bytes, and `digit m i` is a message byte.
-8. The `gpow` product check recovers the two checksum digits.
+1. `E` has characteristic two.
+2. Chains: consecutive `BLAKE2S` outputs from position `e` compute `chainValue` (`chain_from`);
+   `BLAKE2S` operands give `chainInput` and absorb inputs.
+3. The absorb states compute `rootValue`.
+4. Bytes: packing the tie words recovers message bytes, `digit m i` is a message byte, and the
+   loader's cells (`inputWord_*`, including the zero padding `inputWord_pad_zero`).
+5. The checksum identity `Σ_{k<32} E k + 256 · E 32 + E 33 = 8160` recovers the two checksum
+   digits (`checksum_digits`), and the true digits satisfy it (`checksum_honest_sum`).
 -/
 
 namespace OptimalOTS.LeanIsaBaseline.Machine
@@ -32,234 +33,64 @@ open LeanerVM.Parameters
 open OptimalOTS.LeanIsa (cellBits cellOfBits cellBits_cellOfBits blake2sQuery hashInput
   inputWord statementBits)
 
-/-! ## 1. Characteristic two and Boolean cells -/
+/-! ## 1. Characteristic two -/
 
 /-- Addition in `E` is limb-wise `XOR`, so every word is its own negative. -/
 theorem add_self_E (a : E) : a + a = 0 := by
-  first
-  | exact CharTwo.add_self_eq_zero a
-  | exact E.ext fun i => by rw [limb_add, limb_zero]; exact BF64.add_self _
+  exact CharTwo.add_self_eq_zero a
 
 /-- Addition in `K` is `XOR`. -/
 theorem add_self_K (a : K) : a + a = 0 := BF64.add_self a
 
-/-- A Boolean cell of a field is `0` or `1`. -/
-theorem eq_zero_or_one_of_mul_self {F : Type*} [Field F] {t : F} (h : t = t * t) :
-    t = 0 ∨ t = 1 := by
-  have h1 : t * (t - 1) = 0 := by rw [mul_sub, mul_one, ← h, sub_self]
-  rcases mul_eq_zero.mp h1 with h2 | h2
-  · exact Or.inl h2
-  · exact Or.inr (sub_eq_zero.mp h2)
-
-/-! ## 2. Thermometers -/
-
-/-- Boolean cells `t 0, …, t (n-1)` with `t j = t j · t (j+1)` are a thermometer: zeros, then
-ones, with `d ≤ n` zeros. -/
-theorem exists_thermo {F : Type*} [Field F] (t : ℕ → F) (n : ℕ)
-    (hb : ∀ j < n, t j = t j * t j) (hm : ∀ j, j + 1 < n → t j = t j * t (j + 1)) :
-    ∃ d ≤ n, ∀ j < n, t j = if d ≤ j then 1 else 0 := by
-  induction n with
-  | zero => exact ⟨0, le_refl 0, fun j hj => absurd hj (Nat.not_lt_zero j)⟩
-  | succ n ih =>
-    obtain ⟨d, hd, ht⟩ := ih (fun j hj => hb j (by omega)) (fun j hj => hm j (by omega))
-    rcases eq_zero_or_one_of_mul_self (hb n (by omega)) with h0 | h1
-    · refine ⟨n + 1, le_refl _, fun j hj => ?_⟩
-      rw [if_neg (show ¬ (n + 1 ≤ j) by omega)]
-      by_cases hjn : j < n
-      · rw [ht j hjn]
-        by_cases hdj : d ≤ j
-        · exfalso
-          have hprev : t (n - 1) = 1 := by
-            rw [ht (n - 1) (by omega), if_pos (show d ≤ n - 1 by omega)]
-          have hm' := hm (n - 1) (by omega)
-          rw [show n - 1 + 1 = n by omega, hprev, h0, mul_zero] at hm'
-          exact one_ne_zero hm'
-        · rw [if_neg hdj]
-      · rw [show j = n by omega]
-        exact h0
-    · refine ⟨d, by omega, fun j hj => ?_⟩
-      by_cases hjn : j < n
-      · exact ht j hjn
-      · rw [show j = n by omega, if_pos hd]
-        exact h1
-
-/-- `exists_thermo` with the monotonicity constraint indexed as in the program: the constraint
-of step `j ≥ 1` reads `t (j-1) = t (j-1) · t j`. -/
-theorem exists_thermo_pred {F : Type*} [Field F] (t : ℕ → F) (n : ℕ)
-    (hb : ∀ j < n, t j = t j * t j)
-    (hm : ∀ j, 1 ≤ j → j < n → t (j - 1) = t (j - 1) * t j) :
-    ∃ d ≤ n, ∀ j < n, t j = if d ≤ j then 1 else 0 :=
-  exists_thermo t n hb (fun j hj => by
-    have h := hm (j + 1) (by omega) hj
-    rwa [Nat.add_sub_cancel] at h)
-
-/-- The honest thermometer satisfies the Boolean constraint. -/
-theorem thermo_idem {F : Type*} [Field F] (d j : ℕ) :
-    (if d ≤ j then (1 : F) else 0) =
-      (if d ≤ j then (1 : F) else 0) * (if d ≤ j then (1 : F) else 0) := by
-  by_cases h : d ≤ j
-  · rw [if_pos h, mul_one]
-  · rw [if_neg h, mul_zero]
-
-/-- The honest thermometer satisfies the monotonicity constraint. -/
-theorem thermo_mono {F : Type*} [Field F] (d j : ℕ) :
-    (if d ≤ j then (1 : F) else 0) =
-      (if d ≤ j then (1 : F) else 0) * (if d ≤ j + 1 then (1 : F) else 0) := by
-  by_cases h : d ≤ j
-  · rw [if_pos h, if_pos (show d ≤ j + 1 by omega), mul_one]
-  · rw [if_neg h, zero_mul]
-
-/-! ## 3. Telescoping links -/
-
-/-- The accumulator invariant: before `d` it still holds the base `U n`, after `d` it holds
-`U n + U d + U k`. -/
-theorem telescope_inv {F : Type*} [Field F] (h2 : ∀ a : F, a + a = 0) (U acc t : ℕ → F)
-    (d n : ℕ) (ht : ∀ j < n, t j = if d ≤ j then 1 else 0) (h0 : acc 0 = U n)
-    (hs : ∀ j < n, acc (j + 1) = acc j + t j * (U j + U (j + 1))) :
-    ∀ k ≤ n, acc k = if k ≤ d then U n else U n + U d + U k := by
-  intro k
-  induction k with
-  | zero =>
-    intro _
-    rw [if_pos (Nat.zero_le d)]
-    exact h0
-  | succ k ih =>
-    intro hk
-    rw [hs k (by omega), ih (by omega), ht k (by omega)]
-    by_cases hkd : k + 1 ≤ d
-    · rw [if_pos (show k ≤ d by omega), if_neg (show ¬ d ≤ k by omega), if_pos hkd, zero_mul,
-        add_zero]
-    · by_cases hkd' : k ≤ d
-      · have hdk : d = k := by omega
-        rw [if_pos hkd', if_pos (show d ≤ k by omega), if_neg hkd, one_mul, hdk]
-        ring
-      · rw [if_neg hkd', if_pos (show d ≤ k by omega), if_neg hkd, one_mul]
-        linear_combination h2 (U k)
-
-/-- Telescoping in characteristic two: an accumulator started at `U n` and advanced by
-`t j · (U j + U (j+1))` along a thermometer with `d ≤ n` zeros ends at `U d`. -/
-theorem telescope {F : Type*} [Field F] (h2 : ∀ a : F, a + a = 0) (U acc t : ℕ → F)
-    (d n : ℕ) (hd : d ≤ n) (ht : ∀ j < n, t j = if d ≤ j then 1 else 0) (h0 : acc 0 = U n)
-    (hs : ∀ j < n, acc (j + 1) = acc j + t j * (U j + U (j + 1))) :
-    acc n = U d := by
-  rw [telescope_inv h2 U acc t d n ht h0 hs n (le_refl n)]
-  by_cases hnd : n ≤ d
-  · rw [if_pos hnd, show n = d by omega]
-  · rw [if_neg hnd]
-    linear_combination h2 (U n)
-
-/-- `telescope` as a closed sum. -/
-theorem telescope_sum {F : Type*} [Field F] (h2 : ∀ a : F, a + a = 0) (U t : ℕ → F) (d n : ℕ)
-    (hd : d ≤ n) (ht : ∀ j < n, t j = if d ≤ j then 1 else 0) :
-    U n + ∑ j ∈ Finset.range n, t j * (U j + U (j + 1)) = U d :=
-  telescope h2 U (fun k => U n + ∑ j ∈ Finset.range k, t j * (U j + U (j + 1))) t d n hd ht
-    (by simp only [Finset.sum_range_zero, add_zero])
-    (fun j _ => by simp only [Finset.sum_range_succ, add_assoc])
-
-/-! ## 4. The multiplexer -/
-
-/-- `σ + t · (x + σ)` with a thermometer bit is `x` past the threshold and `σ` before it. The
-chain step `j + 1` input and the endpoint (`j = 254`) are both this. -/
-theorem mux_step {F : Type*} [Field F] (h2 : ∀ a : F, a + a = 0) (σ x : F) (d j : ℕ) :
-    σ + (if d ≤ j then (1 : F) else 0) * (x + σ) = if d ≤ j then x else σ := by
-  by_cases h : d ≤ j
-  · rw [if_pos h, if_pos h, one_mul]
-    linear_combination h2 σ
-  · rw [if_neg h, if_neg h, zero_mul, add_zero]
-
-/-- The hash input of chain step `j + 1`: `σ` while `j + 1 ≤ d`, the previous output after. -/
-theorem mux_in {F : Type*} [Field F] (h2 : ∀ a : F, a + a = 0) (σ x : F) (d j : ℕ) :
-    σ + (if d ≤ j then (1 : F) else 0) * (x + σ) = if j + 1 ≤ d then σ else x := by
-  rw [mux_step h2]
-  by_cases hdj : d ≤ j
-  · rw [if_pos hdj, if_neg (show ¬ (j + 1 ≤ d) by omega)]
-  · rw [if_neg hdj, if_pos (show j + 1 ≤ d by omega)]
-
-/-! ## 5. Chains -/
+/-! ## 2. Chains -/
 
 theorem chainValue_zero' (f : HashTable) (i j : ℕ) (x : Word) : chainValue f i j 0 x = x := by
-  first
-  | rfl
-  | simp only [chainValue]
+  rfl
 
 /-- One more chain step, appended at the end. -/
 theorem chainValue_succ' (f : HashTable) (i j n : ℕ) (x : Word) :
     chainValue f i j (n + 1) x =
       (f ⟨896, chainInput i (j + n) (chainValue f i j n x)⟩).extractLsb' 0 128 := by
   rw [← chainValue_add f i j n 1 x]
-  all_goals first
-    | rfl
-    | simp only [chainValue]
+  all_goals rfl
 
-/-- Soundness of one chain of length `n + 1` (the program uses `n = 254`). The thermometer
-`t` has `d` zeros; `inp j` is the multiplexed hash input of step `j` (`inp 0 = σ`, since the
-program reads `t (-1)` from a zero cell); `x (j+1)` is the low output cell of step `j`; `e` is
-the endpoint multiplexer. Then `e` holds `chainValue f i d (n + 1 - d) σ`. -/
-theorem chain_sound (f : HashTable) (i n d : ℕ) (hd : d ≤ n + 1) (σ e : E) (t x inp : ℕ → E)
-    (ht : ∀ j < n + 1, t j = if d ≤ j then 1 else 0)
-    (hin0 : inp 0 = σ)
-    (hin : ∀ j < n, inp (j + 1) = σ + t j * (x (j + 1) + σ))
-    (hx : ∀ j < n + 1, cellBits (x (j + 1)) =
-      (f ⟨896, chainInput i j (cellBits (inp j))⟩).extractLsb' 0 128)
-    (he : e = σ + t n * (x (n + 1) + σ)) :
-    cellBits e = chainValue f i d (n + 1 - d) (cellBits σ) := by
-  have h2 : ∀ a : E, a + a = 0 := add_self_E
-  have hinp : ∀ j ≤ n, inp j = if j ≤ d then σ else x j := by
-    intro j hj
-    cases j with
-    | zero =>
-      rw [if_pos (Nat.zero_le d)]
-      exact hin0
-    | succ j =>
-      rw [hin j (by omega), ht j (by omega), mux_in h2]
-  have key : ∀ k, d + k ≤ n →
-      cellBits (x (d + k + 1)) = chainValue f i d (k + 1) (cellBits σ) := by
-    intro k
-    induction k with
-    | zero =>
-      intro hk
-      rw [hx (d + 0) (by omega), chainValue_succ', hinp (d + 0) (by omega),
-        if_pos (show d + 0 ≤ d by omega), chainValue_zero']
-    | succ k ih =>
-      intro hk
-      have hprev := ih (by omega)
-      rw [Nat.add_assoc d k 1] at hprev
-      rw [hx (d + (k + 1)) (by omega), chainValue_succ', hinp (d + (k + 1)) (by omega),
-        if_neg (show ¬ (d + (k + 1) ≤ d) by omega), hprev]
-  rw [he, ht n (by omega), mux_step h2]
-  by_cases hdn : d ≤ n
-  · rw [if_pos hdn]
-    have hk := key (n - d) (by omega)
-    rw [show d + (n - d) + 1 = n + 1 by omega, show n - d + 1 = n + 1 - d by omega] at hk
-    exact hk
-  · rw [if_neg hdn, show n + 1 - d = 0 by omega, chainValue_zero']
-
-/-- `chain_sound` at the program's length, 255 positions. -/
-theorem chain_sound_255 (f : HashTable) (i d : ℕ) (hd : d ≤ 255) (σ e : E) (t x inp : ℕ → E)
-    (ht : ∀ j < 255, t j = if d ≤ j then 1 else 0)
-    (hin0 : inp 0 = σ)
-    (hin : ∀ j < 254, inp (j + 1) = σ + t j * (x (j + 1) + σ))
-    (hx : ∀ j < 255, cellBits (x (j + 1)) =
-      (f ⟨896, chainInput i j (cellBits (inp j))⟩).extractLsb' 0 128)
-    (he : e = σ + t 254 * (x 255 + σ)) :
-    cellBits e = chainValue f i d (255 - d) (cellBits σ) :=
-  chain_sound f i 254 d hd σ e t x inp ht hin0 hin hx he
+/-- A chain entered at position `e`: step `e` hashes `σ` (when `e < 255`), steps
+`j ∈ (e, 254]` hash the previous output, and for `e = 255` the endpoint is `σ` itself. Then the
+endpoint `x 255` is `chainValue f i e (255 - e) σ`. -/
+theorem chain_from (f : HashTable) (i e : ℕ) (he : e ≤ 255) (σ : Word) (x : ℕ → Word)
+    (hleaf : e < 255 → x (e + 1) = (f ⟨896, chainInput i e σ⟩).extractLsb' 0 128)
+    (hbody : ∀ j, e < j → j ≤ 254 →
+      x (j + 1) = (f ⟨896, chainInput i j (x j)⟩).extractLsb' 0 128)
+    (h255 : e = 255 → x 255 = σ) :
+    x 255 = chainValue f i e (255 - e) σ := by
+  rcases Nat.lt_or_ge e 255 with hlt | hge
+  · have key : ∀ n, e + n ≤ 254 → x (e + n + 1) = chainValue f i e (n + 1) σ := by
+      intro n
+      induction n with
+      | zero =>
+        intro _
+        rw [chainValue_succ', chainValue_zero', Nat.add_zero]
+        exact hleaf hlt
+      | succ n ih =>
+        intro hn
+        rw [chainValue_succ', ← ih (by omega), show e + (n + 1) = e + n + 1 by omega]
+        exact hbody (e + n + 1) (by omega) (by omega)
+    have h := key (254 - e) (by omega)
+    rwa [show e + (254 - e) + 1 = 255 by omega, show 254 - e + 1 = 255 - e by omega] at h
+  · obtain rfl : e = 255 := by omega
+    rw [h255 rfl, Nat.sub_self, chainValue_zero']
 
 /-! ### `BLAKE2S` operands as scheme queries -/
 
 theorem zero_append_zero_128 : (0 : BitVec 128) ++ (0 : BitVec 128) = (0 : BitVec 256) := by
-  first
-  | exact BitVec.zero_append_zero
-  | decide
-  | rfl
+  exact BitVec.zero_append_zero
 
+set_option exponentiation.threshold 512 in
 theorem zero_append_three (y : BitVec 128) :
     (0 : BitVec 128) ++ (0 : BitVec 128) ++ (0 : BitVec 128) ++ y = y.setWidth 512 := by
   apply BitVec.eq_of_toNat_eq
   have h0 : (0 : BitVec 128).toNat = 0 := by
-    first
-    | rfl
-    | simp
+    rfl
   have hy := BitVec.toNat_lt_twoPow_of_le (by decide : 128 ≤ 512) (x := y)
   rw [BitVec.toNat_setWidth]
   simp only [BitVec.toNat_append, h0, Nat.zero_shiftLeft, Nat.zero_or]
@@ -320,14 +151,12 @@ theorem blake2sQuery_absorb (r : ℕ) (x z1 z2 z3 cv0 cv1 md : E)
         (BitVec.ofNat 128 (2 + r)) :=
   blake2sQuery_absorb_gen r ![x, z1, z2, z3] cv0 cv1 md h1 h2 h3 hmd
 
-/-! ## 6. The root -/
+/-! ## 3. The root -/
 
 theorem hi_append_lo (a : BitVec 256) : a.extractLsb' 128 128 ++ a.extractLsb' 0 128 = a := by
-  first
-  | (have h := BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (x := a) (start₁ := 0)
-        (len₁ := 128) (start₂ := 128) (len₂ := 128) rfl
-     exact h.trans BitVec.extractLsb'_eq_self)
-  | simp [BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (start₁ := 0) (len₁ := 128) rfl]
+  have h := BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (x := a) (start₁ := 0)
+    (len₁ := 128) (start₂ := 128) (len₂ := 128) rfl
+  exact h.trans BitVec.extractLsb'_eq_self
 
 /-- The committed output pair of a `BLAKE2S` is the whole answer, high cell first. -/
 theorem out_pair (lo hi : E) (ans : BitVec 256) (hlo : cellBits lo = ans.extractLsb' 0 128)
@@ -343,9 +172,7 @@ theorem rootValueFold_ofFn (f : HashTable) (n : ℕ) : ∀ (w : ℕ → Word) (c
   induction n with
   | zero =>
     intro w c _
-    first
-    | rfl
-    | simp only [List.ofFn_zero, rootValueFold]
+    rfl
   | succ n ih =>
     intro w c hc
     have e0 : f ⟨896, hashInput (c 0) ((w 0).setWidth 512) (BitVec.ofNat 128 (2 + n))⟩ = c 1 := by
@@ -399,7 +226,7 @@ theorem root_sound (f : HashTable) (xs : Fin 34 → Word) (e lo hi : ℕ → E)
     rw [hxs', hfold, BitVec.extractLsb'_append_eq_right]
   exact key.symm
 
-/-! ## 7. Bytes -/
+/-! ## 4. Bytes and the loader -/
 
 /-- `XOR` with a block above the low `n` bits is addition. -/
 theorem xor_shiftLeft_eq_add {N a n : ℕ} (hN : N < 2 ^ n) : N ^^^ (a <<< n) = N + 2 ^ n * a := by
@@ -422,28 +249,18 @@ theorem cellOfBits_add (a b : BitVec 128) :
     cellOfBits a + cellOfBits b = cellOfBits (a ^^^ b) := by
   unfold cellOfBits
   rw [add_limbs, BitVec.extractLsb'_xor, BitVec.extractLsb'_xor]
-  first
-  | rfl
-  | (congr 1 <;> first | rfl | exact add_zero _)
+  rfl
 
 theorem cellOfBits_zero : cellOfBits 0 = 0 := by
   have h := cellOfBits_add 0 0
   rw [add_self_E, BitVec.xor_self] at h
   exact h.symm
 
-/-- The `WV` constants are sums of two `V` words. -/
-theorem cellOfBits_shift_xor (a b s : ℕ) :
-    cellOfBits (BitVec.ofNat 128 ((a ^^^ b) <<< s)) =
-      cellOfBits (BitVec.ofNat 128 (a <<< s)) + cellOfBits (BitVec.ofNat 128 (b <<< s)) := by
-  rw [cellOfBits_add, ← BitVec.ofNat_xor, Nat.shiftLeft_xor_distrib]
-
 theorem pack_lt (d : ℕ → ℕ) (k : ℕ) (hd : ∀ p < k, d p < 256) :
     ∑ p ∈ Finset.range k, 256 ^ p * d p < 256 ^ k := by
   induction k with
   | zero =>
-    first
-    | norm_num
-    | simp
+    norm_num
   | succ k ih =>
     rw [Finset.sum_range_succ]
     have hk : d k ≤ 255 := by
@@ -482,9 +299,7 @@ theorem pack_div (d : ℕ → ℕ) (p : ℕ) : ∀ k, (∀ q < k, d q < 256) →
     rw [Finset.sum_range_succ]
     by_cases hlt : p < k
     · have hpos : 0 < 256 ^ p := by
-        first
-        | exact pow_pos (by norm_num) p
-        | positivity
+        exact pow_pos (by norm_num) p
       have e : 256 ^ k = 256 ^ p * 256 * 256 ^ (k - p - 1) := by
         rw [← pow_succ, ← pow_add, show p + 1 + (k - p - 1) = k by omega]
       have hsplit : 256 ^ k * d k = 256 ^ p * (256 * (256 ^ (k - p - 1) * d k)) := by
@@ -494,9 +309,7 @@ theorem pack_div (d : ℕ → ℕ) (p : ℕ) : ∀ k, (∀ q < k, d q < 256) →
       exact ih (fun q hq => hd q (by omega)) hlt
     · have hpk' : p = k := by omega
       have hpos : 0 < 256 ^ k := by
-        first
-        | exact pow_pos (by norm_num) k
-        | positivity
+        exact pow_pos (by norm_num) k
       rw [hpk', Nat.add_mul_div_left _ _ hpos,
         Nat.div_eq_of_lt (pack_lt d k (fun q hq => hd q (by omega))), Nat.zero_add,
         Nat.mod_eq_of_lt (hd k (by omega))]
@@ -543,17 +356,13 @@ theorem extract_lo_toNat {n : ℕ} (m : BitVec n) :
     (m.extractLsb' 0 128).toNat = m.toNat % 256 ^ 16 := by
   have e : (2 : ℕ) ^ 128 = 256 ^ 16 := by norm_num
   rw [BitVec.extractLsb'_toNat, Nat.shiftRight_zero]
-  first
-  | rw [e]
-  | norm_num
+  rw [e]
 
 theorem extract_hi_toNat {n : ℕ} (m : BitVec n) :
     (m.extractLsb' 128 128).toNat = m.toNat / 256 ^ 16 % 256 ^ 16 := by
   have e : (2 : ℕ) ^ 128 = 256 ^ 16 := by norm_num
   rw [BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
-  first
-  | rw [e]
-  | norm_num
+  rw [e]
 
 theorem byte_lo (n p : ℕ) (hp : p < 16) : n % 256 ^ 16 / 256 ^ p % 256 = n / 256 ^ p % 256 := by
   have e : (256 : ℕ) ^ 16 = 256 ^ p * (256 * 256 ^ (15 - p)) := by
@@ -582,10 +391,8 @@ theorem take_drop_toBits {n : ℕ} (x : BitVec n) (s w : ℕ) (h : s + w ≤ n) 
     have hiw : i < w := by
       rw [length_bits] at h₂
       exact h₂
-    first
-    | (simp only [List.getElem_take, List.getElem_drop, toBits, List.getElem_ofFn,
-        BitVec.getLsbD_extractLsb', decide_eq_true hiw, Bool.true_and]; done)
-    | simp [toBits, hiw]
+    simp only [List.getElem_take, List.getElem_drop, toBits, List.getElem_ofFn,
+      BitVec.getLsbD_extractLsb', decide_eq_true hiw, Bool.true_and]
 
 /-- The loader's cell 1 holds message bits `0 … 127`. -/
 theorem inputWord_one (pk : PublicKey) (m : Message) (σ : List Bool) :
@@ -617,7 +424,6 @@ theorem inputWord_two (pk : PublicKey) (m : Message) (σ : List Bool) :
     omega
   have hm2 : 128 ≤ ((toBits m).drop 128).length := by
     rw [List.length_drop, hm]
-    all_goals omega
   have hslice : ((toBits m).drop 128).take 128 = toBits (m.extractLsb' 128 128) :=
     take_drop_toBits m 128 128 (by show 128 + 128 ≤ 256; omega)
   have h : ((statementBits pk m σ).drop (2 * 128)).take 128 =
@@ -630,6 +436,94 @@ theorem inputWord_two (pk : PublicKey) (m : Message) (σ : List Bool) :
     exact hslice
   unfold inputWord
   rw [h, ofBits_bits]
+
+theorem cellBits_zero_E : cellBits (0 : E) = 0 := by
+  rw [← cellOfBits_zero, cellBits_cellOfBits]
+
+/-- The loader's cell 0 holds the public key. -/
+theorem inputWord_pk (pk : PublicKey) (msg : Message) (σ : List Bool) :
+    inputWord pk msg σ 0 = cellOfBits pk := by
+  have h : ((statementBits pk msg σ).drop (0 * 128)).take 128 = toBits pk := by
+    unfold statementBits
+    rw [Nat.zero_mul, List.drop_zero, List.append_assoc, List.append_assoc]
+    exact List.take_left' (length_bits pk)
+  unfold inputWord
+  rw [h]
+  exact congrArg cellOfBits (ofBits_bits pk)
+
+/-- The loader's cell 3 holds the capped signature length. -/
+theorem inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool) :
+    inputWord pk msg σ 3 =
+      cellOfBits (BitVec.ofNat 128 (min σ.length (maxSignatureBits + 1))) := by
+  have hpre : (toBits pk ++ toBits msg).length = 3 * 128 := by
+    rw [List.length_append, length_bits, length_bits]
+    all_goals rfl
+  have h : ((statementBits pk msg σ).drop (3 * 128)).take 128 =
+      toBits (BitVec.ofNat 128 (min σ.length (maxSignatureBits + 1))) := by
+    unfold statementBits
+    rw [List.append_assoc, List.drop_left' hpre]
+    exact List.take_left' (length_bits _)
+  unfold inputWord
+  rw [h, ofBits_bits]
+
+/-- For a signature of the admitted length, cell `4 + i` holds the `i`-th revealed word. -/
+theorem inputWord_sigDecode (pk : PublicKey) (msg : Message) (σ : List Bool)
+    (hlen : σ.length = 4352) (i : Fin 34) :
+    inputWord pk msg σ (4 + i.val) = cellOfBits (decode σ i) := by
+  have hpre : (toBits pk ++ toBits msg ++
+      toBits (BitVec.ofNat 128 (min σ.length (maxSignatureBits + 1)))).length = 512 := by
+    rw [List.length_append, List.length_append, length_bits, length_bits, length_bits]
+    all_goals rfl
+  have htake : σ.take maxSignatureBits = σ :=
+    List.take_of_length_le (by rw [hlen]; unfold maxSignatureBits; omega)
+  unfold inputWord statementBits
+  rw [show (4 + i.val) * 128 = 512 + 128 * i.val by omega, ← List.drop_drop, List.drop_left' hpre,
+    htake]
+  rfl
+
+/-- The length cell pins the admitted length: `4352 < 5505`, so the capped length is exact. -/
+theorem length_of_inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool)
+    (h : inputWord pk msg σ 3 = cellOfBits (BitVec.ofNat 128 4352)) : σ.length = 4352 := by
+  rw [inputWord_len] at h
+  have hb := congrArg cellBits h
+  rw [cellBits_cellOfBits, cellBits_cellOfBits] at hb
+  have hn := congrArg BitVec.toNat hb
+  rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat] at hn
+  unfold maxSignatureBits at hn
+  have h1 : min σ.length (5504 + 1) < 2 ^ 128 := by
+    have : min σ.length (5504 + 1) ≤ 5505 := Nat.min_le_right _ _
+    have h2 : (5505 : ℕ) < 2 ^ 128 := by norm_num
+    omega
+  have h3 : (4352 : ℕ) < 2 ^ 128 := by norm_num
+  rw [Nat.mod_eq_of_lt h1, Nat.mod_eq_of_lt h3] at hn
+  omega
+
+/-- With `|σ| = 4352` the statement is `4864 = 38 · 128` bits, so cells `38 … 46` are zero. -/
+theorem inputWord_pad_zero (pk : PublicKey) (m : Message) (σ : List Bool)
+    (hlen : σ.length = 4352) {i : ℕ} (h38 : 38 ≤ i) (_h47 : i < 47) :
+    inputWord pk m σ i = 0 := by
+  have hl : (statementBits pk m σ).length ≤ i * 128 := by
+    unfold statementBits
+    simp only [List.length_append, length_bits, List.length_take, hlen]
+    unfold maxSignatureBits pkBits msgBits
+    omega
+  unfold inputWord
+  rw [List.drop_eq_nil_of_le hl, List.take_nil]
+  exact cellOfBits_zero
+
+/-- The tie of one half: chain `b0 + i` contributes its digit at in-cell byte `15 - i`, so the
+half's field sum is the packed word of the bytes `b ↦ D (b0 + 15 - b)`. -/
+theorem tie_sum_half (D : ℕ → ℕ) (b0 : ℕ) (hD : ∀ i < 16, D (b0 + i) < 256) :
+    ∑ i ∈ Finset.range 16, cellOfBits (BitVec.ofNat 128 (D (b0 + i) <<< (8 * (15 - i)))) =
+      cellOfBits (BitVec.ofNat 128 (∑ b ∈ Finset.range 16, 256 ^ b * D (b0 + 15 - b))) := by
+  refine (Finset.sum_range_reflect _ 16).symm.trans ((Finset.sum_congr rfl ?_).trans
+    (pack_sum_eq (fun b => D (b0 + 15 - b)) 16 (fun b hb => by
+      have h := hD (15 - b) (by omega)
+      rwa [show b0 + (15 - b) = b0 + 15 - b by omega] at h)))
+  intro j hj
+  have hj' := Finset.mem_range.mp hj
+  rw [show 16 - 1 - j = 15 - j by omega, show 15 - (15 - j) = j by omega,
+    show b0 + (15 - j) = b0 + 15 - j by omega]
 
 /-- Element `i` of a big-endian digit list. -/
 theorem getElem_digitsOfBaseW (n w : ℕ) : ∀ (len i : ℕ)
@@ -658,9 +552,7 @@ theorem getElem_digitsOfBaseW (n w : ℕ) : ∀ (len i : ℕ)
 /-- The two checksum digits, most significant first. -/
 theorem digitsOfBaseW_two (C : ℕ) :
     Checksum.digitsOfBaseW C 256 2 = [C / 256 % 256, C % 256] := by
-  first
-  | (simp only [Checksum.digitsOfBaseW, pow_one, pow_zero, Nat.div_one]; done)
-  | simp [Checksum.digitsOfBaseW]
+  simp only [Checksum.digitsOfBaseW, pow_one, pow_zero, Nat.div_one]
 
 /-- Message digit `i < 32` is byte `31 - i` of the message (little-endian byte index). -/
 theorem digit_of_lt (m : Message) (i : Fin 34) (hi : i.val < 32) :
@@ -672,10 +564,7 @@ theorem digit_of_lt (m : Message) (i : Fin 34) (hi : i.val < 32) :
     rw [Checksum.digitsOfBaseW_length]
     exact hi
   have h1 : digit m i = (messageDigits m)[i.val]'hlt := by
-    first
-    | exact List.getElem_append_left hlt
-    | (unfold digit digits Checksum.wotsFullDigits
-       exact List.getElem_append_left hlt)
+    exact List.getElem_append_left hlt
   have h2 : (Checksum.digitsOfBaseW m.toNat 256 32)[i.val]'hlt' =
       m.toNat / 256 ^ (31 - i.val) % 256 := by
     rw [getElem_digitsOfBaseW, show 32 - 1 - i.val = 31 - i.val by omega]
@@ -692,7 +581,7 @@ theorem digit_cell2 (m : Message) (i : Fin 34) (h : i.val < 16) :
   rw [digit_of_lt m i (by omega), cell2_byte m (15 - i.val) (by omega),
     show 16 + (15 - i.val) = 31 - i.val by omega]
 
-/-! ## 8. The checksum -/
+/-! ## 5. The checksum -/
 
 theorem sum_map_digitsOfBaseW (f : ℕ → ℕ) (n w : ℕ) : ∀ len,
     ((Checksum.digitsOfBaseW n w len).map f).sum = ∑ j ∈ Finset.range len, f (n / w ^ j % w) := by
@@ -730,10 +619,7 @@ theorem digit_hi_checksum (m : Message) (i : Fin 34) (hi : i.val = 32) :
     omega
   have h1 : digit m i = (Checksum.digitsOfBaseW (Checksum.wotsChecksumValue 256 (messageDigits m))
       256 2)[i.val - (messageDigits m).length]'hlt := by
-    first
-    | exact List.getElem_append_right hle
-    | (unfold digit digits Checksum.wotsFullDigits
-       exact List.getElem_append_right hle)
+    exact List.getElem_append_right hle
   have e : 2 - 1 - (i.val - (messageDigits m).length) = 1 := by
     rw [messageDigits_length]
     omega
@@ -752,97 +638,45 @@ theorem digit_lo_checksum (m : Message) (i : Fin 34) (hi : i.val = 33) :
     omega
   have h1 : digit m i = (Checksum.digitsOfBaseW (Checksum.wotsChecksumValue 256 (messageDigits m))
       256 2)[i.val - (messageDigits m).length]'hlt := by
-    first
-    | exact List.getElem_append_right hle
-    | (unfold digit digits Checksum.wotsFullDigits
-       exact List.getElem_append_right hle)
+    exact List.getElem_append_right hle
   have e : 2 - 1 - (i.val - (messageDigits m).length) = 0 := by
     rw [messageDigits_length]
     omega
   rw [h1, getElem_digitsOfBaseW, e, pow_zero, Nat.div_one]
 
-theorem sum_sub_le (d : ℕ → ℕ) (k : ℕ) : ∑ i ∈ Finset.range k, (255 - d i) ≤ 255 * k := by
-  induction k with
-  | zero =>
-    rw [Finset.sum_range_zero]
-    exact Nat.zero_le _
-  | succ k ih =>
-    rw [Finset.sum_range_succ]
+/-- The checksum plus the message digits is `32 · 255`. -/
+theorem checksum_add_digits (m : Message) (d : ℕ → ℕ)
+    (hd : ∀ k (hk : k < 32), d k = digit m ⟨k, by omega⟩) :
+    Checksum.wotsChecksumValue 256 (messageDigits m) + ∑ k ∈ Finset.range 32, d k = 8160 := by
+  rw [checksum_eq_sum, ← Finset.sum_add_distrib]
+  have h : ∀ k ∈ Finset.range 32, 255 - m.toNat / 256 ^ (31 - k) % 256 + d k = 255 := by
+    intro k hk
+    have hk' := Finset.mem_range.mp hk
+    have h1 : digit m ⟨k, by omega⟩ = m.toNat / 256 ^ (31 - k) % 256 :=
+      digit_of_lt m ⟨k, by omega⟩ hk'
+    have h2 : m.toNat / 256 ^ (31 - k) % 256 < 256 := Nat.mod_lt _ (by norm_num)
+    rw [hd k hk', h1]
     omega
+  rw [Finset.sum_congr rfl h, Finset.sum_const, Finset.card_range, smul_eq_mul]
 
-theorem gpow_mul_gpow (a b : ℕ) : gpow a * gpow b = gpow (a + b) := (pow_add g a b).symm
+/-- The checksum identity recovers the two checksum digits: if the message chains carry the
+message digits, `E 33 ≤ 255` and `Σ_{k<32} E k + 256 · E 32 + E 33 = 8160`, then `E 32` and
+`E 33` are digits 32 and 33. -/
+theorem checksum_digits (m : Message) (D : ℕ → ℕ)
+    (hd : ∀ k (hk : k < 32), D k = digit m ⟨k, by omega⟩) (h33 : D 33 ≤ 255)
+    (hsum : ∑ k ∈ Finset.range 32, D k + 256 * D 32 + D 33 = 8160) :
+    D 32 = digit m ⟨32, by norm_num⟩ ∧ D 33 = digit m ⟨33, by norm_num⟩ := by
+  have hC := checksum_add_digits m D hd
+  rw [digit_hi_checksum m _ rfl, digit_lo_checksum m _ rfl]
+  omega
 
-/-- A product of `ofK (gpow ·)` words is `ofK (gpow ·)` of the summed exponents. -/
-theorem ofK_gpow_prod (d : ℕ → ℕ) (k : ℕ) :
-    ∏ i ∈ Finset.range k, ofK (gpow (d i)) = ofK (gpow (∑ i ∈ Finset.range k, d i)) := by
-  induction k with
-  | zero =>
-    rw [Finset.prod_range_zero, Finset.sum_range_zero]
-    have h1 : ofK (gpow 0) = 1 := by
-      rw [show gpow 0 = 1 from pow_zero g]
-      exact map_one (algebraMap K E)
-    exact h1.symm
-  | succ k ih =>
-    rw [Finset.prod_range_succ, Finset.sum_range_succ, ih, ← ofK_mul]
-    exact congrArg ofK (gpow_mul_gpow _ _)
-
-/-- The checksum product check in `K`: exponents below the group order are recovered, and a
-`(a, b)` pair of base-256 digits is the quotient and remainder. -/
-theorem checksum_of_gpow (C a b : ℕ) (hC : C ≤ 255 * 32) (ha : a ≤ 255) (hb : b ≤ 255)
-    (h : gpow C = gpow (256 * a) * gpow b) : a = C / 256 ∧ b = C % 256 := by
-  have h' : gpow C = gpow (256 * a + b) := h.trans (gpow_mul_gpow _ _)
-  have hbig : (65536 : ℕ) < 2 ^ 64 - 1 := by norm_num
-  have hC' : C ∈ Set.Iio (2 ^ 64 - 1) :=
-    Set.mem_Iio.mpr (lt_of_le_of_lt (by omega : C ≤ 65536) hbig)
-  have hab : 256 * a + b ∈ Set.Iio (2 ^ 64 - 1) :=
-    Set.mem_Iio.mpr (lt_of_le_of_lt (by omega : 256 * a + b ≤ 65536) hbig)
-  have hEq : C = 256 * a + b := gpow_injOn hC' hab h'
-  exact ⟨by omega, by omega⟩
-
-/-- The checksum product check in `E`. -/
-theorem checksum_of_E (C a b : ℕ) (hC : C ≤ 255 * 32) (ha : a ≤ 255) (hb : b ≤ 255)
-    (h : ofK (gpow C) = ofK (gpow (256 * a)) * ofK (gpow b)) : a = C / 256 ∧ b = C % 256 := by
-  rw [← ofK_mul] at h
-  exact checksum_of_gpow C a b hC ha hb (ofK_injective h)
-
-/-- The honest direction: the true checksum digits pass the product check. -/
-theorem checksum_honest (C : ℕ) :
-    ofK (gpow (256 * (C / 256))) * ofK (gpow (C % 256)) = ofK (gpow C) := by
-  rw [← ofK_mul, gpow_mul_gpow, Nat.div_add_mod]
-
-/-- The checksum link: if chain `i < 32` carries message byte `31 - i` and the product check
-holds for `(a, b)`, then `a` and `b` are the scheme's digits 32 and 33. -/
-theorem checksum_link (m : Message) (d : ℕ → ℕ)
-    (hd : ∀ i < 32, d i = m.toNat / 256 ^ (31 - i) % 256) (a b : ℕ) (ha : a ≤ 255)
-    (hb : b ≤ 255) (h : gpow (∑ i ∈ Finset.range 32, (255 - d i)) = gpow (256 * a) * gpow b)
-    (i32 i33 : Fin 34) (h32 : i32.val = 32) (h33 : i33.val = 33) :
-    a = digit m i32 ∧ b = digit m i33 := by
-  have hsum : ∑ i ∈ Finset.range 32, (255 - d i) =
-      Checksum.wotsChecksumValue 256 (messageDigits m) := by
-    rw [checksum_eq_sum]
-    exact Finset.sum_congr rfl (fun i hi => by rw [hd i (Finset.mem_range.mp hi)])
-  obtain ⟨h1, h2⟩ := checksum_of_gpow _ a b (sum_sub_le d 32) ha hb h
-  rw [hsum] at h1 h2
-  rw [digit_hi_checksum m i32 h32, digit_lo_checksum m i33 h33]
-  exact ⟨h1, h2⟩
-
-/-- `checksum_link` for the constraint as the machine checks it, in `E`. -/
-theorem checksum_link_E (m : Message) (d : ℕ → ℕ)
-    (hd : ∀ i < 32, d i = m.toNat / 256 ^ (31 - i) % 256) (a b : ℕ) (ha : a ≤ 255)
-    (hb : b ≤ 255)
-    (h : ofK (gpow (∑ i ∈ Finset.range 32, (255 - d i))) = ofK (gpow (256 * a)) * ofK (gpow b))
-    (i32 i33 : Fin 34) (h32 : i32.val = 32) (h33 : i33.val = 33) :
-    a = digit m i32 ∧ b = digit m i33 := by
-  rw [← ofK_mul] at h
-  exact checksum_link m d hd a b ha hb (ofK_injective h) i32 i33 h32 h33
-
-/-- `checksum_link` with the message chains stated through `digit`. -/
-theorem checksum_link_digit (m : Message) (d : ℕ → ℕ)
-    (hd : ∀ i (hi : i < 32), d i = digit m ⟨i, by omega⟩) (a b : ℕ) (ha : a ≤ 255)
-    (hb : b ≤ 255) (h : gpow (∑ i ∈ Finset.range 32, (255 - d i)) = gpow (256 * a) * gpow b)
-    (i32 i33 : Fin 34) (h32 : i32.val = 32) (h33 : i33.val = 33) :
-    a = digit m i32 ∧ b = digit m i33 :=
-  checksum_link m d (fun i hi => (hd i hi).trans (digit_of_lt m ⟨i, by omega⟩ hi)) a b ha hb h
-    i32 i33 h32 h33
+/-- The honest direction: the true digits satisfy the checksum identity. -/
+theorem checksum_honest_sum (m : Message) (d : ℕ → ℕ)
+    (hd : ∀ k (hk : k < 32), d k = digit m ⟨k, by omega⟩) :
+    ∑ k ∈ Finset.range 32, d k +
+      256 * (Checksum.wotsChecksumValue 256 (messageDigits m) / 256) +
+      Checksum.wotsChecksumValue 256 (messageDigits m) % 256 = 8160 := by
+  have hC := checksum_add_digits m d hd
+  omega
 
 end OptimalOTS.LeanIsaBaseline.Machine

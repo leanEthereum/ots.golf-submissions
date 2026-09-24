@@ -1,8 +1,9 @@
 import Submissions.UpperLeanIsa.Security
 import Submissions.UpperLeanIsa.MachineFaithful
+import Submissions.UpperLeanIsa.MachineCycles
 
-/-! The leanISA baseline: the Winternitz scheme of `Algorithms.lean`, its straight-line bytecode
-(`MachineProgram.lean`) and the six certificate clauses. -/
+/-! The leanISA submission: the Winternitz scheme of `Algorithms.lean`, its straight-line bytecode
+(`MachineProgram.lean`, Rice-tree `JUMP` dispatch) and the six certificate clauses. -/
 
 namespace OptimalOTS.Challenge.UpperLeanIsa
 
@@ -14,8 +15,8 @@ noncomputable def submission : LeanIsa.Submission := Honest.machineSubmission
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`170549` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 170549 where
+`85343` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 85343 where
   admissible := LeanIsaBaseline.admissible
   secure := LeanIsaBaseline.secure
   valid := Machine.valid

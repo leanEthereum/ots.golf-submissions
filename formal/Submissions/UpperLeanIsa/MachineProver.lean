@@ -54,9 +54,6 @@ theorem fixed_seqAnswers (f : HashTable) (q : ℕ → Answers → BitVec 896) (A
   | zero =>
     simp only [seqAnswers, simulateQ_pure]
     congr 1
-    all_goals
-      funext j
-      exact (if_neg (Nat.not_lt_zero j)).symm
   | succ n ih =>
     have hqn : q n (cutAns n A) = q n A := hq n _ (fun k hk => cutAns_of_lt A hk)
     simp only [seqAnswers, simulateQ_bind, simulateQ_pure, ih, pure_bind, fixed_hash]
@@ -361,112 +358,33 @@ theorem length_of_inputWord_three (pk : PublicKey) (msg : Message) (σ : List Bo
   rw [Nat.mod_eq_of_lt h1, Nat.mod_eq_of_lt h3] at hn
   omega
 
-/-! ## Honest cell values of one chain
 
-`d` is the digit, `σ` the revealed word, `A` the chain's answer table. Each value is written
-so that the instruction that checks it holds by definition or by a two-case split. -/
+/-- Above the statement (`38 · 128 = 4864` bits for an admitted signature) the loader pins zero:
+cells `38 … 46`, in particular the zero pair `(zCell, zCell + 1)`. -/
+theorem inputWord_of_ge_38 (pk : PublicKey) (msg : Message) (σ : List Bool)
+    (hlen : σ.length = 4352) {i : ℕ} (hi : 38 ≤ i) : inputWord pk msg σ i = 0 := by
+  have hl : (statementBits pk msg σ).length = 4864 := by
+    unfold statementBits
+    rw [List.length_append, List.length_append, List.length_append, length_bits, length_bits,
+      length_bits, List.length_take, hlen]
+    unfold maxSignatureBits pkBits msgBits
+    omega
+  have hd : (statementBits pk msg σ).drop (i * 128) = [] :=
+    List.drop_eq_nil_of_le (by rw [hl]; omega)
+  unfold inputWord
+  rw [hd, List.take_nil]
+  exact Machine.cellOfBits_zero
 
-/-- Thermometer bit `t_j = [d ≤ j]`. -/
-def thermo (d j : ℕ) : E := if d ≤ j then 1 else 0
-
-/-- The previous thermometer bit `t_{j-1}`, with `t_{-1} = 0`. -/
-def thermoPrev (d j : ℕ) : E := if d < j then 1 else 0
-
-theorem thermoPrev_zero (d : ℕ) : thermoPrev d 0 = 0 := if_neg (Nat.not_lt_zero d)
-
-theorem thermoPrev_succ (d j : ℕ) : thermoPrev d (j + 1) = thermo d j := by
-  unfold thermoPrev thermo
-  by_cases h : d ≤ j
-  · rw [if_pos h, if_pos (show d < j + 1 by omega)]
-  · rw [if_neg h, if_neg (show ¬ d < j + 1 by omega)]
-
-theorem thermo_mul_self (d j : ℕ) : thermo d j = thermo d j * thermo d j := by
-  unfold thermo
-  by_cases h : d ≤ j
-  · rw [if_pos h, one_mul]
-  · rw [if_neg h, zero_mul]
-
-theorem thermoPrev_mul_thermo (d j : ℕ) : thermoPrev d j = thermoPrev d j * thermo d j := by
-  unfold thermoPrev thermo
-  by_cases h : d < j
-  · rw [if_pos h, if_pos (show d ≤ j by omega), one_mul]
-  · rw [if_neg h, zero_mul]
+/-! ## Cell arithmetic -/
 
 /-- The value `x_j` as a cell. -/
 def xE (σ : Word) (A : Answers) (j : ℕ) : E := cellOfBits (xOf σ A j)
-
-/-- `s_j = x_j + σ`. -/
-def sE (σ : Word) (A : Answers) (j : ℕ) : E := xE σ A j + cellOfBits σ
-
-/-- `u_j = t_{j-1} · s_j`. -/
-def uE (d : ℕ) (σ : Word) (A : Answers) (j : ℕ) : E := thermoPrev d j * sE σ A j
-
-/-- `in_j = σ + u_j`. -/
-def inE (d : ℕ) (σ : Word) (A : Answers) (j : ℕ) : E := cellOfBits σ + uE d σ A j
 
 /-- The low output cell of step `j`, which is `x_{j+1}`. -/
 def lowE (A : Answers) (j : ℕ) : E := cellOfBits ((A j).extractLsb' 0 128)
 
 /-- The high output cell of step `j`. -/
 def highE (A : Answers) (j : ℕ) : E := cellOfBits ((A j).extractLsb' 128 128)
-
-/-- A link product `t_j · w_j`. -/
-def prodE (d : ℕ) (w : ℕ → E) (j : ℕ) : E := thermo d j * w j
-
-/-- A link accumulator: `a_0` then `a_{j+1} = a_j + t_j · w_j`. -/
-def accE (d : ℕ) (a0 : E) (w : ℕ → E) : ℕ → E
-  | 0 => a0
-  | j + 1 => accE d a0 w j + prodE d w j
-
-theorem accE_zero (d : ℕ) (a0 : E) (w : ℕ → E) : accE d a0 w 0 = a0 := rfl
-
-theorem accE_succ (d : ℕ) (a0 : E) (w : ℕ → E) (j : ℕ) :
-    accE d a0 w (j + 1) = accE d a0 w j + prodE d w j := rfl
-
-/-- Telescoping in characteristic two: an accumulator of thermometer-weighted differences
-`w_j = V_j + V_{j+1}` has added `V_d + V_n` to its base once `n` has passed the digit. -/
-theorem accE_telescope (d : ℕ) (a0 : E) (V w : ℕ → E) (hw : ∀ j, w j = V j + V (j + 1)) :
-    ∀ n, accE d a0 w n = a0 + (if d ≤ n then V d + V n else 0)
-  | 0 => by
-    rw [accE_zero]
-    by_cases h : d ≤ 0
-    · rw [if_pos h, show d = 0 by omega, CharTwo.add_self_eq_zero, add_zero]
-    · rw [if_neg h, add_zero]
-  | n + 1 => by
-    rw [accE_succ, accE_telescope d a0 V w hw n]
-    unfold prodE thermo
-    rw [hw n]
-    by_cases h : d ≤ n
-    · rw [if_pos h, if_pos h, if_pos (show d ≤ n + 1 by omega), one_mul]
-      linear_combination (CharTwo.add_self_eq_zero (V n))
-    · rw [if_neg h, if_neg h, zero_mul, add_zero, add_zero]
-      by_cases h' : d = n + 1
-      · rw [if_pos (show d ≤ n + 1 by omega), h', CharTwo.add_self_eq_zero, add_zero]
-      · rw [if_neg (show ¬ d ≤ n + 1 by omega), add_zero]
-
-/-- With base `V_n` and a digit `d ≤ n`, the accumulator ends at `V_d`. -/
-theorem accE_telescope_end (d n : ℕ) (V w : ℕ → E) (hw : ∀ j, w j = V j + V (j + 1))
-    (hd : d ≤ n) : accE d (V n) w n = V d := by
-  rw [accE_telescope d (V n) V w hw n, if_pos hd]
-  linear_combination (CharTwo.add_self_eq_zero (V n))
-
-/-- A sequence obeying the accumulator recursion is the accumulator. -/
-theorem eq_accE (d : ℕ) (w : ℕ → E) (a : ℕ → E) (n : ℕ)
-    (hs : ∀ j < n, a (j + 1) = a j + thermo d j * w j) :
-    ∀ j, j ≤ n → a j = accE d (a 0) w j := by
-  intro j
-  induction j with
-  | zero => intro _; rfl
-  | succ j ih =>
-    intro hj
-    rw [hs j (by omega), ih (by omega), accE_succ, prodE]
-
-/-- Endpoint temporaries: `e0 = x_255 + σ`, `e1 = t_254 · e0`, `end = σ + e1`. -/
-def e0E (σ : Word) (A : Answers) : E := xE σ A 255 + cellOfBits σ
-
-def e1E (d : ℕ) (σ : Word) (A : Answers) : E := thermo d 254 * e0E σ A
-
-def endE (d : ℕ) (σ : Word) (A : Answers) : E := cellOfBits σ + e1E d σ A
 
 theorem xE_succ (σ : Word) (A : Answers) (j : ℕ) : xE σ A (j + 1) = lowE A j := rfl
 
@@ -475,24 +393,6 @@ theorem xE_zero (σ : Word) (A : Answers) : xE σ A 0 = cellOfBits σ := rfl
 /-- `σ + (x + σ) = x` in characteristic two. -/
 theorem char2_cancel (a b : E) : a + (b + a) = b := by
   rw [add_comm b a, ← add_assoc, CharTwo.add_self_eq_zero, zero_add]
-
-/-- The mux: the hashed cell is `σ` up to the digit and `x_j` after it. -/
-theorem inE_eq (d : ℕ) (σ : Word) (A : Answers) (j : ℕ) :
-    inE d σ A j = cellOfBits (inW d σ A j) := by
-  unfold inE uE sE inW thermoPrev xE
-  by_cases h : j ≤ d
-  · rw [if_neg (show ¬ d < j by omega), if_pos h, zero_mul, add_zero]
-  · rw [if_pos (show d < j by omega), if_neg h, one_mul, char2_cancel]
-
-/-- The endpoint cell holds `endW`. -/
-theorem endE_eq (d : ℕ) (σ : Word) (A : Answers) : endE d σ A = cellOfBits (endW d σ A) := by
-  unfold endE e1E e0E endW thermo xE
-  by_cases h : d ≤ 254
-  · rw [if_pos h, if_pos h, one_mul, char2_cancel]
-  · rw [if_neg h, if_neg h, zero_mul, add_zero]
-
-
-/-! ## Cell arithmetic -/
 
 theorem isCanonical_cellOfBits (b : BitVec 128) : IsCanonical128 (cellOfBits b) := by
   show (E.ofLimbs (b.extractLsb' 0 64) (b.extractLsb' 64 64) 0).limb 2 = 0
@@ -508,81 +408,6 @@ theorem isCanonical_zero : IsCanonical128 (0 : E) := by
 
 theorem cellOfBits_cellBits {x : E} (hx : IsCanonical128 x) : cellOfBits (cellBits x) = x :=
   eq_of_cellBits_eq (isCanonical_cellOfBits _) hx (cellBits_cellOfBits _)
-
-/-! ## Constants of segment A -/
-
-/-- The constant committed at cell `c < 8192`, laid out as `MachineProgram` sets it. -/
-def hConst (c : ℕ) : E :=
-  if c = 3 then lenV
-  else if c = 50 then oneV
-  else if c = 51 then fpcV
-  else if 64 ≤ c ∧ c < 98 then chainIdV (c - 64)
-  else if 100 ≤ c ∧ c < 134 then rootMdV (c - 100)
-  else if 256 ≤ c ∧ c < 511 then posV (c - 256)
-  else if 1024 ≤ c ∧ c < 5120 then wvV ((c - 1024) / 256) ((c - 1024) % 256)
-  else if 5120 ≤ c ∧ c < 5375 then wuV (c - 5120)
-  else if 5376 ≤ c ∧ c < 5631 then wuHiV (c - 5376)
-  else if 5632 ≤ c ∧ c < 5887 then wuLoV (c - 5632)
-  else if c = 5888 then ubHiV
-  else if c = 5889 then ubLoV
-  else if 5890 ≤ c ∧ c < 5906 then vbV (c - 5890)
-  else 0
-
-/-- The V weights and base of chain `i`. -/
-def avW (i : ℕ) : ℕ → E := wvV (bytePos i)
-
-def avBase (i : ℕ) : E := vbV (bytePos i)
-
-/-- The U weights and base of chain `i`. -/
-def auW (i j : ℕ) : E := if i < 32 then wuV j else if i = 32 then wuHiV j else wuLoV j
-
-def auBase (i : ℕ) : E := if i < 32 then oneV else if i = 32 then ubHiV else ubLoV
-
-/-! ## Link values -/
-
-/-- `V_k` at byte position `p`. -/
-def vV (p k : ℕ) : E := cellOfBits (BitVec.ofNat 128 (k <<< (8 * p)))
-
-theorem wvV_eq (p j : ℕ) : wvV p j = vV p j + vV p (j + 1) :=
-  cellOfBits_shift_xor j (j + 1) (8 * p)
-
-theorem vbV_eq (p : ℕ) : vbV p = vV p 255 := rfl
-
-/-- The exponent of `U_k` on chain `i`. -/
-def uExp (i k : ℕ) : ℕ := if i < 32 then 255 - k else if i = 32 then 256 * k else k
-
-/-- `U_k` on chain `i`. -/
-def uV (i k : ℕ) : E := ofK (gpow (uExp i k))
-
-theorem auW_eq (i j : ℕ) : auW i j = uV i j + uV i (j + 1) := by
-  unfold auW uV uExp
-  by_cases h1 : i < 32
-  · rw [if_pos h1, if_pos h1, if_pos h1]
-    try rfl
-  · by_cases h2 : i = 32
-    · rw [if_neg h1, if_neg h1, if_neg h1, if_pos h2, if_pos h2, if_pos h2]
-      try rfl
-    · rw [if_neg h1, if_neg h1, if_neg h1, if_neg h2, if_neg h2, if_neg h2]
-      try rfl
-
-theorem auBase_eq (i : ℕ) : auBase i = uV i 255 := by
-  unfold auBase uV uExp
-  by_cases h1 : i < 32
-  · rw [if_pos h1, if_pos h1, Nat.sub_self, Machine.gpow_zero, oneV_eq_ofK]
-  · by_cases h2 : i = 32
-    · rw [if_neg h1, if_neg h1, if_pos h2, if_pos h2]
-      try rfl
-    · rw [if_neg h1, if_neg h1, if_neg h2, if_neg h2]
-      try rfl
-
-/-- The honest `D_i` is `V_{d_i}`. -/
-theorem accE_V (d : ℕ) (hd : d ≤ 255) (i : ℕ) : accE d (avBase i) (avW i) 255 = vV (bytePos i) d :=
-  accE_telescope_end d 255 (vV (bytePos i)) (avW i) (fun j => wvV_eq (bytePos i) j) hd
-
-/-- The honest `P_i` is `U_{d_i}`. -/
-theorem accE_U (d : ℕ) (hd : d ≤ 255) (i : ℕ) : accE d (auBase i) (auW i) 255 = uV i d := by
-  rw [auBase_eq]
-  exact accE_telescope_end d 255 (uV i) (auW i) (fun j => auW_eq i j) hd
 
 /-! ## Honest values -/
 
@@ -612,72 +437,60 @@ theorem tabN_fin (CA : Fin 34 → Answers) (i : Fin 34) : tabN CA i.val = CA i :
   unfold tabN
   rw [dif_pos i.isLt]
 
-/-- Honest `D_i` and `P_i`; they depend on the message only. -/
-def dVal (m : Message) (i : ℕ) : E := accE (dig m i) (avBase i) (avW i) 255
+/-- The honest tie accumulator of chain `k < 32`: the byte words `vV (bytePos i) d_i` of the
+chains of `k`'s half up to and including `k` (cells 2 and 1 are the full sums, `accCell 15` and
+`accCell 31`). -/
+def accV (m : Message) (k : ℕ) : E :=
+  ∑ i ∈ Finset.Ico (16 * (k / 16)) (k + 1), vV (bytePos i) (dig m i)
 
-def pVal (m : Message) (i : ℕ) : E := accE (dig m i) (auBase i) (auW i) 255
+/-- The honest checksum-product exponent held by `gCell k`: `Σ_{i ≤ k} (s0 i + d_i + 1)` for
+`k < 32`, and that sum over the 32 message chains plus `256 · d_32` for `k = 32`. -/
+def gExp (m : Message) (k : ℕ) : ℕ :=
+  if k < 32 then ∑ i ∈ Finset.range (k + 1), (s0 i + dig m i + 1)
+  else (∑ i ∈ Finset.range 32, (s0 i + dig m i + 1)) + 256 * dig m 32
 
-/-- The honest value of cell `r` of step `j` of chain `i`. -/
-def stepVal (d : ℕ) (σ : Word) (A : Answers) (i j : ℕ) : ℕ → E
-  | 0 => thermo d j
-  | 1 => sE σ A j
-  | 2 => uE d σ A j
-  | 3 => inE d σ A j
-  | 4 => lowE A j
-  | 5 => highE A j
-  | 6 => prodE d (avW i) j
-  | 7 => accE d (avBase i) (avW i) (j + 1)
-  | 8 => prodE d (auW i) j
-  | _ => accE d (auBase i) (auW i) (j + 1)
+/-- The honest value at offset `o < 160` of chain `k`'s scratch block (§7): the unary and group
+hints selecting leaf `d_k`, all node targets, and the leaf cells. -/
+def scrVal (m : Message) (k o : ℕ) : E :=
+  if o < 64 then
+    (if k = 32 then (if o < 31 - dig m k then oneV else 0)
+     else (if o < dig m k / 4 then oneV else 0))
+  else if o < 128 then
+    (if k = 32 then tgtV (rBase 32 + 7 * (o - 64 + 1)) else tgtV (rBase k + 46 * (o - 64 + 1)))
+  else if o = 128 then (if 2 ≤ dig m k % 4 then oneV else 0)
+  else if o = 129 then (if dig m k % 2 = 1 then oneV else 0)
+  else if o = 130 then tgtV (gBase k (dig m k / 4) + 24)
+  else if o = 131 then tgtV (gBase k (dig m k / 4) + 11 * (2 * (dig m k % 4 / 2) + 1) + 4)
+  else if o = 132 then tgtV (s0 k + dig m k + 1)
+  else if o = 133 then tgtV (s0 k + 255)
+  else if o = 134 then tgtV (gExp m k)
+  else if o = 135 then vV (bytePos k) (dig m k)
+  else if o = 136 then accV m k
+  else tgtV (256 * dig m k)
 
-/-- The honest value at offset `o` of chain `i`'s block. -/
-def chainOffVal (d : ℕ) (σ : Word) (A : Answers) (i o : ℕ) : E :=
-  if o < 2550 then stepVal d σ A i (o / 10) (o % 10)
-  else if o = 2550 then e0E σ A
-  else if o = 2551 then e1E d σ A
-  else if o = 2552 then endE d σ A
-  else 0
+/-- The honest value at `7000 + o`: the root state pairs `S_{t+1}` (low cell at `o = 2t + 2`). -/
+def rootVal (RA : Answers) (o : ℕ) : E :=
+  if o % 2 = 0 then lowE RA (o / 2 - 1) else highE RA (o / 2 - 1)
 
-/-- The honest partial XOR of link half `h`: `Σ_{b ≤ s} D_{linkChain h b}`. -/
-def linkAccV (m : Message) (h : ℕ) : ℕ → E
-  | 0 => dVal m (linkChain h 0)
-  | s + 1 => linkAccV m h s + dVal m (linkChain h (s + 1))
-
-/-- The honest partial checksum product `Π_{i ≤ s} P_i`. -/
-def prodAccV (m : Message) : ℕ → E
-  | 0 => pVal m 0
-  | s + 1 => prodAccV m s * pVal m (s + 1)
-
-/-- The honest link temporary at `96000 + o`. -/
-def tempVal (m : Message) (o : ℕ) : E :=
-  if o < 32 then (if 1 ≤ o % 16 ∧ o % 16 < 15 then linkAccV m (o / 16) (o % 16) else 0)
-  else if 101 ≤ o ∧ o < 132 then prodAccV m (o - 100)
-  else 0
-
-/-- The honest value at `97000 + o`: root states, then the halt cells. -/
-def rootOffVal (RA : Answers) (o : ℕ) : E :=
-  if 2 ≤ o ∧ o < 70 then
-    (if o % 2 = 0 then lowE RA (o / 2 - 1) else highE RA (o / 2 - 1))
-  else if o = 100 then oneV
-  else if o = 101 then fpcV
-  else 0
-
-/-- The honest value at offset `o` of chain `i`. -/
-def chainCellVal (m : Message) (bits : List Bool) (CA : Fin 34 → Answers) (i o : ℕ) : E :=
-  chainOffVal (dig m i) (sigW bits i) (tabN CA i) i o
+/-- The honest value at offset `o < 512` of chain `k`'s word block: `x_{k,j}` at `o = 2j` (the
+hashed word `inW`: `σ` up to the digit, the chain after it), `h_{k,j-1}` at `o = 2j + 1`. -/
+def xVal (m : Message) (bits : List Bool) (CA : Fin 34 → Answers) (k o : ℕ) : E :=
+  if o % 2 = 0 then cellOfBits (inW (dig m k) (sigW bits k) (tabN CA k) (o / 2))
+  else highE (tabN CA k) (o / 2 - 1)
 
 /-- The honest value of every cell. The loader overwrites cells `0 … 46`. -/
 def cellVal (m : Message) (bits : List Bool) (CA : Fin 34 → Answers) (RA : Answers)
     (c : ℕ) : E :=
-  if c < 8192 then hConst c
-  else if c < 95232 then chainCellVal m bits CA ((c - 8192) / 2560) ((c - 8192) % 2560)
-  else if c < 96000 then 0
-  else if c < 97000 then tempVal m (c - 96000)
-  else rootOffVal RA (c - 97000)
+  if c < 400 then posV (c - 100)
+  else if c = 400 then tgtV K0
+  else if c < 1024 then 0
+  else if c < 6464 then scrVal m ((c - 1024) / 160) ((c - 1024) % 160)
+  else if c < 8192 then rootVal RA (c - 7000)
+  else xVal m bits CA ((c - 8192) / 512) ((c - 8192) % 512)
 
-/-- The honest image over given answer tables. -/
+/-- The honest image over given answer tables (`memLog = 16`). -/
 def imageOf (_pk : PublicKey) (m : Message) (bits : List Bool) (CA : Fin 34 → Answers)
-    (RA : Answers) : MemImage 17 :=
+    (RA : Answers) : MemImage 16 :=
   fun c => cellVal m bits CA RA c.val
 
 /-! ## The prover -/
@@ -688,7 +501,7 @@ def endsOf (m : Message) (bits : List Bool) (CA : Fin 34 → Answers) (k : ℕ) 
 
 /-- The honest prover: query the chains as the machine will, then the root, then commit. -/
 def prover (pk : PublicKey) (m : Message) (bits : List Bool) :
-    OracleComp Spec (MemImage 17) := do
+    OracleComp Spec (MemImage 16) := do
   let CA ← tabulate (fun i : Fin 34 => chainAnswers i.val (digit m i) (decode bits i))
   let RA ← rootAnswers (endsOf m bits CA)
   pure (imageOf pk m bits CA RA)
@@ -702,7 +515,7 @@ def rootTab (f : HashTable) (m : Message) (bits : List Bool) : Answers :=
   cutAns 34 (rootAnsF f (endsOf m bits (chainTab f m bits)))
 
 /-- The honest image under a fixed table. -/
-def imageF (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) : MemImage 17 :=
+def imageF (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) : MemImage 16 :=
   imageOf pk m bits (chainTab f m bits) (rootTab f m bits)
 
 theorem fixed_prover (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) :
@@ -740,6 +553,28 @@ theorem rootTab_33 (f : HashTable) (m : Message) (bits : List Bool) :
   rw [rootValueFold_rootStF f (reconstructedWords f m bits) (endsOf m bits (chainTab f m bits))
     (fun t => (endsOf_honest f m bits t).symm)]
   try rfl
+
+
+/-- The honest chain answer of step `j` is the table's answer to the step's query. -/
+theorem chain_answer (f : HashTable) (i d : ℕ) (σ : Word) {j : ℕ} (hj : j < 255) :
+    f ⟨896, chainInput i j (inW d σ (cutAns 255 (chainAnsF f i d σ)) j)⟩ =
+      cutAns 255 (chainAnsF f i d σ) j := by
+  have hq : chainQ i d σ j (cutAns 255 (chainAnsF f i d σ)) = chainQ i d σ j (chainAnsF f i d σ) :=
+    chainQ_congr (i := i) (d := d) (σ := σ) (A := chainAnsF f i d σ)
+      (B := cutAns 255 (chainAnsF f i d σ)) (j := j)
+      (fun k hk => cutAns_of_lt _ (show k < 255 by omega))
+  have hq' : chainInput i j (inW d σ (cutAns 255 (chainAnsF f i d σ)) j) =
+      chainQ i d σ j (chainAnsF f i d σ) := hq
+  rw [hq', cutAns_of_lt _ hj, chainAnsF_spec f i d σ j]
+
+/-- The honest root answer of absorption `t` is the table's answer to its query. -/
+theorem root_answer (f : HashTable) (ends : ℕ → Word) {t : ℕ} (ht : t < 34) :
+    f ⟨896, rootQ ends t (cutAns 34 (rootAnsF f ends))⟩ = cutAns 34 (rootAnsF f ends) t := by
+  have hq : rootQ ends t (cutAns 34 (rootAnsF f ends)) = rootQ ends t (rootAnsF f ends) := by
+    unfold rootQ
+    rw [stOf_congr (R := rootAnsF f ends) (R' := cutAns 34 (rootAnsF f ends)) (k := t)
+      (fun s hs => cutAns_of_lt _ (show s < 34 by omega))]
+  rw [hq, cutAns_of_lt _ ht, rootAnsF_spec f ends t]
 
 end
 
