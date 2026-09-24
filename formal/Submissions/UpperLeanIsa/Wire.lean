@@ -80,17 +80,17 @@ theorem join_slices {α : Type} (w n : ℕ) (xs : List α) (h : xs.length = w * 
     rw [htail, List.take_append_drop]
 
 set_option maxRecDepth 4096 in
-theorem encode_decode (bits : List Bool) (h : bits.length = 4992) :
+theorem encode_decode (bits : List Bool) (h : bits.length = 5504) :
     encode (decode bits) = bits := by
-  have hlen (i : Fin 39) : ((bits.drop (128 * i.val)).take 128).length = 128 := by
+  have hlen (i : Fin 43) : ((bits.drop (128 * i.val)).take 128).length = 128 := by
     simp only [List.length_take, List.length_drop, h]
     have hi := i.isLt
     omega
   unfold encode decode
   rw [List.flatMap_def, List.map_ofFn]
   calc
-    _ = (List.ofFn (fun i : Fin 39 => (bits.drop (128 * i.val)).take 128)).flatten :=
+    _ = (List.ofFn (fun i : Fin 43 => (bits.drop (128 * i.val)).take 128)).flatten :=
       congrArg List.flatten (congrArg List.ofFn (funext fun i => bits_ofBits _ (hlen i)))
-    _ = bits := join_slices 128 39 bits h
+    _ = bits := join_slices 128 43 bits h
 
 end OptimalOTS.LeanIsaBaseline

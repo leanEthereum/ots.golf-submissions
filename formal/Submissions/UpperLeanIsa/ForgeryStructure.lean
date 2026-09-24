@@ -14,7 +14,7 @@ def stepValue (f : HashTable) (i j : ℕ) (x : Word) : Word :=
 
 /-- Distinct checksum encodings require moving backwards in at least one chain. -/
 theorem exists_lower_digit {m₁ m₂ : Message} (h : m₁ ≠ m₂) :
-    ∃ i : Fin 39, digit m₂ i < digit m₁ i := by
+    ∃ i : Fin 43, digit m₂ i < digit m₁ i := by
   by_contra hn
   push Not at hn
   apply (digits_incomparable h).1
@@ -44,21 +44,21 @@ theorem chain_merge (f : HashTable) (i j n : ℕ) (x y : Word)
         rw [show j + (k + 1) = (j + 1) + k by omega]
         exact heq
 
-def honestWord (f : HashTable) (sk : Words) (i : Fin 39) (j : ℕ) : Word :=
+def honestWord (f : HashTable) (sk : Words) (i : Fin 43) (j : ℕ) : Word :=
   chainValue f i.val 0 j (sk i)
 
 /-- A second preimage for one particular step of the honest chain. -/
-def ChainSecondPreimage (f : HashTable) (sk : Words) (i : Fin 39) (j : ℕ) (y : Word) : Prop :=
+def ChainSecondPreimage (f : HashTable) (sk : Words) (i : Fin 43) (j : ℕ) (y : Word) : Prop :=
   j < 127 ∧ y ≠ honestWord f sk i j ∧
     stepValue f i.val j y = stepValue f i.val j (honestWord f sk i j)
 
-theorem honest_continuation (f : HashTable) (sk : Words) (i : Fin 39) (j n : ℕ) :
+theorem honest_continuation (f : HashTable) (sk : Words) (i : Fin 43) (j n : ℕ) :
     chainValue f i.val j n (honestWord f sk i j) = honestWord f sk i (j + n) := by
   simpa only [Nat.zero_add, honestWord] using chainValue_add f i.val 0 j n (sk i)
 
 /-- Reaching an honest endpoint from a candidate signature word either discloses the
 actual word at that position or gives a second preimage on the traversed path. -/
-theorem endpoint_match (f : HashTable) (sk : Words) (i : Fin 39) (j : ℕ) (hj : j ≤ 127)
+theorem endpoint_match (f : HashTable) (sk : Words) (i : Fin 43) (j : ℕ) (hj : j ≤ 127)
     (x : Word) (h : chainValue f i.val j (127 - j) x = endpoints f sk i) :
     x = honestWord f sk i j ∨ ∃ k, j ≤ k ∧
       ChainSecondPreimage f sk i k (chainValue f i.val j (k - j) x) := by
@@ -78,7 +78,7 @@ theorem endpoint_match (f : HashTable) (sk : Words) (i : Fin 39) (j : ℕ) (hj :
 /-- The second-preimage input must occur on the candidate's verification path.
 Existence somewhere in the entire oracle table would not be a useful security event. -/
 def ChainForgeryEvent (f : HashTable) (sk : Words) (m : Message) (bits : List Bool) : Prop :=
-  ∃ (i : Fin 39) (k : ℕ), digit m i ≤ k ∧
+  ∃ (i : Fin 43) (k : ℕ), digit m i ≤ k ∧
     ChainSecondPreimage f sk i k
       (chainValue f i.val (digit m i) (k - digit m i) (decode bits i))
 
@@ -88,7 +88,7 @@ Root binding is deliberately an explicit hypothesis, not an assumed theorem. -/
 theorem different_message_forgery (f : HashTable) (sk : Words) (m₁ m₂ : Message)
     (bits : List Bool) (hm : m₁ ≠ m₂)
     (he : reconstructedWords f m₂ bits = endpoints f sk) :
-    (∃ i : Fin 39, digit m₂ i < digit m₁ i ∧
+    (∃ i : Fin 43, digit m₂ i < digit m₁ i ∧
       decode bits i = honestWord f sk i (digit m₂ i)) ∨
     ChainForgeryEvent f sk m₂ bits := by
   obtain ⟨i, hi⟩ := exists_lower_digit hm
@@ -102,7 +102,7 @@ theorem different_message_forgery (f : HashTable) (sk : Words) (m₁ m₂ : Mess
 provided the reconstructed endpoint vector is unchanged. Canonical wire encoding
 rules out a different bit string that decodes to the same vector. -/
 theorem same_message_forgery (f : HashTable) (sk : Words) (m : Message) (bits : List Bool)
-    (hlen : bits.length = 4992) (hne : bits ≠ encode (signedWords f sk m))
+    (hlen : bits.length = 5504) (hne : bits ≠ encode (signedWords f sk m))
     (he : reconstructedWords f m bits = endpoints f sk) :
     ChainForgeryEvent f sk m bits := by
   have hd : decode bits ≠ signedWords f sk m := by

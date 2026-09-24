@@ -180,8 +180,8 @@ theorem matchingAnswers_congr {ξ ζ : Record} {a : HashLocation} (h : ξ.2 a = 
   cases a with
   | inl x => exact congrArg lowAnswers h
   | inr i =>
-    change (if i = 38 then lowAnswers (ξ.2 (.inr i)) else {ξ.2 (.inr i)}) =
-      (if i = 38 then lowAnswers (ζ.2 (.inr i)) else {ζ.2 (.inr i)})
+    change (if i = 42 then lowAnswers (ξ.2 (.inr i)) else {ξ.2 (.inr i)}) =
+      (if i = 42 then lowAnswers (ζ.2 (.inr i)) else {ζ.2 (.inr i)})
     rw [h]
 
 /-- The matching answers at an exposed or boundary location are public. -/

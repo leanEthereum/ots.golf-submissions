@@ -3,7 +3,7 @@ import Submissions.UpperLeanIsa.Correctness
 import OptimalOTS.LeanIsa
 
 /-!
-# Running the RT-128 bytecode
+# Running the RT-MX bytecode
 
 The execution framework for `Machine.program` (design `NOTES.md` §9.2):
 

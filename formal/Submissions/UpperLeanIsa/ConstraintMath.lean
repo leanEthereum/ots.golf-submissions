@@ -21,11 +21,12 @@ layout.
 2. Chains: consecutive `BLAKE2S` outputs from position `e` compute `chainValue` (`chain_from`);
    `BLAKE2S` operands give `chainInput` and absorb inputs.
 3. The absorb states compute `rootValue`.
-4. The tie: the field sums of the shifted digit words the leaves assert (`tieHi`, `tieLo`) are
-   the message cells exactly when the digits are the message's base-128 digits (`tie_iff`), and
-   the loader's cells (`inputWord_*`, including the zero padding `inputWord_pad_zero`).
-5. The checksum identity `Σ_{k<37} E k + 128 · E 37 + E 38 = 4699` recovers the two checksum
-   digits (`checksum_digits`), and the true digits satisfy it (`checksum_honest_sum`).
+4. The tie: the field sums of the shifted leaf words the leaves assert (`tieHi`, `tieLo`) are
+   the message cells exactly when every leaf index `d k < 2 ^ fieldWidth k` is message field `k`
+   (`tie_iff`), and the loader's cells (`inputWord_*`).
+5. The checksum identity `Σ_{k<41} E k + 64 · (E 41 − 64) + E 42 = 5271` recovers the two
+   offset checksum digits (`checksum_digits`), and the true digits satisfy it
+   (`checksum_honest_sum`).
 -/
 
 namespace OptimalOTS.LeanIsaBaseline.Machine
@@ -205,25 +206,25 @@ theorem rootValueFold_ofFn (f : HashTable) (n : ℕ) : ∀ (w : ℕ → Word) (c
       hrest
 
 /-- Soundness of the root. States `(lo k, hi k)` start at zero; absorb `k` hashes endpoint
-`e k` with metadata `2 + (38 - k)`; then `lo 39` holds `rootValue f xs`. -/
-theorem root_sound (f : HashTable) (xs : Fin 39 → Word) (e lo hi : ℕ → E)
-    (hxs : ∀ i : Fin 39, xs i = cellBits (e i))
+`e k` with metadata `2 + (42 - k)`; then `lo 43` holds `rootValue f xs`. -/
+theorem root_sound (f : HashTable) (xs : Fin 43 → Word) (e lo hi : ℕ → E)
+    (hxs : ∀ i : Fin 43, xs i = cellBits (e i))
     (hlo0 : cellBits (lo 0) = 0) (hhi0 : cellBits (hi 0) = 0)
-    (hlo : ∀ k < 39, cellBits (lo (k + 1)) =
+    (hlo : ∀ k < 43, cellBits (lo (k + 1)) =
       (f ⟨896, hashInput (cellBits (hi k) ++ cellBits (lo k)) ((cellBits (e k)).setWidth 512)
-        (BitVec.ofNat 128 (2 + (38 - k)))⟩).extractLsb' 0 128)
-    (hhi : ∀ k < 39, cellBits (hi (k + 1)) =
+        (BitVec.ofNat 128 (2 + (42 - k)))⟩).extractLsb' 0 128)
+    (hhi : ∀ k < 43, cellBits (hi (k + 1)) =
       (f ⟨896, hashInput (cellBits (hi k) ++ cellBits (lo k)) ((cellBits (e k)).setWidth 512)
-        (BitVec.ofNat 128 (2 + (38 - k)))⟩).extractLsb' 128 128) :
-    cellBits (lo 39) = rootValue f xs := by
+        (BitVec.ofNat 128 (2 + (42 - k)))⟩).extractLsb' 128 128) :
+    cellBits (lo 43) = rootValue f xs := by
   have h0 : cellBits (hi 0) ++ cellBits (lo 0) = (0 : BitVec 256) := by
     rw [hhi0, hlo0, zero_append_zero_128]
-  have hfold := rootValueFold_ofFn f 39 (fun k => cellBits (e k))
+  have hfold := rootValueFold_ofFn f 43 (fun k => cellBits (e k))
     (fun k => cellBits (hi k) ++ cellBits (lo k))
     (fun k hk => out_pair (lo (k + 1)) (hi (k + 1)) _ (hlo k hk) (hhi k hk))
   simp only [h0] at hfold
-  have hxs' : xs = fun i : Fin 39 => cellBits (e i) := funext hxs
-  have key : (rootValueFold f (List.ofFn xs) 0).extractLsb' 0 128 = cellBits (lo 39) := by
+  have hxs' : xs = fun i : Fin 43 => cellBits (e i) := funext hxs
+  have key : (rootValueFold f (List.ofFn xs) 0).extractLsb' 0 128 = cellBits (lo 43) := by
     rw [hxs', hfold, BitVec.extractLsb'_append_eq_right]
   exact key.symm
 
@@ -241,10 +242,6 @@ theorem xor_shiftLeft_eq_add {N a n : ℕ} (hN : N < 2 ^ n) : N ^^^ (a <<< n) = 
         (by omega)))
     rw [if_neg hj, decide_eq_true (show j ≥ n by omega), Bool.true_and, hNj, Bool.false_xor]
 
-theorem two_pow_seven_mul (p : ℕ) : 2 ^ (7 * p) = 128 ^ p := by
-  rw [pow_mul]
-  norm_num
-
 /-- `cellOfBits` turns `XOR` into field addition. -/
 theorem cellOfBits_add (a b : BitVec 128) :
     cellOfBits a + cellOfBits b = cellOfBits (a ^^^ b) := by
@@ -257,71 +254,196 @@ theorem cellOfBits_zero : cellOfBits 0 = 0 := by
   rw [add_self_E, BitVec.xor_self] at h
   exact h.symm
 
-theorem pack_lt (d : ℕ → ℕ) (k : ℕ) (hd : ∀ p < k, d p < 128) :
-    ∑ p ∈ Finset.range k, 128 ^ p * d p < 128 ^ k := by
-  induction k with
-  | zero =>
-    norm_num
-  | succ k ih =>
-    rw [Finset.sum_range_succ]
-    have hk : d k ≤ 127 := by
-      have := hd k (by omega)
-      omega
-    have h1 := ih (fun p hp => hd p (by omega))
-    have h2 : 128 ^ k * d k ≤ 128 ^ k * 127 := Nat.mul_le_mul (le_refl _) hk
-    calc ∑ p ∈ Finset.range k, 128 ^ p * d p + 128 ^ k * d k
-        < 128 ^ k + 128 ^ k * 127 := Nat.add_lt_add_of_lt_of_le h1 h2
-      _ = 128 ^ (k + 1) := by ring
+/-! ### Mixed-radix packing
 
-/-- Packing at bit offset `b`: the field sum of the digit words `d p <<< (7p + b)` is the word of
-`(Σ 128^p d p) <<< b`. -/
-theorem pack_sum_shift (d : ℕ → ℕ) (b k : ℕ) (hd : ∀ p < k, d p < 128) :
-    ∑ p ∈ Finset.range k, cellOfBits (BitVec.ofNat 128 (d p <<< (7 * p + b))) =
-      cellOfBits (BitVec.ofNat 128 ((∑ p ∈ Finset.range k, 128 ^ p * d p) <<< b)) := by
-  induction k with
-  | zero =>
-    rw [Finset.sum_range_zero, Finset.sum_range_zero, Nat.zero_shiftLeft]
-    exact cellOfBits_zero.symm
-  | succ k ih =>
-    have hlt : ∑ p ∈ Finset.range k, 128 ^ p * d p < 2 ^ (7 * k) := by
-      rw [two_pow_seven_mul]
-      exact pack_lt d k (fun p hp => hd p (by omega))
-    rw [Finset.sum_range_succ, Finset.sum_range_succ, ih (fun p hp => hd p (by omega)),
-      cellOfBits_add, ← BitVec.ofNat_xor, Nat.shiftLeft_add, ← Nat.shiftLeft_xor_distrib,
-      xor_shiftLeft_eq_add hlt, two_pow_seven_mul]
+Fields `d q` of widths `w q`, little-endian: field `q` sits at bit offset `lsbOff w q`. -/
 
-theorem pack_div (d : ℕ → ℕ) (p : ℕ) : ∀ k, (∀ q < k, d q < 128) → p < k →
-    (∑ q ∈ Finset.range k, 128 ^ q * d q) / 128 ^ p % 128 = d p := by
-  intro k
-  induction k with
+/-- The bit offset of little-endian field `n`: the total width of the fields below it. -/
+def lsbOff (w : ℕ → ℕ) : ℕ → ℕ
+  | 0 => 0
+  | n + 1 => lsbOff w n + w n
+
+/-- The fields `d 0 … d (n-1)` packed at their offsets. -/
+def packLE (w d : ℕ → ℕ) (n : ℕ) : ℕ := ∑ q ∈ Finset.range n, 2 ^ lsbOff w q * d q
+
+theorem lsbOff_mono (w : ℕ → ℕ) {p n : ℕ} (h : p ≤ n) : lsbOff w p ≤ lsbOff w n := by
+  induction n with
   | zero =>
+    obtain rfl : p = 0 := by omega
+    exact le_rfl
+  | succ n ih =>
+    rcases Nat.eq_or_lt_of_le h with rfl | h
+    · exact le_rfl
+    · exact (ih (by omega)).trans (Nat.le_add_right _ _)
+
+/-- Offsets of the fields from `a` on, counted from `a`. -/
+theorem lsbOff_shift (w w' : ℕ → ℕ) (a : ℕ) (hw : ∀ q, w' q = w (a + q)) :
+    ∀ n, lsbOff w a + lsbOff w' n = lsbOff w (a + n)
+  | 0 => rfl
+  | n + 1 => by
+    have ih := lsbOff_shift w w' a hw n
+    show lsbOff w a + (lsbOff w' n + w' n) = lsbOff w (a + n) + w (a + n)
+    rw [hw n]
+    omega
+
+theorem packLE_lt (w d : ℕ → ℕ) : ∀ n, (∀ q < n, d q < 2 ^ w q) → packLE w d n < 2 ^ lsbOff w n
+  | 0 => by
+    intro _
+    simp [packLE, lsbOff]
+  | n + 1 => by
+    intro hd
+    have ih := packLE_lt w d n (fun q hq => hd q (by omega))
+    have hn : d n + 1 ≤ 2 ^ w n := hd n (by omega)
+    have h2 : 2 ^ lsbOff w n * (d n + 1) ≤ 2 ^ lsbOff w n * 2 ^ w n := Nat.mul_le_mul_left _ hn
+    unfold packLE at ih ⊢
+    rw [Finset.sum_range_succ, lsbOff, pow_add]
+    rw [Nat.mul_add, Nat.mul_one] at h2
+    omega
+
+theorem packLE_div (w d : ℕ → ℕ) (p : ℕ) : ∀ n, (∀ q < n, d q < 2 ^ w q) → p < n →
+    packLE w d n / 2 ^ lsbOff w p % 2 ^ w p = d p
+  | 0 => by
     intro _ h
-    exact absurd h (Nat.not_lt_zero p)
-  | succ k ih =>
-    intro hd hpk
+    omega
+  | n + 1 => by
+    intro hd hp
+    have hpos : 0 < 2 ^ lsbOff w p := by positivity
+    unfold packLE
     rw [Finset.sum_range_succ]
-    by_cases hlt : p < k
-    · have hpos : 0 < 128 ^ p := by
-        exact pow_pos (by norm_num) p
-      have e : 128 ^ k = 128 ^ p * 128 * 128 ^ (k - p - 1) := by
-        rw [← pow_succ, ← pow_add, show p + 1 + (k - p - 1) = k by omega]
-      have hsplit : 128 ^ k * d k = 128 ^ p * (128 * (128 ^ (k - p - 1) * d k)) := by
-        rw [e]
-        ring
-      rw [hsplit, Nat.add_mul_div_left _ _ hpos, Nat.add_mul_mod_self_left]
-      exact ih (fun q hq => hd q (by omega)) hlt
-    · have hpk' : p = k := by omega
-      have hpos : 0 < 128 ^ k := by
-        exact pow_pos (by norm_num) k
-      rw [hpk', Nat.add_mul_div_left _ _ hpos,
-        Nat.div_eq_of_lt (pack_lt d k (fun q hq => hd q (by omega))), Nat.zero_add,
-        Nat.mod_eq_of_lt (hd k (by omega))]
+    rcases Nat.lt_or_ge p n with hlt | hge
+    · have hle : lsbOff w p + w p ≤ lsbOff w n := lsbOff_mono w (show p + 1 ≤ n by omega)
+      have e : 2 ^ lsbOff w n * d n = 2 ^ lsbOff w p *
+          (2 ^ w p * (2 ^ (lsbOff w n - (lsbOff w p + w p)) * d n)) := by
+        rw [← mul_assoc, ← mul_assoc, ← pow_add, ← pow_add,
+          show lsbOff w p + w p + (lsbOff w n - (lsbOff w p + w p)) = lsbOff w n by omega]
+      rw [e, Nat.add_mul_div_left _ _ hpos, Nat.add_mul_mod_self_left]
+      exact packLE_div w d p n (fun q hq => hd q (by omega)) hlt
+    · obtain rfl : p = n := by omega
+      have hlt := packLE_lt w d p (fun q hq => hd q (by omega))
+      unfold packLE at hlt
+      rw [Nat.add_mul_div_left _ _ hpos, Nat.div_eq_of_lt hlt, Nat.zero_add,
+        Nat.mod_eq_of_lt (hd p (by omega))]
 
-theorem pack_digits (n k : ℕ) :
-    ∑ p ∈ Finset.range k, 128 ^ p * (n / 128 ^ p % 128) = n % 128 ^ k := by
-  induction k with
-  | zero => rw [Finset.sum_range_zero, pow_zero, Nat.mod_one]
-  | succ k ih => rw [Finset.sum_range_succ, ih, Nat.mod_pow_succ]
+theorem packLE_digits (w : ℕ → ℕ) (N : ℕ) : ∀ n,
+    packLE w (fun q => N / 2 ^ lsbOff w q % 2 ^ w q) n = N % 2 ^ lsbOff w n
+  | 0 => by simp [packLE, lsbOff, Nat.mod_one]
+  | n + 1 => by
+    have ih := packLE_digits w N n
+    unfold packLE at ih ⊢
+    rw [Finset.sum_range_succ, ih, lsbOff, pow_add, Nat.mod_mul]
+
+/-- Fields below the bound are the packed number's fields exactly. -/
+theorem packLE_eq_iff (w d : ℕ → ℕ) (n c : ℕ) (hd : ∀ q < n, d q < 2 ^ w q)
+    (hc : c < 2 ^ lsbOff w n) :
+    packLE w d n = c ↔ ∀ q < n, d q = c / 2 ^ lsbOff w q % 2 ^ w q := by
+  constructor
+  · rintro rfl q hq
+    exact (packLE_div w d q n hd hq).symm
+  · intro h
+    have e : packLE w d n = packLE w (fun q => c / 2 ^ lsbOff w q % 2 ^ w q) n :=
+      Finset.sum_congr rfl fun q hq => by rw [h q (Finset.mem_range.mp hq)]
+    rw [e, packLE_digits, Nat.mod_eq_of_lt hc]
+
+/-- The field sum of the words `d q <<< lsbOff w q` is the word of the packed number. -/
+theorem packLE_cells (w d : ℕ → ℕ) : ∀ n, (∀ q < n, d q < 2 ^ w q) →
+    ∑ q ∈ Finset.range n, cellOfBits (BitVec.ofNat 128 (d q <<< lsbOff w q)) =
+      cellOfBits (BitVec.ofNat 128 (packLE w d n))
+  | 0 => by
+    intro _
+    rw [Finset.sum_range_zero]
+    exact cellOfBits_zero.symm
+  | n + 1 => by
+    intro hd
+    have ih := packLE_cells w d n (fun q hq => hd q (by omega))
+    have hlt := packLE_lt w d n (fun q hq => hd q (by omega))
+    rw [Finset.sum_range_succ, ih, cellOfBits_add, ← BitVec.ofNat_xor, xor_shiftLeft_eq_add hlt]
+    unfold packLE
+    rw [Finset.sum_range_succ]
+
+/-! ### The message layout -/
+
+/-- Cell 1's fields `40, 39, …, 20`, little-endian (and on through field 0). -/
+def loWidth (q : ℕ) : ℕ := fieldWidth (40 - q)
+
+/-- Cell 2's fields `19, 18, …, 0`, little-endian. -/
+def hiWidth (q : ℕ) : ℕ := fieldWidth (19 - q)
+
+theorem lsbOff_loWidth : ∀ q, q ≤ 40 → lsbOff loWidth q = fieldOff (40 - q)
+  | 0 => fun _ => rfl
+  | q + 1 => fun h => by
+    have hs := fieldOff_succ (k := 40 - (q + 1)) (by omega)
+    rw [show 40 - (q + 1) + 1 = 40 - q by omega] at hs
+    show lsbOff loWidth q + fieldWidth (40 - q) = _
+    rw [lsbOff_loWidth q (by omega), hs]
+
+theorem lsbOff_loWidth_21 : lsbOff loWidth 21 = 128 := by
+  rw [lsbOff_loWidth 21 (by norm_num)]
+  rfl
+
+theorem lsbOff_hiWidth (q : ℕ) : 128 + lsbOff hiWidth q = lsbOff loWidth (21 + q) := by
+  rw [← lsbOff_loWidth_21]
+  exact lsbOff_shift loWidth hiWidth 21 (fun q' => by
+    unfold hiWidth loWidth
+    congr 1
+    omega) q
+
+theorem lsbOff_hiWidth_of_le (q : ℕ) (hq : q ≤ 19) : 128 + lsbOff hiWidth q = fieldOff (19 - q) := by
+  rw [lsbOff_hiWidth q, lsbOff_loWidth _ (by omega), show 40 - (21 + q) = 19 - q by omega]
+
+theorem lsbOff_hiWidth_20 : lsbOff hiWidth 20 = 128 := by
+  have h := lsbOff_hiWidth 20
+  have h2 : lsbOff loWidth 41 = 256 := by
+    show lsbOff loWidth 40 + fieldWidth (40 - 40) = 256
+    rw [lsbOff_loWidth 40 le_rfl]
+    rfl
+  rw [h2] at h
+  omega
+
+/-- The in-cell bit offset of field `k`: fields `0 … 19` in cell 2, `20 … 40` in cell 1. -/
+def fieldShift (k : ℕ) : ℕ := if k < 20 then fieldOff k - 128 else fieldOff k
+
+/-- The tie word of leaf index `d k`: the field at its in-cell offset. -/
+def tieWord (d : ℕ → ℕ) (k : ℕ) : E := cellOfBits (BitVec.ofNat 128 (d k <<< fieldShift k))
+
+/-- The last field of each cell has in-cell offset 0, so its word is `posV (d k)`. -/
+theorem tieWord_last (d : ℕ → ℕ) {k : ℕ} (hk : k = 19 ∨ k = 40) :
+    tieWord d k = cellOfBits (BitVec.ofNat 128 (d k)) := by
+  have h : fieldShift k = 0 := by rcases hk with rfl | rfl <;> rfl
+  unfold tieWord
+  rw [h, Nat.shiftLeft_zero]
+
+/-- The field sum the tie ops of chains `0 … 19` assert equal to message cell 2. -/
+noncomputable def tieHi (d : ℕ → ℕ) : E := ∑ k ∈ Finset.range 20, tieWord d k
+
+/-- The field sum the tie ops of chains `20 … 40` assert equal to message cell 1. -/
+noncomputable def tieLo (d : ℕ → ℕ) : E := ∑ k ∈ Finset.Ico 20 41, tieWord d k
+
+theorem tieHi_eq (d : ℕ → ℕ) (hd : ∀ q < 20, d (19 - q) < 2 ^ hiWidth q) :
+    tieHi d = cellOfBits (BitVec.ofNat 128 (packLE hiWidth (fun q => d (19 - q)) 20)) := by
+  rw [← packLE_cells hiWidth (fun q => d (19 - q)) 20 hd]
+  unfold tieHi
+  refine (Finset.sum_range_reflect _ 20).symm.trans (Finset.sum_congr rfl fun q hq => ?_)
+  have hq' := Finset.mem_range.mp hq
+  have hs : fieldShift (19 - q) = lsbOff hiWidth q := by
+    unfold fieldShift
+    rw [if_pos (by omega)]
+    have := lsbOff_hiWidth_of_le q (by omega)
+    omega
+  unfold tieWord
+  rw [show 20 - 1 - q = 19 - q by omega, hs]
+
+theorem tieLo_eq (d : ℕ → ℕ) (hd : ∀ q < 21, d (40 - q) < 2 ^ loWidth q) :
+    tieLo d = cellOfBits (BitVec.ofNat 128 (packLE loWidth (fun q => d (40 - q)) 21)) := by
+  rw [← packLE_cells loWidth (fun q => d (40 - q)) 21 hd]
+  unfold tieLo
+  rw [Finset.sum_Ico_eq_sum_range, show 41 - 20 = 21 from rfl]
+  refine (Finset.sum_range_reflect _ 21).symm.trans (Finset.sum_congr rfl fun q hq => ?_)
+  have hq' := Finset.mem_range.mp hq
+  have hs : fieldShift (40 - q) = lsbOff loWidth q := by
+    unfold fieldShift
+    rw [if_neg (by omega), lsbOff_loWidth q (by omega)]
+  unfold tieWord
+  rw [show 20 + (21 - 1 - q) = 40 - q by omega, hs]
 
 theorem cellOfBits_ofNat_inj {x : ℕ} {b : BitVec 128} (hx : x < 2 ^ 128) :
     cellOfBits (BitVec.ofNat 128 x) = cellOfBits b ↔ x = b.toNat := by
@@ -345,83 +467,134 @@ theorem extract_hi_toNat (m : Message) : (m.extractLsb' 128 128).toNat = m.toNat
 theorem extract_lo_toNat (m : Message) : (m.extractLsb' 0 128).toNat = m.toNat % 2 ^ 128 := by
   rw [BitVec.extractLsb'_toNat, Nat.shiftRight_zero]
 
-/-- The field sum the tie ops of chains `0 … 18` assert equal to message cell 2: digit `k < 18`
-at in-cell bit offset `124 - 7k`, then the high five bits `e 18 / 4` of the straddling digit 18 at
-offset 0. -/
-noncomputable def tieHi (e : ℕ → ℕ) : E :=
-  ∑ k ∈ Finset.range 18, cellOfBits (BitVec.ofNat 128 (e k <<< (124 - 7 * k))) +
-    cellOfBits (BitVec.ofNat 128 (e 18 / 4))
+/-- A cell-2 field read from the high cell's number. -/
+theorem hi_field (N : ℕ) {q : ℕ} (hq : q < 20) :
+    N / 2 ^ 128 / 2 ^ lsbOff hiWidth q % 2 ^ hiWidth q =
+      N / 2 ^ fieldOff (19 - q) % 2 ^ fieldWidth (19 - q) := by
+  rw [Nat.div_div_eq_div_mul, ← pow_add, lsbOff_hiWidth_of_le q (by omega)]
+  rfl
 
-/-- The field sum the tie ops of chains `18 … 36` assert equal to message cell 1: the low two bits
-`e 18 % 4` of digit 18 at offset 126, then digit `19 ≤ k ≤ 36` at offset `7 (36 - k)`. -/
-noncomputable def tieLo (e : ℕ → ℕ) : E :=
-  cellOfBits (BitVec.ofNat 128 ((e 18 % 4) <<< 126)) +
-    ∑ k ∈ Finset.Ico 19 37, cellOfBits (BitVec.ofNat 128 (e k <<< (7 * (36 - k))))
+/-- A cell-1 field read from the low cell's number. -/
+theorem lo_field (N : ℕ) {q : ℕ} (hq : q < 21) :
+    N % 2 ^ 128 / 2 ^ lsbOff loWidth q % 2 ^ loWidth q =
+      N / 2 ^ fieldOff (40 - q) % 2 ^ fieldWidth (40 - q) := by
+  have hle : lsbOff loWidth q + loWidth q ≤ 128 := by
+    rw [← lsbOff_loWidth_21]
+    exact lsbOff_mono loWidth (show q + 1 ≤ 21 by omega)
+  have hdvd : 2 ^ (lsbOff loWidth q + loWidth q) ∣ 2 ^ 128 := pow_dvd_pow 2 hle
+  rw [← Nat.mod_mul_right_div_self, ← pow_add, Nat.mod_mod_of_dvd _ hdvd, pow_add,
+    Nat.mod_mul_right_div_self, lsbOff_loWidth q (by omega)]
+  rfl
 
-/-- The digits `0 … 17`, little-endian, as a number. -/
-def packHi (e : ℕ → ℕ) : ℕ := ∑ p ∈ Finset.range 18, 128 ^ p * e (17 - p)
-
-/-- The digits `19 … 36`, little-endian, as a number. -/
-def packLo (e : ℕ → ℕ) : ℕ := ∑ p ∈ Finset.range 18, 128 ^ p * e (36 - p)
-
-/-- All 37 digits, little-endian, as a number. -/
-def packAll (e : ℕ → ℕ) : ℕ := ∑ p ∈ Finset.range 37, 128 ^ p * e (36 - p)
-
-theorem tieHi_eq (e : ℕ → ℕ) (he : ∀ k < 37, e k < 128) :
-    tieHi e = cellOfBits (BitVec.ofNat 128 (e 18 / 4 + 2 ^ 5 * packHi e)) := by
-  have hr : ∑ k ∈ Finset.range 18, cellOfBits (BitVec.ofNat 128 (e k <<< (124 - 7 * k))) =
-      ∑ p ∈ Finset.range 18, cellOfBits (BitVec.ofNat 128 (e (17 - p) <<< (7 * p + 5))) := by
-    refine (Finset.sum_range_reflect _ 18).symm.trans (Finset.sum_congr rfl fun p hp => ?_)
-    have := Finset.mem_range.mp hp
-    rw [show 18 - 1 - p = 17 - p by omega, show 124 - 7 * (17 - p) = 7 * p + 5 by omega]
-  have hp : ∑ p ∈ Finset.range 18, cellOfBits (BitVec.ofNat 128 (e (17 - p) <<< (7 * p + 5))) =
-      cellOfBits (BitVec.ofNat 128 (packHi e <<< 5)) :=
-    pack_sum_shift (fun p => e (17 - p)) 5 18 (fun p hp => he _ (by omega))
-  have hq : e 18 / 4 < 2 ^ 5 := by
-    have := he 18 (by norm_num)
+/-- **The tie.** For leaf indices `d k < 2 ^ fieldWidth k` (`k < 41`), the tie sums are the two
+message cells exactly when each offset leaf `digitOff k + d k` is the message's digit `k`. -/
+theorem tie_iff (m : Message) (d : ℕ → ℕ) (hd : ∀ k < 41, d k < 2 ^ fieldWidth k) :
+    (tieHi d = cellOfBits (m.extractLsb' 128 128) ∧ tieLo d = cellOfBits (m.extractLsb' 0 128)) ↔
+      ∀ k (hk : k < 41), digitOff k + d k = digit m ⟨k, by omega⟩ := by
+  have hdh : ∀ q < 20, d (19 - q) < 2 ^ hiWidth q := fun q hq => hd _ (by omega)
+  have hdl : ∀ q < 21, d (40 - q) < 2 ^ loWidth q := fun q hq => hd _ (by omega)
+  have hm : m.toNat < 2 ^ 256 := m.isLt
+  have hHi : m.toNat / 2 ^ 128 < 2 ^ lsbOff hiWidth 20 := by
+    rw [lsbOff_hiWidth_20]
     omega
-  unfold tieHi
-  rw [hr, hp, cellOfBits_add, ← BitVec.ofNat_xor, Nat.xor_comm, xor_shiftLeft_eq_add hq]
+  have hLo : m.toNat % 2 ^ 128 < 2 ^ lsbOff loWidth 21 := by
+    rw [lsbOff_loWidth_21]
+    omega
+  have hPh : packLE hiWidth (fun q => d (19 - q)) 20 < 2 ^ 128 :=
+    lt_of_lt_of_eq (packLE_lt _ _ 20 hdh) (by rw [lsbOff_hiWidth_20])
+  have hPl : packLE loWidth (fun q => d (40 - q)) 21 < 2 ^ 128 :=
+    lt_of_lt_of_eq (packLE_lt _ _ 21 hdl) (by rw [lsbOff_loWidth_21])
+  have hfield : ∀ k (hk : k < 41), digit m ⟨k, by omega⟩ =
+      digitOff k + m.toNat / 2 ^ fieldOff k % 2 ^ fieldWidth k :=
+    fun k hk => digit_of_lt m ⟨k, by omega⟩ hk
+  rw [tieHi_eq d hdh, tieLo_eq d hdl, cellOfBits_ofNat_inj hPh, cellOfBits_ofNat_inj hPl,
+    extract_hi_toNat, extract_lo_toNat, packLE_eq_iff _ _ 20 _ hdh hHi,
+    packLE_eq_iff _ _ 21 _ hdl hLo]
+  constructor
+  · rintro ⟨h1, h2⟩ k hk
+    rw [hfield k hk]
+    by_cases h : k < 20
+    · have e := h1 (19 - k) (by omega)
+      rw [hi_field _ (by omega), show 19 - (19 - k) = k by omega] at e
+      rw [e]
+    · have e := h2 (40 - k) (by omega)
+      rw [lo_field _ (by omega), show 40 - (40 - k) = k by omega] at e
+      rw [e]
+  · intro h
+    refine ⟨fun q hq => ?_, fun q hq => ?_⟩
+    · have e := h (19 - q) (by omega)
+      rw [hfield _ (by omega)] at e
+      rw [hi_field _ hq]
+      omega
+    · have e := h (40 - q) (by omega)
+      rw [hfield _ (by omega)] at e
+      rw [lo_field _ hq]
+      omega
 
-theorem tieLo_eq (e : ℕ → ℕ) (he : ∀ k < 37, e k < 128) :
-    tieLo e = cellOfBits (BitVec.ofNat 128 (packLo e + 2 ^ 126 * (e 18 % 4))) := by
-  have hr : ∑ k ∈ Finset.Ico 19 37, cellOfBits (BitVec.ofNat 128 (e k <<< (7 * (36 - k)))) =
-      ∑ p ∈ Finset.range 18, cellOfBits (BitVec.ofNat 128 (e (36 - p) <<< (7 * p + 0))) := by
-    rw [Finset.sum_Ico_eq_sum_range, show 37 - 19 = 18 from rfl]
-    refine (Finset.sum_range_reflect _ 18).symm.trans (Finset.sum_congr rfl fun p hp => ?_)
-    have := Finset.mem_range.mp hp
-    rw [show 19 + (18 - 1 - p) = 36 - p by omega, show 7 * (36 - (36 - p)) = 7 * p + 0 by omega]
-  have hp : ∑ p ∈ Finset.range 18, cellOfBits (BitVec.ofNat 128 (e (36 - p) <<< (7 * p + 0))) =
-      cellOfBits (BitVec.ofNat 128 (packLo e <<< 0)) :=
-    pack_sum_shift (fun p => e (36 - p)) 0 18 (fun p hp => he _ (by omega))
-  have hQ : packLo e < 2 ^ 126 :=
-    lt_of_lt_of_eq (pack_lt (fun p => e (36 - p)) 18 (fun p hp => he _ (by omega)))
-      (by norm_num)
-  unfold tieLo
-  rw [hr, hp, Nat.shiftLeft_zero, cellOfBits_add, ← BitVec.ofNat_xor, Nat.xor_comm,
-    xor_shiftLeft_eq_add (N := packLo e) (a := e 18 % 4) (n := 126) hQ]
+/-- The tie accumulator after chain `k ≤ 39`: the partial sum of `tieHi` for `k < 20`, and of
+`tieLo` from chain 20 on. -/
+noncomputable def tieAcc (d : ℕ → ℕ) (k : ℕ) : E :=
+  if k < 20 then ∑ i ∈ Finset.range (k + 1), tieWord d i
+  else ∑ i ∈ Finset.Ico 20 (k + 1), tieWord d i
 
-/-- Cell 2 above cell 1 is the whole message number: the straddling digit 18 splits at bit 128. -/
-theorem pack_split (e : ℕ → ℕ) :
-    2 ^ 128 * (e 18 / 4 + 2 ^ 5 * packHi e) + (packLo e + 2 ^ 126 * (e 18 % 4)) = packAll e := by
-  have h1 : ∑ x ∈ Finset.range 18, 128 ^ (18 + (x + 1)) * e (36 - (18 + (x + 1))) =
-      2 ^ 133 * packHi e := by
-    unfold packHi
-    rw [Finset.mul_sum]
-    refine Finset.sum_congr rfl fun x hx => ?_
-    have := Finset.mem_range.mp hx
-    rw [show 36 - (18 + (x + 1)) = 17 - x by omega, show 18 + (x + 1) = 19 + x by omega, pow_add,
-      show (128 : ℕ) ^ 19 = 2 ^ 133 by norm_num]
-    ring
-  have h2 : 128 ^ (18 + 0) * e (36 - (18 + 0)) = 2 ^ 126 * e 18 := by norm_num
-  have h3 := Nat.div_add_mod (e 18) 4
-  have h4 : packAll e = packLo e + (∑ x ∈ Finset.range 18,
-      128 ^ (18 + (x + 1)) * e (36 - (18 + (x + 1))) + 128 ^ (18 + 0) * e (36 - (18 + 0))) := by
-    unfold packAll packLo
-    rw [show 37 = 18 + (18 + 1) from rfl, Finset.sum_range_add,
-      Finset.sum_range_succ' (fun x => 128 ^ (18 + x) * e (36 - (18 + x))) 18]
-  rw [h4, h1, h2]
-  omega
+theorem tieAcc_zero (d : ℕ → ℕ) : tieAcc d 0 = tieWord d 0 := by
+  unfold tieAcc
+  rw [if_pos (by norm_num), Finset.sum_range_one]
+
+theorem tieAcc_20 (d : ℕ → ℕ) : tieAcc d 20 = tieWord d 20 := by
+  unfold tieAcc
+  rw [if_neg (by norm_num), Finset.sum_Ico_succ_top (by norm_num), Finset.Ico_self,
+    Finset.sum_empty, zero_add]
+
+/-- Every middle tie op adds its word to the accumulator. -/
+theorem tieAcc_succ (d : ℕ → ℕ) {k : ℕ} (h1 : 1 ≤ k) (h20 : k ≠ 20) :
+    tieAcc d k = tieAcc d (k - 1) + tieWord d k := by
+  obtain ⟨j, rfl⟩ : ∃ j, k = j + 1 := ⟨k - 1, by omega⟩
+  unfold tieAcc
+  rw [Nat.add_sub_cancel]
+  by_cases h : j + 1 < 20
+  · rw [if_pos h, if_pos (by omega), Finset.sum_range_succ _ (j + 1)]
+  · rw [if_neg h, if_neg (by omega), Finset.sum_Ico_succ_top (by omega)]
+
+theorem tieHi_acc (d : ℕ → ℕ) : tieHi d = tieAcc d 18 + tieWord d 19 := by
+  unfold tieAcc tieHi
+  rw [if_pos (by norm_num), ← Finset.sum_range_succ]
+
+theorem tieLo_acc (d : ℕ → ℕ) : tieLo d = tieAcc d 39 + tieWord d 40 := by
+  unfold tieAcc tieLo
+  rw [if_neg (by norm_num), ← Finset.sum_Ico_succ_top (by norm_num)]
+
+/-- Accumulator cells obeying the tie ops of chains `0 … 40` close the message cells `c2`, `c1`
+on the tie sums. -/
+theorem tie_chain (d : ℕ → ℕ) (acc : ℕ → E) (c1 c2 : E)
+    (h0 : acc 0 = tieWord d 0)
+    (hmid : ∀ k, 1 ≤ k → k ≤ 39 → k ≠ 19 → k ≠ 20 → acc k = acc (k - 1) + tieWord d k)
+    (h19 : c2 = acc 18 + tieWord d 19)
+    (h20 : acc 20 = tieWord d 20)
+    (h40 : c1 = acc 39 + tieWord d 40) :
+    c2 = tieHi d ∧ c1 = tieLo d := by
+  have hL : ∀ k, k ≤ 18 → acc k = tieAcc d k := by
+    intro k
+    induction k with
+    | zero => intro _; rw [h0, tieAcc_zero]
+    | succ k ih =>
+      intro hk
+      rw [hmid (k + 1) (by omega) (by omega) (by omega) (by omega),
+        tieAcc_succ d (by omega) (by omega), Nat.add_sub_cancel, ih (by omega)]
+  have hH : ∀ n, 20 + n ≤ 39 → acc (20 + n) = tieAcc d (20 + n) := by
+    intro n
+    induction n with
+    | zero => intro _; rw [Nat.add_zero, h20, tieAcc_20]
+    | succ n ih =>
+      intro hn
+      rw [hmid (20 + (n + 1)) (by omega) hn (by omega) (by omega),
+        tieAcc_succ d (by omega) (by omega), show 20 + (n + 1) - 1 = 20 + n by omega,
+        ih (by omega)]
+  refine ⟨?_, ?_⟩
+  · rw [h19, hL 18 le_rfl, tieHi_acc]
+  · rw [h40, show (39 : ℕ) = 20 + 19 from rfl, hH 19 le_rfl, tieLo_acc]
+
+/-! ### The loader -/
 
 theorem take_drop_toBits {n : ℕ} (x : BitVec n) (s w : ℕ) (h : s + w ≤ n) :
     ((toBits x).drop s).take w = toBits (x.extractLsb' s w) := by
@@ -509,7 +682,7 @@ theorem inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool) :
 
 /-- For a signature of the admitted length, cell `4 + i` holds the `i`-th revealed word. -/
 theorem inputWord_sigDecode (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 4992) (i : Fin 39) :
+    (hlen : σ.length = 5504) (i : Fin 43) :
     inputWord pk msg σ (4 + i.val) = cellOfBits (decode σ i) := by
   have hpre : (toBits pk ++ toBits msg ++
       toBits (BitVec.ofNat 128 (min σ.length (maxSignatureBits + 1)))).length = 512 := by
@@ -522,9 +695,9 @@ theorem inputWord_sigDecode (pk : PublicKey) (msg : Message) (σ : List Bool)
     htake]
   rfl
 
-/-- The length cell pins the admitted length: `4992 < 5505`, so the capped length is exact. -/
+/-- The length cell pins the admitted length: `5504 < 5505`, so the capped length is exact. -/
 theorem length_of_inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (h : inputWord pk msg σ 3 = cellOfBits (BitVec.ofNat 128 4992)) : σ.length = 4992 := by
+    (h : inputWord pk msg σ 3 = cellOfBits (BitVec.ofNat 128 5504)) : σ.length = 5504 := by
   rw [inputWord_len] at h
   have hb := congrArg cellBits h
   rw [cellBits_cellOfBits, cellBits_cellOfBits] at hb
@@ -535,281 +708,65 @@ theorem length_of_inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool
     have : min σ.length (5504 + 1) ≤ 5505 := Nat.min_le_right _ _
     have h2 : (5505 : ℕ) < 2 ^ 128 := by norm_num
     omega
-  have h3 : (4992 : ℕ) < 2 ^ 128 := by norm_num
+  have h3 : (5504 : ℕ) < 2 ^ 128 := by norm_num
   rw [Nat.mod_eq_of_lt h1, Nat.mod_eq_of_lt h3] at hn
   omega
 
-/-- With `|σ| = 4992` the statement is `5504 = 43 · 128` bits, so cells `43 … 46` are zero. -/
-theorem inputWord_pad_zero (pk : PublicKey) (m : Message) (σ : List Bool)
-    (hlen : σ.length = 4992) {i : ℕ} (h43 : 43 ≤ i) (_h47 : i < 47) :
-    inputWord pk m σ i = 0 := by
-  have hl : (statementBits pk m σ).length ≤ i * 128 := by
-    unfold statementBits
-    simp only [List.length_append, length_bits, List.length_take, hlen]
-    unfold maxSignatureBits pkBits msgBits
-    omega
-  unfold inputWord
-  rw [List.drop_eq_nil_of_le hl, List.take_nil]
-  exact cellOfBits_zero
+/-! ## 5. Digits and the checksum -/
 
-/-- Element `i` of a big-endian digit list. -/
-theorem getElem_digitsOfBaseW (n w : ℕ) : ∀ (len i : ℕ)
-    (h : i < (Checksum.digitsOfBaseW n w len).length),
-    (Checksum.digitsOfBaseW n w len)[i]'h = n / w ^ (len - 1 - i) % w := by
-  intro len
-  induction len with
-  | zero =>
-    intro i h
-    rw [Checksum.digitsOfBaseW_length] at h
-    exact absurd h (Nat.not_lt_zero i)
-  | succ len ih =>
-    intro i h
-    cases i with
-    | zero =>
-      simp only [Checksum.digitsOfBaseW, List.getElem_cons_zero,
-        show len + 1 - 1 - 0 = len by omega]
-    | succ i =>
-      have hi : i < (Checksum.digitsOfBaseW n w len).length := by
-        rw [Checksum.digitsOfBaseW_length] at h ⊢
-        omega
-      simp only [Checksum.digitsOfBaseW, List.getElem_cons_succ,
-        show len + 1 - 1 - (i + 1) = len - 1 - i by omega]
-      exact ih i hi
+/-- Message field `k` as a number below `2 ^ fieldWidth k`. -/
+theorem field_lt (m : Message) (k : ℕ) :
+    m.toNat / 2 ^ fieldOff k % 2 ^ fieldWidth k < 2 ^ fieldWidth k :=
+  Nat.mod_lt _ (Nat.two_pow_pos _)
 
-/-- Message digit `i < 37` is the base-128 digit `36 - i` of the message (little-endian index). -/
-theorem digit_of_lt (m : Message) (i : Fin 39) (hi : i.val < 37) :
-    digit m i = m.toNat / 128 ^ (36 - i.val) % 128 := by
-  have hlt : i.val < (messageDigits m).length := by
-    rw [messageDigits_length]
-    exact hi
-  have hlt' : i.val < (Checksum.digitsOfBaseW m.toNat 128 37).length := by
-    rw [Checksum.digitsOfBaseW_length]
-    exact hi
-  have h1 : digit m i = (messageDigits m)[i.val]'hlt := by
-    exact List.getElem_append_left hlt
-  have h2 : (Checksum.digitsOfBaseW m.toNat 128 37)[i.val]'hlt' =
-      m.toNat / 128 ^ (36 - i.val) % 128 := by
-    rw [getElem_digitsOfBaseW, show 37 - 1 - i.val = 36 - i.val by omega]
-  exact h1.trans h2
+/-- A message digit is its field plus the digit offset. -/
+theorem digitOff_le_digit (m : Message) (k : ℕ) (hk : k < 41) :
+    digitOff k ≤ digit m ⟨k, by omega⟩ := by
+  rw [digit_of_lt m ⟨k, by omega⟩ hk]
+  exact Nat.le_add_right _ _
 
-/-- The top digit has four significant bits: `256 = 36 · 7 + 4`. -/
-theorem digit_zero_lt (m : Message) : digit m ⟨0, by norm_num⟩ < 16 := by
-  rw [digit_of_lt m _ (by norm_num)]
-  have hm : m.toNat < 2 ^ 256 := m.isLt
-  show m.toNat / 128 ^ 36 % 128 < 16
+theorem checksum_hi_le (m : Message) : Checksum.wotsChecksumValue 128 (messageDigits m) / 64 ≤ 50 := by
+  have := wotsChecksumValue_messageDigits_le m
   omega
 
-/-- **The tie.** For digits `e k < 128` (`k < 37`) with `e 0 < 16`, the tie sums are the two
-message cells exactly when `e` is the message's digit vector. -/
-theorem tie_iff (m : Message) (e : ℕ → ℕ) (he : ∀ k < 37, e k < 128) (he0 : e 0 < 16) :
-    (tieHi e = cellOfBits (m.extractLsb' 128 128) ∧ tieLo e = cellOfBits (m.extractLsb' 0 128)) ↔
-      ∀ k (hk : k < 37), e k = digit m ⟨k, by omega⟩ := by
-  have hP : packHi e < 16 * 128 ^ 17 := by
-    unfold packHi
-    rw [Finset.sum_range_succ]
-    have h1 := pack_lt (fun p => e (17 - p)) 17 (fun p hp => he _ (by omega))
-    have h3 : 128 ^ 17 * e (17 - 17) ≤ 128 ^ 17 * 15 := Nat.mul_le_mul_left _ (by
-      show e 0 ≤ 15
-      omega)
-    exact lt_of_lt_of_le (Nat.add_lt_add_of_lt_of_le h1 h3) (by norm_num)
-  have hQ : packLo e < 128 ^ 18 := pack_lt (fun p => e (36 - p)) 18 (fun p hp => he _ (by omega))
-  have hsplit := pack_split e
-  have hr : e 18 % 4 < 4 := Nat.mod_lt _ (by norm_num)
-  have h18 := he 18 (by norm_num)
-  have hm : m.toNat < 2 ^ 256 := m.isLt
-  have hHi : e 18 / 4 + 2 ^ 5 * packHi e < 2 ^ 128 := by omega
-  have hLo : packLo e + 2 ^ 126 * (e 18 % 4) < 2 ^ 128 := by omega
-  have hdig : ∀ k (hk : k < 37), digit m ⟨k, by omega⟩ = m.toNat / 128 ^ (36 - k) % 128 :=
-    fun k hk => digit_of_lt m ⟨k, by omega⟩ hk
-  rw [tieHi_eq e he, tieLo_eq e he, cellOfBits_ofNat_inj hHi, cellOfBits_ofNat_inj hLo,
-    extract_hi_toNat, extract_lo_toNat]
-  constructor
-  · rintro ⟨h1, h2⟩ k hk
-    have hN : packAll e = m.toNat := by omega
-    have h := pack_div (fun p => e (36 - p)) (36 - k) 37 (fun q hq => he _ (by omega)) (by omega)
-    rw [show 36 - (36 - k) = k by omega] at h
-    unfold packAll at hN
-    rw [hdig k hk, ← h, hN]
-  · intro h
-    have hN : packAll e = m.toNat := by
-      have hmN : m.toNat = ∑ p ∈ Finset.range 37, 128 ^ p * (m.toNat / 128 ^ p % 128) := by
-        rw [pack_digits, Nat.mod_eq_of_lt (by omega)]
-      rw [hmN]
-      unfold packAll
-      refine Finset.sum_congr rfl fun p hp => ?_
-      have := Finset.mem_range.mp hp
-      rw [h (36 - p) (by omega), hdig _ (by omega), show 36 - (36 - p) = p by omega]
-    omega
-
-/-- The tie accumulator after chain `k ≤ 35`: the partial sum of `tieHi` for `k < 18`, and of
-`tieLo` from chain 18 on. -/
-noncomputable def tieAcc (e : ℕ → ℕ) (k : ℕ) : E :=
-  if k < 18 then ∑ i ∈ Finset.range (k + 1), cellOfBits (BitVec.ofNat 128 (e i <<< (124 - 7 * i)))
-  else cellOfBits (BitVec.ofNat 128 ((e 18 % 4) <<< 126)) +
-    ∑ i ∈ Finset.Ico 19 (k + 1), cellOfBits (BitVec.ofNat 128 (e i <<< (7 * (36 - i))))
-
-theorem tieAcc_zero (e : ℕ → ℕ) : tieAcc e 0 = cellOfBits (BitVec.ofNat 128 (e 0 <<< 124)) := by
-  unfold tieAcc
-  rw [if_pos (by norm_num), Finset.sum_range_one]
-
-theorem tieAcc_succ_lo (e : ℕ → ℕ) {k : ℕ} (h1 : 1 ≤ k) (h17 : k ≤ 17) :
-    tieAcc e k = tieAcc e (k - 1) + cellOfBits (BitVec.ofNat 128 (e k <<< (124 - 7 * k))) := by
-  obtain ⟨j, rfl⟩ : ∃ j, k = j + 1 := ⟨k - 1, by omega⟩
-  unfold tieAcc
-  rw [if_pos (by omega), if_pos (by omega), Nat.add_sub_cancel, Finset.sum_range_succ _ (j + 1)]
-
-theorem tieAcc_18 (e : ℕ → ℕ) : tieAcc e 18 = cellOfBits (BitVec.ofNat 128 ((e 18 % 4) <<< 126)) := by
-  unfold tieAcc
-  rw [if_neg (by norm_num), Finset.Ico_self, Finset.sum_empty, add_zero]
-
-theorem tieAcc_succ_hi (e : ℕ → ℕ) {k : ℕ} (h19 : 19 ≤ k) :
-    tieAcc e k = tieAcc e (k - 1) + cellOfBits (BitVec.ofNat 128 (e k <<< (7 * (36 - k)))) := by
-  obtain ⟨j, rfl⟩ : ∃ j, k = j + 1 := ⟨k - 1, by omega⟩
-  unfold tieAcc
-  rw [if_neg (by omega), if_neg (by omega), Nat.add_sub_cancel, Finset.sum_Ico_succ_top (by omega),
-    add_assoc]
-
-theorem tieHi_acc (e : ℕ → ℕ) : tieHi e = tieAcc e 17 + cellOfBits (BitVec.ofNat 128 (e 18 / 4)) := by
-  unfold tieAcc
-  rw [if_pos (by norm_num)]
-  rfl
-
-theorem tieLo_acc (e : ℕ → ℕ) : tieLo e = tieAcc e 35 + cellOfBits (BitVec.ofNat 128 (e 36)) := by
-  have h := tieAcc_succ_hi e (k := 36) (by norm_num)
-  rw [show 7 * (36 - 36) = 0 from rfl, Nat.shiftLeft_zero] at h
-  rw [← h]
-  unfold tieAcc
-  rw [if_neg (by norm_num)]
-  rfl
-
-/-- Accumulator cells obeying the tie ops of chains `0 … 36` close the message cells `c2`, `c1`
-on the tie sums. -/
-theorem tie_chain (e : ℕ → ℕ) (acc : ℕ → E) (c1 c2 : E)
-    (h0 : acc 0 = cellOfBits (BitVec.ofNat 128 (e 0 <<< 124)))
-    (hlo : ∀ k, 1 ≤ k → k ≤ 17 →
-      acc k = acc (k - 1) + cellOfBits (BitVec.ofNat 128 (e k <<< (124 - 7 * k))))
-    (h18a : c2 = acc 17 + cellOfBits (BitVec.ofNat 128 (e 18 / 4)))
-    (h18b : acc 18 = cellOfBits (BitVec.ofNat 128 ((e 18 % 4) <<< 126)))
-    (hhi : ∀ k, 19 ≤ k → k ≤ 35 →
-      acc k = acc (k - 1) + cellOfBits (BitVec.ofNat 128 (e k <<< (7 * (36 - k)))))
-    (h36 : c1 = acc 35 + cellOfBits (BitVec.ofNat 128 (e 36))) :
-    c2 = tieHi e ∧ c1 = tieLo e := by
-  have hL : ∀ k, k ≤ 17 → acc k = tieAcc e k := by
-    intro k
-    induction k with
-    | zero => intro _; rw [h0, tieAcc_zero]
-    | succ k ih =>
-      intro hk
-      rw [hlo (k + 1) (by omega) hk, tieAcc_succ_lo e (by omega) hk, Nat.add_sub_cancel,
-        ih (by omega)]
-  have hH : ∀ n, 18 + n ≤ 35 → acc (18 + n) = tieAcc e (18 + n) := by
-    intro n
-    induction n with
-    | zero => intro _; rw [Nat.add_zero, h18b, tieAcc_18]
-    | succ n ih =>
-      intro hn
-      rw [hhi (18 + (n + 1)) (by omega) hn, tieAcc_succ_hi e (by omega),
-        show 18 + (n + 1) - 1 = 18 + n by omega, ih (by omega)]
-  refine ⟨?_, ?_⟩
-  · rw [h18a, hL 17 le_rfl, tieHi_acc]
-  · rw [h36, show (35 : ℕ) = 18 + 17 from rfl, hH 17 le_rfl, tieLo_acc]
-
-/-! ## 5. The checksum -/
-
-theorem sum_map_digitsOfBaseW (f : ℕ → ℕ) (n w : ℕ) : ∀ len,
-    ((Checksum.digitsOfBaseW n w len).map f).sum = ∑ j ∈ Finset.range len, f (n / w ^ j % w) := by
-  intro len
-  induction len with
-  | zero =>
-    simp only [Checksum.digitsOfBaseW_nil, List.map_nil, List.sum_nil, Finset.sum_range_zero]
-  | succ len ih =>
-    simp only [Checksum.digitsOfBaseW, List.map_cons, List.sum_cons, Finset.sum_range_succ, ih]
-    omega
-
-/-- The scheme's checksum value, as a sum over the message digits. -/
-theorem checksum_eq_sum (m : Message) :
-    Checksum.wotsChecksumValue 128 (messageDigits m) =
-      ∑ i ∈ Finset.range 37, (127 - m.toNat / 128 ^ (36 - i) % 128) := by
-  have h1 := sum_map_digitsOfBaseW (fun d => 128 - 1 - d) m.toNat 128 37
-  have h2 := Finset.sum_range_reflect (fun j => 127 - m.toNat / 128 ^ j % 128) 37
-  exact h1.trans h2.symm
-
-theorem wotsChecksum_le (m : Message) :
-    Checksum.wotsChecksumValue 128 (messageDigits m) ≤ 127 * 37 :=
-  (Checksum.wotsChecksumValue_le (messageDigits_length m) (messageDigits_lt m)).trans
-    (by norm_num)
-
-/-- The high checksum digit. -/
-theorem digit_hi_checksum (m : Message) (i : Fin 39) (hi : i.val = 37) :
-    digit m i = Checksum.wotsChecksumValue 128 (messageDigits m) / 128 := by
-  have hC := wotsChecksum_le m
-  have hle : (messageDigits m).length ≤ i.val := by
-    rw [messageDigits_length]
-    omega
-  have hlt : i.val - (messageDigits m).length <
-      (Checksum.digitsOfBaseW (Checksum.wotsChecksumValue 128 (messageDigits m)) 128 2).length := by
-    rw [Checksum.digitsOfBaseW_length, messageDigits_length]
-    omega
-  have h1 : digit m i = (Checksum.digitsOfBaseW (Checksum.wotsChecksumValue 128 (messageDigits m))
-      128 2)[i.val - (messageDigits m).length]'hlt := by
-    exact List.getElem_append_right hle
-  have e : 2 - 1 - (i.val - (messageDigits m).length) = 1 := by
-    rw [messageDigits_length]
-    omega
-  rw [h1, getElem_digitsOfBaseW, e, pow_one]
-  exact Nat.mod_eq_of_lt (by omega)
-
-/-- The low checksum digit. -/
-theorem digit_lo_checksum (m : Message) (i : Fin 39) (hi : i.val = 38) :
-    digit m i = Checksum.wotsChecksumValue 128 (messageDigits m) % 128 := by
-  have hle : (messageDigits m).length ≤ i.val := by
-    rw [messageDigits_length]
-    omega
-  have hlt : i.val - (messageDigits m).length <
-      (Checksum.digitsOfBaseW (Checksum.wotsChecksumValue 128 (messageDigits m)) 128 2).length := by
-    rw [Checksum.digitsOfBaseW_length, messageDigits_length]
-    omega
-  have h1 : digit m i = (Checksum.digitsOfBaseW (Checksum.wotsChecksumValue 128 (messageDigits m))
-      128 2)[i.val - (messageDigits m).length]'hlt := by
-    exact List.getElem_append_right hle
-  have e : 2 - 1 - (i.val - (messageDigits m).length) = 0 := by
-    rw [messageDigits_length]
-    omega
-  rw [h1, getElem_digitsOfBaseW, e, pow_zero, Nat.div_one]
-
-/-- The checksum plus the message digits is `37 · 127`. -/
-theorem checksum_add_digits (m : Message) (d : ℕ → ℕ)
-    (hd : ∀ k (hk : k < 37), d k = digit m ⟨k, by omega⟩) :
-    Checksum.wotsChecksumValue 128 (messageDigits m) + ∑ k ∈ Finset.range 37, d k = 4699 := by
-  rw [checksum_eq_sum, ← Finset.sum_add_distrib]
-  have h : ∀ k ∈ Finset.range 37, 127 - m.toNat / 128 ^ (36 - k) % 128 + d k = 127 := by
+/-- The checksum plus the message digits is `41 · 127`. -/
+theorem checksum_add_digits (m : Message) (D : ℕ → ℕ)
+    (hd : ∀ k (hk : k < 41), D k = digit m ⟨k, by omega⟩) :
+    Checksum.wotsChecksumValue 128 (messageDigits m) + ∑ k ∈ Finset.range 41, D k = 5207 := by
+  have hC : Checksum.wotsChecksumValue 128 (messageDigits m) =
+      ∑ k ∈ Finset.range 41, (127 - D k) := by
+    rw [wotsChecksumValue_messageDigits m, ← Fin.sum_univ_eq_sum_range (fun k => 127 - D k) 41]
+    refine Finset.sum_congr rfl fun k _ => ?_
+    rw [hd k.val k.isLt]
+    rfl
+  rw [hC, ← Finset.sum_add_distrib]
+  have h : ∀ k ∈ Finset.range 41, 127 - D k + D k = 127 := by
     intro k hk
     have hk' := Finset.mem_range.mp hk
-    have h1 : digit m ⟨k, by omega⟩ = m.toNat / 128 ^ (36 - k) % 128 :=
-      digit_of_lt m ⟨k, by omega⟩ hk'
-    have h2 : m.toNat / 128 ^ (36 - k) % 128 < 128 := Nat.mod_lt _ (by norm_num)
-    rw [hd k hk', h1]
+    have := digit_le m ⟨k, by omega⟩
+    rw [hd k hk']
     omega
   rw [Finset.sum_congr rfl h, Finset.sum_const, Finset.card_range, smul_eq_mul]
 
-/-- The checksum identity recovers the two checksum digits: if the message chains carry the
-message digits, `E 38 ≤ 127` and `Σ_{k<37} E k + 128 · E 37 + E 38 = 4699`, then `E 37` and
-`E 38` are digits 37 and 38. -/
+/-- The checksum identity recovers the two offset checksum digits: if the message chains carry
+the message digits, `64 ≤ E 41`, `64 ≤ E 42 < 128` and
+`Σ_{k<41} E k + 64 · (E 41 − 64) + E 42 = 5271`, then `E 41` and `E 42` are digits 41 and 42. -/
 theorem checksum_digits (m : Message) (D : ℕ → ℕ)
-    (hd : ∀ k (hk : k < 37), D k = digit m ⟨k, by omega⟩) (h38 : D 38 ≤ 127)
-    (hsum : ∑ k ∈ Finset.range 37, D k + 128 * D 37 + D 38 = 4699) :
-    D 37 = digit m ⟨37, by norm_num⟩ ∧ D 38 = digit m ⟨38, by norm_num⟩ := by
+    (hd : ∀ k (hk : k < 41), D k = digit m ⟨k, by omega⟩) (h41 : 64 ≤ D 41) (h42 : 64 ≤ D 42)
+    (h42' : D 42 < 128)
+    (hsum : ∑ k ∈ Finset.range 41, D k + 64 * (D 41 - 64) + D 42 = 5271) :
+    D 41 = digit m 41 ∧ D 42 = digit m 42 := by
   have hC := checksum_add_digits m D hd
-  rw [digit_hi_checksum m _ rfl, digit_lo_checksum m _ rfl]
+  rw [digit_hi, digit_lo]
   omega
 
 /-- The honest direction: the true digits satisfy the checksum identity. -/
-theorem checksum_honest_sum (m : Message) (d : ℕ → ℕ)
-    (hd : ∀ k (hk : k < 37), d k = digit m ⟨k, by omega⟩) :
-    ∑ k ∈ Finset.range 37, d k +
-      128 * (Checksum.wotsChecksumValue 128 (messageDigits m) / 128) +
-      Checksum.wotsChecksumValue 128 (messageDigits m) % 128 = 4699 := by
-  have hC := checksum_add_digits m d hd
+theorem checksum_honest_sum (m : Message) (D : ℕ → ℕ)
+    (hd : ∀ k (hk : k < 41), D k = digit m ⟨k, by omega⟩) :
+    ∑ k ∈ Finset.range 41, D k +
+      64 * (Checksum.wotsChecksumValue 128 (messageDigits m) / 64) +
+      (64 + Checksum.wotsChecksumValue 128 (messageDigits m) % 64) = 5271 := by
+  have hC := checksum_add_digits m D hd
   omega
 
 end OptimalOTS.LeanIsaBaseline.Machine

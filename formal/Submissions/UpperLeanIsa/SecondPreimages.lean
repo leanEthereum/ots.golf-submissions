@@ -39,7 +39,7 @@ theorem card_filter_low_le (n m : ℕ) (hm : m ≤ n) (a : BitVec m) :
 def AnswerMatches (ξ : Record) (a : HashLocation) (u : BitVec hashBits) : Prop :=
   match a with
   | .inl _ => u.setWidth 128 = (ξ.2 a).setWidth 128
-  | .inr i => if i = 38 then u.setWidth 128 = (ξ.2 a).setWidth 128 else u = ξ.2 a
+  | .inr i => if i = 42 then u.setWidth 128 = (ξ.2 a).setWidth 128 else u = ξ.2 a
 
 def lowAnswers (v : BitVec hashBits) : Finset (BitVec hashBits) :=
   Finset.univ.filter (fun w => w.setWidth 128 = v.setWidth 128)
@@ -53,14 +53,14 @@ theorem lowAnswers_card (v : BitVec hashBits) : (lowAnswers v).card ≤ 2 ^ 128 
 def matchingAnswers (ξ : Record) (a : HashLocation) : Finset (BitVec hashBits) :=
   match a with
   | .inl _ => lowAnswers (ξ.2 a)
-  | .inr i => if i = 38 then lowAnswers (ξ.2 a) else {ξ.2 a}
+  | .inr i => if i = 42 then lowAnswers (ξ.2 a) else {ξ.2 a}
 
 theorem matchingAnswers_card (ξ : Record) (a : HashLocation) :
     (matchingAnswers ξ a).card ≤ 2 ^ 128 := by
   cases a with
   | inl a => exact lowAnswers_card _
   | inr i =>
-    change (if i = 38 then lowAnswers (ξ.2 (.inr i)) else {ξ.2 (.inr i)}).card ≤ _
+    change (if i = 42 then lowAnswers (ξ.2 (.inr i)) else {ξ.2 (.inr i)}).card ≤ _
     split
     · exact lowAnswers_card _
     · rw [Finset.card_singleton]

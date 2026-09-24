@@ -131,7 +131,7 @@ theorem two_le_of_costAtMost_experiment {B : ℕ}
   unfold keygen at h
   simp only [bind_assoc] at h
   have h1 := costAtMost_tabulate_sample_bind _ h (fun _ => 0)
-  have h2 := costAtMost_tabulate_succ_bind (n := 38) _ _ h1
+  have h2 := costAtMost_tabulate_succ_bind (n := 42) _ _ h1
   exact two_le_of_costAtMost_chain_bind _ 0 126 _ _ h2
 
 end OptimalOTS.LeanIsaBaseline

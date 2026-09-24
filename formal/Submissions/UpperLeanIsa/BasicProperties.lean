@@ -4,7 +4,7 @@ namespace OptimalOTS.LeanIsaBaseline
 
 open OracleComp
 
-theorem encode_length (xs : Words) : (encode xs).length = 4992 := by
+theorem encode_length (xs : Words) : (encode xs).length = 5504 := by
   have hw (y : Word) : (toBits y).length = 128 := by simp only [toBits, List.length_ofFn]
   have h (ys : List Word) : (ys.flatMap toBits).length = 128 * ys.length := by
     induction ys with
@@ -25,7 +25,7 @@ theorem signature_size : scheme.SignatureSizeAtMost maxSignatureBits := by
 
 theorem rejects_oversized : scheme.RejectsOversized maxSignatureBits := by
   intro pk m bits h
-  have hlen : bits.length ≠ 4992 := by unfold maxSignatureBits at h; omega
+  have hlen : bits.length ≠ 5504 := by unfold maxSignatureBits at h; omega
   change true ∉ support (verify pk m bits)
   simp [verify, hlen]
 

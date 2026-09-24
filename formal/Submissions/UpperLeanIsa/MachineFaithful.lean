@@ -44,7 +44,7 @@ theorem fixed_sound {κ : ℕ} (hκ : 16 ≤ κ) (hκ' : κ ≤ maxLogMem) (f : 
     (pk : PublicKey) (m : Message) (bits : List Bool) (L : MemImage κ) {n c : ℕ}
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
       (LeanIsa.runCost program (LeanIsa.loadInput pk m bits L) n Regs.initial))) :
-    bits.length = 4992 ∧ rootValue f (reconstructedWords f m bits) = pk := by
+    bits.length = 5504 ∧ rootValue f (reconstructedWords f m bits) = pk := by
   rw [initial_eq] at h
   have hone := one_of_sim hκ' h
   obtain ⟨D, hD, -, -, hP⟩ := walk_full (fun _ hs => holdsNH_of_holds hs) hone
@@ -59,7 +59,7 @@ theorem honest_sound (f : HashTable) (pk : PublicKey) (m : Message) (bits : List
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
       (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits))
         (totalSteps (dig m)) Regs.initial))) :
-    bits.length = 4992 ∧ rootValue f (reconstructedWords f m bits) = pk := by
+    bits.length = 5504 ∧ rootValue f (reconstructedWords f m bits) = pk := by
   generalize totalSteps (dig m) = n at h
   exact fixed_sound (le_refl 16) (by decide) f pk m bits _ h
 

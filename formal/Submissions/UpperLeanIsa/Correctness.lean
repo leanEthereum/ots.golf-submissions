@@ -94,9 +94,9 @@ def reconstructedWords (f : HashTable) (m : Message) (bits : List Bool) : Words 
 /-- The exact fixed-table decision on arbitrary raw inputs, including malformed lengths. -/
 theorem fixed_verify (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) :
     simulateQ (unifFwdAnswerImpl f) (verify pk m bits) =
-      pure (if bits.length = 4992 then rootValue f (reconstructedWords f m bits) == pk
+      pure (if bits.length = 5504 then rootValue f (reconstructedWords f m bits) == pk
         else false) := by
-  by_cases h : bits.length = 4992
+  by_cases h : bits.length = 5504
   · simp only [verify, h, ne_eq, not_true_eq_false, ↓reduceIte, simulateQ_bind, simulateQ_pure]
     rw [fixed_tabulate f _ (reconstructedWords f m bits) (fun i => fixed_chain f _ _ _ _),
       pure_bind, fixed_root, pure_bind]
@@ -104,7 +104,7 @@ theorem fixed_verify (f : HashTable) (pk : PublicKey) (m : Message) (bits : List
 
 theorem fixed_keygen (f : HashTable) :
     simulateQ (unifFwdAnswerImpl f) keygen =
-      (simulateQ (unifFwdAnswerImpl f) (tabulate (fun _ : Fin 39 => sampleBits 128)) >>= fun sk =>
+      (simulateQ (unifFwdAnswerImpl f) (tabulate (fun _ : Fin 43 => sampleBits 128)) >>= fun sk =>
         pure (rootValue f (endpoints f sk), sk)) := by
   simp only [keygen, simulateQ_bind, simulateQ_pure]
   apply congrArg
@@ -120,7 +120,7 @@ theorem fixed_sign (f : HashTable) (sk : Words) (m : Message) :
 theorem fixed_verify_honest (f : HashTable) (sk : Words) (m : Message) :
     simulateQ (unifFwdAnswerImpl f)
       (verify (rootValue f (endpoints f sk)) m (encode (signedWords f sk m))) = pure true := by
-  have hc (i : Fin 39) :
+  have hc (i : Fin 43) :
       chainValue f i.val (digit m i) (127 - digit m i) (signedWords f sk m i) =
         endpoints f sk i := by
     unfold signedWords endpoints
