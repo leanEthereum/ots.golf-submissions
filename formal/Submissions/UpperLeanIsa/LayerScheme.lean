@@ -6,7 +6,7 @@ import VCVio.OracleComp.Constructions.SampleableType
 # Layer schemes: the generic 42-chain one-time signature
 
 A *layer scheme* has 42 hash chains, chain `k` with `len k` positions `0, …, len k - 1`
-(so `len k - 1` steps), one 128-bit *index* per signature, and accepts an index `I` when the
+(so `len k - 1` steps), one 127-bit *index* per signature, and accepts an index `I` when the
 remaining-step digits `digit I k < len k` sum to the layer `layer`. The accepted digit vectors
 form an antichain, which replaces the Winternitz checksum.
 
@@ -16,8 +16,8 @@ and the three query *shapes* are separated by the metadata cell:
 * chain step of chain `k` at position `j`: `cv = P.cv`, block `m = [x, A, B, C]` with the three
   tag cells `P.tag k j`, `md = P.chainMd`; the next word is the answer slice `P.slice k j`: the
   high half for the step that produces the top of a `P.hiTop` chain, the low half otherwise;
-* index: `cv = P.cv`, block `m = [msg.lo, msg.hi, η, pk]`, `md = P.idxMd`; the index is the low
-  half of the answer;
+* index: `cv = P.cv`, block `m = [msg.lo, msg.hi, η, pk]`, `md = P.idxMd`; the index is bits
+  `1, …, 127` of the answer (`idxAns`);
 * root call `r < 9` (tagged, "R9"): call 0 has `cv = (top 0, top 1)` and block
   `[top 2, …, top 5]`; call `r = 1, …, 7` has `cv = (top (5r+1), top (5r+2))` and block
   `[lo st, top (5r+3), top (5r+4), top (5r+5)]` with `st` the previous 256-bit answer; call 8
@@ -41,6 +41,10 @@ namespace OptimalOTS.LeanIsaBaseline.Layer
 abbrev Word := BitVec 128
 /-- The signing nonce: one full signature cell. -/
 abbrev Nonce := BitVec 128
+/-- The index word: bits `1, …, 127` of the index answer (bit `0` is not read). -/
+abbrev IdxWord := BitVec 127
+/-- The index word of an index answer. -/
+abbrev idxAns {n : ℕ} (y : BitVec n) : IdxWord := y.extractLsb' 1 127
 /-- Number of chains. -/
 abbrev numChains : ℕ := 42
 /-- Signature length in bits: 42 words and the nonce. -/
@@ -55,7 +59,7 @@ structure Params where
   /-- The accepted layer: the digits sum to `layer`. -/
   layer : ℕ
   /-- Digit (remaining steps) of chain `k` read from the index. -/
-  digit : Word → Fin numChains → ℕ
+  digit : IdxWord → Fin numChains → ℕ
   /-- The three tag cells `A, B, C` of the step of chain `k` at position `j`. -/
   tag : Fin numChains → ℕ → Fin 3 → Word
   /-- The constant chaining value of chain steps and the index query. -/
@@ -137,9 +141,9 @@ def chainList (k : Fin numChains) : ℕ → ℕ → Word → OracleComp Spec (Li
     let ys ← chainList k (j + 1) n y
     pure (x :: ys)
 
-/-- The index of a message and nonce under a public key: the low half of the answer. -/
-def index (m : Message) (η : Nonce) (pk : PublicKey) : OracleComp Spec Word :=
-  (fun y => y.extractLsb' 0 128) <$> hash (P.idxInput m η pk)
+/-- The index of a message and nonce under a public key: bits `1, …, 127` of the answer. -/
+def index (m : Message) (η : Nonce) (pk : PublicKey) : OracleComp Spec IdxWord :=
+  idxAns <$> hash (P.idxInput m η pk)
 
 /-- Root calls `r, …, r + n - 1` from state `st`. -/
 def rootFrom (t : Fin numChains → Word) : ℕ → ℕ → BitVec 256 → OracleComp Spec (BitVec 256)
@@ -153,12 +157,12 @@ def root (t : Fin numChains → Word) : OracleComp Spec PublicKey :=
   (fun y => y.extractLsb' 0 128) <$> P.rootFrom t 0 9 (rootInit t)
 
 /-- Acceptance: the digits of the index sum to the layer. -/
-def Accepted (I : Word) : Prop := ∑ k : Fin numChains, P.digit I k = P.layer
+def Accepted (I : IdxWord) : Prop := ∑ k : Fin numChains, P.digit I k = P.layer
 
-instance (I : Word) : Decidable (P.Accepted I) := by unfold Accepted; infer_instance
+instance (I : IdxWord) : Decidable (P.Accepted I) := by unfold Accepted; infer_instance
 
 /-- The number of accepted indices. -/
-def numValid : ℕ := (Finset.univ.filter fun I : Word => P.Accepted I).card
+def numValid : ℕ := (Finset.univ.filter fun I : IdxWord => P.Accepted I).card
 
 end Params
 
@@ -192,7 +196,7 @@ namespace Params
 variable (P : Params)
 
 /-- The revealed word of chain `k` for index `I`: position `len k - 1 - digit I k`. -/
-def revealed (sk : SecretKey) (I : Word) (k : Fin numChains) : Word :=
+def revealed (sk : SecretKey) (I : IdxWord) (k : Fin numChains) : Word :=
   (sk.table k).getD (P.len k - 1 - P.digit I k) 0
 
 /-- Key generation: 42 uniform seeds, the full chain tables, the root. -/

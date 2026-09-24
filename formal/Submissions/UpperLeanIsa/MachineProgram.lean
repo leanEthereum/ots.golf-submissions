@@ -5,23 +5,28 @@ import Submissions.UpperLeanIsa.ConstraintMath
 # The HL-TRI bytecode
 
 The hinted-landing machine for the FLAT-42 layer scheme (`SchemeFlat.lean`), design
-`.tmp/hl/hltri_r9_model.py`: the 42 chains are dispatched in 14 groups of three, one landing per
-group, and every block of group `g` costs the same number of non-hash instructions whatever its
-digits, so every completing run executes exactly `258` instructions (`116` of them `BLAKE2S`).
+`.tmp/hl/hltri_1390_model.py`: the 42 chains are dispatched in 14 groups of three, one landing
+per group, and every block of group `g` costs the same number of non-hash instructions whatever
+its digits, so every completing run executes exactly `253` instructions (`113` of them
+`BLAKE2S`).
 
 * **Groups.** `G_g = (3g, 3g + 1, 3g + 2)` for `g < 12`, `G_12 = (36, 37, 40)`,
-  `G_13 = (38, 39, 41)` (`gch g j`). A block is indexed by the three digits `(a, b, c)` of its
-  group, `a, b < 8`, `c < Wc g`.
+  `G_13 = (38, 39, 41)` (`gch g j`). A block is indexed by the junk digit `d < Wd g` and the three
+  digits `(a, b, c)` of its group, `a, b < 8`, `c < Wc g` (`16` only for group 13, whose last
+  chain is chain 41).
 * **Frames.** `F_g = g ^ ((g + 1) · 2 ^ 33)`. The dispatch of group `g` is
   `MUL(H_g, g, H'_g); JUMP(ONE, H_g, F_g)` with `H_g` a prover hint. The only instructions that
   can execute in frame `F_g` are the entries `I0_g = JUMP(ONE, H'_g, ONE)` of group `g`, whose
   operands are frame-shifted (`sop`); they return to frame `1` at the next slot.
-* **Entries.** The entry of digits `(a, b, c)` of group `g` sits at `BASE g + SP g · grank`,
-  `grank = (a · 8 + b) · Wc g + c`.
+* **Entries.** The entry of digits `(d, a, b, c)` of group `g` sits at `BASE g + SP g · grank`,
+  `grank = 512 · d + (a · 8 + b) · Wc g + c`.
+* **Junk bit.** The index is bits `1 … 127` of the index cell; bit `0` is the junk digit `d < 2`
+  of group 0 (1024 group-0 blocks), and the other groups have `d = 0`. Group 0's tie word
+  `d + T_0` sets `acc_0`, so `acc_13 = d + Σ T_g` is the whole index cell.
 * **Blocks** (frame `1`, after `I0`): the tie (`SET acc_0` for `g = 0`; else `SET T_g; XOR` into
-  the accumulator, or an accumulator copy if all digits are `0`), the zero copies
-  `XOR(W_k, Z, rootTop k)` of the zero digits, the layer factor (`SET L_0 := g ^ (rootSlot - 106 +
-  σ)` for `g = 0`; else `MUL(L_{g-1}, ·, L_g)` by `ONE`, a prologue constant `g ^ σ` (`σ ≤ 7`) or a
+  the accumulator, or an accumulator copy if all digits are `0`), the zero copies `XOR(W_k, Z, rootTop k)`
+  of the zero digits, the layer factor (`SET L_0 := g ^ (rootSlot - 103 + σ)` for `g = 0`; else
+  `MUL(L_{g-1}, ·, L_g)` by `ONE`, a prologue constant `g ^ σ` (`σ ≤ 7`) or a
   `SET C_g := g ^ σ`), pads `XOR(Z, Z, Z)` up to `NH g` non-hash ops, the `σ` inline chain steps,
   then the next dispatch; group 13 ends with the exit `JUMP(ONE, K0, ONE)` into the root at
   `rootSlot`. `L_13 = K0 = g ^ rootSlot`.
@@ -32,8 +37,8 @@ digits, so every completing run executes exactly `258` instructions (`116` of th
 * **Root.** Nine tagged `BLAKE2S` (calls `1 … 7` chain the low half of the previous state through
   the message, call 8 takes the full state as cv), then `XOR` into the public key cell; it falls
   through to the sentinel.
-* **Constants.** Tag symbols and root metadata reuse the prologue's constant cells (`Z`, `ONE`,
-  `g ^ 1 … g ^ 7`, the length cell).
+* **Constants.** Tag symbols and metadata reuse the prologue's constant cells (`Z`, `ONE`,
+  `g ^ 1 … g ^ 7`, `K0`, the length cell).
 
 This file holds the cells, the constants, the cell-level instructions, the image and its
 builder-level decode lemmas, and the frame lemma. No slot range is ever evaluated: the builders
@@ -108,8 +113,8 @@ theorem frame_ne_one {g : ℕ} (hg : g < 14) : frame g ≠ 1 := by
 
 /-! ## Chains and groups -/
 
-/-- Positions (digit range) of chain `k`: 8 for `k < 40`, 16 for `k = 40, 41`. -/
-def W (k : ℕ) : ℕ := if k < 40 then 8 else 16
+/-- Positions (digit range) of chain `k`: 8 for `k < 41`, 16 for `k = 41`. -/
+def W (k : ℕ) : ℕ := if k < 41 then 8 else 16
 
 theorem W_le {k : ℕ} : W k ≤ 16 := by unfold W; split_ifs <;> omega
 
@@ -118,7 +123,7 @@ theorem W_pos {k : ℕ} : 8 ≤ W k := by unfold W; split_ifs <;> omega
 theorem W_eq_len (k : Fin numChains) : W k.val = Flat.len k := by
   unfold W Flat.len Flat.wid
   have := k.isLt
-  by_cases h : k.val < 40
+  by_cases h : k.val < 41
   · rw [if_pos h, if_pos h]; rfl
   · rw [if_neg h, if_neg h, if_pos (by omega)]; rfl
 
@@ -144,43 +149,49 @@ theorem grp_lt {k : ℕ} (hk : k < 42) : grp k < 14 ∧ gpos k < 3 := by
   unfold grp gpos; split_ifs <;> omega
 
 /-- The range of the last digit of group `g`. -/
-def Wc (g : ℕ) : ℕ := if g < 12 then 8 else 16
+def Wc (g : ℕ) : ℕ := if g < 13 then 8 else 16
 
 theorem W_gch {g j : ℕ} (hg : g < 14) (hj : j < 3) :
     W (gch g j) = if j < 2 then 8 else Wc g := by
   unfold W gch Wc; split_ifs <;> omega
 
-/-- Blocks of group `g`: `8 · 8 · Wc g`. -/
-def NT (g : ℕ) : ℕ := 64 * Wc g
+/-- The range of the junk digit of group `g`: bit `0` of the index cell is group 0's. -/
+def Wd (g : ℕ) : ℕ := if g = 0 then 2 else 1
+
+/-- Blocks of group `g`: `Wd g · 8 · 8 · Wc g`. -/
+def NT (g : ℕ) : ℕ := Wd g * (64 * Wc g)
 
 /-- Non-hash ops of a block of group `g` before its tail, counting `I0` and the pads. -/
-def NH (g : ℕ) : ℕ := if g < 12 then 6 else 7
+def NH (g : ℕ) : ℕ := if g < 13 then 6 else 7
 
 /-- Slots per block of group `g`. -/
-def SP (g : ℕ) : ℕ := if g < 12 then 29 else if g = 12 then 38 else 37
+def SP (g : ℕ) : ℕ := if g < 13 then 29 else 37
 
 /-- The first entry of group `g`. -/
-def BASE (g : ℕ) : ℕ := if g < 12 then 29 + 14848 * g else if g = 12 then 178205 else 217117
+def BASE (g : ℕ) : ℕ := if g = 0 then 28 else if g < 13 then 14876 + 14848 * g else 207900
 
-/-- The rank of the digits `(a, b, c)` in group `g`. -/
-def grank (g a b c : ℕ) : ℕ := if g < 12 then 64 * a + 8 * b + c else 128 * a + 16 * b + c
+/-- The rank of the digits `(d, a, b, c)` in group `g`. -/
+def grank (g d a b c : ℕ) : ℕ :=
+  512 * d + if g < 13 then 64 * a + 8 * b + c else 128 * a + 16 * b + c
 
 /-- The per-group constants, by case. -/
 theorem grp_consts {g : ℕ} (hg : g < 14) :
-    (g < 12 ∧ Wc g = 8 ∧ NH g = 6 ∧ SP g = 29 ∧ BASE g = 29 + 14848 * g) ∨
-    (g = 12 ∧ Wc g = 16 ∧ NH g = 7 ∧ SP g = 38 ∧ BASE g = 178205) ∨
-    (g = 13 ∧ Wc g = 16 ∧ NH g = 7 ∧ SP g = 37 ∧ BASE g = 217117) := by
-  unfold Wc NH SP BASE
-  by_cases h : g < 12
-  · left; simp [h]
-  · by_cases h12 : g = 12
-    · subst h12; right; left; simp
-    · right; right; refine ⟨by omega, ?_⟩; simp [h, h12]
+    (g = 0 ∧ Wc g = 8 ∧ NH g = 6 ∧ SP g = 29 ∧ BASE g = 28 ∧ Wd g = 2) ∨
+    ((0 < g ∧ g < 13) ∧ Wc g = 8 ∧ NH g = 6 ∧ SP g = 29 ∧ BASE g = 14876 + 14848 * g ∧
+      Wd g = 1) ∨
+    (g = 13 ∧ Wc g = 16 ∧ NH g = 7 ∧ SP g = 37 ∧ BASE g = 207900 ∧ Wd g = 1) := by
+  unfold Wc NH SP BASE Wd
+  by_cases h0 : g = 0
+  · left; simp [h0]
+  by_cases h : g < 13
+  · right; left; refine ⟨⟨by omega, h⟩, ?_⟩; simp [h0, h]
+  · right; right; refine ⟨by omega, ?_⟩; simp [h0, h]
 
-theorem grank_lt {g a b c : ℕ} (hg : g < 14) (ha : a < 8) (hb : b < 8) (hc : c < Wc g) :
-    grank g a b c < NT g := by
+theorem grank_lt {g d a b c : ℕ} (hg : g < 14) (hd : d < Wd g) (ha : a < 8) (hb : b < 8)
+    (hc : c < Wc g) : grank g d a b c < NT g := by
   unfold grank NT
-  rcases grp_consts hg with ⟨h, hw, -⟩ | ⟨rfl, hw, -⟩ | ⟨rfl, hw, -⟩ <;> rw [hw] at hc ⊢ <;>
+  rcases grp_consts hg with ⟨rfl, hw, -, -, -, hwd⟩ | ⟨⟨h0, h⟩, hw, -, -, -, hwd⟩ |
+      ⟨rfl, hw, -, -, -, hwd⟩ <;> rw [hw] at hc ⊢ <;> rw [hwd] at hd ⊢ <;>
     simp_all <;> omega
 
 /-- The root segment's first slot, the exit target `K0 = g ^ rootSlot`. -/
@@ -201,7 +212,6 @@ def nonceCell : ℕ := 46
 /-- The zero cell; `(zCell, oneCell)` is the constant cv pair `(0, 1)`. -/
 def zCell : ℕ := 47
 def oneCell : ℕ := 48
-def tidxCell : ℕ := 49
 def gCell : ℕ := 50
 def k0Cell : ℕ := 51
 /-- The frame constant of group `g`. -/
@@ -257,8 +267,8 @@ def xCell (k t : ℕ) : ℕ := 1024 + 32 * k + 2 * t
 def stCell (r : ℕ) : ℕ := 2400 + 2 * r
 /-- The cv pair of root call `r`: its own cv cells for `r < 8`, the full state of call 7 for `r = 8`. -/
 def rootCv (r : ℕ) : ℕ := if r < 8 then cvCell r else stCell 7
-/-- The metadata cell of root call `r`: `Z, g ^ 1, …, g ^ 7, LEN` (values `0, 2, 4, …, 128, 5504`). -/
-def rhoCell (r : ℕ) : ℕ := if r = 0 then zCell else if r < 8 then gpCell r else lenCell
+/-- The metadata cell of root call `r`: `Z, g ^ 1, …, g ^ 7, K0`. -/
+def rhoCell (r : ℕ) : ℕ := if r = 0 then zCell else if r < 8 then gpCell r else k0Cell
 
 /-! ## Constants -/
 
@@ -268,10 +278,11 @@ def k0V : E := ofK (gpow rootSlot)
 def frameV (g : ℕ) : E := ofK (frame g)
 /-- The value of symbol cell `v`. -/
 def symV (v : ℕ) : E := if v = 0 then 0 else ofK (gpow (v - 1))
-/-- The tie word of digits `(a, b, c)` of group `g`: each digit in its chain's bit field. -/
-def gword (g a b c : ℕ) : ℕ :=
-  a * 2 ^ posW Flat.wid (gch g 0) + b * 2 ^ posW Flat.wid (gch g 1) +
-    c * 2 ^ posW Flat.wid (gch g 2)
+/-- The tie word of digits `(d, a, b, c)` of group `g`: the junk digit at bit `0`, each digit in
+its chain's bit field of the index cell, one bit above its field in the index word. -/
+def gword (g d a b c : ℕ) : ℕ :=
+  d + a * 2 ^ (1 + posW Flat.wid (gch g 0)) + b * 2 ^ (1 + posW Flat.wid (gch g 1)) +
+    c * 2 ^ (1 + posW Flat.wid (gch g 2))
 /-- Tag position of the step of chain `k` at chain position `j`. -/
 def tagPos (k j : ℕ) : ℕ := Flat.off k + j
 
@@ -442,19 +453,18 @@ theorem exec_entry_frame_one {κ : ℕ} (hκ : κ ≤ 32) (L : MemImage κ) (pc 
 
 /-! ## The builders -/
 
-/-- Slots `0 … 28`: the constants, the index hash, then group 0's dispatch. -/
+/-- Slots `0 … 27`: the constants, the index hash, then group 0's dispatch. -/
 def prologue (s : ℕ) : CInstr :=
   if s = 0 then .setc zCell 0
   else if s = 1 then .setc oneCell oneV
   else if s = 2 then .setc lenCell (natV 5504)
-  else if s = 3 then .setc tidxCell (natV 10)
-  else if s = 4 then .setc gCell gV
-  else if s = 5 then .setc k0Cell k0V
-  else if s < 20 then .setc (fCell (s - 6)) (frameV (s - 6))
-  else if s < 26 then .setc (gpCell (s - 18)) (ofK (gpow (s - 18)))
-  else if s = 26 then .blake msgLo msgHi nonceCell pkCell zCell idxCell tidxCell
-  else if s = 27 then .mul (hCell 0) gCell (h1Cell 0)
-  else if s = 28 then .dispatch 0
+  else if s = 3 then .setc gCell gV
+  else if s = 4 then .setc k0Cell k0V
+  else if s < 19 then .setc (fCell (s - 5)) (frameV (s - 5))
+  else if s < 25 then .setc (gpCell (s - 17)) (ofK (gpow (s - 17)))
+  else if s = 25 then .blake msgLo msgHi nonceCell pkCell zCell idxCell lenCell
+  else if s = 26 then .mul (hCell 0) gCell (h1Cell 0)
+  else if s = 27 then .dispatch 0
   else .pad
 
 /-- Inline step `t` of the `s` steps of chain `k`: position `W k - 1 - s + t`. -/
@@ -487,10 +497,10 @@ def zeroIdx (a b q : ℕ) : ℕ :=
   else if q = 1 then (if a = 0 ∧ b = 0 then 1 else 2) else 2
 
 /-- Tie op `q`. -/
-def tieOp (g a b c q : ℕ) : CInstr :=
-  if g = 0 then .setc (accCell 0) (natV (gword 0 a b c))
+def tieOp (g d a b c q : ℕ) : CInstr :=
+  if g = 0 then .setc (accCell 0) (natV (gword 0 d a b c))
   else if a + b + c = 0 then .xor (accCell (g - 1)) zCell (accCell g)
-  else if q = 0 then .setc (tCell g) (natV (gword g a b c))
+  else if q = 0 then .setc (tCell g) (natV (gword g d a b c))
   else .xor (accCell (g - 1)) (tCell g) (accCell g)
 
 /-- Zero copy `q`: `XOR(W_k, Z, rootTop k)` for the `q`-th zero digit's chain `k`. -/
@@ -499,15 +509,15 @@ def zcOp (g a b q : ℕ) : CInstr :=
 
 /-- Layer op `q` of a block with digit sum `σ`. -/
 def layOp (g σ q : ℕ) : CInstr :=
-  if g = 0 then .setc (layCell 0) (ofK (gpow (rootSlot - 106 + σ)))
+  if g = 0 then .setc (layCell 0) (ofK (gpow (rootSlot - 103 + σ)))
   else if σ = 0 then .mul (layCell (g - 1)) oneCell (layCell g)
   else if σ ≤ 7 then .mul (layCell (g - 1)) (gpCell σ) (layCell g)
   else if q = 0 then .setc (cCell g) (ofK (gpow σ))
   else .mul (layCell (g - 1)) (cCell g) (layCell g)
 
 /-- Pre op `q`. -/
-def preOp (g a b c q : ℕ) : CInstr :=
-  if q < tieLen g (a + b + c) then tieOp g a b c q
+def preOp (g d a b c q : ℕ) : CInstr :=
+  if q < tieLen g (a + b + c) then tieOp g d a b c q
   else if q < tieLen g (a + b + c) + zeroCount a b c then zcOp g a b (q - tieLen g (a + b + c))
   else layOp g (a + b + c) (q - tieLen g (a + b + c) - zeroCount a b c)
 
@@ -517,9 +527,9 @@ def stepOp (g a b c t : ℕ) : CInstr :=
   else if t < a + b then chainOp (gch g 1) b (t - a)
   else chainOp (gch g 2) c (t - a - b)
 
-/-- Op `i ≥ 1` of the block of digits `(a, b, c)` of group `g` (op `0` is `I0_g`). -/
-def blockOp (g a b c i : ℕ) : CInstr :=
-  if i < 1 + preLen g a b c then preOp g a b c (i - 1)
+/-- Op `i ≥ 1` of the block of digits `(d, a, b, c)` of group `g` (op `0` is `I0_g`). -/
+def blockOp (g d a b c i : ℕ) : CInstr :=
+  if i < 1 + preLen g a b c then preOp g d a b c (i - 1)
   else if i < NH g then nop
   else if i < NH g + (a + b + c) then stepOp g a b c (i - NH g)
   else if i = NH g + (a + b + c) then
@@ -530,9 +540,9 @@ def blockOp (g a b c i : ℕ) : CInstr :=
 /-- Slot `o` of group `g`'s region: entries every `SP g` slots, blocks by rank. -/
 def unitInstr (g o : ℕ) : CInstr :=
   if o % SP g = 0 then .entry g
-  else if g < 12 then
-    blockOp g (o / SP g / 64) (o / SP g / 8 % 8) (o / SP g % 8) (o % SP g)
-  else blockOp g (o / SP g / 128) (o / SP g / 16 % 8) (o / SP g % 16) (o % SP g)
+  else if g < 13 then
+    blockOp g (o / SP g / 512) (o / SP g / 64 % 8) (o / SP g / 8 % 8) (o / SP g % 8) (o % SP g)
+  else blockOp g 0 (o / SP g / 128) (o / SP g / 16 % 8) (o / SP g % 16) (o % SP g)
 
 /-- Root call `t < 9`, then the public-key check. Calls `1 … 7` take the low half of the previous
 state as their first message word; call 8 takes the full state of call 7 as its cv pair. -/
@@ -547,10 +557,10 @@ def rootOp (t : ℕ) : CInstr :=
 
 /-- The cell-level instruction at slot `s`, decoded by segment. -/
 def cinstrAt (s : ℕ) : CInstr :=
-  if s < 29 then prologue s
-  else if s < 178205 then unitInstr ((s - 29) / 14848) ((s - 29) % 14848)
-  else if s < 217117 then unitInstr 12 (s - 178205)
-  else if s < 255005 then unitInstr 13 (s - 217117)
+  if s < 28 then prologue s
+  else if s < 29724 then unitInstr 0 (s - 28)
+  else if s < 207900 then unitInstr ((s - 14876) / 14848) ((s - 14876) % 14848)
+  else if s < 245788 then unitInstr 13 (s - 207900)
   else if s < 262133 then .pad
   else if s < 262143 then rootOp (s - 262133)
   else .pad
@@ -573,22 +583,22 @@ attribute [irreducible] prologue chainOp tieOp zcOp layOp preOp stepOp blockOp u
 
 /-! ## Segment decoding of `cinstrAt` -/
 
-theorem cinstrAt_pro {s : ℕ} (h : s < 29) : cinstrAt s = prologue s := by
+theorem cinstrAt_pro {s : ℕ} (h : s < 28) : cinstrAt s = prologue s := by
   unfold cinstrAt; rw [if_pos h]
 
-theorem cinstrAt_gA {s : ℕ} (h1 : 29 ≤ s) (h2 : s < 178205) :
-    cinstrAt s = unitInstr ((s - 29) / 14848) ((s - 29) % 14848) := by
+theorem cinstrAt_g0 {s : ℕ} (h1 : 28 ≤ s) (h2 : s < 29724) :
+    cinstrAt s = unitInstr 0 (s - 28) := by
   unfold cinstrAt; rw [if_neg (by omega), if_pos h2]
 
-theorem cinstrAt_g12 {s : ℕ} (h1 : 178205 ≤ s) (h2 : s < 217117) :
-    cinstrAt s = unitInstr 12 (s - 178205) := by
+theorem cinstrAt_gA {s : ℕ} (h1 : 29724 ≤ s) (h2 : s < 207900) :
+    cinstrAt s = unitInstr ((s - 14876) / 14848) ((s - 14876) % 14848) := by
   unfold cinstrAt; rw [if_neg (by omega), if_neg (by omega), if_pos h2]
 
-theorem cinstrAt_g13 {s : ℕ} (h1 : 217117 ≤ s) (h2 : s < 255005) :
-    cinstrAt s = unitInstr 13 (s - 217117) := by
+theorem cinstrAt_g13 {s : ℕ} (h1 : 207900 ≤ s) (h2 : s < 245788) :
+    cinstrAt s = unitInstr 13 (s - 207900) := by
   unfold cinstrAt; rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos h2]
 
-theorem cinstrAt_gap {s : ℕ} (h1 : 255005 ≤ s) (h2 : s < 262133) : cinstrAt s = .pad := by
+theorem cinstrAt_gap {s : ℕ} (h1 : 245788 ≤ s) (h2 : s < 262133) : cinstrAt s = .pad := by
   unfold cinstrAt
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos h2]
 
@@ -607,13 +617,13 @@ theorem cinstrAt_tail {s : ℕ} (h1 : 262143 ≤ s) : cinstrAt s = .pad := by
 theorem cinstrAt_unit {g o : ℕ} (hg : g < 14) (ho : o < SP g * NT g) :
     cinstrAt (BASE g + o) = unitInstr g o := by
   unfold NT at ho
-  rcases grp_consts hg with ⟨h, hw, -, hs, hb⟩ | ⟨rfl, hw, -, hs, hb⟩ | ⟨rfl, hw, -, hs, hb⟩ <;>
-    rw [hw, hs] at ho <;> rw [hb]
+  rcases grp_consts hg with ⟨rfl, hw, -, hs, hb, hd⟩ | ⟨⟨h0, h⟩, hw, -, hs, hb, hd⟩ |
+      ⟨rfl, hw, -, hs, hb, hd⟩ <;> rw [hw, hs, hd] at ho <;> rw [hb]
+  · rw [cinstrAt_g0 (by omega) (by omega), show 28 + o - 28 = o by omega]
   · rw [cinstrAt_gA (by omega) (by omega),
-      show (29 + 14848 * g + o - 29) / 14848 = g by omega,
-      show (29 + 14848 * g + o - 29) % 14848 = o by omega]
-  · rw [cinstrAt_g12 (by omega) (by omega), show 178205 + o - 178205 = o by omega]
-  · rw [cinstrAt_g13 (by omega) (by omega), show 217117 + o - 217117 = o by omega]
+      show (14876 + 14848 * g + o - 14876) / 14848 = g by omega,
+      show (14876 + 14848 * g + o - 14876) % 14848 = o by omega]
+  · rw [cinstrAt_g13 (by omega) (by omega), show 207900 + o - 207900 = o by omega]
 
 /-- The entry of rank `r` of group `g`. -/
 theorem cinstrAt_entry {g r : ℕ} (hg : g < 14) (hr : r < NT g) :
@@ -622,35 +632,46 @@ theorem cinstrAt_entry {g r : ℕ} (hg : g < 14) (hr : r < NT g) :
   rw [cinstrAt_unit hg (Nat.mul_lt_mul_of_pos_left hr hsp)]
   unfold unitInstr; rw [if_pos (Nat.mul_mod_right _ _)]
 
-/-- Op `i ∈ [1, SP g)` of the block of digits `(a, b, c)` of group `g`. -/
-theorem cinstrAt_block {g a b c i : ℕ} (hg : g < 14) (ha : a < 8) (hb : b < 8) (hc : c < Wc g)
-    (hi0 : 0 < i) (hi : i < SP g) :
-    cinstrAt (BASE g + SP g * grank g a b c + i) = blockOp g a b c i := by
-  have hr := grank_lt hg ha hb hc
+/-- Op `i ∈ [1, SP g)` of the block of digits `(d, a, b, c)` of group `g`. -/
+theorem cinstrAt_block {g d a b c i : ℕ} (hg : g < 14) (hd : d < Wd g) (ha : a < 8) (hb : b < 8)
+    (hc : c < Wc g) (hi0 : 0 < i) (hi : i < SP g) :
+    cinstrAt (BASE g + SP g * grank g d a b c + i) = blockOp g d a b c i := by
+  have hr := grank_lt hg hd ha hb hc
   rw [Nat.add_assoc, cinstrAt_unit hg (by
     unfold NT at hr ⊢
-    rcases grp_consts hg with ⟨-, hw, -, hs, -⟩ | ⟨-, hw, -, hs, -⟩ | ⟨-, hw, -, hs, -⟩ <;>
-      rw [hw] at hr <;> rw [hs] at hi ⊢ <;> rw [hw] <;> omega)]
+    rcases grp_consts hg with ⟨-, hw, -, hs, -, hwd⟩ | ⟨-, hw, -, hs, -, hwd⟩ |
+        ⟨-, hw, -, hs, -, hwd⟩ <;>
+      rw [hw, hwd] at hr <;> rw [hs] at hi ⊢ <;> rw [hw, hwd] <;> omega)]
   unfold unitInstr grank
-  rcases grp_consts hg with ⟨h, hw, -, hs, -⟩ | ⟨rfl, hw, -, hs, -⟩ | ⟨rfl, hw, -, hs, -⟩ <;>
-    rw [hw] at hc <;> rw [hs] at hi ⊢
-  · rw [if_pos h, if_neg (by omega), if_pos h,
-      show (29 * (64 * a + 8 * b + c) + i) / 29 = 64 * a + 8 * b + c by omega,
-      show (29 * (64 * a + 8 * b + c) + i) % 29 = i by omega,
-      show (64 * a + 8 * b + c) / 64 = a by omega, show (64 * a + 8 * b + c) / 8 % 8 = b by omega,
-      show (64 * a + 8 * b + c) % 8 = c by omega]
-  · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega),
-      show (38 * (128 * a + 16 * b + c) + i) / 38 = 128 * a + 16 * b + c by omega,
-      show (38 * (128 * a + 16 * b + c) + i) % 38 = i by omega,
-      show (128 * a + 16 * b + c) / 128 = a by omega,
-      show (128 * a + 16 * b + c) / 16 % 8 = b by omega,
-      show (128 * a + 16 * b + c) % 16 = c by omega]
-  · rw [if_neg (by omega), if_neg (by omega), if_neg (by omega),
-      show (37 * (128 * a + 16 * b + c) + i) / 37 = 128 * a + 16 * b + c by omega,
-      show (37 * (128 * a + 16 * b + c) + i) % 37 = i by omega,
-      show (128 * a + 16 * b + c) / 128 = a by omega,
-      show (128 * a + 16 * b + c) / 16 % 8 = b by omega,
-      show (128 * a + 16 * b + c) % 16 = c by omega]
+  rcases grp_consts hg with ⟨rfl, hw, -, hs, -, hwd⟩ | ⟨⟨h0, h⟩, hw, -, hs, -, hwd⟩ |
+      ⟨rfl, hw, -, hs, -, hwd⟩ <;>
+    rw [hw] at hc <;> rw [hwd] at hd <;> rw [hs] at hi ⊢
+  · simp only [show (0 : ℕ) < 13 by omega, if_true]
+    rw [if_neg (by omega),
+      show (29 * (512 * d + (64 * a + 8 * b + c)) + i) / 29 = 512 * d + (64 * a + 8 * b + c) by
+        omega,
+      show (29 * (512 * d + (64 * a + 8 * b + c)) + i) % 29 = i by omega,
+      show (512 * d + (64 * a + 8 * b + c)) / 512 = d by omega,
+      show (512 * d + (64 * a + 8 * b + c)) / 64 % 8 = a by omega,
+      show (512 * d + (64 * a + 8 * b + c)) / 8 % 8 = b by omega,
+      show (512 * d + (64 * a + 8 * b + c)) % 8 = c by omega]
+  · obtain rfl : d = 0 := by omega
+    rw [if_pos h, if_neg (by omega), if_pos h,
+      show (29 * (512 * 0 + (64 * a + 8 * b + c)) + i) / 29 = 512 * 0 + (64 * a + 8 * b + c) by
+        omega,
+      show (29 * (512 * 0 + (64 * a + 8 * b + c)) + i) % 29 = i by omega,
+      show (512 * 0 + (64 * a + 8 * b + c)) / 512 = 0 by omega,
+      show (512 * 0 + (64 * a + 8 * b + c)) / 64 % 8 = a by omega,
+      show (512 * 0 + (64 * a + 8 * b + c)) / 8 % 8 = b by omega,
+      show (512 * 0 + (64 * a + 8 * b + c)) % 8 = c by omega]
+  · obtain rfl : d = 0 := by omega
+    rw [if_neg (by omega), if_neg (by omega), if_neg (by omega),
+      show (37 * (512 * 0 + (128 * a + 16 * b + c)) + i) / 37 = 512 * 0 + (128 * a + 16 * b + c) by
+        omega,
+      show (37 * (512 * 0 + (128 * a + 16 * b + c)) + i) % 37 = i by omega,
+      show (512 * 0 + (128 * a + 16 * b + c)) / 128 = a by omega,
+      show (512 * 0 + (128 * a + 16 * b + c)) / 16 % 8 = b by omega,
+      show (512 * 0 + (128 * a + 16 * b + c)) % 16 = c by omega]
 
 theorem cinstrAt_root {t : ℕ} (ht : t < 10) : cinstrAt (rootSlot + t) = rootOp t := by
   rw [cinstrAt_rootSeg (by unfold rootSlot; omega) (by unfold rootSlot; omega),
@@ -660,8 +681,8 @@ theorem cinstrAt_sentinel : cinstrAt sentinel = .pad := cinstrAt_tail (le_refl _
 
 /-! ## Block op decoding -/
 
-theorem preOp_straight (g a b c q : ℕ) :
-    (preOp g a b c q).straight = true ∧ (preOp g a b c q).cost = 1 := by
+theorem preOp_straight (g d a b c q : ℕ) :
+    (preOp g d a b c q).straight = true ∧ (preOp g d a b c q).cost = 1 := by
   unfold preOp tieOp zcOp layOp; split_ifs <;> exact ⟨rfl, rfl⟩
 
 theorem chainOp_straight (k s t : ℕ) :
@@ -676,44 +697,44 @@ theorem stepOp_straight (g a b c t : ℕ) :
 theorem pre_fit {g a b c : ℕ} (hg : g < 14) (ha : a < 8) (hb : b < 8) (hc : c < Wc g) :
     1 + preLen g a b c ≤ NH g := by
   unfold preLen tieLen zeroCount layLen
-  rcases grp_consts hg with ⟨h, hw, hn, -⟩ | ⟨rfl, hw, hn, -⟩ | ⟨rfl, hw, hn, -⟩ <;>
+  rcases grp_consts hg with ⟨h, hw, hn, -⟩ | ⟨h, hw, hn, -⟩ | ⟨h, hw, hn, -⟩ <;>
     rw [hw] at hc <;> rw [hn] <;> split_ifs <;> omega
 
 /-- The block, tail included, fits in its `SP g` slots (group 13's tail is the exit alone). -/
 theorem blk_fit {g a b c : ℕ} (hg : g < 14) (ha : a < 8) (hb : b < 8) (hc : c < Wc g) :
     NH g + (a + b + c) + (if g < 13 then 1 else 0) < SP g := by
-  rcases grp_consts hg with ⟨h, hw, hn, hs, -⟩ | ⟨rfl, hw, hn, hs, -⟩ | ⟨rfl, hw, hn, hs, -⟩ <;>
+  rcases grp_consts hg with ⟨h, hw, hn, hs, -⟩ | ⟨h, hw, hn, hs, -⟩ | ⟨h, hw, hn, hs, -⟩ <;>
     rw [hw] at hc <;> rw [hn, hs] <;> split_ifs <;> omega
 
-theorem blockOp_pre {g a b c q : ℕ} (hq : q < preLen g a b c) :
-    blockOp g a b c (1 + q) = preOp g a b c q := by
+theorem blockOp_pre {g d a b c q : ℕ} (hq : q < preLen g a b c) :
+    blockOp g d a b c (1 + q) = preOp g d a b c q := by
   unfold blockOp; rw [if_pos (by omega), show 1 + q - 1 = q by omega]
 
-theorem blockOp_nop {g a b c i : ℕ} (h1 : 1 + preLen g a b c ≤ i) (h2 : i < NH g) :
-    blockOp g a b c i = nop := by
+theorem blockOp_nop {g d a b c i : ℕ} (h1 : 1 + preLen g a b c ≤ i) (h2 : i < NH g) :
+    blockOp g d a b c i = nop := by
   unfold blockOp; rw [if_neg (by omega), if_pos h2]
 
-theorem blockOp_step {g a b c t : ℕ} (hpre : 1 + preLen g a b c ≤ NH g)
-    (ht : t < a + b + c) : blockOp g a b c (NH g + t) = stepOp g a b c t := by
+theorem blockOp_step {g d a b c t : ℕ} (hpre : 1 + preLen g a b c ≤ NH g)
+    (ht : t < a + b + c) : blockOp g d a b c (NH g + t) = stepOp g a b c t := by
   unfold blockOp
   rw [if_neg (by omega), if_neg (by omega), if_pos (by omega), Nat.add_sub_cancel_left]
 
-theorem blockOp_tail {g a b c : ℕ} (hpre : 1 + preLen g a b c ≤ NH g) :
-    blockOp g a b c (NH g + (a + b + c)) =
+theorem blockOp_tail {g d a b c : ℕ} (hpre : 1 + preLen g a b c ≤ NH g) :
+    blockOp g d a b c (NH g + (a + b + c)) =
       if g < 13 then .mul (hCell (g + 1)) gCell (h1Cell (g + 1)) else .exit := by
   unfold blockOp
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos rfl]
 
-theorem blockOp_disp {g a b c : ℕ} (hpre : 1 + preLen g a b c ≤ NH g) (hg : g < 13) :
-    blockOp g a b c (NH g + (a + b + c) + 1) = .dispatch (g + 1) := by
+theorem blockOp_disp {g d a b c : ℕ} (hpre : 1 + preLen g a b c ≤ NH g) (hg : g < 13) :
+    blockOp g d a b c (NH g + (a + b + c) + 1) = .dispatch (g + 1) := by
   unfold blockOp
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
     if_pos ⟨rfl, hg⟩]
 
-theorem blockOp_ne_entry (g a b c i j : ℕ) : blockOp g a b c i ≠ .entry j := by
+theorem blockOp_ne_entry (g d a b c i j : ℕ) : blockOp g d a b c i ≠ .entry j := by
   unfold blockOp
   split_ifs
-  · exact CInstr.ne_entry_of_straight (preOp_straight _ _ _ _ _).1 j
+  · exact CInstr.ne_entry_of_straight (preOp_straight _ _ _ _ _ _).1 j
   · simp [nop]
   · exact CInstr.ne_entry_of_straight (stepOp_straight _ _ _ _ _).1 j
   · simp
@@ -732,26 +753,26 @@ theorem isEntry_eq {g e : ℕ} (h : IsEntry g e) :
     e = BASE g + SP g * ((e - BASE g) / SP g) ∧ (e - BASE g) / SP g < NT g := by
   obtain ⟨hg, h1, h2, h3⟩ := h
   unfold NT at h2 ⊢
-  rcases grp_consts hg with ⟨-, hw, -, hs, -⟩ | ⟨-, hw, -, hs, -⟩ | ⟨-, hw, -, hs, -⟩ <;>
-    rw [hw, hs] at h2 <;> rw [hs] at h3 <;> rw [hw, hs] <;> omega
+  rcases grp_consts hg with ⟨-, hw, -, hs, -, hd⟩ | ⟨-, hw, -, hs, -, hd⟩ | ⟨-, hw, -, hs, -, hd⟩ <;>
+    rw [hw, hs, hd] at h2 <;> rw [hs] at h3 <;> rw [hw, hs, hd] <;> omega
 
 theorem cinstrAt_of_entry {s g : ℕ} (h : IsEntry g s) : cinstrAt s = .entry g := by
   obtain ⟨he, hlt⟩ := isEntry_eq h
   rw [he]; exact cinstrAt_entry h.1 hlt
 
-theorem isEntry_lt {g e : ℕ} (h : IsEntry g e) : e < 255005 := by
+theorem isEntry_lt {g e : ℕ} (h : IsEntry g e) : e < 245788 := by
   obtain ⟨hg, -, h2, -⟩ := h
   unfold NT at h2
-  rcases grp_consts hg with ⟨-, hw, -, hs, hb⟩ | ⟨-, hw, -, hs, hb⟩ | ⟨-, hw, -, hs, hb⟩ <;>
-    rw [hw, hs, hb] at h2 <;> omega
+  rcases grp_consts hg with ⟨-, hw, -, hs, hb, hd⟩ | ⟨-, hw, -, hs, hb, hd⟩ |
+      ⟨-, hw, -, hs, hb, hd⟩ <;> rw [hw, hs, hb, hd] at h2 <;> omega
 
 theorem unitInstr_eq_entry {g o j : ℕ} (h : unitInstr g o = .entry j) :
     j = g ∧ o % SP g = 0 := by
   unfold unitInstr at h
   split_ifs at h with ho
   · exact ⟨(CInstr.entry.inj h).symm, ho⟩
-  · exact absurd h (blockOp_ne_entry _ _ _ _ _ _)
-  · exact absurd h (blockOp_ne_entry _ _ _ _ _ _)
+  · exact absurd h (blockOp_ne_entry _ _ _ _ _ _ _)
+  · exact absurd h (blockOp_ne_entry _ _ _ _ _ _ _)
 
 theorem prologue_ne_entry (s j : ℕ) : prologue s ≠ .entry j := by
   unfold prologue
@@ -762,27 +783,28 @@ theorem rootOp_ne_entry (t j : ℕ) : rootOp t ≠ .entry j := by
 
 /-- The only `I0_g` slots are the entries of group `g`. -/
 theorem cinstrAt_eq_entry {s k : ℕ} (h : cinstrAt s = .entry k) : IsEntry k s := by
-  by_cases a : s < 29
+  by_cases a : s < 28
   · rw [cinstrAt_pro a] at h; exact absurd h (prologue_ne_entry _ _)
-  by_cases b : s < 178205
+  by_cases a0 : s < 29724
+  · rw [cinstrAt_g0 (by omega) a0] at h
+    obtain ⟨rfl, ho⟩ := unitInstr_eq_entry h
+    exact ⟨by omega, by unfold BASE; simp; omega, by unfold BASE SP NT Wc Wd; simp; omega,
+      by unfold BASE SP at *; simp at *; omega⟩
+  by_cases b : s < 207900
   · rw [cinstrAt_gA (by omega) b] at h
     obtain ⟨rfl, ho⟩ := unitInstr_eq_entry h
-    have hq : (s - 29) / 14848 < 12 := by omega
-    have hsp : SP ((s - 29) / 14848) = 29 := by unfold SP; rw [if_pos hq]
+    have hq : (s - 14876) / 14848 < 13 := by omega
+    have hq0 : (s - 14876) / 14848 ≠ 0 := by omega
+    have hsp : SP ((s - 14876) / 14848) = 29 := by unfold SP; rw [if_pos hq]
     rw [hsp] at ho
-    refine ⟨by omega, ?_, ?_, ?_⟩ <;> unfold BASE <;> rw [if_pos hq]
+    refine ⟨by omega, ?_, ?_, ?_⟩ <;> unfold BASE <;> rw [if_neg hq0, if_pos hq]
     · omega
-    · unfold NT Wc; rw [if_pos hq, hsp]; omega
+    · unfold NT Wc Wd; rw [if_neg hq0, if_pos hq, hsp]; omega
     · rw [hsp]; omega
-  by_cases c : s < 217117
-  · rw [cinstrAt_g12 (by omega) c] at h
-    obtain ⟨rfl, ho⟩ := unitInstr_eq_entry h
-    exact ⟨by omega, by unfold BASE; simp; omega, by unfold BASE SP NT Wc; simp; omega,
-      by unfold BASE SP at *; simp at *; omega⟩
-  by_cases d : s < 255005
+  by_cases d : s < 245788
   · rw [cinstrAt_g13 (by omega) d] at h
     obtain ⟨rfl, ho⟩ := unitInstr_eq_entry h
-    exact ⟨by omega, by unfold BASE; simp; omega, by unfold BASE SP NT Wc; simp; omega,
+    exact ⟨by omega, by unfold BASE; simp; omega, by unfold BASE SP NT Wc Wd; simp; omega,
       by unfold BASE SP at *; simp at *; omega⟩
   by_cases e : s < 262133
   · rw [cinstrAt_gap (by omega) e] at h; exact absurd h (by simp)
@@ -795,8 +817,8 @@ theorem cinstrAt_eq_entry {s k : ℕ} (h : cinstrAt s = .entry k) : IsEntry k s 
 theorem prologue_bounded (s : ℕ) : (prologue s).Bounded := by
   unfold prologue
   repeat' split
-  all_goals try simp only [CInstr.Bounded, zCell, oneCell, gCell, k0Cell, fCell, hCell, h1Cell,
-    lenCell, tidxCell, msgLo, msgHi, nonceCell, pkCell, idxCell, gpCell]
+  all_goals try simp only [CInstr.Bounded, zCell, oneCell, gCell, k0Cell, fCell, hCell,
+    h1Cell, lenCell, msgLo, msgHi, nonceCell, pkCell, idxCell, gpCell]
   all_goals (try split_ifs) <;> omega
 
 /-- Symbol cells are constant cells below `2 ^ 16`. -/
@@ -818,13 +840,13 @@ theorem chainOp_bounded (k s t : ℕ) (hk : k < 42) (ht : t < 16) : (chainOp k s
   · have := rootTop_le k
     unfold chainOut xCell; split_ifs <;> omega
 
-theorem preOp_bounded (g a b c q : ℕ) (hg : g < 14) : (preOp g a b c q).Bounded := by
+theorem preOp_bounded (g d a b c q : ℕ) (hg : g < 14) : (preOp g d a b c q).Bounded := by
   have h0 := gch_lt hg (show zeroIdx a b (q - tieLen g (a + b + c)) < 3 by
     unfold zeroIdx; split_ifs <;> omega)
   have hr := rootTop_le (gch g (zeroIdx a b (q - tieLen g (a + b + c))))
   unfold preOp tieOp zcOp layOp
-  split_ifs <;> simp only [CInstr.Bounded, accCell, tCell, idxCell, zCell, wCell, layCell, k0Cell,
-    oneCell, gpCell, gCell, cCell] <;>
+  split_ifs <;> simp only [CInstr.Bounded, accCell, tCell, idxCell, zCell, wCell,
+    layCell, k0Cell, oneCell, gpCell, gCell, cCell] <;>
     (try split_ifs) <;> omega
 
 theorem stepOp_bounded {g a b c t : ℕ} (hg : g < 14) (ha : a < 8) (hb : b < 8) (hc : c < 16)
@@ -835,11 +857,11 @@ theorem stepOp_bounded {g a b c t : ℕ} (hg : g < 14) (ha : a < 8) (hb : b < 8)
   · exact chainOp_bounded _ _ _ (gch_lt hg (by omega)) (by omega)
   · exact chainOp_bounded _ _ _ (gch_lt hg (by omega)) (by omega)
 
-theorem blockOp_bounded {g a b c : ℕ} (i : ℕ) (hg : g < 14) (ha : a < 8) (hb : b < 8)
-    (hc : c < 16) : (blockOp g a b c i).Bounded := by
+theorem blockOp_bounded {g d a b c : ℕ} (i : ℕ) (hg : g < 14) (ha : a < 8) (hb : b < 8)
+    (hc : c < 16) : (blockOp g d a b c i).Bounded := by
   unfold blockOp
   split_ifs with h1 h2 h3
-  · exact preOp_bounded _ _ _ _ _ hg
+  · exact preOp_bounded _ _ _ _ _ _ hg
   · simp only [nop, CInstr.Bounded, zCell]; omega
   · exact stepOp_bounded hg ha hb hc (by omega)
   · simp only [CInstr.Bounded, hCell, gCell, h1Cell]; omega
@@ -851,8 +873,8 @@ theorem unitInstr_bounded (g o : ℕ) (hg : g < 14) (ho : o < SP g * NT g) :
     (unitInstr g o).Bounded := by
   unfold NT at ho
   unfold unitInstr
-  rcases grp_consts hg with ⟨h, hw, -, hs, -⟩ | ⟨rfl, hw, -, hs, -⟩ | ⟨rfl, hw, -, hs, -⟩ <;>
-    rw [hw, hs] at ho <;> rw [hs] <;> split_ifs <;>
+  rcases grp_consts hg with ⟨h, hw, -, hs, -, hd⟩ | ⟨h, hw, -, hs, -, hd⟩ | ⟨h, hw, -, hs, -, hd⟩ <;>
+    rw [hw, hs, hd] at ho <;> rw [hs] <;> split_ifs <;>
     first
       | exact hg
       | omega
@@ -862,24 +884,25 @@ theorem rootOp_bounded (t : ℕ) : (rootOp t).Bounded := by
   unfold rootOp
   split_ifs <;>
     simp only [CInstr.Bounded, rootTop, topCell, cvCell, rootCv, stCell, rhoCell, zCell, gCell,
-      gpCell, lenCell, pkCell] <;>
+      gpCell, k0Cell, pkCell] <;>
     (try refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩) <;> (try split_ifs) <;> omega
 
 /-- Every slot satisfies the shape invariant. -/
 theorem cinstrAt_bounded (s : ℕ) : (cinstrAt s).Bounded := by
-  by_cases a : s < 29
+  by_cases a : s < 28
   · rw [cinstrAt_pro a]; exact prologue_bounded s
-  by_cases b : s < 178205
+  by_cases a0 : s < 29724
+  · rw [cinstrAt_g0 (by omega) a0]
+    exact unitInstr_bounded _ _ (by omega) (by unfold SP NT Wc Wd; simp; omega)
+  by_cases b : s < 207900
   · rw [cinstrAt_gA (by omega) b]
-    have hq : (s - 29) / 14848 < 12 := by omega
+    have hq : (s - 14876) / 14848 < 13 := by omega
+    have hq0 : (s - 14876) / 14848 ≠ 0 := by omega
     refine unitInstr_bounded _ _ (by omega) ?_
-    unfold SP NT Wc; rw [if_pos hq, if_pos hq]; omega
-  by_cases c : s < 217117
-  · rw [cinstrAt_g12 (by omega) c]
-    exact unitInstr_bounded _ _ (by omega) (by unfold SP NT Wc; simp; omega)
-  by_cases d : s < 255005
+    unfold SP NT Wc Wd; rw [if_pos hq, if_pos hq, if_neg hq0]; omega
+  by_cases d : s < 245788
   · rw [cinstrAt_g13 (by omega) d]
-    exact unitInstr_bounded _ _ (by omega) (by unfold SP NT Wc; simp; omega)
+    exact unitInstr_bounded _ _ (by omega) (by unfold SP NT Wc Wd; simp; omega)
   by_cases e : s < 262133
   · rw [cinstrAt_gap (by omega) e]; trivial
   by_cases i : s < 262143

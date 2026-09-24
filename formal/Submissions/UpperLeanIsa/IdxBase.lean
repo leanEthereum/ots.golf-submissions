@@ -12,9 +12,9 @@ The vocabulary of the index-grinding analysis, ported from UpperRiscv (`SignIdx`
   RISC-V layout, every leanISA query has 896 bits, so encoding queries are told apart from chain
   and root queries by their metadata (`chainInput_ne_encQuery`, `rootInput_ne_encQuery`), not by
   their length;
-* the index of an answer `idxOf w` (the low 128 bits, as a natural number), the accepted
+* the index of an answer `idxOf w` (bits `1, …, 127`, as a natural number), the accepted
   indices `validSet`, with `validSet.card = numValid` (`card_validSet`);
-* `card_idxOf_mem`: each index value is the index of exactly `2 ^ 128` answers.
+* `card_idxOf_mem`: each index value is the index of exactly `2 ^ 129` answers.
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -125,30 +125,30 @@ theorem record_query_ne_encQuery (hP : P.Hyp) (ξ : Record P) (a : Loc P) (u : E
 
 /-! ## Indices -/
 
-/-- The index of an answer: its low 128 bits as a number. -/
-def idxOf (w : BitVec hashBits) : ℕ := (w.extractLsb' 0 128).toNat
+/-- The index of an answer: its index word as a number. -/
+def idxOf (w : BitVec hashBits) : ℕ := (idxAns w).toNat
 
-theorem idxOf_lt (w : BitVec hashBits) : idxOf w < 2 ^ 128 := (w.extractLsb' 0 128).isLt
+theorem idxOf_lt (w : BitVec hashBits) : idxOf w < 2 ^ 127 := (idxAns w).isLt
 
 /-- The accepted indices. -/
-def validSet : Finset ℕ := (Finset.range (2 ^ 128)).filter fun n => P.Accepted (BitVec.ofNat 128 n)
+def validSet : Finset ℕ := (Finset.range (2 ^ 127)).filter fun n => P.Accepted (BitVec.ofNat 127 n)
 
 /-- An accepted index. -/
 abbrev Idx : Type := {i : ℕ // i ∈ P.validSet}
 
 /-- The word of an index. -/
-def idxWord (i : ℕ) : Word := BitVec.ofNat 128 i
+def idxWord (i : ℕ) : IdxWord := BitVec.ofNat 127 i
 
-theorem idxWord_idxOf (w : BitVec hashBits) : idxWord (idxOf w) = w.extractLsb' 0 128 := by
+theorem idxWord_idxOf (w : BitVec hashBits) : idxWord (idxOf w) = idxAns w := by
   unfold idxWord idxOf
   rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
-theorem mem_validSet_lt {i : ℕ} (h : i ∈ P.validSet) : i < 2 ^ 128 := by
+theorem mem_validSet_lt {i : ℕ} (h : i ∈ P.validSet) : i < 2 ^ 127 := by
   unfold validSet at h
   exact Finset.mem_range.mp (Finset.mem_filter.mp h).1
 
 theorem mem_validSet_iff (w : BitVec hashBits) :
-    idxOf w ∈ P.validSet ↔ P.Accepted (w.extractLsb' 0 128) := by
+    idxOf w ∈ P.validSet ↔ P.Accepted (idxAns w) := by
   unfold validSet
   rw [Finset.mem_filter, ← idxWord, idxWord_idxOf]
   exact ⟨fun h => h.2, fun h => ⟨Finset.mem_range.mpr (idxOf_lt w), h⟩⟩
@@ -159,7 +159,7 @@ theorem accepted_of_mem {i : ℕ} (h : i ∈ P.validSet) : P.Accepted (idxWord i
 
 theorem card_validSet : P.validSet.card = P.numValid := by
   unfold validSet numValid
-  refine Finset.card_bij' (fun n _ => BitVec.ofNat 128 n) (fun I _ => I.toNat) ?_ ?_ ?_ ?_
+  refine Finset.card_bij' (fun n _ => BitVec.ofNat 127 n) (fun I _ => I.toNat) ?_ ?_ ?_ ?_
   · intro n hn
     simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hn ⊢
     exact hn.2
@@ -173,60 +173,31 @@ theorem card_validSet : P.validSet.card = P.numValid := by
   · intro I _
     rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
-theorem numValid_le' : P.numValid ≤ 2 ^ 128 := by
+theorem numValid_le' : P.numValid ≤ 2 ^ 127 := by
   rw [← card_validSet]
-  calc P.validSet.card ≤ (Finset.range (2 ^ 128)).card := Finset.card_filter_le _ _
-    _ = 2 ^ 128 := Finset.card_range _
+  calc P.validSet.card ≤ (Finset.range (2 ^ 127)).card := Finset.card_filter_le _ _
+    _ = 2 ^ 127 := Finset.card_range _
 
 end Params
 
 /-- Number of oracle answers whose index lies in a set of index values. -/
-theorem card_idxOf_mem (A : Finset ℕ) (hA : ∀ n ∈ A, n < 2 ^ 128) :
+theorem card_idxOf_mem (A : Finset ℕ) (hA : ∀ n ∈ A, n < 2 ^ 127) :
     (Finset.univ.filter fun y : BitVec hashBits => Params.idxOf y ∈ A).card =
-      A.card * 2 ^ (hashBits - 128) := by
-  have hhb : hashBits = 256 := rfl
-  have hH : 2 ^ hashBits = 2 ^ 128 * 2 ^ (hashBits - 128) := by
-    rw [← pow_add, hhb]
-  have hNpos : 0 < 2 ^ 128 := by positivity
-  have hlow : ∀ y : BitVec hashBits, Params.idxOf y = y.toNat % 2 ^ 128 := by
-    intro y
-    unfold Params.idxOf
-    rw [← BitVec.setWidth_ushiftRight_eq_extractLsb, BitVec.ushiftRight_zero,
-      BitVec.toNat_setWidth]
-  rw [← Finset.card_range (2 ^ (hashBits - 128)), ← Finset.card_product]
-  refine Finset.card_nbij' (fun y => (y.toNat % 2 ^ 128, y.toNat / 2 ^ 128))
-    (fun x => BitVec.ofNat hashBits (x.1 + 2 ^ 128 * x.2)) ?_ ?_ ?_ ?_
-  · intro y hy
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq] at hy
-    simp only [Finset.coe_product, Set.mem_prod, Finset.mem_coe, Finset.mem_range]
-    refine ⟨?_, ?_⟩
-    · rw [← hlow]; exact hy
-    · rw [Nat.div_lt_iff_lt_mul hNpos]
-      have := y.isLt
-      rw [hH] at this
-      linarith
-  · intro x hx
-    simp only [Finset.coe_product, Set.mem_prod, Finset.mem_coe, Finset.mem_range] at hx
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq]
-    have h1 : x.1 + 2 ^ 128 * x.2 < 2 ^ hashBits := by
-      rw [hH]
-      have := hA _ hx.1
-      nlinarith
-    rw [hlow, BitVec.toNat_ofNat, Nat.mod_eq_of_lt h1, Nat.add_mul_mod_self_left,
-      Nat.mod_eq_of_lt (hA _ hx.1)]
-    exact hx.1
-  · intro y _
-    apply BitVec.eq_of_toNat_eq
-    simp only [BitVec.toNat_ofNat]
-    rw [Nat.mod_add_div, Nat.mod_eq_of_lt y.isLt]
-  · intro x hx
-    simp only [Finset.coe_product, Set.mem_prod, Finset.mem_coe, Finset.mem_range] at hx
-    have hx1 := hA _ hx.1
-    have h1 : x.1 + 2 ^ 128 * x.2 < 2 ^ hashBits := by
-      rw [hH]
-      nlinarith
-    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h1, Nat.add_mul_mod_self_left,
-      Nat.mod_eq_of_lt hx1, Nat.add_mul_div_left _ _ hNpos, Nat.div_eq_of_lt hx1, zero_add]
+      A.card * 2 ^ (hashBits - 127) := by
+  have hI : (Finset.univ.filter fun I : IdxWord => I.toNat ∈ A).card = A.card := by
+    refine Finset.card_bij' (fun I _ => I.toNat) (fun n _ => BitVec.ofNat 127 n) ?_ ?_ ?_ ?_
+    · intro I hI
+      exact (Finset.mem_filter.1 hI).2
+    · intro n hn
+      simp only [Finset.mem_filter, Finset.mem_univ, true_and]
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (hA n hn)]
+      exact hn
+    · intro I _
+      rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
+    · intro n hn
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (hA n hn)]
+  rw [← hI]
+  exact card_filter_idxAns (fun I : IdxWord => I.toNat ∈ A)
 
 theorem sum_fin_equivFin {α : Type*} {s : Finset α} {n : ℕ} (h : n = s.card) (G : α → ℝ≥0∞) :
     ∑ j : Fin n, G (s.equivFin.symm (Fin.cast h j)).1 = ∑ η ∈ s, G η := by

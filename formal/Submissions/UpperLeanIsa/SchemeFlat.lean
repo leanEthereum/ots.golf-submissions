@@ -8,17 +8,17 @@ import Submissions.UpperLeanIsa.LayerCount
 The instance of `LayerScheme` the HL-FLAT-A machine implements (model:
 `leanisa-frontier/hlflat/hlflat_model.py`).
 
-* **Chains.** 40 chains of 8 positions and 2 of 16 (310 steps); the digit of chain `k` is the
-  bit field of the 128-bit index at `posW wid k` of width `wid k` (3 bits for `k < 40`, 4 for
-  `k = 40, 41`): the 42 fields tile the index, so digits and index are in bijection.
-* **Layer.** An index is accepted when its digits sum to `106`; there are exactly
-  `N₁₀₆ = 69117521303608168194311003377855640` accepted indices (`numValid_eq`).
-* **Tags.** Chain step `(k, j)` sits at position `p = off k + j < 310`; its tag cells are the
+* **Chains.** 41 chains of 8 positions and 1 of 16 (302 steps); the digit of chain `k` is the
+  bit field of the 127-bit index at `posW wid k = 3k` of width `wid k` (3 bits for `k < 41`, 4
+  for `k = 41`): the 42 fields tile the index, so digits and index are in bijection.
+* **Layer.** An index is accepted when its digits sum to `103`; there are exactly
+  `N₁₀₃ = 31836335063033790258067380181515840` accepted indices (`numValid_eq`).
+* **Tags.** Chain step `(k, j)` sits at position `p = off k + j < 302`; its tag cells are the
   symbols `sym (p % 7)`, `sym (p / 7 % 7)`, `sym (p / 49)` with `sym = 0, 1, 2, 4, 8, 16, 32`.
   The constant cv pair is `(0, 1)` (the machine's adjacent `Z, ONE` cells). Metadata: chain steps
-  `1`, index `10`, root calls `0, 2, 4, …, 128, 5504`. All tag symbols and metadata values are
-  constants the machine already holds: `Z`, `ONE`, the powers `g ^ 1 … g ^ 7` and the checked
-  length cell.
+  `1`, index `5504`, root calls `0, 2, 4, …, 128` and `k0Md`. All tag symbols and metadata values
+  are constants the machine already holds: `Z`, `ONE`, the powers `g ^ 1 … g ^ 7`, the checked
+  length cell and the exit target `K0 = g ^ 262133`.
 * **High-half tops.** The chains `0, 6, 11, …, 36` keep the high half of their last step's
   answer (`hiTop`), so that the root's cv pairs `(top (5r+1), top (5r+2))` sit in adjacent cells.
 * **Availability.** Signing fails with probability at most `2 ^ -128` for every message chosen
@@ -37,20 +37,20 @@ namespace OptimalOTS.LeanIsaBaseline.Layer
 
 namespace Flat
 
-/-- Digit widths: 40 three-bit fields, then 2 four-bit fields. -/
-def wid (k : ℕ) : ℕ := if k < 40 then 3 else if k < 42 then 4 else 0
+/-- Digit widths: 41 three-bit fields, then one four-bit field. -/
+def wid (k : ℕ) : ℕ := if k < 41 then 3 else if k < 42 then 4 else 0
 
 /-- Positions of chain `k`: 8 or 16. -/
 def len (k : Fin numChains) : ℕ := 2 ^ wid k
 
 /-- The accepted layer. -/
-def layer : ℕ := 106
+def layer : ℕ := 103
 
 /-- Digit `k` of the index: its bit field at `posW wid k`. -/
-def digit (I : Word) (k : Fin numChains) : ℕ := digitW wid I.toNat k
+def digit (I : IdxWord) (k : Fin numChains) : ℕ := digitW wid I.toNat k
 
-/-- First step position of chain `k` (chains of 7 steps, then two of 15). -/
-def off (k : ℕ) : ℕ := if k < 40 then 7 * k else 280 + 15 * (k - 40)
+/-- First step position of chain `k` (chains of 7 steps, then one of 15). -/
+def off (k : ℕ) : ℕ := if k < 41 then 7 * k else 287
 
 /-- The symbol `v < 7`: `0, 1, 2, 4, 8, 16, 32`. -/
 def sym (v : ℕ) : Word := BitVec.ofNat 128 (if v = 0 then 0 else 2 ^ (v - 1))
@@ -65,12 +65,15 @@ def cv : BitVec 256 := BitVec.ofNat 256 (2 ^ 128)
 /-- Metadata of chain steps (`ONE`). -/
 def chainMd : Word := 1
 
-/-- Metadata of the index query. -/
-def idxMd : Word := 10
+/-- Metadata of the index query (the signature length). -/
+def idxMd : Word := 5504
 
-/-- Metadata of root call `r`: `0, 2, 4, 8, 16, 32, 64, 128, 5504`. -/
+/-- The word of `g ^ 262133` in `GF(2^64)`, the machine's `K0` cell. -/
+def k0Md : ℕ := 3909124629532110206
+
+/-- Metadata of root call `r`: `0, 2, 4, 8, 16, 32, 64, 128, k0Md`. -/
 def rootMd (r : ℕ) : Word :=
-  BitVec.ofNat 128 (if r = 0 then 0 else if r < 8 then 2 ^ r else 5504)
+  BitVec.ofNat 128 (if r = 0 then 0 else if r < 8 then 2 ^ r else k0Md)
 
 /-- The chains whose top is the high half: `0` and `5r + 1` for `r = 1, …, 7`. -/
 def hiTop (k : Fin numChains) : Bool := k.val = 0 || (6 ≤ k.val && k.val ≤ 36 && k.val % 5 = 1)
@@ -92,9 +95,9 @@ def scheme : OracleAlgorithm.Scheme := params.scheme
 
 /-! ## Basic facts -/
 
-theorem digit_lt (I : Word) (k : Fin numChains) : digit I k < len k := digitW_lt wid _ _
+theorem digit_lt (I : IdxWord) (k : Fin numChains) : digit I k < len k := digitW_lt wid _ _
 
-theorem pos_42 : posW wid 42 = 128 := by decide
+theorem pos_42 : posW wid 42 = 127 := by decide
 
 theorem chainMd_ne : params.chainMd ≠ params.idxMd := by decide
 
@@ -122,8 +125,8 @@ theorem digitFun_lt (c : (k : Fin numChains) → Fin (2 ^ wid k)) (k : ℕ) :
   · positivity
 
 /-- The index with the given digits. -/
-def indexOf (c : (k : Fin numChains) → Fin (2 ^ wid k)) : Word :=
-  BitVec.ofNat 128 (ofDigitsW wid (digitFun c) 42)
+def indexOf (c : (k : Fin numChains) → Fin (2 ^ wid k)) : IdxWord :=
+  BitVec.ofNat 127 (ofDigitsW wid (digitFun c) 42)
 
 theorem indexOf_toNat (c : (k : Fin numChains) → Fin (2 ^ wid k)) :
     (indexOf c).toNat = ofDigitsW wid (digitFun c) 42 := by
@@ -170,23 +173,23 @@ theorem card_accepted : params.numValid = compW wid 42 layer := by
     apply Fin.ext
     exact digit_indexOf c k
 
-/-- `N₁₀₆`, by kernel evaluation of the partial-sum table. -/
-theorem compW_layer : compW wid 42 layer = 69117521303608168194311003377855640 := by
+/-- `N₁₀₃`, by kernel evaluation of the partial-sum table. -/
+theorem compW_layer : compW wid 42 layer = 31836335063033790258067380181515840 := by
   rw [← compTableW_getD wid layer 42 layer le_rfl]
   decide +kernel
 
 /-- The exact number of accepted indices. -/
-theorem numValid_eq : params.numValid = 69117521303608168194311003377855640 := by
+theorem numValid_eq : params.numValid = 31836335063033790258067380181515840 := by
   rw [card_accepted, compW_layer]
 
-/-- Layer 105 is not enough: `N₁₀₅ < 200 · 2 ^ 108` (the availability threshold used here). -/
-theorem compW_105 : compW wid 42 105 < 200 * 2 ^ 108 := by
-  rw [← compTableW_getD wid 105 42 105 le_rfl]
+/-- Layer 102 is not enough: `N₁₀₂ < 90 · 2 ^ 108` (the availability threshold used here). -/
+theorem compW_102 : compW wid 42 102 < 90 * 2 ^ 108 := by
+  rw [← compTableW_getD wid 102 42 102 le_rfl]
   decide +kernel
 
 /-! ## Availability -/
 
-theorem numValid_ge : 200 * 2 ^ 108 ≤ params.numValid := by
+theorem numValid_ge : 90 * 2 ^ 108 ≤ params.numValid := by
   rw [numValid_eq]; norm_num
 
 /-- **Signing availability of HL-FLAT-A.** -/

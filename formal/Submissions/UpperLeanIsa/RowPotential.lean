@@ -7,16 +7,17 @@ import Submissions.UpperLeanIsa.RowIneq
 Ported from UpperRiscv `RowPotential.lean`. `psi d = r + Σ_m max (b_m − r a_m) 0 / D_m`: `r` is
 the fraction of accepted indices held by the cache, and row `m` has `a_m` accepted entries,
 `b_m` of them shared, and `D_m = a_m + q N_m` with `N_m` its uncached nonces and
-`q = numValid / 2 ^ 128`.
+`q = numValid / 2 ^ 127`.
 
 * `psi_step`: one fresh index answer raises `psi` by at most the class bound `gCls` of its index;
 * `sum_gCls_le`: the class bounds add up to at most `11/6` over all indices;
-* `psi_charge`: hence `θ psi` grows by at most `2 / 2 ^ 128` on average, `θ = I / (I − 2L)`;
+* `psi_charge`: hence `θ psi` grows by at most `(19/10) / 2 ^ 127` on average, `θ = I / (I − 2L)`;
 * `psi_dom`: `θ psi` is a valid `ρ` for the signing lemma `signRho_bound`.
 
 The parameters enter through the instance `RowCtx`, so that the RISC-V statements carry over
-verbatim (`P` below is `RowCtx.P`); `idxBits = nonceBits = 128` are kept opaque, as in the RISC-V
-proof, so that no power `2 ^ 128` is ever unfolded.
+verbatim (`P` below is `RowCtx.P`); `idxBits = 127` and `nonceBits = 128` are kept opaque, as in
+the RISC-V proof, so that no power `2 ^ 127` is ever unfolded. A row has `2 ^ nonceBits ≥ I` nonces,
+so its fresh mass `q N_m` lies in `[M/2, 2M]`; `RowIneq.charge_le_clamp` handles `q N_m > M`.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -34,12 +35,12 @@ class RowCtx where
   P : Params
 
 /-- Index width (opaque). -/
-def idxBits : ℕ := 128
+def idxBits : ℕ := 127
 
 /-- Nonce width (opaque). -/
 def nonceBits : ℕ := 128
 
-theorem idxBits_eq : idxBits = 128 := rfl
+theorem idxBits_eq : idxBits = 127 := rfl
 
 theorem nonceBits_eq : nonceBits = 128 := rfl
 
@@ -86,11 +87,11 @@ attribute [local irreducible] idxBits nonceBits
 
 /-- The standing hypotheses on the parameters. -/
 structure RowHyp : Prop where
-  nonce_eq : nonceBits = idxBits
+  idx_le_nonce : idxBits ≤ nonceBits
   idx_le : idxBits ≤ hashBits
   two_le : 2 ≤ numValid
   numCuts_le : 2 * numValid ≤ 2 ^ idxBits
-  trial_le : 24 * trials ≤ 2 ^ idxBits
+  trial_le : 64 * trials ≤ 2 ^ idxBits
 
 
 namespace Row
@@ -179,8 +180,8 @@ theorem q_le_half (hP : RowHyp) : q ≤ 1 / 2 := by
 
 theorem qI : q * I = M := div_mul_cancel₀ _ I_pos.ne'
 
-theorem nonce_card (hP : RowHyp) : (2 : ℝ) ^ nonceBits = I := by
-  rw [hP.nonce_eq]; rfl
+theorem I_le_nonce (hP : RowHyp) : I ≤ (2 : ℝ) ^ nonceBits :=
+  pow_le_pow_right₀ (by norm_num) hP.idx_le_nonce
 
 theorem u_nonneg (d : Cache) (m : EMessage) : 0 ≤ u d m := Nat.cast_nonneg _
 
@@ -241,17 +242,10 @@ theorem u_le_half (m : EMessage) : u d m ≤ I / 2 :=
   (Finset.single_le_sum (fun m _ => u_nonneg d m) (Finset.mem_univ m)).trans (sum_u_le hP hc)
 
 theorem N_ge (m : EMessage) : I / 2 ≤ N d m := by
-  unfold N; rw [nonce_card hP]; linarith [u_le_half hP hc m]
-
-theorem N_le (m : EMessage) : N d m ≤ I := by
-  unfold N; rw [nonce_card hP]; linarith [u_nonneg d m]
+  unfold N; linarith [u_le_half hP hc m, I_le_nonce hP]
 
 theorem qN_ge (m : EMessage) : M / 2 ≤ q * N d m := by
   have := mul_le_mul_of_nonneg_left (N_ge hP hc m) (q_nonneg)
-  rw [← qI]; linarith
-
-theorem qN_le (m : EMessage) : q * N d m ≤ M := by
-  have := mul_le_mul_of_nonneg_left (N_le hP hc m) (q_nonneg)
   rw [← qI]; linarith
 
 theorem D_ge (m : EMessage) : M / 2 ≤ D d m := by
@@ -490,7 +484,7 @@ theorem sum_gCls_le (m₀ : EMessage) :
   have hr0 := Row.r_nonneg hP d
   have hr1 := Row.r_le_one hP d
   have hS : S ≤ Row.r d - Row.dd d m₀ / Row.M + 1 / 2 -
-      (Row.M - Row.q * Row.N d m₀) / Row.M := by
+      (Row.M - min (Row.q * Row.N d m₀) Row.M) / Row.M := by
     have hrow : ∀ m, Row.dd d m / Row.D d m ≤
         (Row.dd d m + Row.q * Row.u d m) / Row.M := fun m => by
       have hu := Row.u_le_half hP hc m
@@ -500,8 +494,8 @@ theorem sum_gCls_le (m₀ : EMessage) :
       · have := mul_le_mul_of_nonneg_left (show Row.u d m ≤ Row.I by
           linarith [Row.I_pos]) hq0
         linarith
-      · simp only [Row.D, Row.N]
-        rw [Row.nonce_card hP]
+      · have := mul_le_mul_of_nonneg_left (Row.I_le_nonce hP) hq0
+        simp only [Row.D, Row.N]
         nlinarith [Row.dd_le_a d m]
     have hfree : ∑ m, Row.dd d m ≤ Row.v d := by
       simp only [Row.dd, Row.v]
@@ -518,24 +512,38 @@ theorem sum_gCls_le (m₀ : EMessage) :
           · linarith
           · exact Row.q_nonneg
           · linarith
-      _ = _ := by
-          simp only [Row.N, Row.r]
-          rw [Row.nonce_card hP]
+      _ ≤ _ := by
           have e : Row.q * (Row.I / 2 - Row.u d m₀) =
               Row.M / 2 - Row.q * Row.u d m₀ := by rw [← hqI]; ring
-          have e' : Row.q * (Row.I - Row.u d m₀) = Row.M - Row.q * Row.u d m₀ := by
-            rw [← hqI]; ring
-          rw [e, e']
-          field_simp
-          ring
+          have hmin : Row.M - min (Row.q * Row.N d m₀) Row.M ≤ Row.q * Row.u d m₀ := by
+            have hN : Row.M ≤ Row.q * (Row.N d m₀ + Row.u d m₀) := by
+              have := mul_le_mul_of_nonneg_left (Row.I_le_nonce hP) Row.q_nonneg
+              simp only [Row.N]
+              rw [← hqI]; linarith
+            rcases le_total (Row.q * Row.N d m₀) Row.M with h | h
+            · rw [min_eq_left h]; linarith
+            · rw [min_eq_right h]; nlinarith [Row.u_nonneg d m₀, Row.q_nonneg]
+          rw [e, div_le_iff₀ hM]
+          have hdiv : (Row.M - min (Row.q * Row.N d m₀) Row.M) / Row.M * Row.M =
+              Row.M - min (Row.q * Row.N d m₀) Row.M := by field_simp
+          have hr : Row.r d * Row.M = Row.v d := Row.rM hP d
+          have hd : Row.dd d m₀ / Row.M * Row.M = Row.dd d m₀ := by field_simp
+          nlinarith
   have hx1 : max (Row.x d m₀) 0 ≤ (1 - Row.r d) * Row.a d m₀ := by
     refine max_le ?_ (mul_nonneg (by linarith) (Row.a_nonneg d m₀))
     simp only [Row.x]
     nlinarith [Row.b_le_a d m₀]
-  have key := RowIneq.charge_le (Row.M) (Row.I) (Row.a d m₀) (Row.dd d m₀)
+  have hD1 : 1 ≤ Row.a d m₀ + min (Row.q * Row.N d m₀) Row.M := by
+    have := Row.a_nonneg d m₀
+    have := Row.two_le_M hP
+    have := Row.qN_ge hP hc m₀
+    rcases le_total (Row.q * Row.N d m₀) Row.M with h | h
+    · rw [min_eq_left h]; linarith
+    · rw [min_eq_right h]; linarith
+  have key := RowIneq.charge_le_clamp (Row.M) (Row.I) (Row.a d m₀) (Row.dd d m₀)
     (Row.q * Row.N d m₀) (max (Row.x d m₀) 0) (Row.r d) S hM (by linarith)
-    (Row.qN_ge hP hc m₀) (Row.qN_le hP hc m₀) (Row.a_nonneg d m₀) (Row.dd_nonneg d m₀)
-    (Row.dd_le_a d m₀) hr0 hr1 (le_max_right _ _) hx1 (Row.one_le_D hP hc m₀) hMI2 hS
+    (Row.qN_ge hP hc m₀) (Row.a_nonneg d m₀) (Row.dd_nonneg d m₀)
+    (Row.dd_le_a d m₀) hr0 hr1 (le_max_right _ _) hx1 hD1 hMI2 hS
   rw [show Row.M / Row.I = Row.q from rfl,
     show Row.a d m₀ + Row.q * Row.N d m₀ = Row.D d m₀ from rfl] at key
   have e4 : (Row.r d * Row.M * (1 - Row.r d) + Row.dd d m₀) / Row.D d m₀ =
@@ -557,9 +565,9 @@ theorem natCast_div_two_pow (n k : ℕ) :
 
 namespace Row
 
-theorem θ_bounds (hP : RowHyp) : 1 ≤ θ ∧ θ ≤ 12 / 11 := by
+theorem θ_bounds (hP : RowHyp) : 1 ≤ θ ∧ θ ≤ 32 / 31 := by
   have hL := hP.trial_le
-  have hL' : 24 * (trials : ℝ) ≤ I := by unfold I; exact_mod_cast hL
+  have hL' : 64 * (trials : ℝ) ≤ I := by unfold I; exact_mod_cast hL
   have hL0 : (0 : ℝ) ≤ trials := Nat.cast_nonneg _
   have hpos : 0 < I - 2 * trials := by linarith [I_pos]
   unfold θ
@@ -611,11 +619,12 @@ theorem psi_avg {m₀ : EMessage} {η₀ : Nonce} (hfresh : d (P.encQuery (m₀ 
         have := (Row.I_pos).ne'
         field_simp
 
-/-- One fresh encoding answer raises `θ psi` by at most `2 / 2^idxBits` on average. -/
+/-- One fresh encoding answer raises `θ psi` by at most `(19/10) / 2^idxBits` on average:
+`θ · 11/6 ≤ (32/31) · (11/6) ≤ 19/10`. -/
 theorem psi_charge {m₀ : EMessage} {η₀ : Nonce} (hfresh : d (P.encQuery (m₀ ++ η₀)) = none) :
     ∑ w, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         ENNReal.ofReal (Row.θ * psi (d.cacheQuery (P.encQuery (m₀ ++ η₀)) w)) ≤
-      ENNReal.ofReal (Row.θ * psi d) + 2 * ((2 : ℝ≥0∞) ^ idxBits)⁻¹ := by
+      ENNReal.ofReal (Row.θ * psi d) + 19 / 10 * ((2 : ℝ≥0∞) ^ idxBits)⁻¹ := by
   obtain ⟨hθ1, hθ2⟩ := Row.θ_bounds hP
   have hθ0 : 0 ≤ Row.θ := by linarith
   have hKpos : (0 : ℝ) < 2 ^ hashBits := by positivity
@@ -624,9 +633,10 @@ theorem psi_charge {m₀ : EMessage} {η₀ : Nonce} (hfresh : d (P.encQuery (m�
       ENNReal.ofReal ((2 : ℝ) ^ hashBits)⁻¹ := by
     rw [ENNReal.ofReal_inv_of_pos hKpos, ofReal_two_pow, Fintype.card_bitVec]
     push_cast; rfl
-  have h2 : 2 * ((2 : ℝ≥0∞) ^ idxBits)⁻¹ = ENNReal.ofReal (2 / Row.I) := by
-    rw [ENNReal.ofReal_div_of_pos hIpos, ENNReal.ofReal_ofNat, Row.I, ofReal_two_pow,
-      div_eq_mul_inv]
+  have h2 : 19 / 10 * ((2 : ℝ≥0∞) ^ idxBits)⁻¹ = ENNReal.ofReal (19 / 10 / Row.I) := by
+    rw [div_eq_mul_inv (19 / 10 : ℝ) Row.I, ENNReal.ofReal_mul (by norm_num),
+      ENNReal.ofReal_inv_of_pos hIpos, Row.I, ofReal_two_pow, ENNReal.ofReal_div_of_pos (by norm_num),
+      ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat]
   rw [hcard, h2]
   simp_rw [← ENNReal.ofReal_mul (inv_nonneg.2 hKpos.le)]
   rw [← ENNReal.ofReal_sum_of_nonneg (fun w _ => mul_nonneg (inv_nonneg.2 hKpos.le)
@@ -639,8 +649,8 @@ theorem psi_charge {m₀ : EMessage} {η₀ : Nonce} (hfresh : d (P.encQuery (m�
       = (∑ w, psi (d.cacheQuery (P.encQuery (m₀ ++ η₀)) w)) / 2 ^ hashBits * Row.θ := by
         ring
     _ ≤ (psi d + 11 / 6 / Row.I) * Row.θ := mul_le_mul_of_nonneg_right hav hθ0
-    _ ≤ Row.θ * psi d + 2 / Row.I := by
-        have : Row.θ * (11 / 6 / Row.I) ≤ 2 / Row.I := by
+    _ ≤ Row.θ * psi d + 19 / 10 / Row.I := by
+        have : Row.θ * (11 / 6 / Row.I) ≤ 19 / 10 / Row.I := by
           rw [mul_div_assoc', div_le_div_iff_of_pos_right hIpos]; linarith
         nlinarith
 
@@ -668,7 +678,7 @@ theorem psi_dom (m : EMessage) (c : ℕ) (hc1 : (P.rowFresh d m).card ≤ c + tr
   have hc2' : (c : ℝ) ≤ Row.N d m := by rw [← hfreshN]; exact_mod_cast hc2
   clear hc1 hc2 hfreshN
   have hL0 : (0 : ℝ) ≤ trials := Nat.cast_nonneg _
-  have hLI : 24 * (trials : ℝ) ≤ Row.I := by
+  have hLI : 64 * (trials : ℝ) ≤ Row.I := by
     unfold Row.I; exact_mod_cast hP.trial_le
   have hc0 : (0 : ℝ) ≤ c := Nat.cast_nonneg _
   have hθ0 : (0 : ℝ) ≤ Row.θ := by linarith

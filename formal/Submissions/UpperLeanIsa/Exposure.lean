@@ -104,7 +104,7 @@ def beforeSigning : Cut := fun k => P.len k - 1
 
 variable (P) in
 /-- After signing index `I`: the revealed positions. -/
-def afterSigning (I : Word) : Cut := fun k => P.len k - 1 - P.digit I k
+def afterSigning (I : IdxWord) : Cut := fun k => P.len k - 1 - P.digit I k
 
 variable (P) in
 /-- A cut is at or below the tops. -/
@@ -112,7 +112,7 @@ def ValidCut (d : Cut) : Prop := ∀ k, d k ≤ P.len k - 1
 
 theorem beforeSigning_valid : ValidCut P (beforeSigning P) := fun _ => le_rfl
 
-theorem afterSigning_valid (I : Word) : ValidCut P (afterSigning P I) :=
+theorem afterSigning_valid (I : IdxWord) : ValidCut P (afterSigning P I) :=
   fun _ => Nat.sub_le _ _
 
 /-- The hidden locations: chain steps strictly below the cut. -/

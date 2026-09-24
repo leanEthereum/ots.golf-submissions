@@ -29,7 +29,7 @@ variable (P : Params)
 structure Hyp : Prop where
   len_pos : ∀ k, 1 ≤ P.len k
   digit_lt : ∀ I k, P.digit I k < P.len k
-  digit_inj : ∀ I I' : Word, (∀ k, P.digit I k = P.digit I' k) → I = I'
+  digit_inj : ∀ I I' : IdxWord, (∀ k, P.digit I k = P.digit I' k) → I = I'
   layer_pos : 1 ≤ P.layer
   tag_inj : ∀ (k k' : Fin numChains) (j j' : ℕ), j + 1 < P.len k → j' + 1 < P.len k' →
     P.tag k j 0 = P.tag k' j' 0 → P.tag k j 1 = P.tag k' j' 1 → P.tag k j 2 = P.tag k' j' 2 →
@@ -38,8 +38,8 @@ structure Hyp : Prop where
   chain_root : ∀ r < 9, P.chainMd ≠ P.rootMd r
   root_idx : ∀ r < 9, P.rootMd r ≠ P.idxMd
   root_inj : ∀ r s, r < 9 → s < 9 → P.rootMd r = P.rootMd s → r = s
-  numValid_ge : 200 * 2 ^ 108 ≤ P.numValid
-  numValid_le : 2 * P.numValid ≤ 2 ^ 128
+  numValid_ge : 90 * 2 ^ 108 ≤ P.numValid
+  numValid_le : 2 * P.numValid ≤ 2 ^ 127
   keygen_le : 2 * (∑ k, (P.len k - 1)) + 18 ≤ 2 ^ 20
   verify_le : 20 + 2 * P.layer ≤ 2 ^ 20
   len_zero : 2 ≤ P.len 0

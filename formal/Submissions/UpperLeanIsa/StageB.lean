@@ -16,8 +16,8 @@ After the first stage ended with cache `d` and signing added the index entries `
   *earlier* entry other than the signed one held `I₁` (`IdxPre`, charged to signing). The three
   events are charged in one potential `ΦB` by query shape: a chain step can only pay the hidden
   and target charges (`2 · 2 ^ -129` per compression), a root call only the target charge, and an
-  index query only the `IdxPost` charge (`2 ^ -128` per query), so the potential grows by at most
-  `κ = 2 ^ -128` per compression.
+  index query only the `IdxPost` charge (`2 ^ -127` per query of two compressions), so the potential
+  grows by at most `κ = (19/20) · 2 ^ -127` per compression.
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -68,13 +68,38 @@ theorem g_le_one (p : Bool × Cache) : g p ≤ 1 := by
   unfold g
   split_ifs <;> simp
 
-/-- The charge per compression: `2 · 2 ^ -129 = 2 ^ -128`. -/
-def κ : ℝ≥0∞ := 2 * rate
+/-- The charge per compression, `(19/20) · 2 ^ -127`. Every query costs two compressions, and the
+largest charge per query is the index charge `θ · (11/6) · 2 ^ -127 ≤ (19/10) · 2 ^ -127`
+(`RowPot.psi_charge`); the chain and root charges are `2 · 2 ^ -129 = 2 ^ -128` per compression. -/
+def κ : ℝ≥0∞ := 19 / 10 * ((2 : ℝ≥0∞) ^ 128)⁻¹
 
-theorem κ_eq : κ = ((2 : ℝ≥0∞) ^ 128)⁻¹ := by
+theorem κ_mul_two : κ * 2 = 19 / 10 * ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
   unfold κ
-  rw [mul_comm]
-  exact rate_two
+  rw [show (2 : ℝ≥0∞) ^ 128 = 2 ^ 127 * 2 by rw [← pow_succ],
+    ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), mul_assoc, mul_assoc,
+    ENNReal.inv_mul_cancel (by simp) (by simp), mul_one]
+
+theorem two_rate_le_κ : 2 * rate ≤ κ := by
+  rw [mul_comm, rate_two, κ]
+  exact le_mul_of_one_le_left bot_le
+    (by rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (by norm_num))]; norm_num)
+
+/-- `κ = (19/20) · 2 ^ -127 < 2 ^ -127`. -/
+theorem κ_lt : κ < ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
+  rw [κ, show ((2 : ℝ≥0∞) ^ 127)⁻¹ = 2 * ((2 : ℝ≥0∞) ^ 128)⁻¹ by
+    rw [show (2 : ℝ≥0∞) ^ 128 = 2 * 2 ^ 127 by rw [← pow_succ'],
+      ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), ← mul_assoc,
+      ENNReal.mul_inv_cancel (by simp) (by simp), one_mul]]
+  refine ENNReal.mul_lt_mul_left ?_ ?_ ?_
+  · simp
+  · simp
+  · rw [ENNReal.div_lt_iff (Or.inl (by norm_num)) (Or.inl (by norm_num))]
+    norm_num
+
+theorem inv_two_pow_127_le : ((2 : ℝ≥0∞) ^ 127)⁻¹ ≤ κ * 2 := by
+  rw [κ_mul_two]
+  exact le_mul_of_one_le_left bot_le
+    (by rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (by norm_num))]; norm_num)
 
 /-- A potential charged at every fresh query bounds every adaptive computation. -/
 theorem potential_bound {α : Type} (Φ : Cache → ℝ≥0∞) (κ' : ℝ≥0∞)
@@ -360,9 +385,10 @@ theorem stageB_none (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
     _ ≤ rate * sumW P (publicFiber (beforeSigning P) v) * b' +
           sumW P (publicFiber (beforeSigning P) v) * (rate * b') :=
         add_le_add le_rfl (mul_le_mul' (sumW_mono hT) le_rfl)
-    _ = κ * sumW P (publicFiber (beforeSigning P) v) * b' := by
-        unfold κ
-        ring
+    _ = 2 * rate * sumW P (publicFiber (beforeSigning P) v) * b' := by ring
+    _ ≤ κ * sumW P (publicFiber (beforeSigning P) v) * b' := by
+        gcongr
+        exact two_rate_le_κ
 
 /-! ## Stage B after signing index `I₁` -/
 
@@ -397,21 +423,21 @@ theorem ΦB_charge (hP : P.Hyp) {d₁ : Cut} (hd₁ : ValidCut P d₁) (v₁ : P
     have hs := sumW_mono (P := P) hT
     calc _ ≤ hiddenHitPotential d₁ T c + sumW P T *
           (ind (TargetHit (cutTargets P d₁ ζ) c) +
-            ((if P.IdxPost d' c i then 1 else 0) + ((2 : ℝ≥0∞) ^ 128)⁻¹)) := by
+            ((if P.IdxPost d' c i then 1 else 0) + ((2 : ℝ≥0∞) ^ 127)⁻¹)) := by
           refine add_le_add h1 (mul_le_mul' le_rfl (add_le_add (le_of_eq h2) ?_))
           exact h3
       _ = hiddenHitPotential d₁ T c + sumW P T *
             (ind (TargetHit (cutTargets P d₁ ζ) c) + ind (P.IdxPost d' c i)) +
-          sumW P T * ((2 : ℝ≥0∞) ^ 128)⁻¹ := by
+          sumW P T * ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
           unfold ind
           ring
       _ ≤ _ := by
           refine add_le_add le_rfl ?_
-          rw [← hcost, ← κ_eq]
-          calc sumW P T * κ ≤ sumW P (publicFiber d₁ v₁) * κ := mul_le_mul' hs le_rfl
-            _ ≤ κ * sumW P (publicFiber d₁ v₁) * 2 := by
-                rw [mul_comm (sumW P _)]
-                exact le_mul_of_one_le_right bot_le (by norm_num)
+          rw [← hcost]
+          calc sumW P T * ((2 : ℝ≥0∞) ^ 127)⁻¹
+              ≤ sumW P (publicFiber d₁ v₁) * (κ * 2) :=
+                mul_le_mul' hs inv_two_pow_127_le
+            _ = κ * sumW P (publicFiber d₁ v₁) * 2 := by ring
   · have hne : ∀ u, q ≠ P.encQuery u := fun u h => henc ⟨u, h⟩
     have h1 := P.hiddenHit_charge hP hd₁ v₁ T hT c q
     have h2 := (ind_target_charge (cutTargets P d₁ ζ) c q hq).trans
@@ -438,12 +464,13 @@ theorem ΦB_charge (hP : P.Hyp) {d₁ : Cut} (hd₁ : ValidCut P d₁) (v₁ : P
               ≤ rate * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) +
                   sumW P (publicFiber d₁ v₁) * (rate * queryCost (.inr q)) :=
                 add_le_add le_rfl (mul_le_mul' hs le_rfl)
-            _ = κ * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) := by
-                unfold κ
-                ring
+            _ = 2 * rate * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) := by ring
+            _ ≤ κ * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) := by
+                gcongr
+                exact two_rate_le_κ
 
 theorem idxOf_eq_of_low {w : BitVec hashBits} {i : P.Idx}
-    (h : w.extractLsb' 0 128 = idxWord i.val) : idxOf w = i.val := by
+    (h : idxAns w = idxWord i.val) : idxOf w = i.val := by
   unfold idxOf
   rw [h, idxWord, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (P.mem_validSet_lt i.2)]
 
@@ -454,7 +481,7 @@ theorem idxPost_of_event (pk : PublicKey) (m₁ : Message) (d d' c : Cache) (η�
     (hpre : ¬ P.IdxPre d (emsg m₁ pk ++ η₁) i₁.val) (hsub : Cache.Sub d' c)
     (m₂ : Message) (η₂ : Nonce) (hne : (m₂, η₂) ≠ (m₁, η₁)) (w : BitVec hashBits)
     (hw : c ⟨896, P.idxInput m₂ η₂ pk⟩ = some w)
-    (hlow : w.extractLsb' 0 128 = idxWord i₁.val) : P.IdxPost d' c i₁.val := by
+    (hlow : idxAns w = idxWord i₁.val) : P.IdxPost d' c i₁.val := by
   set u := emsg m₂ pk ++ η₂ with hu
   have hwq : c (P.encQuery u) = some w := by rw [hu, P.encQuery_emsg]; exact hw
   have hidx : idxOf w = i₁.val := P.idxOf_eq_of_low hlow

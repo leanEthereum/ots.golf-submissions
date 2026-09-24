@@ -7,6 +7,7 @@ import Mathlib
 `2 ^ -idxBits`, is at most `11/6`. The variables describe the queried row after the reduction of the
 other rows to the row budget (see `docs/nonce-128-analysis.md`): `w = q N₀ ∈ [M/2, M]` with
 `q = M / I`, `D₀ = a₀ + w`, `x₀⁺ ≤ (1 − r) a₀`, `d₀ ≤ a₀`, and `S` the other rows' collision term.
+`charge_le_clamp` drops `w ≤ M` (more nonces than indices).
 -/
 
 namespace OptimalOTS.LeanIsaBaseline.Layer.RowIneq
@@ -94,5 +95,41 @@ theorem charge_le (M I a0 d0 w x0p r S : ℝ) (hM : 0 < M) (hMI : M ≤ I)
   have e3 : (r * M * (1 - r) + d0) / D = r * M * (1 - r) / D + d0 / D := by ring
   rw [e3]
   linarith [hA, hB, hC, hRow, hS]
+
+/-- `charge_le` without the upper bound `w ≤ M`: a larger `w` only enlarges `D₀`, which lowers
+every term, so the bound for `min w M` applies. -/
+theorem charge_le_clamp (M I a0 d0 w x0p r S : ℝ) (hM : 0 < M) (hMI : M ≤ I)
+    (hw1 : M / 2 ≤ w) (ha0 : 0 ≤ a0) (hd0 : 0 ≤ d0) (hd0a : d0 ≤ a0)
+    (hr0 : 0 ≤ r) (hr1 : r ≤ 1) (hx0 : 0 ≤ x0p) (hx1 : x0p ≤ (1 - r) * a0)
+    (hD1 : 1 ≤ a0 + min w M) (hMI2 : 2 * M ≤ I)
+    (hS : S ≤ r - d0 / M + 1/2 - (M - min w M) / M) :
+    (I - M) * (x0p / (a0 + w - M / I) - x0p / (a0 + w)) + (1 - r) +
+      (r * M * (1 - r) + d0) / (a0 + w) + S ≤ 11/6 := by
+  have hI : 0 < I := lt_of_lt_of_le hM hMI
+  have hq0 : 0 ≤ M / I := div_nonneg hM.le hI.le
+  have hq : M / I ≤ 1 / 2 := by rw [div_le_iff₀ hI]; linarith
+  have hw' : min w M ≤ w := min_le_left _ _
+  have key := charge_le M I a0 d0 (min w M) x0p r S hM hMI (le_min hw1 (by linarith))
+    (min_le_right _ _) ha0 hd0 hd0a hr0 hr1 hx0 hx1 hD1 hMI2 hS
+  set D' := a0 + min w M
+  set D := a0 + w
+  set q := M / I
+  have hDD : D' ≤ D := by linarith
+  have hD'q : 0 < D' - q := by linarith
+  have hdrift : ∀ E, q < E → x0p / (E - q) - x0p / E = x0p * q / (E * (E - q)) := by
+    intro E hE
+    have h1 : E - q ≠ 0 := by linarith
+    have h2 : E ≠ 0 := by linarith
+    field_simp
+    ring
+  have h1 : (I - M) * (x0p / (D - q) - x0p / D) ≤ (I - M) * (x0p / (D' - q) - x0p / D') := by
+    rw [hdrift D (by linarith), hdrift D' (by linarith)]
+    refine mul_le_mul_of_nonneg_left ?_ (by linarith)
+    exact div_le_div_of_nonneg_left (mul_nonneg hx0 hq0) (by nlinarith)
+      (by nlinarith)
+  have h2 : (r * M * (1 - r) + d0) / D ≤ (r * M * (1 - r) + d0) / D' :=
+    div_le_div_of_nonneg_left
+      (add_nonneg (mul_nonneg (mul_nonneg hr0 hM.le) (by linarith)) hd0) (by linarith) hDD
+  linarith
 
 end OptimalOTS.LeanIsaBaseline.Layer.RowIneq
