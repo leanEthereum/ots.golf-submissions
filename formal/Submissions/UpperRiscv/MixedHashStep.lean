@@ -8,7 +8,7 @@ open Riscv2Program
 open Forest Forest.Name OracleComp
 
 /-- A chain hash preserves the dispatch table and all fixed registers. -/
-theorem Ctx.writeHash {s : MachineState} {index : Idx} {pk : PublicKey}
+theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {pk : PublicKey}
     (ctx : Ctx s index pk) (k : Fin 32) (y : BitVec hashBits)
     (ho : s.getReg .x12 = W (outAddr k)) : Ctx (Riscv.writeHash s y) index pk := by
   have b := output_bounds k

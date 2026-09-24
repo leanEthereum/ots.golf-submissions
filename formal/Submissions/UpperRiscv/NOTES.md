@@ -1,3 +1,77 @@
+# Restricted antichain and address checksum: 349-cycle candidate
+
+This extends Nicolas Consigny's officially verified 353-cycle record in PR #34,
+checked source `0b21c2e8b5db210ff4feba8daab76a345cb03a6d`.
+Assisted by: Codex. Earlier notes below are historical snapshots.
+
+The full 349-cycle certificate builds and passes a cold pinned-comparator
+replay through Lean's default kernel in 226.127 seconds locally. No hosted
+verdict is claimed; the unchanged official verifier fails this host's Landlock
+preflight before compilation. No production isolation requirement is bypassed.
+
+## Construction
+
+Keep thirty-two four-bit chain digits, but use target sum 158. Restrict the
+first eight pair sums to at most 23, the next two to at most 24, and the last
+six to at most 30. Restricting a fixed-rank antichain preserves the existing
+disclosure/security structure. The generating function is
+`[x^158] P23(x)^8 P24(x)^2 P30(x)^6`, where `Pt` counts digit pairs whose sum
+is at most `t`. `PairCount` and `Valid` prove that the actual packed index set
+has exactly 29,517,020,996,343,900,342,099,578,715,398,432 elements.
+
+The reduced acceptance rate needs a new availability proof. Its rational lower
+bound is `89 / 2^20`. Thirty-two-trial reciprocal bounds give a failure bound
+of one half per 8192 trials, hence `2^-128` over the full signing budget.
+Actual cached key-generation freshness and public-key-dependent messages are
+still covered. No floating-point or transcendental estimate is assumed.
+
+The machine accumulates its already-computed dispatch addresses instead of the
+masked index words. The adjusted first base lane and exactly three RV64 wraps
+make remainder zero modulo 255 equivalent to digit sum 158 or 413. The pair
+caps total 412, excluding the high alias. The table rejects forbidden pair
+landings without adding instructions to an accepting path: 266 forbidden
+cells branch to eight rejection stubs in existing padding.
+
+Five index instructions disappear and one chain hash is added:
+`33 + 295 + 21 = 349` cycles. The image stays at 15,701 instructions plus
+88 data bytes, or 62,892 bytes. Signature layout and the 5504-bit full size
+are unchanged from 353. The latest forbidden-pair rejection costs at most 330
+cycles including index processing.
+
+## Exact staged rejection and security
+
+Some invalid inputs perform prefix hashes before their forbidden landing.
+The new `StagedVerifier` specifies these exact oracle queries. It is not
+syntactically equated with an immediate-reject verifier. `RejectAdapter`
+proves that deleting only terminal constant-answer query suffixes preserves
+the result distribution from every initial random-oracle cache and transfers
+the same pathwise whole-experiment budget `B`. This is the security bridge to
+the certified strict forest verifier. A separate deterministic query-cost
+bound establishes admissibility without relying on the machine-cycle proof.
+
+The mathematical inspiration is fixed-rank order structure, local restrictions,
+and choosing a representation that makes the checksum cheap. No theorem of
+Grothendieck, Noether, Weil, or Bourbaki is assumed by the Lean certificate.
+
+## Validation checkpoint
+
+The actual Lean-exported image exactly matches the independent generator:
+canonical JSON SHA-256
+`1c5c586854daffa80e0379acd95151b5aafa03e152a2569d3d5555621020c602`.
+All 32,822 transcript tests pass, including every 4096 pair/digit landing,
+all 5504 bit flips of one honest signature, malformed lengths, both checksum
+aliases, and each possible first forbidden pair. Arithmetic/counting,
+availability, and the normal and rejecting pair-refinement lemmas have been
+kernel checked. The final certificate covers admissibility, 127-bit strong
+security, exact all-input machine refinement, every-path cycle bounds, and
+strict image size. The permitted-axiom guard and cold comparator both pass,
+using only `propext`, `Classical.choice`, and `Quot.sound`. Source-policy and
+contract-pin checks pass. The comparator uses the pinned genuine landrun and
+lean4export tools; this development replay is not a hosted verdict or a
+certification of the official production isolation and resource limits.
+
+---
+
 # Exact availability and thinner states: 353-cycle candidate
 
 This extends Nicolas Consigny's officially verified 358-cycle record in PR #33,

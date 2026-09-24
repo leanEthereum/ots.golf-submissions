@@ -1,4 +1,5 @@
 import Submissions.UpperRiscv.MixedPair
+import Submissions.UpperRiscv.StagedVerifier
 
 namespace OptimalOTS.RiscvMixedProgram
 open OptimalOTS.Dag
@@ -9,7 +10,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : Idx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
 def chainsFrom (k : ℕ) : List Name :=
   if h : k < 32 then chainNodes ⟨k,h⟩ ++ chainsFrom (k+1) else []
@@ -58,12 +59,12 @@ theorem sum_pairs (f : Fin 32 → ℕ) :
   simp only [Nat.add_assoc]
   rfl
 
-theorem blocksCost_zero : blocksCost index 0 = 294 := by
+theorem blocksCost_zero (index : Idx) : blocksCost index 0 = 295 := by
   have overhead : ∑ q : Fin 16,
       ((lengthSetup q).length+6+earlyHash (leftChain q)+earlyHash (rightChain q)) = 105 := by
     decide +kernel
   have hashes : (∑ q : Fin 16, (32-RiscvUpperForest.ForestVerifier.pos index (leftChain q))) +
-      (∑ q : Fin 16, (32-RiscvUpperForest.ForestVerifier.pos index (rightChain q))) = 189 := by
+      (∑ q : Fin 16, (32-RiscvUpperForest.ForestVerifier.pos index (rightChain q))) = 190 := by
     rw [← Finset.sum_add_distrib, sum_pairs (fun k => 32-RiscvUpperForest.ForestVerifier.pos index k), all_chain_hashes]
   simp only [Finset.sum_add_distrib] at overhead
   simp only [blocksCost, Nat.zero_le, if_true, pairCost_eq, Finset.sum_add_distrib]
@@ -71,6 +72,7 @@ theorem blocksCost_zero : blocksCost index 0 = 294 := by
 
 /-- All sixteen pairs refine all thirty-two chains. -/
 theorem blocks_refines
+    (caps : ∀ q : Fin 16, PairAllowed index.val q)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (hlen : wire.length = 5376)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
@@ -105,7 +107,7 @@ theorem blocks_refines
     change pairCost index Q+blocksCost index (q+1)+rest ≤ fuel at bound
     unfold blockCodeAt at located
     rw [if_pos hq16] at located
-    apply pair_refines index wire pk Q
+    apply pair_refines index wire pk Q (caps Q)
       (fun r => runNodes' index (Payload.permute wire) (chainsFrom (2*(q+1))) r.1 r.2 >>= K)
       (blocksCost index (q+1)+c) (blocksCost index (q+1)+rest) hlen ?_
       s x fuel inv located (by omega)
@@ -113,5 +115,66 @@ theorem blocks_refines
     dsimp only
     apply ih (q+1) (by omega) (by omega) u z left invU ?_ hleft
     simpa only [nextCode_eq Q] using locU
+
+/-- Complete trace refinement includes the hashes made before a forbidden landing. -/
+theorem stagedBlocks_refines (hlen : wire.length = 5376) :
+    ∀ (n q : ℕ), 16-q=n → q ≤ 16 →
+    ∀ (s : MachineState) (x : graph.Assignment) (fuel : ℕ),
+      ChainsInv index wire pk s x (2*q) →
+      (∃ junk, Riscv.CodeAt s s.pc (blockCodeAt q ++ junk)) →
+      stagedCost index n q ≤ fuel →
+      Riscv.Refines fuel s
+        (some <$> stagedBlocks index (Payload.permute wire) pk n q x (cursor (2*q)))
+        (stagedCost index n q) := by
+  intro n
+  induction n with
+  | zero =>
+    intro q hq _ s x fuel inv located bound
+    have hq16 : q=16 := by omega
+    subst q
+    obtain ⟨junk, located⟩ := located
+    unfold blockCodeAt at located
+    rw [if_neg (by omega)] at located
+    simp only [stagedCost, stagedBlocks, map_bind, map_pure] at bound ⊢
+    have h := rootDecision_refines index (Payload.permute wire) pk s x fuel
+      (final_root index wire pk inv) located.append_left (by omega)
+    convert h using 1
+    apply bind_congr
+    intro r
+    apply congrArg pure
+    apply congrArg some
+    exact decide_eq_decide.mpr Iff.rfl
+  | succ n ih =>
+    intro q hq hq' s x fuel inv located bound
+    have hq16 : q < 16 := by omega
+    let Q : Fin 16 := ⟨q,hq16⟩
+    rw [stagedBlocks_some_succ _ _ _ _ _ hq16]
+    rw [stagedCost, dif_pos hq16] at bound ⊢
+    unfold blockCodeAt at located
+    rw [if_pos hq16] at located
+    by_cases good : PairAllowed index.val q
+    · simp only [if_pos good] at bound ⊢
+      have spec : (runNodes' index (Payload.permute wire)
+          (chainNodes (leftChain Q) ++ chainNodes (rightChain Q)) x (cursor (2*q)) >>= fun r =>
+            some <$> stagedBlocks index (Payload.permute wire) pk n (q+1) r.1 r.2) =
+          (runNodes' index (Payload.permute wire) (entryNodes index (leftChain Q)) x (cursor (2*q)) >>= fun r =>
+            runNodes' index (Payload.permute wire)
+              (tableNodes index (leftChain Q) ++ chainNodes (rightChain Q)) r.1 r.2 >>= fun r' =>
+                some <$> stagedBlocks index (Payload.permute wire) pk n (q+1) r'.1 r'.2) := by
+        rw [chain_entry_split index (leftChain Q), List.append_assoc, runNodes'_append, bind_assoc]
+      dsimp only [Q, leftChain, rightChain] at spec
+      rw [← spec]
+      apply pair_refines index wire pk Q good
+        (fun r => some <$> stagedBlocks index (Payload.permute wire) pk n (q+1) r.1 r.2)
+        (stagedCost index n (q+1)) (stagedCost index n (q+1)) hlen ?_
+        s x fuel inv located bound
+      intro u z invU locU left hleft
+      apply ih (q+1) (by omega) (by omega) u z left invU ?_ hleft
+      simpa only [nextCode_eq Q] using locU
+    · simp only [if_neg good] at bound ⊢
+      exact pair_bad_refines index wire pk Q (by
+        change ¬ (digit index.val (2*q)+coarseDigit index q ≤ pairCap q) at good
+        dsimp only [Q]
+        omega) hlen s x fuel inv located bound
 
 end OptimalOTS.RiscvMixedProgram

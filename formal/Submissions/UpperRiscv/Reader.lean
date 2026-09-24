@@ -22,7 +22,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : Idx) (payload : List Bool)
+variable (index : RawIdx) (payload : List Bool)
 
 /-- The sequential reader, also returning its final cursor. -/
 def runNodes' : List Name → graph.Assignment → ℕ →

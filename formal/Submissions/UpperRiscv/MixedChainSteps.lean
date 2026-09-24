@@ -10,7 +10,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : Idx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
 /-- Invariant at a chain hash, with either its wire or expanded input address. -/
 structure HashInv (s : MachineState) (x : graph.Assignment) (k : Fin 32) (base : ℕ) : Prop where

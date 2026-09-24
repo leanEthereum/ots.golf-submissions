@@ -1,4 +1,5 @@
-import Submissions.UpperRiscv.MixedEntry
+import Submissions.UpperRiscv.MixedProgram
+import Submissions.UpperRiscv.MachineFacts
 
 set_option maxRecDepth 100000
 
@@ -22,6 +23,23 @@ theorem fragments_placed : wellPlaced 0 fragments = true := by decide +kernel
 
 theorem keys_complete : ∀ q : Fin 16, ∀ d : Fin (copies q),
     (q.val, d.val) ∈ fragmentKeys := by decide +kernel
+
+theorem mem_insertFragment (a b : ℕ × Code) (parts : List (ℕ × Code)) :
+    a ∈ insertFragment b parts ↔ a = b ∨ a ∈ parts := by
+  induction parts with
+  | nil => simp [insertFragment]
+  | cons c rest ih =>
+    rw [insertFragment]
+    split_ifs <;> simp_all [List.mem_cons, or_left_comm]
+
+theorem mem_addStubs (a : ℕ × Code) (stubs : List ℕ) :
+    a ∈ addStubs stubs ↔ a ∈ copyFragments ∨ ∃ ip ∈ stubs, a = (ip-50,reject) := by
+  induction stubs with
+  | nil => simp [addStubs]
+  | cons ip rest ih =>
+    rw [addStubs, mem_insertFragment, ih]
+    simp only [List.mem_cons, exists_eq_or_imp]
+    tauto
 
 /-- Generic placement proof: checking the small fragment metadata is enough; do not
 reduce the whole image once for every copy. -/
@@ -60,11 +78,26 @@ theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
 theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (q : Fin 16) (d : Fin (copies q)) :
     Riscv.CodeAt s (W (copyStart q d)) (copyCode q d) := by
-  have ht := global.append_right (first := indexPhase ++ prologue 0) (last := tables)
-  rw [show (indexPhase ++ prologue 0).length = 50 by decide, W_add] at ht
+  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 5 nop) (last := tables)
+  rw [show (indexPhase ++ prologue 0 ++ List.replicate 5 nop).length = 50 by decide, W_add] at ht
   have mem : (groupOffset (group q)+256*(15-d.val)+slotOffset q, copyCode q d) ∈ fragments :=
-    List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩
+    (mem_addStubs _ _).mpr (Or.inl
+      (List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩))
   have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
   exact h
+
+theorem rejectStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
+    (ip : ℕ) (hi : ip ∈ rejectStubs) :
+    Riscv.CodeAt s (W (4096+4*ip)) reject := by
+  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 5 nop) (last := tables)
+  rw [show (indexPhase ++ prologue 0 ++ List.replicate 5 nop).length = 50 by decide, W_add] at ht
+  have mem : (ip-50,reject) ∈ fragments :=
+    (mem_addStubs _ _).mpr (Or.inr ⟨ip,hi,rfl⟩)
+  have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
+  have hb : 50 ≤ ip := by
+    simp only [rejectStubs, List.mem_cons, List.not_mem_nil, or_false] at hi
+    omega
+  have he : copiesStart+4*(ip-50) = 4096+4*ip := by unfold copiesStart; omega
+  simpa only [he] using h
 
 end OptimalOTS.RiscvMixedProgram

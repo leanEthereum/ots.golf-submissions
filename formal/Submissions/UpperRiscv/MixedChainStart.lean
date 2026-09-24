@@ -9,7 +9,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : Idx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
 def readNodes (k : Fin 32) : List Name :=
   src k :: (List.range (RiscvUpperForest.ForestVerifier.pos index k+1)).flatMap (tripleN k)

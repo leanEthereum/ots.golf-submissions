@@ -17,7 +17,7 @@ theorem lane_offset' : ∀ q : Fin 16,
 theorem lane_access' : ∀ q : Fin 16, isValidHalfwordAccess (W (laneAddr q)) = true := by
   decide +kernel
 
-theorem dispatch_refines (index : Idx) (wire : List Bool) (pk : PublicKey)
+theorem dispatch_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
     (q : Fin 16) (k : Fin 32) (hk : k.val = 2*q.val) (s : MachineState) (x : graph.Assignment)
     (inv : HashInv index wire pk s x k (work k)) (tail : Code)
     (located : Riscv.CodeAt s s.pc (dispatchCode q ++ tail))

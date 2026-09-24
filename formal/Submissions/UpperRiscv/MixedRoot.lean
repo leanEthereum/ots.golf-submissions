@@ -23,7 +23,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : Idx) (payload : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (payload : List Bool) (pk : PublicKey)
 
 def rootLin : Code := [.ADDI .x10 .x10 (imm12 (-752)), .ADDI .x11 .x13 (imm12 640)]
 

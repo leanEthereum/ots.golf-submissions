@@ -21,7 +21,7 @@ namespace OptimalOTS.Forest
 open OptimalOTS.Dag
 
 theorem digit_sum (i : Idx) : ∑ k ∈ Finset.range 32, digit i.val k = target :=
-  mem_validSet_accepted i.2
+  (mem_validSet_accepted i.2).1
 
 theorem digit_lt_32 (i : ℕ) (k : ℕ) : digit i k < 32 := by
   have h := digit_lt i k
@@ -29,7 +29,7 @@ theorem digit_lt_32 (i : ℕ) (k : ℕ) : digit i k < 32 := by
   omega
 
 /-- The chain digits of an accepted index. -/
-def fixedDigits (i : Idx) (k : Fin 32) : Fin 32 := ⟨digit i.val k, digit_lt_32 _ _⟩
+def fixedDigits (i : RawIdx) (k : Fin 32) : Fin 32 := ⟨digit i.val k, digit_lt_32 _ _⟩
 
 theorem fixedDigits_sum (i : Idx) : ∑ k, (fixedDigits i k).val = target := by
   rw [← digit_sum i, ← Fin.sum_univ_eq_sum_range]
@@ -37,9 +37,9 @@ theorem fixedDigits_sum (i : Idx) : ∑ k, (fixedDigits i k).val = target := by
 
 theorem fixedDigits_injective : Function.Injective fixedDigits := by
   intro i j h
-  apply Subtype.ext
-  have hi : i.val < 2 ^ pos 32 := by rw [← idxBits_eq]; exact Idx.isLt i
-  have hj : j.val < 2 ^ pos 32 := by rw [← idxBits_eq]; exact Idx.isLt j
+  apply Fin.ext
+  have hi : i.val < 2 ^ pos 32 := by rw [← idxBits_eq]; exact i.isLt
+  have hj : j.val < 2 ^ pos 32 := by rw [← idxBits_eq]; exact j.isLt
   rw [← ofDigits_digit i.val 32 hi, ← ofDigits_digit j.val 32 hj]
   unfold ofDigits
   refine Finset.sum_congr rfl fun k hk => ?_
@@ -49,9 +49,9 @@ theorem fixedDigits_injective : Function.Injective fixedDigits := by
   rw [e]
 
 /-- The revealed positions: chain `k` at `31 - d_k`. -/
-def fixedPositions (i : Idx) (k : Fin 32) : Fin 32 := Fin.rev (fixedDigits i k)
+def fixedPositions (i : RawIdx) (k : Fin 32) : Fin 32 := Fin.rev (fixedDigits i k)
 
-theorem fixedPositions_val (i : Idx) (k : Fin 32) :
+theorem fixedPositions_val (i : RawIdx) (k : Fin 32) :
     (fixedPositions i k).val = 31 - digit i.val k := by
   simp [fixedPositions, fixedDigits, Fin.val_rev]
 
@@ -65,28 +65,29 @@ theorem fixedPositions_sum (i : Idx) : ∑ k, (32 - (fixedPositions i k).val) = 
   simp
 
 /-- The disclosure set of an accepted index. -/
-def fixedChoice (i : Idx) : Choice := fixedPositions i
+def fixedChoice (i : RawIdx) : Choice := fixedPositions i
 
 attribute [local irreducible] fixedDigits
 
-theorem fixedCut_injective : Function.Injective (fun i => cutOf (fixedChoice i)) := by
+theorem fixedCut_injective : Function.Injective (fun i : Idx => cutOf (fixedChoice i)) := by
   intro i j h
   have hc := cutOf_injective h
+  apply Idx.toRaw_injective
   apply fixedDigits_injective
   funext k
   have hp := congrFun hc k
   simp only [fixedChoice, fixedPositions] at hp
   exact Fin.rev_injective hp
 
-theorem fixedCut_isCut (i : Idx) : IsCut (cutOf (fixedChoice i)) := isCut_cutOf _
+theorem fixedCut_isCut (i : RawIdx) : IsCut (cutOf (fixedChoice i)) := isCut_cutOf _
 
-theorem fixedCut_card (i : Idx) : (cutOf (fixedChoice i)).card = 32 := card_cutOf _
+theorem fixedCut_card (i : RawIdx) : (cutOf (fixedChoice i)).card = 32 := card_cutOf _
 
-/-- Every disclosure set costs `target + 32 + 12 = 201` compressions to reconstruct. -/
+/-- Every disclosure set costs `target + 32 + 12 = 202` compressions to reconstruct. -/
 theorem fixedCut_cost (i : Idx) :
-    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 201 := by
+    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 202 := by
   rw [cost_cutOf]
-  change ∑ k, (32 - (fixedPositions i k).val) + 12 = 201
+  change ∑ k, (32 - (fixedPositions i k).val) + 12 = 202
   rw [fixedPositions_sum]
   rfl
 

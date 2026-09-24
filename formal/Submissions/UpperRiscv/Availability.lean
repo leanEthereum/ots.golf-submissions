@@ -8,7 +8,7 @@ import Submissions.UpperRiscv.FreshKeygen
 
 Key generation makes no 512-bit index query. For any message chosen from the public key,
 the signer therefore tries fresh, distinct nonce queries. Each trial fails with probability
-`miss = 1 - numValid / 2 ^ 128 ≤ 8387858 / 8388608`, and the `2^20` trials give failure at most
+`miss = 1 - numValid / 2 ^ 128 ≤ 1048487 / 1048576`, and the `2^20` trials give failure at most
 `2^-128`.
 -/
 
@@ -30,18 +30,18 @@ def miss : ℝ≥0∞ :=
 theorem miss_eq : miss = ((2 ^ 256 - numValid * 2 ^ 128 : ℕ) : ℝ≥0∞) / 2 ^ 256 := by
   rw [miss, div_eq_mul_inv, Nat.cast_pow, Nat.cast_ofNat]
 
-/-- At least `750 * 2 ^ 105` of the `2 ^ 128` indices are accepted. -/
-theorem miss_le : miss ≤ 8387858 / 8388608 := by
-  have hN : 750 * 2 ^ 233 ≤ numValid * 2 ^ 128 :=
-    calc 750 * 2 ^ 233 = (750 * 2 ^ 105) * 2 ^ 128 := by norm_num
+/-- At least `89 * 2 ^ 108` of the `2 ^ 128` indices are accepted. -/
+theorem miss_le : miss ≤ 1048487 / 1048576 := by
+  have hN : 89 * 2 ^ 236 ≤ numValid * 2 ^ 128 :=
+    calc 89 * 2 ^ 236 = (89 * 2 ^ 108) * 2 ^ 128 := by norm_num
       _ ≤ _ := Nat.mul_le_mul_right _ numValid_avail
-  have ha : 2 ^ 256 - numValid * 2 ^ 128 ≤ 8387858 * 2 ^ 233 := by
+  have ha : 2 ^ 256 - numValid * 2 ^ 128 ≤ 1048487 * 2 ^ 236 := by
     have h := Nat.sub_le_sub_left hN (2 ^ 256)
-    have e : 2 ^ 256 - 750 * 2 ^ 233 = 8387858 * 2 ^ 233 := by norm_num
+    have e : 2 ^ 256 - 89 * 2 ^ 236 = 1048487 * 2 ^ 236 := by norm_num
     omega
   calc miss = ((2 ^ 256 - numValid * 2 ^ 128 : ℕ) : ℝ≥0∞) / 2 ^ 256 := miss_eq
-    _ ≤ ((8387858 * 2 ^ 233 : ℕ) : ℝ≥0∞) / 2 ^ 256 := ENNReal.div_le_div_right (Nat.cast_le.mpr ha) _
-    _ = 8387858 / 8388608 := by
+    _ ≤ ((1048487 * 2 ^ 236 : ℕ) : ℝ≥0∞) / 2 ^ 256 := ENNReal.div_le_div_right (Nat.cast_le.mpr ha) _
+    _ = 1048487 / 1048576 := by
       rw [ENNReal.div_eq_div_iff (by norm_num) (by finiteness) (by norm_num) (by finiteness)]
       norm_num
 
@@ -162,51 +162,36 @@ private theorem bernoulli_reciprocal {p : ℝ} (hp : 0 ≤ p) (hp1 : p ≤ 1) (k
   rw [le_div_iff₀ hd]
   simpa only [mul_comm] using hprod k
 
-/-- A block of 8192 trials fails with probability at most `0.482`.
-
-The reciprocal bound `(1 - p)^k ≤ 1 / (1 + k p)` loses `ln 2` per doubling if applied to a whole
-block; applying it to 32 trials and raising to the 256th power keeps the compounding:
-`(8388608 / 8412608) ^ 256 ≈ 0.48125`. -/
-private theorem miss_block : miss ^ 8192 ≤ 4820 / 10000 := by
+/-- Grouping the rational reciprocal bound into 32-trial blocks proves that
+8192 trials fail with probability at most one half, without real exponentials. -/
+private theorem miss_block : miss ^ 8192 ≤ 1 / 2 := by
   refine (pow_le_pow_left' miss_le 8192).trans ?_
-  have h32 := bernoulli_reciprocal (p := (750 : ℝ) / 8388608) (by norm_num) (by norm_num) 32
-  have hbase : (1 : ℝ) - 750 / 8388608 = 8387858 / 8388608 := by norm_num
-  have hden : 1 + ((32 : ℕ) : ℝ) * (750 / 8388608) = 8412608 / 8388608 := by norm_num
+  have h32 := bernoulli_reciprocal (p := (89 : ℝ) / 1048576) (by norm_num) (by norm_num) 32
+  have hbase : (1 : ℝ) - 89 / 1048576 = 1048487 / 1048576 := by norm_num
+  have hden : 1 + ((32 : ℕ) : ℝ) * (89 / 1048576) = 1051424 / 1048576 := by norm_num
   rw [hbase, hden, one_div_div] at h32
-  have hnn : (0 : ℝ) ≤ ((8387858 : ℝ) / 8388608) ^ 32 := by positivity
-  have h : ((8387858 : ℝ) / 8388608) ^ 8192 ≤ 4820 / 10000 := by
-    calc ((8387858 : ℝ) / 8388608) ^ 8192
-        = (((8387858 : ℝ) / 8388608) ^ 32) ^ 256 := by rw [← pow_mul]
-      _ ≤ ((8388608 : ℝ) / 8412608) ^ 256 := pow_le_pow_left₀ hnn h32 256
-      _ ≤ 4820 / 10000 := by
+  have hnn : (0 : ℝ) ≤ ((1048487 : ℝ) / 1048576) ^ 32 := by positivity
+  have h : ((1048487 : ℝ) / 1048576) ^ 8192 ≤ 1 / 2 := by
+    calc ((1048487 : ℝ) / 1048576) ^ 8192
+        = (((1048487 : ℝ) / 1048576) ^ 32) ^ 256 := by rw [← pow_mul]
+      _ ≤ ((1048576 : ℝ) / 1051424) ^ 256 := pow_le_pow_left₀ hnn h32 256
+      _ ≤ 1 / 2 := by
           rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
           norm_num
   have h' := ENNReal.ofReal_le_ofReal h
   rw [ENNReal.ofReal_pow (by norm_num)] at h'
-  have hb : ENNReal.ofReal ((8387858 : ℝ) / 8388608) = (8387858 / 8388608 : ℝ≥0∞) := by
+  have hb : ENNReal.ofReal ((1048487 : ℝ) / 1048576) = (1048487 / 1048576 : ℝ≥0∞) := by
     rw [ENNReal.ofReal_div_of_pos (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat]
-  have hh : ENNReal.ofReal ((4820 : ℝ) / 10000) = (4820 / 10000 : ℝ≥0∞) := by
-    rw [ENNReal.ofReal_div_of_pos (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat]
+  have hh : ENNReal.ofReal ((1 : ℝ) / 2) = (1 / 2 : ℝ≥0∞) := by
+    rw [ENNReal.ofReal_div_of_pos (by norm_num), ENNReal.ofReal_one, ENNReal.ofReal_ofNat]
   rwa [hb, hh] at h'
 
-/-- The full signing budget contains 128 blocks; `0.482 ^ 128 < 0.740 · 2 ^ (-128)` leaves room
-for the bad records. -/
-theorem miss_trials_le : miss ^ trials ≤ (740 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
-  change miss ^ (8192 * 128) ≤ (740 / 1000 : ℝ≥0∞) / 2 ^ 128
+/-- The full signing budget contains 128 blocks. -/
+theorem miss_trials_le : miss ^ trials ≤ (1 : ℝ≥0∞) / 2 ^ 128 := by
+  change miss ^ (8192 * 128) ≤ (1 : ℝ≥0∞) / 2 ^ 128
   rw [pow_mul]
   refine (pow_le_pow_left' miss_block 128).trans ?_
-  have h : ((4820 : ℝ) / 10000) ^ 128 ≤ (740 / 1000) / 2 ^ 128 := by
-    rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
-    norm_num
-  have h' := ENNReal.ofReal_le_ofReal h
-  rw [ENNReal.ofReal_pow (by norm_num)] at h'
-  have hb : ENNReal.ofReal ((4820 : ℝ) / 10000) = (4820 / 10000 : ℝ≥0∞) := by
-    rw [ENNReal.ofReal_div_of_pos (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat]
-  have hh : ENNReal.ofReal (((740 : ℝ) / 1000) / 2 ^ 128) = (740 / 1000 : ℝ≥0∞) / 2 ^ 128 := by
-    rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_div_of_pos (by positivity),
-      ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat, ENNReal.ofReal_ofNat,
-      ENNReal.ofReal_ofNat]
-  rwa [hb, hh] at h'
+  simp only [one_div, ENNReal.inv_pow, le_refl]
 
 /-- Signing has the same failure probability for every message and every fresh index cache. -/
 theorem sign_failure (x : forestScheme.graph.Assignment) (m : Message)
@@ -245,10 +230,7 @@ theorem signingFailure_strong :
     let σ ← forestScheme.sign kg.2 (message kg.1)
     pure σ.isNone) ≤ _
   rw [signingFailure_exact]
-  have h : (740 / 1000 : ℝ≥0∞) ≤ 1 := by
-    rw [ENNReal.div_le_iff (by norm_num) (by finiteness)]
-    norm_num
-  exact miss_trials_le.trans (ENNReal.div_le_div_right h _)
+  exact miss_trials_le
 
 end OptimalOTS.Forest.Availability
 

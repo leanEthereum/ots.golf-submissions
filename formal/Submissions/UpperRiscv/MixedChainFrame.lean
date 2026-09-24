@@ -11,7 +11,7 @@ attribute [local reducible] Forest.graph
 
 def CtxReg (r : Reg) : Prop := r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x13
 
-theorem Ctx.frame {s t : MachineState} {index : Idx} {pk : PublicKey} (ctx : Ctx s index pk)
+theorem Ctx.frame {s t : MachineState} {index : RawIdx} {pk : PublicKey} (ctx : Ctx s index pk)
     (regs : ∀ r, CtxReg r → t.getReg r = s.getReg r) (mem : t.mem = s.mem)
     (code : t.code = s.code) : Ctx t index pk := by
   refine ⟨?_, ?_, ?_, ?_, ?_, ctx.code.code_eq code⟩
@@ -22,7 +22,7 @@ theorem Ctx.frame {s t : MachineState} {index : Idx} {pk : PublicKey} (ctx : Ctx
     simpa only [MachineState.getHalfword, MachineState.getMem, mem] using ctx.lanes q
   · rw [regs .x13 (by simp [CtxReg])]; exact ctx.sigLen
 
-variable (index : Idx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
 theorem HashInv.frame {s t : MachineState} {x : graph.Assignment} {k : Fin 32} {base : ℕ}
     (inv : HashInv index wire pk s x k base) (next : ℕ) (hp : t.getReg .x10 = W next)
@@ -76,16 +76,6 @@ theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Fin 32}
     by_cases he : j = k
     · subst j; exact rootSlice_of_memAnswer k answer
     · exact inv.done j (by have hne : j.val ≠ k.val := fun h => he (Fin.ext h); omega)
-
-theorem initial_chains (pk : PublicKey) (m : Message) (bits : List Bool) (answer : BitVec hashBits)
-    (hi : Accepted (pack answer)) (hlen : bits.length = 5504)
-    (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier) (x : graph.Assignment) :
-    ChainsInv (acceptedIdx answer hi) (bits.drop 128) pk (afterIndex pk m bits answer) x 0 := by
-  refine ⟨afterIndex_ctx pk m bits answer hi hlen located,
-    (afterIndex_setupRegs pk m bits answer).2, ?_, (afterIndex_setupRegs pk m bits answer).1,
-    afterIndex_payloadFrom pk m bits answer, ?_⟩
-  · intro h; omega
-  · intro j hj; omega
 
 /-- After the last chain (which is on the grid), `x10` is its cell. -/
 theorem prevInput_32 : prevInput 32 = slot 31 := by decide +kernel

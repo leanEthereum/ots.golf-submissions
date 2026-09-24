@@ -2,12 +2,11 @@ import Submissions.UpperRiscv.MachineFacts
 import Submissions.UpperRiscv.MixedProgram
 
 /-!
-# The lane words and the fold of the index phase
+# The address-word checksum of the index phase
 
-Each of the four lane words is one mask, an accumulation into `x27`, a subtraction from its
-broadcast jump base and a store (`laneWord_effect`). Together they leave in `x27` the sum of the
-masked words and in memory the dispatch halfwords (`lanesUpTo_effect`). The fold then adds the
-coarse fields onto the fine ones (`fold_effect`).
+Each word is masked, subtracted from the packed jump base, accumulated into `x27`, and stored.
+The register and stored dispatch words thus share the same address arithmetic. The old fold
+lemmas are retained as independent helpers, but the 349-cycle image does not execute a fold.
 -/
 
 namespace OptimalOTS.RiscvMixedProgram
@@ -38,8 +37,10 @@ theorem baseReg_ne (g : ℕ) : baseReg g ≠ .x26 ∧ baseReg g ≠ .x27 ∧ bas
   unfold baseReg; decide
 
 structure LaneEffect (a b : MachineState) (g : ℕ) : Prop where
-  acc : b.getReg .x27 = if g = 0 then laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g))
-    else a.getReg .x27 + laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g))
+  acc : b.getReg .x27 = if g = 0 then
+    a.getReg (baseReg g) - laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g))
+    else a.getReg .x27 +
+      (a.getReg (baseReg g) - laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g)))
   regs : ∀ r, r ≠ .x26 → r ≠ .x27 → b.getReg r = a.getReg r
   mem : ∀ addr, b.getMem addr = if addr = W (laneWordAddr g) then
     a.getReg (baseReg g) - laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g))
@@ -48,11 +49,12 @@ structure LaneEffect (a b : MachineState) (g : ℕ) : Prop where
 /-- Everything of a lane word but its store. -/
 def lanePre (g : ℕ) : Code :=
   let dst : Reg := if g = 0 then .x27 else .x26
-  [.AND dst (wordReg g) (maskReg g)] ++ (if g = 0 then [] else [.ADD .x27 .x27 .x26]) ++
-  [.SUB .x26 (baseReg g) dst]
+  [.AND dst (wordReg g) (maskReg g), .SUB dst (baseReg g) dst] ++
+    (if g = 0 then [] else [.ADD .x27 .x27 .x26])
 
 theorem laneWord_parts (g : ℕ) :
-    laneWord g = lanePre g ++ [.SD .x10 .x26 (imm12 ((laneWordAddr g : ℤ) - hashBase))] := by
+    laneWord g = lanePre g ++
+      [.SD .x10 (if g = 0 then .x27 else .x26) (imm12 ((laneWordAddr g : ℤ) - hashBase))] := by
   simp [laneWord, lanePre]
 
 theorem lanePre_ready (a : MachineState) (g : ℕ) (hg : g < 4) :
@@ -63,9 +65,12 @@ theorem lanePre_ready (a : MachineState) (g : ℕ) (hg : g < 4) :
 /-- The register effect of the lane computation before its store. -/
 theorem lanePre_regs (a : MachineState) (g : ℕ) (hg : g < 4) :
     let b := (lanePre g).foldl execInstrBr a
-    b.getReg .x27 = (if g = 0 then laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g))
-      else a.getReg .x27 + laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g))) ∧
-    b.getReg .x26 = a.getReg (baseReg g) - laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g)) ∧
+    b.getReg .x27 = (if g = 0 then
+      a.getReg (baseReg g) - laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g))
+      else a.getReg .x27 +
+        (a.getReg (baseReg g) - laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g)))) ∧
+    b.getReg (if g = 0 then .x27 else .x26) =
+      a.getReg (baseReg g) - laneValue (a.getReg (wordReg g)) (a.getReg (maskReg g)) ∧
     (∀ r, r ≠ .x26 → r ≠ .x27 → b.getReg r = a.getReg r) ∧
     (∀ addr, b.getMem addr = a.getMem addr) := by
   interval_cases g <;>
@@ -116,6 +121,11 @@ def laneSum (a : MachineState) : ℕ → Word
   | 0 => 0
   | n + 1 => laneSum a n + laneOf a n
 
+/-- The actual accumulator sums the already-computed dispatch address words. -/
+def addressSum (a : MachineState) : ℕ → Word
+  | 0 => 0
+  | n + 1 => addressSum a n + (a.getReg (baseReg n) - laneOf a n)
+
 /-- The first `n` lane words. -/
 def lanesUpTo (n : ℕ) : Code := (List.range n).flatMap laneWord
 
@@ -128,7 +138,7 @@ theorem lanesUpTo_succ (n : ℕ) : lanesUpTo (n + 1) = lanesUpTo n ++ laneWord n
 
 /-- The effect of the first `n` lane words. -/
 structure LanesEffect (a b : MachineState) (n : ℕ) : Prop where
-  acc : 1 ≤ n → b.getReg .x27 = laneSum a n
+  acc : 1 ≤ n → b.getReg .x27 = addressSum a n
   regs : ∀ r, r ≠ .x26 → r ≠ .x27 → b.getReg r = a.getReg r
   stored : ∀ g, g < n → b.getMem (W (laneWordAddr g)) = a.getReg (baseReg g) - laneOf a g
   frame : ∀ addr, (∀ g, g < n → addr ≠ W (laneWordAddr g)) → b.getMem addr = a.getMem addr
@@ -167,12 +177,12 @@ theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
     rw [← hb]
     refine ⟨?_, ?_, ?_, ?_⟩
     · intro _
-      rw [e.acc, wordEq, maskEq]
-      show _ = laneSum a n + laneOf a n
+      rw [e.acc, wordEq, maskEq, baseEq]
+      show _ = addressSum a n + (a.getReg (baseReg n) - laneOf a n)
       by_cases h0 : n = 0
       · rw [if_pos h0]
         subst h0
-        simp [laneSum, laneOf]
+        simp [addressSum, laneOf]
       · rw [if_neg h0, eff.acc (by omega)]
         rfl
     · intro r h26 h27

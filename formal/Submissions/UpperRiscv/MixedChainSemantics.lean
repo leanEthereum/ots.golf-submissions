@@ -11,7 +11,7 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 def tops (x : graph.Assignment) (k : Fin 32) : BitVec 256 :=
   (x (cv k 31).fin).cast (lenF_fin _)
 
-variable (index : Idx) (payload : List Bool)
+variable (index : RawIdx) (payload : List Bool)
 
 theorem fin_ne_of_ne {m n : Name} (h : m ≠ n) : m.fin ≠ n.fin :=
   fun e => h (Name.fin_injective e)

@@ -1,3 +1,26 @@
+# RISC-V upper bound: 349-cycle capped-rank candidate
+
+This extends Nicolas Consigny's officially verified 353-cycle record in PR #34
+(`0b21c2e8b5db210ff4feba8daab76a345cb03a6d`). A restricted fixed-rank acceptance
+code makes the already-computed dispatch addresses serve as a cheap checksum.
+Five index instructions disappear at the cost of one additional chain hash.
+
+Proved accounting: **349 = 33 index + 295 chains + 21 root/decision** cycles.
+The proof covers accepting and rejecting paths and their exact oracle queries,
+including early forbidden-pair rejection. The image remains **62,892 bytes**,
+and the full signature remains **5504 bits**.
+
+The image matches the independent generator and passes 32,822 transcript tests.
+The full Lean certificate and cold pinned-comparator replay pass, including
+Lean default-kernel checking, in 226.127 seconds locally. Source-policy and
+contract-pin checks pass. No hosted verdict is claimed: the unchanged official
+verifier fails this host's Landlock preflight before compilation.
+See `NOTES.md` for the construction, security transfer, and attribution.
+
+The notes below describe preserved historical versions.
+
+---
+
 # RISC-V upper bound: 353 cycles with 144/192-bit chain states
 
 This candidate extends Nicolas Consigny's officially verified 358-cycle record

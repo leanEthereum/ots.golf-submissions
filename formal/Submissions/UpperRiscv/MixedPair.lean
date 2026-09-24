@@ -1,4 +1,5 @@
 import Submissions.UpperRiscv.MixedLanding
+import Submissions.UpperRiscv.MixedReject
 
 namespace OptimalOTS.RiscvMixedProgram
 open OptimalOTS.Dag
@@ -9,7 +10,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : Idx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
 def pairCost (q : Fin 16) : ℕ := (lengthSetup q).length +
   (2+2*earlyHash (leftChain q)) + 2 + remaining index (leftChain q) +
@@ -59,6 +60,7 @@ theorem pairCost_eq (q : Fin 16) : pairCost index q =
 
 /-- One pair runs its two graph chains and reaches the next block with all invariants restored. -/
 theorem pair_refines (q : Fin 16)
+    (good : digit index.val (2*q.val)+coarseDigit index q ≤ pairCap q)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (hlen : wire.length = 5376)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
@@ -114,7 +116,7 @@ theorem pair_refines (q : Fin 16)
     (NA+(EB+(NB+c))) left2 (by omega)
   intro s3 inv3 mem3 pc3
   have prep3 := prep2.frame inv3 mem3
-  obtain ⟨junk, loc3⟩ := landing_located index s3 inv3.ctx.code q
+  obtain ⟨junk, loc3⟩ := landing_located index s3 inv3.ctx.code q good
   rw [← pc3] at loc3
   apply table_refines index wire pk A
     (enter B (prevInput B) ++ (List.replicate NB .ECALL ++ (nextCode q ++ junk)))
@@ -144,5 +146,59 @@ theorem pair_refines (q : Fin 16)
   rw [endIndex] at inv6
   rw [← cursor_step B, endIndex]
   exact continuation s6 x6 inv6 ⟨junk,loc6⟩ left6 hleft6
+
+def badPairCost (q : Fin 16) : ℕ :=
+  (lengthSetup q).length + (2+2*earlyHash (leftChain q)) + 2 + 4
+
+/-- Exact charge of the staged chain/root program, including rejecting paths. -/
+def stagedCost (index : RawIdx) : (n q : ℕ) → ℕ
+  | 0, _ => 21
+  | n+1, q => if hq : q < 16 then
+      if PairAllowed index.val q then pairCost index ⟨q,hq⟩ + stagedCost index n (q+1)
+      else badPairCost ⟨q,hq⟩
+    else 0
+
+/-- A forbidden table entry rejects after precisely the first entry hash, if any. -/
+theorem pair_bad_refines (q : Fin 16)
+    (bad : pairCap q < digit index.val (2*q.val)+coarseDigit index q)
+    (hlen : wire.length = 5376)
+    (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
+    (inv : ChainsInv index wire pk s x (leftChain q))
+    (located : ∃ junk, Riscv.CodeAt s s.pc (prologue q ++ junk))
+    (bound : badPairCost q ≤ fuel) :
+    Riscv.Refines fuel s
+      (runNodes' index (Payload.permute wire) (entryNodes index (leftChain q)) x
+        (cursor (leftChain q)) >>= fun _ => pure (some false)) (badPairCost q) := by
+  let A := leftChain q
+  let L := (lengthSetup q).length
+  let EA := 2+2*earlyHash A
+  have cost : badPairCost q = L+(EA+(2+4)) := by
+    unfold badPairCost; dsimp [L,EA,A]; omega
+  rw [cost] at bound ⊢
+  obtain ⟨junk, located⟩ := located
+  rw [prologue_parts] at located
+  simp only [List.append_assoc] at located
+  have ready := lengthSetup_ready s q
+  set s1 := (lengthSetup q).foldl execInstrBr s with hs1
+  have E := lengthSetup_effect s q inv.length
+  have ctx : Ctx s1 index pk := inv.ctx.frame (fun r hr => by
+    rcases hr with rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code
+  have input : s1.getReg .x10 = W (prevInput A) := by
+    rw [E.regs .x10 (by decide)]; exact inv.input
+  have payload : PayloadFrom s1 wire A := fun j hj => memBits_of_mem_eq E.mem (inv.payload j hj)
+  have done : Completed s1 (tops x) A := fun j hj => memBits_of_mem_eq E.mem (inv.done j hj)
+  have loc : Riscv.CodeAt s1 s1.pc (enter A (prevInput A) ++ (dispatchCode q ++ junk)) := by
+    rw [show s1.pc=s.pc+W (4*L) from Riscv.linear_fold_pc s _ ready]
+    exact located.append_right.code_eq E.code
+  rw [show fuel=L+(fuel-L) by omega]
+  apply Riscv.Refines.linear _ located.append_left ready
+  rw [← hs1]
+  apply enter_refines index wire pk A (dispatchCode q ++ junk)
+    (fun _ => pure (some false)) (2+4) (2+4) hlen ?_
+    s1 x (fuel-L) ctx input E.length payload done loc (by dsimp [EA] at *; omega)
+  intro s2 x2 prep loc2 left hleft
+  apply dispatch_refines index wire pk q A rfl s2 x2 prep.inv junk loc2 _ 4 left (by omega)
+  intro s3 inv3 _ pc3
+  exact landing_reject_refines index q s3 inv3.ctx.code pc3 bad (left-2) (by omega)
 
 end OptimalOTS.RiscvMixedProgram

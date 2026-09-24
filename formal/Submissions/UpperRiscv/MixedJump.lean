@@ -37,7 +37,7 @@ theorem landing0_mod' : ∀ q : Fin 16, landing0 q % 4 = 0 := by decide +kernel
 theorem landing0_mod (q : ℕ) (hq : q < 16) : landing0 q % 4 = 0 := landing0_mod' ⟨q, hq⟩
 
 /-- The computed jump lands on `landing0 q` less the dispatch value. -/
-theorem jump_target (index : Idx) (q : ℕ) (hq : q < 16) (v : Word)
+theorem jump_target (index : RawIdx) (q : ℕ) (hq : q < 16) (v : Word)
     (hv : v.toNat = baseLane q - dispatch index q) :
     (v + signExtend12 (imm12 (jumpImm q))) &&& ~~~(1#64) = W (landing0 q - dispatch index q) := by
   obtain ⟨r1, r2⟩ := jump_offset_range q hq

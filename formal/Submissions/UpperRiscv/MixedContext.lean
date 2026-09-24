@@ -1,20 +1,18 @@
 import Submissions.UpperRiscv.MixedIndexLanes
-import Submissions.UpperRiscv.Reader
 
 namespace OptimalOTS.RiscvMixedProgram
 open RiscvZkvm.Rv64
 open Riscv2Program (W Code laneBase hashBase)
 open OptimalOTS.Dag
-open Forest Forest.Name
 
 abbrev target : ℕ := OptimalOTS.target
-def blockZero : ℕ := 4096 + 4*44
+def blockZero : ℕ := 4096 + 4*39
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q
 def firstChain (q : ℕ) : ℕ := 2*q
-def coarseDigit (index : Idx) (q : ℕ) : ℕ := digit index.val (2*q+1)
-def dispatch (index : Idx) (q : ℕ) : ℕ :=
+def coarseDigit (index : RawIdx) (q : ℕ) : ℕ := digit index.val (2*q+1)
+def dispatch (index : RawIdx) (q : ℕ) : ℕ :=
   4*digit index.val (2*q) + 1024*coarseDigit index q
 
 theorem firstChain_lt (q : ℕ) (hq : q < 16) : firstChain q < 32 := by
@@ -25,14 +23,14 @@ theorem digit_lt_32' (i k : ℕ) : digit i k < 32 := by
   have : 2 ^ wid k ≤ 32 := by unfold wid; split_ifs <;> norm_num
   omega
 
-theorem coarseDigit_lt (index : Idx) (q : ℕ) : coarseDigit index q < 16 := by
+theorem coarseDigit_lt (index : RawIdx) (q : ℕ) : coarseDigit index q < 16 := by
   have h := digit_lt index.val (2*q+1)
   have : 2 ^ wid (2*q+1) ≤ 16 := by
     unfold wid
     split_ifs <;> norm_num
   unfold coarseDigit; omega
 
-theorem dispatch_le (index : Idx) (q : ℕ) : dispatch index q ≤ 15420 := by
+theorem dispatch_le (index : RawIdx) (q : ℕ) : dispatch index q ≤ 15420 := by
   unfold dispatch
   have hf := digit_lt index.val (2*q)
   have hw : 2 ^ wid (2*q) ≤ 16 := by unfold wid; split_ifs <;> norm_num
@@ -40,7 +38,7 @@ theorem dispatch_le (index : Idx) (q : ℕ) : dispatch index q ≤ 15420 := by
   omega
 
 /-- Register and dispatch facts shared by the wide and narrow chain phases. -/
-structure Ctx (s : MachineState) (index : Idx) (pk : PublicKey) : Prop where
+structure Ctx (s : MachineState) (index : RawIdx) (pk : PublicKey) : Prop where
   pk0 : s.getReg .x30 = pk.extractLsb' 0 64
   pk1 : s.getReg .x31 = pk.extractLsb' 64 64
   call : s.getReg .x5 = Riscv.hashCall

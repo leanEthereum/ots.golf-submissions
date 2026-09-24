@@ -75,13 +75,13 @@ theorem secure : scheme.Secure :=
 
 theorem admissible : scheme.Admissible :=
   WireAdapter.admissible RiscvUpperForest.scheme decode decode_encode canonical
-    RiscvUpperForest.admissible 202 RiscvUpperForest.cost (by decide)
+    RiscvUpperForest.admissible 203 RiscvUpperForest.cost (by decide)
 
-theorem cost : scheme.VerifyCostAtMost 202 :=
-  WireAdapter.verifyCost RiscvUpperForest.scheme decode 202 RiscvUpperForest.cost
+theorem cost : scheme.VerifyCostAtMost 203 :=
+  WireAdapter.verifyCost RiscvUpperForest.scheme decode 203 RiscvUpperForest.cost
 
 /-- A complete OTS certificate on its transmitted signature bits. -/
-theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 202 := ⟨admissible, secure, cost⟩
+theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 203 := ⟨admissible, secure, cost⟩
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.Wire.certificate' depends on axioms: [propext, Classical.choice, Quot.sound]

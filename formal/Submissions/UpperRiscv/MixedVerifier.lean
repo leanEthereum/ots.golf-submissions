@@ -1,4 +1,5 @@
 import Submissions.UpperRiscv.MixedPhase
+import Submissions.UpperRiscv.MixedStagedCost
 
 namespace OptimalOTS.RiscvMixedProgram
 
@@ -9,6 +10,7 @@ open Riscv2Program
 
 set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
+attribute [local irreducible] stagedBlocks stagedCost
 
 theorem index_take (bits : List Bool) : ofBits 128 (bits.take 128) = ofBits 128 bits := by
   simpa only [List.drop_zero] using
@@ -50,7 +52,7 @@ theorem directVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
 theorem image_code : image.code = verifier := rfl
 
 /-- The certified cycle bound on every execution. -/
-def cycleBound : ℕ := 353
+def cycleBound : ℕ := 349
 
 theorem order_eq : order = chainsFrom 0 ++ [rc, rh] := by
   rw [← chainsFrom_zero]
@@ -70,10 +72,33 @@ theorem acceptedTail_eq (pk : PublicKey) (bits : List Bool) (answer : BitVec has
   try simp only [map_eq_bind_pure_comp, bind_assoc, Function.comp_apply, pure_bind]
   try rfl
 
-/-- The image computes exactly the specified verifier within its fuel, and every run costs at
-most `cycleBound` cycles. -/
+theorem initial_chains (pk : PublicKey) (m : Message) (bits : List Bool) (answer : BitVec hashBits)
+    (hlen : bits.length = 5504)
+    (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier) (x : graph.Assignment) :
+    ChainsInv (rawIdx answer) (bits.drop 128) pk (afterIndex pk m bits answer) x 0 := by
+  refine ⟨afterIndex_ctx pk m bits answer hlen located,
+    (afterIndex_setupRegs pk m bits answer).2, ?_, (afterIndex_setupRegs pk m bits answer).1,
+    afterIndex_payloadFrom pk m bits answer, ?_⟩
+  · intro h; omega
+  · intro j hj; omega
+
+theorem stagedVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
+    some <$> stagedVerify pk m bits = (do
+      let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits bits))
+      if IndexRank (pack answer) ∧ bits.length = 5504 then
+        some <$> stagedBlocks (rawIdx answer) (Payload.permute (bits.drop 128)) pk 16 0 (fun _ => 0) 0
+      else pure (some false)) := by
+  unfold stagedVerify
+  have ht : ofBits nonceBits (bits.take 128) = ofBits nonceBits bits := index_take bits
+  rw [ht, map_bind]
+  apply bind_congr_of_forall_mem_support
+  intro answer _
+  change some <$> (if IndexRank (pack answer) ∧ bits.length = 5504 then _ else _) = _
+  split_ifs <;> rfl
+
+/-- Every accepted and rejected execution follows the staged verifier's exact oracle trace. -/
 theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
-    Riscv.Refines 1337 (Riscv.initialState image pk m bits) (some <$> directVerify pk m bits)
+    Riscv.Refines 1337 (Riscv.initialState image pk m bits) (some <$> stagedVerify pk m bits)
       cycleBound := by
   have located := Riscv.CodeAt.initial image pk m bits image_valid
   rw [image_code] at located
@@ -83,34 +108,29 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   have global : Riscv.CodeAt (Riscv.initialState image pk m bits) (W 4096) verifier := by
     rw [pc0] at located
     exact located
-  have e : verifier = indexPhase ++ (prologue 0 ++ tables) := by
+  have e : verifier = indexPhase ++ (prologue 0 ++ List.replicate 5 nop ++ tables) := by
     simp only [verifier, List.append_assoc]
   rw [e] at located
-  rw [directVerify_unfold, show cycleBound = (294 + 21) + 38 from rfl]
-  apply indexPhase_refines pk m bits _ 321 1337
-    (fun answer => acceptedTail pk bits answer) _ (by norm_num) located
+  rw [stagedVerify_unfold, show cycleBound = 316 + 33 from rfl]
+  apply indexPhase_refines pk m bits _ 316 1337
+    (fun answer => some <$> stagedBlocks (rawIdx answer) (Payload.permute (bits.drop 128))
+      pk 16 0 (fun _ => 0) 0) _ (by norm_num) located
     (by rw [indexPhase_length]; norm_num)
-  intro answer hi hlen left hleft
-  rw [acceptedTail_eq pk bits answer hi hlen, order_eq, runNodes'_append]
-  simp only [bind_assoc]
-  set index := acceptedIdx answer hi
+  intro answer rank hlen left hleft
+  set index := rawIdx answer
   set s := afterIndex pk m bits answer
-  have inv := initial_chains pk m bits answer hi hlen global (fun _ => 0)
+  have inv := initial_chains pk m bits answer hlen global (fun _ => 0)
   have located2 : ∃ junk, Riscv.CodeAt s s.pc (blockCodeAt 0 ++ junk) := by
     have h := located.append_right (first := indexPhase)
-    have hp : (Riscv.initialState image pk m bits).pc + BitVec.ofNat 64 (4 * 44) =
+    have hp : (Riscv.initialState image pk m bits).pc + BitVec.ofNat 64 (4 * 39) =
         W blockZero := by rw [pc0]; decide
     rw [indexPhase_length, hp] at h
     have h' := h.code_eq (afterIndex_code pk m bits answer)
     rw [← afterIndex_pc pk m bits answer] at h'
     exact ⟨_, h'⟩
-  rw [← blocksCost_zero index]
-  refine blocks_refines index (bits.drop 128) pk _ 21 11
-    (by rw [List.length_drop, hlen]) ?_ 16 0 rfl
-    (by norm_num) s (fun _ => 0) left inv located2 (by rw [blocksCost_zero]; omega)
-  intro u y invU locatedU left2 hleft2
-  exact rootDecision_refines index (Payload.permute (bits.drop 128)) pk u y left2
-    (final_root index (bits.drop 128) pk invU) locatedU hleft2
+  have bound := stagedCost_le index rank
+  exact (stagedBlocks_refines index (bits.drop 128) pk (by rw [List.length_drop, hlen])
+    16 0 rfl (by omega) s (fun _ => 0) left inv located2 (by omega)).mono bound
 
 /--
 info: 'OptimalOTS.RiscvMixedProgram.image_refines' depends on axioms: [propext, Classical.choice, Quot.sound]

@@ -7,7 +7,7 @@ open RiscvZkvm.Rv64 Forest Forest.Name OracleComp
 open Riscv2Program
 
 /-- The pointer setup preserves all disclosed blocks and completed slices. -/
-theorem move_refines (index : Idx) (wire : List Bool) (pk : PublicKey)
+theorem move_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
     (k : Fin 32) (s : MachineState) (x : graph.Assignment) (tail : Code)
     (ctx : Ctx s index pk) (input : s.getReg .x10 = W (prevInput k))
     (len : s.getReg .x11 = W (chainBits k)) (payload : PayloadFrom s wire k)
@@ -39,7 +39,7 @@ theorem move_refines (index : Idx) (wire : List Bool) (pk : PublicKey)
   exact Riscv.Refines.linear _ located.append_left ready (continuation u inv held loc)
 
 /-- The redirect after an early hash preserves every memory invariant. -/
-theorem redirect_refines (index : Idx) (wire : List Bool) (pk : PublicKey)
+theorem redirect_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
     (k : Fin 32) (base : ℕ) (s : MachineState) (x : graph.Assignment) (tail : Code)
     (inv : HashInv index wire pk s x k base)
     (located : Riscv.CodeAt s s.pc ([.ADDI .x10 .x12 8] ++ tail))
