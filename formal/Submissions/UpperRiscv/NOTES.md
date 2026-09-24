@@ -1,3 +1,51 @@
+# One dispatch base: 358-cycle candidate
+
+This extends the officially verified 359-cycle submission in PR #32, checked
+source `60a13667e3335e2e372d31930a996a89984b3e81`, credited to Nicolas Consigny.
+The earlier construction and attribution notes follow unchanged below.
+
+Assisted by: Codex
+
+## Change
+
+All four index words now share one dispatch-base word, removing `LD x4, x12, 88`.
+Coarse digits move from bit 9 to bit 10 in each 16-bit lane; the mask is `0x3c3c`
+and the fold shift is 8. This changes the answer-to-index mapping, while retaining
+32 independent four-bit digits, target sum 157, and exactly 128 unread bits.
+The updated `Valid.jw` and existing uniform-fiber argument prove the new mapping.
+Nonce, payload, chain widths, truncations, and root layout are unchanged.
+
+Rows are 256 instructions apart. Group q%4 contains corresponding pairs from all
+four words. Its origin is `3840*g`, with slots
+`[0,64,128,192] / [25,90,154,215] / [49,112,177,238] / [75,138,200,261]`.
+At each boundary, a group's final row interleaves with the next group's first row.
+This saves enough address space for all stored destinations to remain halfwords;
+all remaining JALR displacements fit signed 12-bit immediates.
+
+`MixedCode.wellPlaced` certifies non-overlap of the 256 bodies; a generic
+`assemble_located` theorem lifts these small layout facts to the concrete image.
+It avoids separately normalizing the complete image at every landing.
+
+Accounting: **38 index + 299 chains + 21 root/decision = 358 cycles**.
+The image has 15,703 instructions and 88 data bytes: **62,900 bytes**.
+
+## Validation
+
+- The full exported 358-cycle certificate and strict image-size theorem build
+  with the pinned toolchain. The permitted-axiom guard passes.
+- The independent generator exactly matches the Lean-exported code and data.
+- 20,840 full executions agree with the updated chain-level reference on every
+  oracle query and verdict, with maximum 358, including all 4,096 pair/digit
+  landings. Eight honest cases cost exactly 38/299/21.
+- The pinned development comparator exports the required statements and permitted
+  axioms, replays them through Lean's default kernel, and reports "Your solution
+  is okay!" This run uses the genuine pinned landrun and lean4export tools.
+- The unchanged official verifier fails this local host's Landlock preflight,
+  before checking the proof. No production isolation requirement was bypassed.
+  No hosted verdict or new publication is claimed; official 359 is unchanged.
+
+---
+
 # Two dispatch bases: 359-cycle candidate
 
 This extends scaraven's verified 360-cycle construction (#30), checked source

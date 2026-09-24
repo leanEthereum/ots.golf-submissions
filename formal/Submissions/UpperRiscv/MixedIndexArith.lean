@@ -5,10 +5,10 @@ import Submissions.UpperRiscv.MixedLanes
 # The arithmetic of the index check
 
 The index answer is held in four words. The sum of the four masked words has four lanes, each
-`4 · (fine fields) + 512 · (coarse fields)`; the fold brings the coarse part down, and the top lane
-after the broadcast multiplication is four times the field sum of the answer (`top_fold_answer`),
-which the sum check compares with `4 · 215`. Each stored lane holds
-`base − (4 · dA + 512 · dB)` (`lane_halfword`).
+`4 · (fine fields) + 1024 · (coarse fields)`; the fold brings the coarse part down, and reduction
+modulo 65535 yields four times the field sum (`remainder_fold_answer`),
+which the sum check compares with `4 · 157`. Each stored lane holds
+`base − (4 · dA + 1024 · dB)` (`lane_halfword`).
 -/
 
 namespace OptimalOTS.RiscvMixedProgram
@@ -29,16 +29,16 @@ theorem fineFld_le (g u l : ℕ) : fineFld g u l ≤ 15 := by
   omega
 
 theorem coarseFld_le (g u l : ℕ) : coarseFld g u l ≤ 15 := by
-  have h := fld_lt u (16*l+9) (coarseBits g l)
+  have h := fld_lt u (16*l+10) (coarseBits g l)
   have hw : 2 ^ coarseBits g l ≤ 16 := by norm_num [coarseBits]
   unfold coarseFld
   omega
 
-/-- One lane of a masked word is below `7805`. -/
-theorem laneEntry_le (g u l : ℕ) : 4 * fineFld g u l + 512 * coarseFld g u l ≤ 7804 := by
+/-- One lane of a masked word is below `15421`. -/
+theorem laneEntry_le (g u l : ℕ) : 4 * fineFld g u l + 1024 * coarseFld g u l ≤ 15420 := by
   have := fineFld_le g u l; have := coarseFld_le g u l; omega
 
-theorem laneNat_le (u g : ℕ) : laneNat u g ≤ 7804 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) := by
+theorem laneNat_le (u g : ℕ) : laneNat u g ≤ 15420 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) := by
   unfold laneNat
   have := laneEntry_le g u 0
   have := laneEntry_le g u 1
@@ -64,18 +64,18 @@ theorem laneSum_toNat (a : MachineState) (hm : MasksLoaded a) :
   | succ n ih =>
     intro hn
     have hb : ∀ n, ∑ g ∈ Finset.range n, laneNat (a.getReg (wordReg g)).toNat g ≤
-        n * (7804 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by
+        n * (15420 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by
       intro n
       calc ∑ g ∈ Finset.range n, laneNat (a.getReg (wordReg g)).toNat g
-          ≤ ∑ _g ∈ Finset.range n, 7804 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) :=
+          ≤ ∑ _g ∈ Finset.range n, 15420 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48) :=
             Finset.sum_le_sum fun g _ => laneNat_le _ _
-        _ = n * (7804 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by simp
+        _ = n * (15420 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) := by simp
     rw [laneSum, BitVec.toNat_add, ih (by omega), laneOf_toNat a hm n (by omega),
       Finset.sum_range_succ, Nat.mod_eq_of_lt]
     have h1 := hb n
     have h2 := laneNat_le (a.getReg (wordReg n)).toNat n
-    have : n * (7804 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) ≤
-        3 * (7804 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) :=
+    have : n * (15420 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) ≤
+        3 * (15420 * (1 + 2 ^ 16 + 2 ^ 32 + 2 ^ 48)) :=
       Nat.mul_le_mul_right _ (by omega)
     omega
 
@@ -163,7 +163,7 @@ theorem fieldPos_fine (g l : ℕ) (hg : g < 4) (hl : l < 4) :
   interval_cases g <;> interval_cases l <;> decide
 
 theorem fieldPos_coarse (g l : ℕ) (hg : g < 4) (hl : l < 4) :
-    fieldPos (coarseChain g l) = 64 * g + (16 * l + 9) ∧ wid (coarseChain g l) = coarseBits g l := by
+    fieldPos (coarseChain g l) = 64 * g + (16 * l + 10) ∧ wid (coarseChain g l) = coarseBits g l := by
   interval_cases g <;> interval_cases l <;> decide
 
 /-- The fine field of lane `l` of word `g` is the digit of chain `fineChain g l`. -/

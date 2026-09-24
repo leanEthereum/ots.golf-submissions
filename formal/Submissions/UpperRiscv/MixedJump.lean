@@ -26,10 +26,10 @@ theorem jump_offset_range' : ∀ q : Fin 16, -2048 ≤ jumpImm q ∧ jumpImm q <
 theorem jump_offset_range (q : ℕ) (hq : q < 16) : -2048 ≤ jumpImm q ∧ jumpImm q < 2048 :=
   jump_offset_range' ⟨q, hq⟩
 
-theorem landing0_bounds' : ∀ q : Fin 16, 7804 ≤ landing0 q ∧ landing0 q < 68000 := by
+theorem landing0_bounds' : ∀ q : Fin 16, 15420 ≤ landing0 q ∧ landing0 q < 68000 := by
   decide +kernel
 
-theorem landing0_bounds (q : ℕ) (hq : q < 16) : 7804 ≤ landing0 q ∧ landing0 q < 68000 :=
+theorem landing0_bounds (q : ℕ) (hq : q < 16) : 15420 ≤ landing0 q ∧ landing0 q < 68000 :=
   landing0_bounds' ⟨q, hq⟩
 
 theorem landing0_mod' : ∀ q : Fin 16, landing0 q % 4 = 0 := by decide +kernel
