@@ -14,10 +14,11 @@ The instance of `LayerScheme` the HL-FLAT-A machine implements (model:
 * **Layer.** An index is accepted when its digits sum to `106`; there are exactly
   `N₁₀₆ = 69117521303608168194311003377855640` accepted indices (`numValid_eq`).
 * **Tags.** Chain step `(k, j)` sits at position `p = off k + j < 310`; its tag cells are the
-  symbols `3 + p % 7`, `3 + p / 7 % 7`, `3 + p / 49`. The constant cv pair is `(0, 1)` (the
-  machine's adjacent `Z, ONE` cells). Metadata: chain steps `1`, index `10`, root calls
-  `0, 2, 3, …, 9, 5504` (the machine's `Z`, `g`, seven symbol cells and the checked length
-  cell).
+  symbols `sym (p % 7)`, `sym (p / 7 % 7)`, `sym (p / 49)` with `sym = 0, 1, 2, 4, 8, 16, 32`.
+  The constant cv pair is `(0, 1)` (the machine's adjacent `Z, ONE` cells). Metadata: chain steps
+  `1`, index `10`, root calls `0, 2, 4, …, 128, 5504, 3`. All tag symbols and metadata values are
+  constants the machine already holds: `Z`, `ONE`, the powers `g ^ 1 … g ^ 7`, the checked length
+  cell and one extra constant `3`.
 * **Availability.** Signing fails with probability at most `2 ^ -128` for every message chosen
   from the public key (`signingFailure`).
 -/
@@ -49,8 +50,8 @@ def digit (I : Word) (k : Fin numChains) : ℕ := digitW wid I.toNat k
 /-- First step position of chain `k` (chains of 7 steps, then two of 15). -/
 def off (k : ℕ) : ℕ := if k < 40 then 7 * k else 280 + 15 * (k - 40)
 
-/-- The symbol cell `v < 7`, value `v + 3`. -/
-def sym (v : ℕ) : Word := BitVec.ofNat 128 (v + 3)
+/-- The symbol `v < 7`: `0, 1, 2, 4, 8, 16, 32`. -/
+def sym (v : ℕ) : Word := BitVec.ofNat 128 (if v = 0 then 0 else 2 ^ (v - 1))
 
 /-- Tag cells `A, B, C` of the step of chain `k` at position `j`. -/
 def tag (k : Fin numChains) (j : ℕ) : Fin 3 → Word :=
@@ -65,9 +66,9 @@ def chainMd : Word := 1
 /-- Metadata of the index query. -/
 def idxMd : Word := 10
 
-/-- Metadata of root call `r`: `0, 2, 3, …, 9, 5504`. -/
+/-- Metadata of root call `r`: `0, 2, 4, 8, 16, 32, 64, 128, 5504, 3`. -/
 def rootMd (r : ℕ) : Word :=
-  BitVec.ofNat 128 (if r = 0 then 0 else if r = 1 then 2 else if r < 9 then r + 1 else 5504)
+  BitVec.ofNat 128 (if r = 0 then 0 else if r < 8 then 2 ^ r else if r = 8 then 5504 else 3)
 
 /-- The FLAT-42 parameters. -/
 def params : Params where

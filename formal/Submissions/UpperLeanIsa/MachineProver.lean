@@ -149,7 +149,7 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if c = 49 then natV 10
   else if c = 50 then gV
   else if c = 51 then k0V
-  else if c < 59 then natV (c - 49)
+  else if c < 59 then (if c = 52 then natV 3 else 0)
   else if c < 73 then frameV (c - 59)
   else if c < 101 then 0
   else if c = 101 then loC y0

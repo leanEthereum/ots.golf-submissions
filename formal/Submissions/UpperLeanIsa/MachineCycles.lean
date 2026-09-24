@@ -4,7 +4,7 @@ import OptimalOTS.LeanIsa
 /-!
 # The hash-free facts and the cycle bound
 
-`CyclesAtMost 1439` for the HL-TRI bytecode, over every admissible memory size, every committed
+`CyclesAtMost 1433` for the HL-TRI bytecode, over every admissible memory size, every committed
 image and every step count, in the cache-free `support` semantics.
 
 * `layer_of_facts`: the layer products along the path force `L_13 = g ^ (rootSlot - 106 + Σ σ)`,
@@ -12,8 +12,8 @@ image and every step count, in the cache-free `support` semantics.
 * `tie_of_facts`: the tie accumulators hold the sums of the group words; `acc_13` is the index
   cell (`idx_of_facts`).
 * `zero_copy_of_facts`, `copy0_of_facts`: the copies the root reads for zero digits and chain 0.
-* `totalCost_eq`, `totalSteps_eq`: every path of a layer vector costs exactly `1319` cycles in
-  `266` instructions: each block's non-hash cost is independent of its digits, and the hashes
+* `totalCost_eq`, `totalSteps_eq`: every path of a layer vector costs exactly `1313` cycles in
+  `260` instructions: each block's non-hash cost is independent of its digits, and the hashes
   number `1 + 106 + 10`.
 * `cycles`: a completing run is a walk (`walk_of_supp`), the walk is a path (`walk_full`), and
   the two facts give its cost. No hash binding is used.
@@ -43,7 +43,7 @@ variable {v : ℕ → E} {R : ℕ → Prop} (hR : ∀ t, R t → (cinstrAt t).Re
   {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts R s)
 include hR hP
 
-theorem pro_relNH {t : ℕ} {ci : CInstr} (ht : t < 36) (hc : cinstrAt t = ci) : ci.RelNH v := by
+theorem pro_relNH {t : ℕ} {ci : CInstr} (ht : t < 30) (hc : cinstrAt t = ci) : ci.RelNH v := by
   have := hR t (hP.pro t ht); rwa [hc] at this
 
 theorem fact_z : v zCell = 0 := pro_relNH hR hP (by omega) cinstrAt_set0
@@ -56,7 +56,7 @@ theorem fact_gp {w : ℕ} (h1 : 1 ≤ w) (h7 : w ≤ 7) : v (gpCell w) = ofK (gp
   by_cases hw : w = 1
   · subst hw
     rw [show gpCell 1 = gCell from rfl, fact_g hR hP, gV, gpow, pow_one]
-  · have := pro_relNH hR hP (t := 25 + w) (by omega) (cinstrAt_gp (by omega) h7)
+  · have := pro_relNH hR hP (t := 19 + w) (by omega) (cinstrAt_gp (by omega) h7)
     exact this
 
 include hV
@@ -232,27 +232,27 @@ end Facts
 
 theorem segBase_sum : ∑ g ∈ Finset.range 14, (NH g + 2) = 114 := by decide
 
-/-- On the layer, every path costs `1319` cycles. -/
-theorem totalCost_eq {s : ℕ → ℕ} (h : ∑ k ∈ Finset.range 42, s k = 106) : totalCost s = 1319 := by
+/-- On the layer, every path costs `1313` cycles. -/
+theorem totalCost_eq {s : ℕ → ℕ} (h : ∑ k ∈ Finset.range 42, s k = 106) : totalCost s = 1313 := by
   rw [← sum_sig] at h
   unfold totalCost segCost
   rw [Finset.sum_add_distrib, segBase_sum, ← Finset.mul_sum, h]; norm_num
 
-/-- On the layer, every path executes `266` instructions. -/
-theorem totalSteps_eq {s : ℕ → ℕ} (h : ∑ k ∈ Finset.range 42, s k = 106) : totalSteps s = 266 := by
+/-- On the layer, every path executes `260` instructions. -/
+theorem totalSteps_eq {s : ℕ → ℕ} (h : ∑ k ∈ Finset.range 42, s k = 106) : totalSteps s = 260 := by
   rw [← sum_sig] at h
   unfold totalSteps segSteps
   rw [Finset.sum_add_distrib, segBase_sum, h]; norm_num
 
-/-- The claim: `boundaryCycles + 1319`. -/
-def claim : ℕ := 1439
+/-- The claim: `boundaryCycles + 1313`. -/
+def claim : ℕ := 1433
 
 theorem boundary_eq : LeanIsa.boundaryCycles = 120 := by decide
 
 /-! ## The certificate clauses -/
 
 /-- **Cycles.** Every completing execution of the bytecode, under every admissible memory size,
-every committed image and every step count, costs exactly `1319` plus the boundary. -/
+every committed image and every step count, costs exactly `1313` plus the boundary. -/
 theorem cycles (S : LeanIsa.Submission) (hS : S.program = program) : S.CyclesAtMost claim := by
   intro pk m σ κ h16 hκ L n cost h
   unfold LeanIsa.Submission.exec at h

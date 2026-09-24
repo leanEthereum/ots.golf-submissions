@@ -6,7 +6,7 @@ import Submissions.UpperLeanIsa.MachineProver
 Under a table `f` for which the verifier accepts, the honest image `imageF f pk m bits`, loaded
 with the statement, satisfies the fixed-table relation of every slot on the path of the index
 digits (`honest_path`), with the return hints and `K0` the walk needs; so the machine completes
-in `266` instructions (`honest_run`). Together with `fixed_sound` this is `Faithful`.
+in `260` instructions (`honest_run`). Together with `fixed_sound` this is `Faithful`.
 -/
 
 namespace OptimalOTS.HLFlat
@@ -22,7 +22,7 @@ noncomputable section
 
 /-- `omega` after unfolding the cell layout. -/
 macro "cellω" : tactic => `(tactic| ((try simp only [zCell, oneCell, tidxCell, gCell, k0Cell,
-  symCell, fCell, idxCell, tCell, hCell, h1Cell, cCell, topCell, cvCell, xCell, stCell] at *) <;>
+  x3Cell, fCell, idxCell, tCell, hCell, h1Cell, cCell, topCell, cvCell, xCell, stCell] at *) <;>
   omega))
 
 section Cells
@@ -50,11 +50,10 @@ theorem hc_k0 : hcell bits y0 A RA k0Cell = k0V := by
   rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
     if_pos (by cellω)]
 
-theorem hc_sym {i : ℕ} (hi : i < 7) : hcell bits y0 A RA (symCell i) = natV (i + 3) := by
+theorem hc_x3 : hcell bits y0 A RA x3Cell = natV 3 := by
   unfold hcell
   rw [if_neg (by cellω), if_neg (by cellω), if_neg (by cellω), if_neg (by cellω),
-    if_neg (by cellω), if_pos (by cellω)]
-  congr 1; unfold symCell; omega
+    if_neg (by cellω), if_pos (by cellω), if_pos (by cellω)]
 
 theorem hc_frame {g : ℕ} (hg : g < 14) : hcell bits y0 A RA (fCell g) = frameV g := by
   unfold hcell
@@ -248,6 +247,10 @@ theorem canon_ofK (a : K) : IsCanonical128 (ofK a) := by
   show (ofK a).limb 2 = 0; rw [limb_ofK]; rfl
 theorem canon_zero : IsCanonical128 (0 : E) := by
   show (0 : E).limb 2 = 0; exact limb_zero 2
+theorem canon_symV (i : ℕ) : IsCanonical128 (symV i) := by
+  unfold symV; split_ifs
+  · exact canon_zero
+  · exact canon_ofK _
 
 theorem cellBits_loC (a : BitVec 256) : cellBits (loC a) = a.extractLsb' 0 128 := cellBits_cellOfBits _
 theorem cellBits_hiC (a : BitVec 256) : cellBits (hiC a) = a.extractLsb' 128 128 :=
@@ -277,7 +280,7 @@ theorem blake_rel {f : HashTable} {v : ℕ → E} {m0 m1 m2 m3 cv out md : ℕ} 
 
 /-- The chain-step query of a chain op, from the constants' values. -/
 theorem chain_query {v : ℕ → E} (hz : v zCell = 0) (hone : v oneCell = oneV)
-    (hsym : ∀ i < 7, v (symCell i) = natV (i + 3)) {k : ℕ} (hk : k < 42) {j : ℕ} (hj : j < W k)
+    (hsym : ∀ i < 7, v (symCell i) = symV i) {k : ℕ} (hk : k < 42) {j : ℕ} (hj : j < W k)
     (x : E) :
     blake2sQuery ![x, v (symCell (tagPos k j % 7)), v (symCell (tagPos k j / 7 % 7)),
         v (symCell (tagPos k j / 49))] (v zCell) (v (zCell + 1)) (v oneCell) =
@@ -285,7 +288,8 @@ theorem chain_query {v : ℕ → E} (hz : v zCell = 0) (hone : v oneCell = oneV)
   have hp : tagPos k j < 343 := by
     have := @W_le k; unfold tagPos Flat.off; split_ifs <;> omega
   rw [blake2sQuery_eq, hsym _ (Nat.mod_lt _ (by norm_num)), hsym _ (Nat.mod_lt _ (by norm_num)),
-    hsym _ (by omega), cellBits_natV, cellBits_natV, cellBits_natV,
+    hsym _ (by omega), cellBits_symV (Nat.mod_lt _ (by norm_num)),
+    cellBits_symV (Nat.mod_lt _ (by norm_num)), cellBits_symV (by omega),
     show zCell + 1 = oneCell from rfl, hone, hz, cellBits_zero_E, cellBits_oneV, cv_const]
   rfl
 
@@ -396,8 +400,7 @@ theorem hv_one : hv f pk m bits oneCell = oneV := hv_c (by decide) (by decide) (
 theorem hv_tidx : hv f pk m bits tidxCell = natV 10 := hv_c (by decide) (by decide) (hc_tidx ..)
 theorem hv_g : hv f pk m bits gCell = gV := hv_c (by decide) (by decide) (hc_g ..)
 theorem hv_k0 : hv f pk m bits k0Cell = k0V := hv_c (by decide) (by decide) (hc_k0 ..)
-theorem hv_sym {i : ℕ} (hi : i < 7) : hv f pk m bits (symCell i) = natV (i + 3) :=
-  hv_c (by unfold symCell; omega) (by unfold symCell; omega) (hc_sym _ _ _ _ hi)
+theorem hv_x3 : hv f pk m bits x3Cell = natV 3 := hv_c (by decide) (by decide) (hc_x3 ..)
 theorem hv_frame {g : ℕ} (hg : g < 14) : hv f pk m bits (fCell g) = frameV g :=
   hv_c (by unfold fCell; omega) (by unfold fCell; omega) (hc_frame _ _ _ _ hg)
 theorem hv_idx : hv f pk m bits idxCell = loC (y0F f pk m bits) :=
@@ -424,6 +427,14 @@ theorem hv_gp {v : ℕ} (h1 : 1 ≤ v) (h7 : v ≤ 7) : hv f pk m bits (gpCell v
   · subst hv1
     rw [hv_g, gV, show gpow 1 = g from (g_mul_gpow 0).symm.trans (by rw [gpow_zero', mul_one])]
   · exact hv_c (by omega) (by omega) (hc_gp _ _ _ _ (by omega) h7)
+
+/-- The symbol cells. -/
+theorem hv_sym {i : ℕ} (hi : i < 7) : hv f pk m bits (symCell i) = symV i := by
+  unfold symCell symV
+  split_ifs with h0 h1
+  · exact hv_z
+  · subst h1; rw [hv_one, oneV, show 1 - 1 = 0 from rfl, gpow_zero']
+  · exact hv_gp (by omega) (by omega)
 
 theorem hv_top {k : ℕ} (hk : k < 42) :
     hv f pk m bits (topCell k) = cellOfBits (topOf bits (y0F f pk m bits) (AF f pk m bits) k) :=
@@ -497,7 +508,7 @@ theorem topsOfV_eq : topsOfV bits (y0F f pk m bits) (AF f pk m bits) =
 abbrev HR (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) (t : ℕ) : Prop :=
   (cinstrAt t).Rel f (hv f pk m bits)
 
-theorem hv_sym' : ∀ i < 7, hv f pk m bits (symCell i) = natV (i + 3) := fun _ hi => hv_sym hi
+theorem hv_sym' : ∀ i < 7, hv f pk m bits (symCell i) = symV i := fun _ hi => hv_sym hi
 
 include hlen in
 /-- The index query of the honest image. -/
@@ -576,9 +587,9 @@ theorem honest_lay_step {g : ℕ} (h1 : 1 ≤ g) (hg : g < 14) :
   rw [Nat.add_sub_cancel, Finset.sum_range_succ _ (j + 1), Nat.add_assoc]
 
 include hlen in
-theorem honest_pro : ∀ t < 36, HR f pk m bits t := by
+theorem honest_pro : ∀ t < 30, HR f pk m bits t := by
   intro t ht
-  by_cases h6 : t < 6
+  by_cases h7 : t < 7
   · unfold HR
     interval_cases t
     · rw [cinstrAt_set0]; exact hv_z
@@ -589,18 +600,16 @@ theorem honest_pro : ∀ t < 36, HR f pk m bits t := by
     · rw [cinstrAt_set3]; exact hv_tidx
     · rw [cinstrAt_set4]; exact hv_g
     · rw [cinstrAt_set5]; exact hv_k0
-  by_cases h13 : t < 13
-  · obtain ⟨i, rfl⟩ : ∃ i, t = 6 + i := ⟨t - 6, by omega⟩
-    unfold HR; rw [cinstrAt_sym (by omega)]; exact hv_sym (by omega)
-  by_cases h27 : t < 27
-  · obtain ⟨g, rfl⟩ : ∃ g, t = 13 + g := ⟨t - 13, by omega⟩
+    · rw [cinstrAt_set6]; exact hv_x3
+  by_cases h21 : t < 21
+  · obtain ⟨g, rfl⟩ : ∃ g, t = 7 + g := ⟨t - 7, by omega⟩
     unfold HR; rw [cinstrAt_frame (by omega)]; exact hv_frame (by omega)
-  by_cases h33 : t < 33
-  · obtain ⟨v, rfl⟩ : ∃ v, t = 25 + v := ⟨t - 25, by omega⟩
+  by_cases h27 : t < 27
+  · obtain ⟨v, rfl⟩ : ∃ v, t = 19 + v := ⟨t - 19, by omega⟩
     unfold HR; rw [cinstrAt_gp (by omega) (by omega)]; exact hv_gp (by omega) (by omega)
   unfold HR
-  rcases (show t = 33 ∨ t = 34 ∨ t = 35 by omega) with rfl | rfl | rfl
-  · rw [cinstrAt_33]
+  rcases (show t = 27 ∨ t = 28 ∨ t = 29 by omega) with rfl | rfl | rfl
+  · rw [cinstrAt_27]
     refine blake_rel (a := y0F f pk m bits) ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hv_idx hv_idx1
     · rw [show msgLo = 1 from rfl, hv_lt f pk m bits (by omega), inputWord_one]
       exact canon_cellOfBits _
@@ -615,8 +624,8 @@ theorem honest_pro : ∀ t < 36, HR f pk m bits t := by
     · rw [show zCell + 1 = oneCell from rfl, hv_one]; exact canon_ofK 1
     · rw [hv_tidx]; exact canon_natV _
     · rw [honest_idx_query hlen]; rfl
-  · rw [cinstrAt_34]; exact honest_hmul (by omega)
-  · rw [cinstrAt_35]; exact honest_dispatch (by omega)
+  · rw [cinstrAt_28]; exact honest_hmul (by omega)
+  · rw [cinstrAt_29]; exact honest_dispatch (by omega)
 
 include hlen in
 /-- The honest source of chain step `t`. -/
@@ -668,11 +677,11 @@ theorem honest_chainOp {k : ℕ} (hk : k < 42) {t : ℕ} (ht : t < dg (idxOf (y0
   · by_cases h0 : t = 0
     · rw [if_pos h0, hv_w hlen hk]; exact canon_cellOfBits _
     · rw [if_neg h0, hv_x hk (by have := @W_le k; omega)]; exact canon_loC _
-  · rw [hv_sym (Nat.mod_lt _ (by norm_num))]; exact canon_natV _
-  · rw [hv_sym (Nat.mod_lt _ (by norm_num))]; exact canon_natV _
+  · rw [hv_sym (Nat.mod_lt _ (by norm_num))]; exact canon_symV _
+  · rw [hv_sym (Nat.mod_lt _ (by norm_num))]; exact canon_symV _
   · have hp : tagPos k (W k - 1 - dg (idxOf (y0F f pk m bits)) k + t) < 343 := by
       have := @W_le k; unfold tagPos Flat.off; split_ifs <;> omega
-    rw [hv_sym (by omega)]; exact canon_natV _
+    rw [hv_sym (by omega)]; exact canon_symV _
   · rw [hv_z]; exact canon_zero
   · rw [show zCell + 1 = oneCell from rfl, hv_one]; exact canon_ofK 1
   · rw [hv_one]; exact canon_ofK 1
@@ -850,15 +859,16 @@ theorem honest_rho {i : ℕ} (hi : i < 10) :
   by_cases h0 : i = 0
   · subst h0; rw [show rhoCell 0 = zCell from rfl, hv_z]
     exact ⟨canon_zero, by rw [cellBits_zero_E]; rfl⟩
-  by_cases h1 : i = 1
-  · subst h1; rw [show rhoCell 1 = gCell from rfl, hv_g]
-    exact ⟨canon_ofK _, by rw [cellBits_gV]; rfl⟩
-  by_cases h9 : i < 9
-  · rw [rhoCell_eq (by omega) h9, rootMd_eq (by omega) h9, hv_sym (by omega)]
-    exact ⟨canon_natV _, by rw [cellBits_natV, show i - 2 + 3 = i + 1 by omega]⟩
-  · obtain rfl : i = 9 := by omega
-    rw [show rhoCell 9 = lenCell from rfl, show lenCell = 3 from rfl, hv_lt f pk m bits (by omega),
+  by_cases h8 : i < 8
+  · rw [rhoCell_eq (by omega) h8, rootMd_eq (by omega) h8, hv_gp (by omega) (by omega)]
+    exact ⟨canon_ofK _, cellBits_gpow h8⟩
+  by_cases h8' : i = 8
+  · subst h8'
+    rw [show rhoCell 8 = lenCell from rfl, show lenCell = 3 from rfl, hv_lt f pk m bits (by omega),
       inputWord_len_of pk m bits hlen]
+    exact ⟨canon_natV _, by rw [cellBits_natV]; rfl⟩
+  · obtain rfl : i = 9 := by omega
+    rw [show rhoCell 9 = x3Cell from rfl, hv_x3]
     exact ⟨canon_natV _, by rw [cellBits_natV]; rfl⟩
 
 include hlen hroot in
@@ -906,11 +916,11 @@ theorem honest_path : PathFacts (HR f pk m bits) (dg (idxOf (y0F f pk m bits))) 
 
 include hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`266` instructions. -/
+`260` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 266
-          Regs.initial) = pure (some 1319) := by
+        (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 260
+          Regs.initial) = pure (some 1313) := by
   obtain ⟨n, c, hw⟩ := walk_mk (dF_valid f pk m bits) (honest_path hlen hacc hroot)
     (fun g hg => hv_h1 hg) hv_k0
   have hpin : Pinned (hv f pk m bits) := ⟨hv_one, fun g hg => hv_frame hg⟩

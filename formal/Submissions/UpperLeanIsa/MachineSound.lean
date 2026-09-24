@@ -7,8 +7,9 @@ import Submissions.UpperLeanIsa.MachineCycles
 vector `s`, and agreeing with the loader on the pinned cells, certify a signature that
 `Flat.params.verify` accepts under the table.
 
-1. The prologue pins `Z, ONE, LEN, TIDX, g, K0` and the symbols; the length cell pins
-   `|σ| = 5504`, so the loader's cells are the 42 words and the nonce.
+1. The prologue pins `Z, ONE, LEN, TIDX, g, K0`, the constant `3` and `g ^ 2 … g ^ 7` (the cells
+   of the tag symbols and the root metadata); the length cell pins `|σ| = 5504`, so the loader's
+   cells are the 42 words and the nonce.
 2. The index `BLAKE2S` is the scheme's index query; its low half `I` is the index cell.
 3. The group ties accumulate the tie words into the index cell (`idx_of_facts`); the words' bit
    fields are disjoint, so `I` is the digit vector (`tie_sum`) and `digit I k = s k`; the layer
@@ -40,6 +41,16 @@ theorem blake2sQuery_eq (a b c d cv0 cv1 md : E) :
 theorem cellBits_oneV : cellBits oneV = 1 := by rw [oneV, cellBits_ofK]; decide
 
 theorem cellBits_gV : cellBits gV = BitVec.ofNat 128 2 := by rw [gV, cellBits_ofK]; decide
+
+/-- The prologue powers `g ^ w`, `w < 8`, are the words `2 ^ w`. -/
+theorem cellBits_gpow {w : ℕ} (hw : w < 8) : cellBits (ofK (gpow w)) = BitVec.ofNat 128 (2 ^ w) := by
+  rw [cellBits_ofK]; interval_cases w <;> decide +kernel
+
+theorem cellBits_symV {i : ℕ} (hi : i < 7) : cellBits (symV i) = Flat.sym i := by
+  unfold symV Flat.sym
+  split_ifs with h0
+  · rw [cellBits_zero_E]; rfl
+  · exact cellBits_gpow (by omega)
 
 theorem cv_const : (1 : BitVec 128) ++ (0 : BitVec 128) = Flat.cv := by unfold Flat.cv; decide
 
@@ -223,7 +234,7 @@ variable {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool} {v : 
   {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s)
 
 include hP in
-theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 36) (hc : cinstrAt t = ci) : ci.Rel f v := by
+theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 30) (hc : cinstrAt t = ci) : ci.Rel f v := by
   have := hP.pro t ht; rwa [hc] at this
 
 include hP in
@@ -239,8 +250,21 @@ theorem v_one : v oneCell = oneV := pro_rel hP (by omega) cinstrAt_set1
 theorem v_len : v lenCell = natV 5504 := pro_rel hP (by omega) cinstrAt_set2
 theorem v_tidx : v tidxCell = natV 10 := pro_rel hP (by omega) cinstrAt_set3
 theorem v_g : v gCell = gV := pro_rel hP (by omega) cinstrAt_set4
-theorem v_sym {i : ℕ} (hi : i < 7) : v (symCell i) = natV (i + 3) :=
-  pro_rel hP (by omega) (cinstrAt_sym hi)
+theorem v_x3 : v x3Cell = natV 3 := pro_rel hP (by omega) cinstrAt_set6
+
+/-- The prologue constants `g ^ w`, `1 ≤ w ≤ 7`. -/
+theorem v_gp {w : ℕ} (h1 : 1 ≤ w) (h7 : w ≤ 7) : v (gpCell w) = ofK (gpow w) := by
+  by_cases hw : w = 1
+  · subst hw
+    rw [show gpCell 1 = gCell from rfl, v_g hP, gV, gpow, pow_one]
+  · exact pro_rel hP (t := 19 + w) (by omega) (cinstrAt_gp (by omega) h7)
+
+theorem v_sym {i : ℕ} (hi : i < 7) : v (symCell i) = symV i := by
+  unfold symCell symV
+  split_ifs with h0 h1
+  · exact v_z hP
+  · subst h1; rw [v_one hP, oneV, show 1 - 1 = 0 from rfl, gpow_zero']
+  · exact v_gp hP (by omega) (by omega)
 
 theorem cb_z : cellBits (v zCell) = 0 := by rw [v_z hP]; exact cellBits_zero_E
 
@@ -258,7 +282,8 @@ theorem chainOp_query (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : �
   have hp : tagPos k j < 343 := by
     have := @W_le k; unfold tagPos Flat.off; split_ifs <;> omega
   rw [blake2sQuery_eq, v_sym hP (Nat.mod_lt _ (by norm_num)), v_sym hP (Nat.mod_lt _ (by norm_num)),
-    v_sym hP (by omega), cellBits_natV, cellBits_natV, cellBits_natV, cb_cv hP, v_one hP,
+    v_sym hP (by omega), cellBits_symV (Nat.mod_lt _ (by norm_num)),
+    cellBits_symV (Nat.mod_lt _ (by norm_num)), cellBits_symV (by omega), cb_cv hP, v_one hP,
     cellBits_oneV]
   rfl
 
@@ -306,24 +331,24 @@ theorem topAt_topsV (v : ℕ → E) {i : ℕ} (hi : i < 42) :
     Params.topAt (topsV v) i = cellBits (v (rootTop i)) := by
   unfold Params.topAt; rw [dif_pos hi]; rfl
 
-theorem rhoCell_eq {r : ℕ} (h2 : 2 ≤ r) (h9 : r < 9) : rhoCell r = symCell (r - 2) := by
-  unfold rhoCell; rw [if_neg (by omega), if_neg (by omega), if_pos h9]
+theorem rhoCell_eq {r : ℕ} (h1 : 1 ≤ r) (h8 : r < 8) : rhoCell r = gpCell r := by
+  unfold rhoCell; rw [if_neg (by omega), if_pos h8]
 
-theorem rootMd_eq {r : ℕ} (h2 : 2 ≤ r) (h9 : r < 9) : FP.rootMd r = BitVec.ofNat 128 (r + 1) := by
+theorem rootMd_eq {r : ℕ} (h1 : 1 ≤ r) (h8 : r < 8) : FP.rootMd r = BitVec.ofNat 128 (2 ^ r) := by
   show Flat.rootMd r = _
-  unfold Flat.rootMd; rw [if_neg (by omega), if_neg (by omega), if_pos h9]
+  unfold Flat.rootMd; rw [if_neg (by omega), if_pos h8]
 
 include hP in
 theorem rho_md {r : ℕ} (hr : r < 10) : cellBits (v (rhoCell r)) = FP.rootMd r := by
   by_cases h0 : r = 0
   · subst h0; rw [show rhoCell 0 = zCell from rfl, cb_z hP]; rfl
-  by_cases h1 : r = 1
-  · subst h1; rw [show rhoCell 1 = gCell from rfl, v_g hP, cellBits_gV]; rfl
-  by_cases h9 : r < 9
-  · rw [rhoCell_eq (by omega) h9, rootMd_eq (by omega) h9, v_sym hP (by omega), cellBits_natV,
-      show r - 2 + 3 = r + 1 by omega]
+  by_cases h8 : r < 8
+  · rw [rhoCell_eq (by omega) h8, rootMd_eq (by omega) h8, v_gp hP (by omega) (by omega),
+      cellBits_gpow h8]
+  by_cases h8' : r = 8
+  · subst h8'; rw [show rhoCell 8 = lenCell from rfl, v_len hP, cellBits_natV]; rfl
   · obtain rfl : r = 9 := by omega
-    rw [show rhoCell 9 = lenCell from rfl, v_len hP, cellBits_natV]; rfl
+    rw [show rhoCell 9 = x3Cell from rfl, v_x3 hP, cellBits_natV]; rfl
 
 /-- The root state sequence: the initial cv pair, then the states. -/
 def rootSeq (v : ℕ → E) (i : ℕ) : BitVec 256 :=
@@ -393,7 +418,7 @@ theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ
     length_of_inputWord_len pk m bits ((hpin 3 (by omega)).symm.trans (v_len hP))
   -- the index
   have hidx : idxValue f FP m (decodeNonce bits) pk = cellBits (v idxCell) := by
-    have h := pro_rel hP (by omega) cinstrAt_33
+    have h := pro_rel hP (by omega) cinstrAt_27
     have hlo := oracle_lo h
     have hpk : cellBits (v pkCell) = pk := by
       rw [show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
