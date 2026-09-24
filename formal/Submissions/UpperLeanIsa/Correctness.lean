@@ -34,7 +34,7 @@ variable (P : Params)
 
 /-- One chain step under a fixed table. -/
 def stepValue (f : HashTable) (k : Fin numChains) (j : ℕ) (x : Word) : Word :=
-  (f ⟨896, P.chainInput k j x⟩).extractLsb' 0 128
+  P.slice k j (f ⟨896, P.chainInput k j x⟩)
 
 /-- `n` chain steps from position `j` under a fixed table. -/
 def chainValue (f : HashTable) (k : Fin numChains) : ℕ → ℕ → Word → Word
@@ -58,7 +58,7 @@ def rootFromValue (f : HashTable) (t : Fin numChains → Word) :
 
 /-- The public key of the tops `t` under a fixed table. -/
 def rootValue (f : HashTable) (t : Fin numChains → Word) : PublicKey :=
-  (P.rootFromValue f t 0 10 (rootInit t)).extractLsb' 0 128
+  (P.rootFromValue f t 0 9 (rootInit t)).extractLsb' 0 128
 
 /-- The tops reconstructed by the verifier from the words of `bits` at index `I`. -/
 def reconWords (f : HashTable) (I : Word) (bits : List Bool) : Fin numChains → Word :=

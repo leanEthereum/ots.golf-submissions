@@ -4,11 +4,11 @@ import Submissions.UpperLeanIsa.MachineRun
 # The forced path of the HL-TRI bytecode
 
 Every walk from slot `0` is the forced walk of one digit vector `s = digitOf v` (read off the
-landing hints of the 14 groups): the prologue `0 … 28`, then for each group `g` the dispatch at
+landing hints of the 14 groups): the prologue `0 … 27`, then for each group `g` the dispatch at
 its control slot, the landing at `entryOf g s = BASE g + SP g · rank`, the block's straight-line
-ops (`stepBase - 1` pre ops and pads, the `sig s g` chain steps, chain 0's top copy and the next
-group's `MUL(H, g, H')`), and finally the exit into the root segment
-`rootSlot … rootSlot + 10`, which falls through to the sentinel.
+ops (`NH g - 1` pre ops and pads, the `sig s g` chain steps and the next group's `MUL(H, g, H')`),
+and finally the exit into the root segment `rootSlot … rootSlot + 9`, which falls through to the
+sentinel.
 
 A landing is forced to an entry by the frame lemma (`runCost_dispatch`), and the entry `I0`
 returns to frame `1` at `H'_g = H_g · g`, the slot after the entry: no suffix of a block can be
@@ -84,7 +84,7 @@ variable {s : ℕ → ℕ} {g : ℕ} (hG : GValid s g) (hg : g < 14)
 include hG hg
 
 theorem pre_fit' : 1 + preLen g (s (gch g 0)) (s (gch g 1)) (s (gch g 2)) ≤
-    stepBase g (s (gch g 0)) := pre_fit hg hG.1 hG.2.1 hG.2.2
+    NH g := pre_fit hg hG.1 hG.2.1 hG.2.2
 
 theorem ctlOff_lt : ctlOff g (sig s g) < SP g := blk_fit hg hG.1 hG.2.1 hG.2.2
 
@@ -98,63 +98,55 @@ theorem entryOf_isEntry : IsEntry g (entryOf g s) := by
   refine ⟨hg, Nat.le_add_right _ _, Nat.add_lt_add_left (Nat.mul_lt_mul_of_pos_left hr hsp) _, ?_⟩
   unfold entryOf; rw [Nat.add_sub_cancel_left, Nat.mul_mod_right]
 
-theorem entryOf_lt : entryOf g s + SP g ≤ 255006 := by
+theorem entryOf_lt : entryOf g s + SP g ≤ 255005 := by
   obtain ⟨h0, h1, h2⟩ := hG
   unfold entryOf grank
   rcases grp_consts hg with ⟨h, hw, -, hs, hb⟩ | ⟨rfl, hw, -, hs, hb⟩ | ⟨rfl, hw, -, hs, hb⟩ <;>
     rw [hw] at h2 <;> rw [hs, hb] <;> split_ifs <;> omega
 
-theorem stepBase_bounds : 1 ≤ stepBase g (s (gch g 0)) ∧ stepBase g (s (gch g 0)) ≤ NH g ∧
-    NH g ≤ stepBase g (s (gch g 0)) + 1 := by
-  have := pre_fit' hG hg
-  have := stepBase_le g (s (gch g 0))
-  omega
-
-/-- Ops `[1, stepBase)`: the pre ops and the pads. -/
-theorem seg_pre {i : ℕ} (hi0 : 0 < i) (hi : i < stepBase g (s (gch g 0))) :
+/-- Ops `[1, NH g)`: the pre ops and the pads. -/
+theorem seg_pre {i : ℕ} (hi0 : 0 < i) (hi : i < NH g) :
     (cinstrAt (entryOf g s + i)).straight = true ∧ (cinstrAt (entryOf g s + i)).cost = 1 := by
-  have hb := stepBase_bounds hG hg
+  have hb := pre_fit' hG hg
   rw [cinstrAt_blk hG hg hi0 (by unfold ctlOff; omega)]
   by_cases h : i < 1 + preLen g (s (gch g 0)) (s (gch g 1)) (s (gch g 2))
   · obtain ⟨q, rfl⟩ : ∃ q, i = 1 + q := ⟨i - 1, by omega⟩
     rw [blockOp_pre (by omega)]; exact preOp_straight _ _ _ _ _
   · rw [blockOp_nop (by omega) hi]; exact ⟨rfl, rfl⟩
 
-/-- Op `stepBase + t`: chain step `t`. -/
+/-- Op `NH g + t`: chain step `t`. -/
 theorem seg_step {t : ℕ} (ht : t < sig s g) :
-    cinstrAt (entryOf g s + (stepBase g (s (gch g 0)) + t)) =
+    cinstrAt (entryOf g s + (NH g + t)) =
       stepOp g (s (gch g 0)) (s (gch g 1)) (s (gch g 2)) t := by
-  have hb := stepBase_bounds hG hg
+  have hb := pre_fit' hG hg
   unfold sig at ht
   rw [cinstrAt_blk hG hg (by omega) (by unfold ctlOff sig; omega),
     blockOp_step (pre_fit' hG hg) ht]
 
-/-- Ops `[stepBase + σ, ctlOff)`: chain 0's top copy and the next group's `MUL(H, g, H')`. -/
-theorem seg_post {i : ℕ} (h1 : stepBase g (s (gch g 0)) + sig s g ≤ i)
+/-- Ops `[NH g + σ, ctlOff)`: the next group's `MUL(H, g, H')` (none for group 13). -/
+theorem seg_post {i : ℕ} (h1 : NH g + sig s g ≤ i)
     (h2 : i < ctlOff g (sig s g)) :
     (cinstrAt (entryOf g s + i)).straight = true ∧ (cinstrAt (entryOf g s + i)).cost = 1 := by
-  have hb := stepBase_bounds hG hg
+  have hb := pre_fit' hG hg
   unfold sig at h1
   unfold ctlOff sig at h2
   rw [cinstrAt_blk hG hg (by omega) (by unfold ctlOff sig; omega)]
-  by_cases h : i < NH g + (s (gch g 0) + s (gch g 1) + s (gch g 2))
-  · rw [blockOp_post (pre_fit' hG hg) h1 h]; exact ⟨rfl, rfl⟩
-  · have h13 : g < 13 := by by_contra h13; rw [if_neg h13] at h2; omega
-    rw [if_pos h13] at h2
-    obtain rfl : i = NH g + (s (gch g 0) + s (gch g 1) + s (gch g 2)) := by omega
-    rw [blockOp_tail (pre_fit' hG hg), if_pos h13]; exact ⟨rfl, rfl⟩
+  have h13 : g < 13 := by by_contra h13; rw [if_neg h13] at h2; omega
+  rw [if_pos h13] at h2
+  obtain rfl : i = NH g + (s (gch g 0) + s (gch g 1) + s (gch g 2)) := by omega
+  rw [blockOp_tail (pre_fit' hG hg), if_pos h13]; exact ⟨rfl, rfl⟩
 
 /-- The last op before the control op of group `g < 13`: the next group's `MUL(H, g, H')`. -/
 theorem seg_hmul (h13 : g < 13) :
     cinstrAt (entryOf g s + (ctlOff g (sig s g) - 1)) = .mul (hCell (g + 1)) gCell (h1Cell (g + 1)) := by
-  have hb := stepBase_bounds hG hg
+  have hb := pre_fit' hG hg
   rw [cinstrAt_blk hG hg (by unfold ctlOff; rw [if_pos h13]; omega) (by omega)]
   unfold ctlOff sig; rw [if_pos h13, Nat.add_sub_cancel, blockOp_tail (pre_fit' hG hg), if_pos h13]
 
 /-- The control op after the block: the next dispatch, or the exit. -/
 theorem seg_ctl : cinstrAt (entryOf g s + ctlOff g (sig s g)) =
     if g < 13 then .dispatch (g + 1) else .exit := by
-  rw [cinstrAt_blk hG hg (by unfold ctlOff; have := stepBase_bounds hG hg; omega) le_rfl]
+  rw [cinstrAt_blk hG hg (by unfold ctlOff; have := pre_fit' hG hg; omega) le_rfl]
   unfold ctlOff sig
   by_cases h13 : g < 13
   · rw [if_pos h13, if_pos h13, blockOp_disp (pre_fit' hG hg) h13]
@@ -206,7 +198,7 @@ theorem tieLen_le (g σ : ℕ) : tieLen g σ ≤ 2 := by unfold tieLen; split_if
 
 /-- The block offset of step `t` of chain `k`. -/
 def stepOff (s : ℕ → ℕ) (k t : ℕ) : ℕ :=
-  stepBase (grp k) (s (gch (grp k) 0)) +
+  NH (grp k) +
     (if gpos k = 0 then 0
      else if gpos k = 1 then s (gch (grp k) 0) else s (gch (grp k) 0) + s (gch (grp k) 1)) + t
 
@@ -226,7 +218,7 @@ theorem stepOff_range {s : ℕ → ℕ} (hV : Valid s) {k t : ℕ} (hk : k < 42)
     0 < stepOff s k t ∧ stepOff s k t ≤ ctlOff (grp k) (sig s (grp k)) := by
   obtain ⟨hg, hj⟩ := grp_lt hk
   have hG := gvalid_of_valid hV hg
-  have hb := stepBase_bounds hG hg
+  have hb := pre_fit' hG hg
   have e := gch_grp hk
   unfold stepOff ctlOff sig
   rcases (show gpos k = 0 ∨ gpos k = 1 ∨ gpos k = 2 by omega) with hp | hp | hp <;>
@@ -250,24 +242,24 @@ theorem cinstrAt_step {s : ℕ → ℕ} (hV : Valid s) {k t : ℕ} (hk : k < 42)
 /-! ## Prologue shape -/
 
 /-- Cycles of prologue op `t`. -/
-def proW (t : ℕ) : ℕ := if t = 27 then 10 else 1
+def proW (t : ℕ) : ℕ := if t = 26 then 10 else 1
 
 /-- Cycles of root op `t`. -/
-def rootW (t : ℕ) : ℕ := if t < 10 then 10 else 1
+def rootW (t : ℕ) : ℕ := if t < 9 then 10 else 1
 
-theorem prologue_setc {t : ℕ} (ht : t < 27) :
+theorem prologue_setc {t : ℕ} (ht : t < 26) :
     (prologue t).straight = true ∧ (prologue t).cost = 1 := by
   unfold prologue
   repeat' split
   all_goals exact ⟨rfl, rfl⟩
 
-theorem cinstrAt_29 : cinstrAt 29 = .dispatch 0 := by
+theorem cinstrAt_28 : cinstrAt 28 = .dispatch 0 := by
   rw [cinstrAt_pro (by omega)]; unfold prologue; simp
 
-theorem cinstrAt_28 : cinstrAt 28 = .mul (hCell 0) gCell (h1Cell 0) := by
+theorem cinstrAt_27 : cinstrAt 27 = .mul (hCell 0) gCell (h1Cell 0) := by
   rw [cinstrAt_pro (by omega)]; unfold prologue; simp
 
-theorem cinstrAt_27 : cinstrAt 27 = .blake msgLo msgHi nonceCell pkCell zCell idxCell tidxCell := by
+theorem cinstrAt_26 : cinstrAt 26 = .blake msgLo msgHi nonceCell pkCell zCell idxCell tidxCell := by
   rw [cinstrAt_pro (by omega)]; unfold prologue; simp
 
 theorem cinstrAt_set0 : cinstrAt 0 = .setc zCell 0 := by
@@ -288,37 +280,34 @@ theorem cinstrAt_set4 : cinstrAt 4 = .setc gCell gV := by
 theorem cinstrAt_set5 : cinstrAt 5 = .setc k0Cell k0V := by
   rw [cinstrAt_pro (by omega)]; unfold prologue; simp
 
-theorem cinstrAt_set6 : cinstrAt 6 = .setc x3Cell (natV 3) := by
-  rw [cinstrAt_pro (by omega)]; unfold prologue; simp
-
-theorem cinstrAt_frame {k : ℕ} (hk : k < 14) : cinstrAt (7 + k) = .setc (fCell k) (frameV k) := by
+theorem cinstrAt_frame {k : ℕ} (hk : k < 14) : cinstrAt (6 + k) = .setc (fCell k) (frameV k) := by
   rw [cinstrAt_pro (by omega)]; unfold prologue
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
-    if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos (by omega),
-    show 7 + k - 7 = k by omega]
+    if_neg (by omega), if_neg (by omega), if_pos (by omega), show 6 + k - 6 = k by omega]
 
 /-- The prologue constants `g ^ v`, `2 ≤ v ≤ 7`. -/
 theorem cinstrAt_gp {v : ℕ} (h2 : 2 ≤ v) (h7 : v ≤ 7) :
-    cinstrAt (19 + v) = .setc (gpCell v) (ofK (gpow v)) := by
+    cinstrAt (18 + v) = .setc (gpCell v) (ofK (gpow v)) := by
   rw [cinstrAt_pro (by omega)]; unfold prologue
   rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega),
-    if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos (by omega),
-    show 19 + v - 19 = v by omega]
+    if_neg (by omega), if_neg (by omega), if_neg (by omega), if_pos (by omega),
+    show 18 + v - 18 = v by omega]
 
-theorem prologue_straight {t : ℕ} (ht : t < 29) :
+theorem prologue_straight {t : ℕ} (ht : t < 28) :
     (cinstrAt t).straight = true ∧ (cinstrAt t).cost = proW t := by
+  by_cases h26 : t = 26
+  · subst h26; rw [cinstrAt_26]; exact ⟨rfl, rfl⟩
   by_cases h27 : t = 27
   · subst h27; rw [cinstrAt_27]; exact ⟨rfl, rfl⟩
-  by_cases h28 : t = 28
-  · subst h28; rw [cinstrAt_28]; exact ⟨rfl, rfl⟩
-  rw [show proW t = 1 from if_neg h27, cinstrAt_pro (by omega)]
+  rw [show proW t = 1 from if_neg h26, cinstrAt_pro (by omega)]
   exact prologue_setc (by omega)
 
-/-- The root segment is straight: ten `BLAKE2S` and the pk `XOR`. -/
-theorem root_straight {t : ℕ} (ht : t < 11) :
+/-- The root segment is straight: nine `BLAKE2S` and the pk `XOR`. -/
+theorem root_straight {t : ℕ} (ht : t < 10) :
     (cinstrAt (rootSlot + t)).straight = true ∧
       (cinstrAt (rootSlot + t)).cost = rootW t := by
-  rw [cinstrAt_root ht]; unfold rootOp rootW; split_ifs <;> exact ⟨rfl, rfl⟩
+  rw [cinstrAt_root ht]; unfold rootOp rootW
+  split_ifs <;> first | exact ⟨rfl, rfl⟩ | (exfalso; omega)
 
 /-! ## Walk lemmas -/
 
@@ -473,12 +462,12 @@ theorem digitOf_eq {v : ℕ → E} {g e : ℕ} (he : IsEntry g e) (hx : (v (hCel
 
 /-- The relation holds at every slot of the path of `s`. -/
 structure PathFacts (R : ℕ → Prop) (s : ℕ → ℕ) : Prop where
-  pro : ∀ t < 30, R t
+  pro : ∀ t < 29, R t
   blk : ∀ g < 14, ∀ i, 0 < i → i ≤ ctlOff g (sig s g) → R (entryOf g s + i)
-  root : ∀ t < 11, R (rootSlot + t)
+  root : ∀ t < 10, R (rootSlot + t)
 
 /-- The dispatch slot of group `j` on the path of `s`. -/
-def ctl (s : ℕ → ℕ) (j : ℕ) : ℕ := if j = 0 then 29 else ctlAfter (j - 1) s
+def ctl (s : ℕ → ℕ) (j : ℕ) : ℕ := if j = 0 then 28 else ctlAfter (j - 1) s
 
 theorem ctl_succ (s : ℕ → ℕ) (j : ℕ) : ctl s (j + 1) = ctlAfter j s := by
   unfold ctl; rw [if_neg (by omega), Nat.add_sub_cancel]
@@ -486,7 +475,7 @@ theorem ctl_succ (s : ℕ → ℕ) (j : ℕ) : ctl s (j + 1) = ctlAfter j s := b
 theorem cinstrAt_ctl {s : ℕ → ℕ} {j : ℕ} (hj : j < 14) (hs : ∀ g < j, GValid s g) :
     cinstrAt (ctl s j) = .dispatch j := by
   rcases Nat.eq_zero_or_pos j with rfl | hj0
-  · exact cinstrAt_29
+  · exact cinstrAt_28
   · obtain ⟨k, rfl⟩ : ∃ k, j = k + 1 := ⟨j - 1, by omega⟩
     rw [ctl_succ, ctlAfter, seg_ctl (hs k (by omega)) (by omega), if_pos (by omega)]
 
@@ -534,10 +523,10 @@ theorem walk_group {j n c : ℕ} (hj : j < 14) {d : ℕ} (hci : cinstrAt d = .di
       ∃ n' c', n = n' + segSteps j (sig (digitOf v) j) ∧ c = segCost j (sig (digitOf v) j) + c' ∧
         Walk R v n' (if j < 13 then ctlAfter j (digitOf v) else rootSlot) c' := by
   obtain ⟨hRd, hG, hHv, n1, c1, rfl, rfl, hw1⟩ := walk_disp hR hci hg hmul h
-  have hb := stepBase_bounds hG hj
+  have hb := pre_fit' hG hj
   have hlt := entryOf_lt hG hj
   have hco := ctlOff_lt hG hj
-  generalize hsb : stepBase j (digitOf v (gch j 0)) = sb at hb
+  generalize hsb : NH j = sb at hb
   generalize hσ : sig (digitOf v) j = σ at hco ⊢
   generalize hco' : ctlOff j σ = co at hco ⊢
   generalize he : entryOf j (digitOf v) = e at hlt hw1 hHv ⊢
@@ -600,14 +589,14 @@ end Groups
 /-! ## The full path -/
 
 /-- Steps of the whole path. -/
-def totalSteps (s : ℕ → ℕ) : ℕ := 29 + ∑ g ∈ Finset.range 14, segSteps g (sig s g) + 11
+def totalSteps (s : ℕ → ℕ) : ℕ := 28 + ∑ g ∈ Finset.range 14, segSteps g (sig s g) + 10
 
 /-- Cycles of the whole path. -/
-def totalCost (s : ℕ → ℕ) : ℕ := 38 + ∑ g ∈ Finset.range 14, segCost g (sig s g) + 101
+def totalCost (s : ℕ → ℕ) : ℕ := 37 + ∑ g ∈ Finset.range 14, segCost g (sig s g) + 91
 
-theorem prologue_cost : ∑ i ∈ Finset.range 29, proW i = 38 := by decide
+theorem prologue_cost : ∑ i ∈ Finset.range 28, proW i = 37 := by decide
 
-theorem root_cost : ∑ i ∈ Finset.range 11, rootW i = 101 := by decide
+theorem root_cost : ∑ i ∈ Finset.range 10, rootW i = 91 := by decide
 
 section Full
 
@@ -627,7 +616,7 @@ theorem walk_full {n c : ℕ} (h : Walk R v n 0 c) :
   have hg : v gCell = gV := by have := hR 4 (hRp 4 (by omega)); rwa [cinstrAt_set4] at this
   have hk0 : v k0Cell = k0V := by have := hR 5 (hRp 5 (by omega)); rwa [cinstrAt_set5] at this
   have hmul0 : v (h1Cell 0) = v (hCell 0) * v gCell := by
-    have := hR 28 (hRp 28 (by omega)); rwa [cinstrAt_28] at this
+    have := hR 27 (hRp 27 (by omega)); rwa [cinstrAt_27] at this
   -- the groups, by induction
   have key : ∀ j ≤ 14, (∀ k < j, GValid (digitOf v) k ∧
       v (hCell k) = ofK (gpow (entryOf k (digitOf v))) ∧ R (ctl (digitOf v) k) ∧
@@ -659,7 +648,7 @@ theorem walk_full {n c : ℕ} (h : Walk R v n 0 c) :
       · by_cases h13 : j < 13
         · rw [if_pos h13] at hw'; rw [if_pos (by omega), ctl_succ]; exact hw'
         · rw [if_neg h13] at hw'; rw [if_neg (by omega)]; exact hw'
-      · have hb := stepBase_bounds hG (by omega)
+      · have hb := pre_fit' hG (by omega)
         have hlast := hblk (ctlOff j (sig (digitOf v) j) - 1)
           (by unfold ctlOff; rw [if_pos (by omega)]; omega) (by omega)
         have := hR _ hlast
@@ -669,13 +658,13 @@ theorem walk_full {n c : ℕ} (h : Walk R v n 0 c) :
   -- the root
   obtain ⟨hRr, n2, c2, hn2, hc2, hw2⟩ := walk_seg' rootW
     (fun i hi => root_straight hi) (by unfold rootSlot sentinel; omega) hw1
-  rw [show rootSlot + 11 = sentinel from rfl] at hw2
+  rw [show rootSlot + 10 = sentinel from rfl] at hw2
   obtain ⟨h0n, h0c⟩ := hw2.at_sentinel
   refine ⟨valid_of_gvalid fun k hk => (hall k hk).1,
     ⟨fun t ht => ?_, fun k hk => (hall k hk).2.2.2, hRr⟩, fun k hk => (hall k hk).2.1, ?_, ?_⟩
-  · by_cases h29 : t < 29
-    · exact hRp t h29
-    · obtain rfl : t = 29 := by omega
+  · by_cases h28 : t < 28
+    · exact hRp t h28
+    · obtain rfl : t = 28 := by omega
       have := (hall 0 (by omega)).2.2.1
       unfold ctl at this; rwa [if_pos rfl] at this
   · unfold totalSteps; omega
@@ -697,12 +686,12 @@ theorem group_mk {s : ℕ → ℕ} {k : ℕ} (hk : k < 14) (hs : ∀ j ≤ k, GV
     (h : ∃ n c, Walk R v n (if k < 13 then ctlAfter k s else rootSlot) c) :
     ∃ n c, Walk R v n (ctl s k) c := by
   have hG := hs k le_rfl
-  have hb := stepBase_bounds hG hk
+  have hb := pre_fit' hG hk
   have hlt := entryOf_lt hG hk
   have hco := ctlOff_lt hG hk
   set e := entryOf k s with he
   set co := ctlOff k (sig s k) with hco'
-  set sb := stepBase k (s (gch k 0)) with hsb
+  set sb := NH k with hsb
   set σ := sig s k with hσ
   have hcoσ : co = NH k + σ + (if k < 13 then 1 else 0) := rfl
   have hcoge : sb + σ ≤ co := by rw [hcoσ]; split_ifs <;> omega
@@ -720,7 +709,7 @@ theorem group_mk {s : ℕ → ℕ} {k : ℕ} (hk : k < 14) (hs : ∀ j ≤ k, GV
         rw [hk0, k0V, limb_ofK_zero, slotOf_gpow (by unfold rootSlot; omega)]
       rw [← hnext] at hw
       exact ⟨_, _, Walk.step (by unfold sentinel; omega) (hblk co (by omega) le_rfl) hw⟩
-  -- the post, chain and pre segments
+  -- the tail, chain and pre segments
   have h3 := walk_seg_ex (t := e + sb + σ) (a := co - sb - σ)
     (fun i hi => by
       rw [show e + sb + σ + i = e + (sb + σ + i) by ring]
@@ -759,7 +748,7 @@ theorem walk_mk {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts R s)
     (hk0 : v k0Cell = k0V) : ∃ n c, Walk R v n 0 c := by
   -- the root
   have hroot : ∃ n c, Walk R v n rootSlot c :=
-    walk_seg_ex (a := 11) (fun i hi => (root_straight hi).1) hP.root
+    walk_seg_ex (a := 10) (fun i hi => (root_straight hi).1) hP.root
       (by unfold rootSlot sentinel; omega) ⟨0, 0, Walk.done⟩
   -- the groups, backwards
   have key : ∀ d ≤ 14, ∃ n c, Walk R v n (if 14 - d < 14 then ctl s (14 - d) else rootSlot) c := by
@@ -774,7 +763,7 @@ theorem walk_mk {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts R s)
       refine group_mk hk (fun j hj => gvalid_of_valid hV (by omega)) (hP.blk _ hk) ?_
         (hH1 _ hk) hk0 ?_
       · rcases Nat.eq_zero_or_pos (14 - (d + 1)) with h0 | h0
-        · rw [h0]; unfold ctl; rw [if_pos rfl]; exact hP.pro 29 (by omega)
+        · rw [h0]; unfold ctl; rw [if_pos rfl]; exact hP.pro 28 (by omega)
         · obtain ⟨j, hj⟩ : ∃ j, 14 - (d + 1) = j + 1 := ⟨14 - (d + 1) - 1, by omega⟩
           rw [hj, ctl_succ]
           exact hP.blk j (by omega) _ (by unfold ctlOff NH; split_ifs <;> omega) le_rfl
@@ -791,7 +780,7 @@ theorem walk_mk {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts R s)
   unfold ctl at hw
   rw [if_pos rfl] at hw
   -- the prologue
-  exact walk_seg_ex (t := 0) (a := 29) (fun i hi => (prologue_straight (t := 0 + i) (by omega)).1)
+  exact walk_seg_ex (t := 0) (a := 28) (fun i hi => (prologue_straight (t := 0 + i) (by omega)).1)
     (fun i hi => hP.pro _ (by omega)) (by unfold sentinel; omega) ⟨n, c, hw⟩
 
 end Mk
@@ -838,11 +827,11 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
       x ∈ Sm.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr) →
         x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).RelB B (Lx L)))
     {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost program L n ⟨gpow 0, 1⟩)) : Pinned (Lx L) := by
-  have hp := rel_prefix Sm B hst 29 0 n c
+  have hp := rel_prefix Sm B hst 28 0 n c
     (fun i hi => (prologue_straight (t := 0 + i) (by omega)).1) (by unfold sentinel; omega) h
   refine ⟨?_, fun k hk => ?_⟩
   · have := hp 1 (by omega); rwa [Nat.zero_add, cinstrAt_set1] at this
-  · have := hp (7 + k) (by omega); rwa [Nat.zero_add, cinstrAt_frame hk] at this
+  · have := hp (6 + k) (by omega); rwa [Nat.zero_add, cinstrAt_frame hk] at this
 
 end Prefix
 

@@ -4,11 +4,11 @@ import Submissions.UpperLeanIsa.MachineSound
 # The honest HL-TRI prover
 
 The honest prover queries the oracle exactly as the verifier does: the index, then for each chain
-`k` its `d k` steps from the revealed word (`d = digits of the index`), then the ten root calls.
+`k` its `d k` steps from the revealed word (`d = digits of the index`), then the nine root calls.
 It commits the image whose every cell is a pure function of the input and those answers
 (`hcell`): the constants, the index pair, per group the tie word, accumulator, landing hints
-`H_g = g ^ entryOf g d`, `H'_g = H_g · g`, layer constant and layer product, the chain pairs and
-the root states. Under a fixed table the prover is `imageF` (`fixed_prover`).
+`H_g = g ^ entryOf g d`, `H'_g = H_g · g`, layer constant and layer product, the chain pairs (the
+output pair of each chain's last step, `pairV`) and the root states. Under a fixed table the prover is `imageF` (`fixed_prover`).
 -/
 
 namespace OptimalOTS.HLFlat
@@ -27,14 +27,14 @@ def chainAnsQ (k : Fin numChains) : ℕ → ℕ → Word → OracleComp Spec (�
   | _, 0, _ => pure (fun _ => 0)
   | j, n + 1, x => do
     let a ← hash896 (FP.chainInput k j x)
-    let A ← chainAnsQ k (j + 1) n (a.extractLsb' 0 128)
+    let A ← chainAnsQ k (j + 1) n (FP.slice k j a)
     pure (fun t => if t = 0 then a else A (t - 1))
 
 /-- `chainAnsQ` under a fixed table. -/
 def chainAnsF (f : HashTable) (k : Fin numChains) : ℕ → ℕ → Word → ℕ → BitVec 256
   | _, 0, _ => fun _ => 0
   | j, n + 1, x => fun t => if t = 0 then ans f (FP.chainInput k j x) else
-      chainAnsF f k (j + 1) n ((ans f (FP.chainInput k j x)).extractLsb' 0 128) (t - 1)
+      chainAnsF f k (j + 1) n (FP.slice k j (ans f (FP.chainInput k j x))) (t - 1)
 
 theorem fixed_chainAns (f : HashTable) (k : Fin numChains) (j n : ℕ) (x : Word) :
     simulateQ (unifFwdAnswerImpl f) (chainAnsQ k j n x) = pure (chainAnsF f k j n x) := by
@@ -47,7 +47,7 @@ theorem fixed_chainAns (f : HashTable) (k : Fin numChains) (j n : ℕ) (x : Word
 
 theorem chainValue_succ (f : HashTable) (P : Params) (k : Fin numChains) :
     ∀ t j x, chainValue f P k j (t + 1) x =
-      (ans f (P.chainInput k (j + t) (chainValue f P k j t x))).extractLsb' 0 128 := by
+      P.slice k (j + t) (ans f (P.chainInput k (j + t) (chainValue f P k j t x))) := by
   intro t
   induction t with
   | zero => intro j x; rfl
@@ -120,13 +120,13 @@ def sigW (bits : List Bool) (k : ℕ) : Word := ofBits 128 ((bits.drop (128 * k)
 /-- The index of the index answer `y0`. -/
 def idxOf (y0 : BitVec 256) : Word := y0.extractLsb' 0 128
 
-/-- The chain top of chain `k` (the last answer's low half, or the revealed word). -/
-def topOf (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (k : ℕ) : Word :=
-  if dg (idxOf y0) k = 0 then sigW bits k else (A k (dg (idxOf y0) k - 1)).extractLsb' 0 128
+/-- The place of chain `k`'s top in its output pair: the high cell for a high-top chain. -/
+def topBit (k : ℕ) : ℕ := if hiChain k then 1 else 0
 
-/-- The high half of chain `k`'s last answer (zero when it has no step). -/
-def hiOf (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (k : ℕ) : E :=
-  if dg (idxOf y0) k = 0 then 0 else cellOfBits ((A k (dg (idxOf y0) k - 1)).extractLsb' 128 128)
+/-- The chain top of chain `k` (the kept half of the last answer, or the revealed word). -/
+def topOf (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (k : ℕ) : Word :=
+  if dg (idxOf y0) k = 0 then sigW bits k
+  else (A k (dg (idxOf y0) k - 1)).extractLsb' (128 * topBit k) 128
 
 /-- The tops as a vector. -/
 def topsOfV (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) :
@@ -137,6 +137,24 @@ def loC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 0 128)
 
 /-- The high cell of an answer. -/
 def hiC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 128 128)
+
+/-- Cell `b < 2` of chain `k`'s output pair: the last answer's halves, or, without a step, the
+revealed word in the top's cell. -/
+def pairV (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (k b : ℕ) : E :=
+  if dg (idxOf y0) k = 0 then (if b = topBit k then cellOfBits (sigW bits k) else 0)
+  else if b = 0 then loC (A k (dg (idxOf y0) k - 1)) else hiC (A k (dg (idxOf y0) k - 1))
+
+/-- The chain of output cell `c ∈ [320, 441)` (the inverse of `chainOut k + b`). -/
+def outChain (c : ℕ) : ℕ :=
+  if c < 409 then (c - 320) / 2
+  else if (c - 409) / 4 = 0 then (c - 409) / 2 else 5 * ((c - 409) / 4) + 1 + (c - 409) / 2 % 2
+
+/-- The place of output cell `c` in its pair. -/
+def outBit (c : ℕ) : ℕ := if c < 409 then (c - 320) % 2 else (c - 409) % 2
+
+theorem out_decode : ∀ k < 42, ∀ b < 2, outChain (chainOut k + b) = k ∧
+    outBit (chainOut k + b) = b ∧ 320 ≤ chainOut k + b ∧ chainOut k + b < 441 := by
+  decide
 
 /-- The honest value of cell `c ≥ 47`, from the index answer `y0`, the chain answers `A` and the
 root answers `RA`. Per group `g` (digits `d` of the index): the tie word `T_g`, the accumulator
@@ -149,7 +167,7 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if c = 49 then natV 10
   else if c = 50 then gV
   else if c = 51 then k0V
-  else if c < 59 then (if c = 52 then natV 3 else 0)
+  else if c < 59 then 0
   else if c < 73 then frameV (c - 59)
   else if c < 101 then 0
   else if c = 101 then loC y0
@@ -167,13 +185,7 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if c < 303 then
     ofK (gpow (rootSlot - 106 + ∑ j ∈ Finset.range (c - 289), sig (dg (idxOf y0)) j))
   else if c < 320 then 0
-  else if c < 404 then
-    (if (c - 320) % 2 = 0 then cellOfBits (topOf bits y0 A ((c - 320) / 2))
-      else hiOf y0 A ((c - 320) / 2))
-  else if c < 410 then 0
-  else if c = 410 then cellOfBits (topOf bits y0 A 0)
-  else if c = 411 then cellOfBits (topOf bits y0 A 1)
-  else if c = 412 then hiOf y0 A 1
+  else if c < 441 then pairV bits y0 A (outChain c) (outBit c)
   else if c < 442 then 0
   else if c < 448 then ofK (gpow (c - 440))
   else if c < 1024 then 0
@@ -181,7 +193,7 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
     (if (c - 1024) % 2 = 0 then loC (A ((c - 1024) / 32) ((c - 1024) % 32 / 2))
       else hiC (A ((c - 1024) / 32) ((c - 1024) % 32 / 2)))
   else if c < 2400 then 0
-  else if c < 2420 then
+  else if c < 2418 then
     (if (c - 2400) % 2 = 0 then loC (RA ((c - 2400) / 2)) else hiC (RA ((c - 2400) / 2)))
   else 0
 
@@ -198,7 +210,7 @@ def prover (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp Spec (
   let y0 ← hash896 (FP.idxInput m (decodeNonce bits) pk)
   let CA ← tabulate (fun k : Fin numChains =>
     chainAnsQ k (W k.val - 1 - dg (idxOf y0) k.val) (dg (idxOf y0) k.val) (sigW bits k.val))
-  let RA ← rootAnsQ (topsOfV bits y0 (chainTab CA)) 0 10
+  let RA ← rootAnsQ (topsOfV bits y0 (chainTab CA)) 0 9
     (Params.rootInit (topsOfV bits y0 (chainTab CA)))
   pure (imageOf bits y0 (chainTab CA) RA)
 
@@ -218,7 +230,7 @@ def AF : ℕ → ℕ → BitVec 256 :=
 
 /-- The root answers. -/
 def RAF : ℕ → BitVec 256 :=
-  rootAnsF f (topsOfV bits (y0F f pk m bits) (AF f pk m bits)) 0 10
+  rootAnsF f (topsOfV bits (y0F f pk m bits) (AF f pk m bits)) 0 9
     (Params.rootInit (topsOfV bits (y0F f pk m bits) (AF f pk m bits)))
 
 /-- The honest image under the table. -/

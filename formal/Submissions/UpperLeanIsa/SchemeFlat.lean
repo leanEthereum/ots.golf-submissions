@@ -16,9 +16,11 @@ The instance of `LayerScheme` the HL-FLAT-A machine implements (model:
 * **Tags.** Chain step `(k, j)` sits at position `p = off k + j < 310`; its tag cells are the
   symbols `sym (p % 7)`, `sym (p / 7 % 7)`, `sym (p / 49)` with `sym = 0, 1, 2, 4, 8, 16, 32`.
   The constant cv pair is `(0, 1)` (the machine's adjacent `Z, ONE` cells). Metadata: chain steps
-  `1`, index `10`, root calls `0, 2, 4, …, 128, 5504, 3`. All tag symbols and metadata values are
-  constants the machine already holds: `Z`, `ONE`, the powers `g ^ 1 … g ^ 7`, the checked length
-  cell and one extra constant `3`.
+  `1`, index `10`, root calls `0, 2, 4, …, 128, 5504`. All tag symbols and metadata values are
+  constants the machine already holds: `Z`, `ONE`, the powers `g ^ 1 … g ^ 7` and the checked
+  length cell.
+* **High-half tops.** The chains `0, 6, 11, …, 36` keep the high half of their last step's
+  answer (`hiTop`), so that the root's cv pairs `(top (5r+1), top (5r+2))` sit in adjacent cells.
 * **Availability.** Signing fails with probability at most `2 ^ -128` for every message chosen
   from the public key (`signingFailure`).
 -/
@@ -66,9 +68,12 @@ def chainMd : Word := 1
 /-- Metadata of the index query. -/
 def idxMd : Word := 10
 
-/-- Metadata of root call `r`: `0, 2, 4, 8, 16, 32, 64, 128, 5504, 3`. -/
+/-- Metadata of root call `r`: `0, 2, 4, 8, 16, 32, 64, 128, 5504`. -/
 def rootMd (r : ℕ) : Word :=
-  BitVec.ofNat 128 (if r = 0 then 0 else if r < 8 then 2 ^ r else if r = 8 then 5504 else 3)
+  BitVec.ofNat 128 (if r = 0 then 0 else if r < 8 then 2 ^ r else 5504)
+
+/-- The chains whose top is the high half: `0` and `5r + 1` for `r = 1, …, 7`. -/
+def hiTop (k : Fin numChains) : Bool := k.val = 0 || (6 ≤ k.val && k.val ≤ 36 && k.val % 5 = 1)
 
 /-- The FLAT-42 parameters. -/
 def params : Params where
@@ -80,6 +85,7 @@ def params : Params where
   chainMd := chainMd
   idxMd := idxMd
   rootMd := rootMd
+  hiTop := hiTop
 
 /-- The HL-FLAT-A scheme. -/
 def scheme : OracleAlgorithm.Scheme := params.scheme
@@ -92,7 +98,7 @@ theorem pos_42 : posW wid 42 = 128 := by decide
 
 theorem chainMd_ne : params.chainMd ≠ params.idxMd := by decide
 
-theorem rootMd_ne : ∀ r < 10, params.rootMd r ≠ params.idxMd := by
+theorem rootMd_ne : ∀ r < 9, params.rootMd r ≠ params.idxMd := by
   intro r hr
   interval_cases r <;> decide
 

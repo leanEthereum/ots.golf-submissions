@@ -14,12 +14,15 @@ Every oracle query is one leanISA `BLAKE2S`, i.e. one 896-bit `LeanIsa.hashInput
 and the three query *shapes* are separated by the metadata cell:
 
 * chain step of chain `k` at position `j`: `cv = P.cv`, block `m = [x, A, B, C]` with the three
-  tag cells `P.tag k j`, `md = P.chainMd`; the next word is the low half of the answer;
+  tag cells `P.tag k j`, `md = P.chainMd`; the next word is the answer slice `P.slice k j`: the
+  high half for the step that produces the top of a `P.hiTop` chain, the low half otherwise;
 * index: `cv = P.cv`, block `m = [msg.lo, msg.hi, η, pk]`, `md = P.idxMd`; the index is the low
   half of the answer;
-* root call `r < 10` (tagged Merkle–Damgård, "R10"): call 0 has `cv = (top 0, top 1)` and
-  block `[top 2, …, top 5]`; call `r ≥ 1` has `cv =` the previous 256-bit answer and block
-  `[top (4r+2), …, top (4r+5)]`; `md = P.rootMd r`. `pk` is the low half of the last answer.
+* root call `r < 9` (tagged, "R9"): call 0 has `cv = (top 0, top 1)` and block
+  `[top 2, …, top 5]`; call `r = 1, …, 7` has `cv = (top (5r+1), top (5r+2))` and block
+  `[lo st, top (5r+3), top (5r+4), top (5r+5)]` with `st` the previous 256-bit answer; call 8
+  has `cv = st` and block `[top 41, 0, 0, 0]`; `md = P.rootMd r`. `pk` is the low half of the
+  last answer.
 
 The signature is the 42 revealed words followed by the 128-bit nonce, `43 · 128 = 5504` bits.
 The signer draws fresh uniform untried nonces, at most `trials = 2 ^ 19` of them; the secret key
@@ -63,6 +66,8 @@ structure Params where
   idxMd : Word
   /-- Metadata of root call `r`. -/
   rootMd : ℕ → Word
+  /-- Chains whose top is the high half of the answer of their last step. -/
+  hiTop : Fin numChains → Bool
 
 namespace Params
 
@@ -78,24 +83,44 @@ def chainInput (k : Fin numChains) (j : ℕ) (x : Word) : BitVec 896 :=
 def idxInput (m : Message) (η : Nonce) (pk : PublicKey) : BitVec 896 :=
   LeanIsa.hashInput P.cv (pk ++ η ++ m) P.idxMd
 
+/-- Bit offset of the answer slice that the step of chain `k` at position `j` keeps: `128` for
+the step producing the top (`j + 2 = len k`) of a `hiTop` chain, `0` otherwise. -/
+def stepOff (k : Fin numChains) (j : ℕ) : ℕ := if P.hiTop k ∧ j + 2 = P.len k then 128 else 0
+
+/-- The next word of the step of chain `k` at position `j`: a 128-bit slice of the answer. -/
+def slice (k : Fin numChains) (j : ℕ) (y : BitVec hashBits) : Word :=
+  y.extractLsb' (P.stepOff k j) 128
+
 /-- The tops, read by position (zero past the end). -/
 def topAt (t : Fin numChains → Word) (i : ℕ) : Word :=
   if h : i < numChains then t ⟨i, h⟩ else 0
 
-/-- Root call `r`: block `[top (4r+2), …, top (4r+5)]` under the state `st`. -/
+/-- The chaining value of root call `r` after state `st`: the state itself for calls `0` and
+`8`, the pair `(top (5r+1), top (5r+2))` for calls `1, …, 7`. -/
+def rootCv (t : Fin numChains → Word) (r : ℕ) (st : BitVec 256) : BitVec 256 :=
+  if r = 0 ∨ 8 ≤ r then st else topAt t (5 * r + 2) ++ topAt t (5 * r + 1)
+
+/-- The block of root call `r` after state `st`: `[top 2, …, top 5]` for call 0,
+`[lo st, top (5r+3), top (5r+4), top (5r+5)]` for calls `1, …, 7`, `[top 41, 0, 0, 0]` for
+call 8. -/
+def rootBlock (t : Fin numChains → Word) (r : ℕ) (st : BitVec 256) : BitVec 512 :=
+  if r = 0 then topAt t 5 ++ topAt t 4 ++ topAt t 3 ++ topAt t 2
+  else if r < 8 then
+    topAt t (5 * r + 5) ++ topAt t (5 * r + 4) ++ topAt t (5 * r + 3) ++ st.extractLsb' 0 128
+  else (0 : Word) ++ (0 : Word) ++ (0 : Word) ++ topAt t 41
+
+/-- Root call `r` under the state `st`. -/
 def rootInput (t : Fin numChains → Word) (r : ℕ) (st : BitVec 256) : BitVec 896 :=
-  LeanIsa.hashInput st
-    (topAt t (4 * r + 5) ++ topAt t (4 * r + 4) ++ topAt t (4 * r + 3) ++ topAt t (4 * r + 2))
-    (P.rootMd r)
+  LeanIsa.hashInput (rootCv t r st) (rootBlock t r st) (P.rootMd r)
 
 /-- The initial root state: the cv pair `(top 0, top 1)`. -/
 def rootInit (t : Fin numChains → Word) : BitVec 256 := topAt t 1 ++ topAt t 0
 
 /-! ## Oracle programs -/
 
-/-- One chain step: the low half of the answer. -/
+/-- One chain step: the answer slice `P.slice k j`. -/
 def chainStep (k : Fin numChains) (j : ℕ) (x : Word) : OracleComp Spec Word :=
-  (fun y => y.extractLsb' 0 128) <$> hash (P.chainInput k j x)
+  P.slice k j <$> hash (P.chainInput k j x)
 
 /-- `n` steps of chain `k` from position `j`. -/
 def chain (k : Fin numChains) : ℕ → ℕ → Word → OracleComp Spec Word
@@ -123,9 +148,9 @@ def rootFrom (t : Fin numChains → Word) : ℕ → ℕ → BitVec 256 → Oracl
     let st' ← hash (P.rootInput t r st)
     rootFrom t (r + 1) n st'
 
-/-- The tagged 10-call root; the public key is the low half of the last state. -/
+/-- The tagged 9-call root; the public key is the low half of the last state. -/
 def root (t : Fin numChains → Word) : OracleComp Spec PublicKey :=
-  (fun y => y.extractLsb' 0 128) <$> P.rootFrom t 0 10 (rootInit t)
+  (fun y => y.extractLsb' 0 128) <$> P.rootFrom t 0 9 (rootInit t)
 
 /-- Acceptance: the digits of the index sum to the layer. -/
 def Accepted (I : Word) : Prop := ∑ k : Fin numChains, P.digit I k = P.layer

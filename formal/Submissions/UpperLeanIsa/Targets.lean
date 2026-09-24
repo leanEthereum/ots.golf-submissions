@@ -6,12 +6,12 @@ import Submissions.UpperLeanIsa.Master
 
 * `TargetHit targets c`: some cached answer lies in the target set of its query. A fresh query
   hits its targets with probability `|targets q| / 2 ^ 256` (`target_charge`).
-* `matchingAnswers ξ a`: the answers matching the honest answer at location `a` (the low half at
-  chain steps and at the last root call, the full answer at internal root calls): at most
-  `2 ^ 128` of them, i.e. `2 ^ -129` per compression.
+* `matchingAnswers ξ a`: the answers matching the honest answer at location `a` (the step's
+  slice `P.slice k j` at chain steps, the low half at root calls): at most `2 ^ 128` of them,
+  i.e. `2 ^ -129` per compression.
 * `secondPreimageTargets ξ`: before signing, a matching answer through a different input at any
   location. `cutTargets d ζ`: at cut `d`, a matching answer through a different input at an
-  exposed location, or any answer whose low half is the public word at the boundary step just
+  exposed location, or any answer whose slice is the public word at the boundary step just
   below the cut. Both depend only on public data and cost `2 ^ -129` per compression; neither
   has a target at a query that is not a record location (in particular at an index query).
 * `hiddenHitPotential d T c`: the weight of the records of `T` whose hidden points `c` hits;
@@ -144,28 +144,37 @@ theorem mem_lowAnswers {u v : BitVec hashBits} :
 theorem lowAnswers_card (v : BitVec hashBits) : (lowAnswers v).card ≤ 2 ^ 128 :=
   card_low_le _
 
-/-- Answers matching the honest answer at a location: the low half at chain steps and at the last
-root call (whose low half is the public key), the full answer at the internal root calls. -/
+/-- The answers whose slice at chain step `(k, j)` equals that of `v`. -/
+def sliceAnswers (k : Fin numChains) (j : ℕ) (v : BitVec hashBits) : Finset (BitVec hashBits) :=
+  Finset.univ.filter fun w => P.slice k j w = P.slice k j v
+
+theorem mem_sliceAnswers {k : Fin numChains} {j : ℕ} {u v : BitVec hashBits} :
+    u ∈ sliceAnswers (P := P) k j v ↔ P.slice k j u = P.slice k j v := by
+  unfold sliceAnswers
+  rw [Finset.mem_filter]
+  exact ⟨fun h => h.2, fun h => ⟨Finset.mem_univ _, h⟩⟩
+
+theorem sliceAnswers_card (k : Fin numChains) (j : ℕ) (v : BitVec hashBits) :
+    (sliceAnswers (P := P) k j v).card ≤ 2 ^ 128 :=
+  card_slice_le k j _
+
+/-- Answers matching the honest answer at a location: the slice the step passes on at chain
+steps, the low half at root calls (the next call reads the low half of the state; the last
+call's low half is the public key). -/
 def matchingAnswers (ξ : Record P) : Loc P → Finset (BitVec hashBits)
-  | .inl a => lowAnswers (ξ.2 (.inl a))
-  | .inr r => if r.val = 9 then lowAnswers (ξ.2 (.inr r)) else {ξ.2 (.inr r)}
+  | .inl a => sliceAnswers (P := P) a.1 a.2.val (ξ.2 (.inl a))
+  | .inr r => lowAnswers (ξ.2 (.inr r))
 
 theorem matchingAnswers_inl (ξ : Record P) (a : ChainLoc P) :
-    matchingAnswers ξ (.inl a) = lowAnswers (ξ.2 (.inl a)) := rfl
+    matchingAnswers ξ (.inl a) = sliceAnswers (P := P) a.1 a.2.val (ξ.2 (.inl a)) := rfl
 
-theorem matchingAnswers_inr (ξ : Record P) (r : Fin 10) :
-    matchingAnswers ξ (.inr r) =
-      if r.val = 9 then lowAnswers (ξ.2 (.inr r)) else {ξ.2 (.inr r)} := rfl
+theorem matchingAnswers_inr (ξ : Record P) (r : Fin 9) :
+    matchingAnswers ξ (.inr r) = lowAnswers (ξ.2 (.inr r)) := rfl
 
 theorem matchingAnswers_card (ξ : Record P) (a : Loc P) : (matchingAnswers ξ a).card ≤ 2 ^ 128 := by
   cases a with
-  | inl a => exact lowAnswers_card _
-  | inr r =>
-    rw [matchingAnswers_inr]
-    split
-    · exact lowAnswers_card _
-    · rw [Finset.card_singleton]
-      exact Nat.one_le_pow _ _ (by decide)
+  | inl a => exact sliceAnswers_card _ _ _
+  | inr r => exact lowAnswers_card _
 
 theorem matchingAnswers_congr {ξ ζ : Record P} {a : Loc P} (h : ξ.2 a = ζ.2 a) :
     matchingAnswers ξ a = matchingAnswers ζ a := by
@@ -223,7 +232,7 @@ theorem secondPreimage_charge (ξ : Record P) (q : Query) :
 
 /-! ## Targets at a cut -/
 
-/-- The chain step just below the cut: its answer's low half is the public word at the cut. -/
+/-- The chain step just below the cut: its answer's slice is the public word at the cut. -/
 def Boundary (d : Cut) : Loc P → Prop
   | .inl a => a.2.val + 1 = d a.1
   | .inr _ => False
@@ -314,7 +323,7 @@ theorem matchingAnswers_public (d : Cut) (ξ ζ : Record P)
       have hw := data_word_eq d ξ ζ h k (j.val + 1) (by omega)
       rw [Record.word_succ _ k j.val j.isLt, Record.word_succ _ k j.val j.isLt] at hw
       rw [matchingAnswers_inl, matchingAnswers_inl]
-      unfold lowAnswers
+      unfold sliceAnswers
       rw [hw]
 
 /-- The targets depend only on the public data of the cut. -/

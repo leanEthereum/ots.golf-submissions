@@ -123,7 +123,7 @@ def Hidden (d : Cut) : Loc P → Prop
 theorem hidden_inl (d : Cut) (k : Fin numChains) (j : Fin (P.len k - 1)) :
     Hidden d (.inl ⟨k, j⟩) ↔ j.val < d k := Iff.rfl
 
-theorem not_hidden_inr (d : Cut) (r : Fin 10) : ¬ Hidden (P := P) d (.inr r) := fun h => h
+theorem not_hidden_inr (d : Cut) (r : Fin 9) : ¬ Hidden (P := P) d (.inr r) := fun h => h
 
 variable (P) in
 /-- The data visible at a cut. -/
@@ -217,7 +217,7 @@ theorem data_chain_eq (d : Cut) (ξ ζ : Record P)
 
 attribute [local semireducible] publicData in
 theorem data_root_eq (d : Cut) (ξ ζ : Record P)
-    (h : publicData d ξ = publicData d ζ) (r : Fin 10) :
+    (h : publicData d ξ = publicData d ζ) (r : Fin 9) :
     ξ.2 (.inr r) = ζ.2 (.inr r) :=
   Option.some.inj (congrArg (fun v : PublicData P => v.2 (.inr r)) h)
 
@@ -241,7 +241,7 @@ theorem data_rootState_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
   cases r with
   | zero => rw [Record.rootState_zero, Record.rootState_zero, data_top_eq hd ξ ζ h]
   | succ r =>
-    by_cases hr : r < 10
+    by_cases hr : r < 9
     · rw [Record.rootState_succ_lt _ r hr, Record.rootState_succ_lt _ r hr,
         data_root_eq d ξ ζ h ⟨r, hr⟩]
     · rw [Record.rootState_succ_ge _ r hr, Record.rootState_succ_ge _ r hr]
@@ -249,7 +249,7 @@ theorem data_rootState_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
 theorem data_pk_eq (d : Cut) (ξ ζ : Record P) (h : publicData d ξ = publicData d ζ) :
     ξ.pk = ζ.pk := by
   unfold Record.pk
-  rw [data_root_eq d ξ ζ h 9]
+  rw [data_root_eq d ξ ζ h 8]
 
 theorem exposed_query_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
     (h : publicData d ξ = publicData d ζ) (a : Loc P) (ha : ¬ Hidden d a) :
@@ -422,6 +422,33 @@ theorem card_low_le (a : Word) :
   rw [show hashBits - 128 = 128 by unfold hashBits; rfl] at h
   simpa only [low_eq_setWidth] using h
 
+/-- Fixing either half of a 256-bit answer leaves `2 ^ 128` answers. -/
+theorem card_half_le (o : ℕ) (ho : o = 0 ∨ o = 128) (a : Word) :
+    (Finset.univ.filter fun w : BitVec 256 => w.extractLsb' o 128 = a).card ≤ 2 ^ 128 := by
+  have hu : (Finset.univ : Finset (BitVec 128)).card = 2 ^ 128 := by
+    rw [Finset.card_univ, Fintype.card_bitVec]
+  rw [← hu]
+  refine Finset.card_le_card_of_injOn (fun w => w.extractLsb' (128 - o) 128)
+    (fun _ _ => Finset.mem_coe.2 (Finset.mem_univ _)) ?_
+  intro w hw w' hw' h
+  rw [Finset.mem_coe, Finset.mem_filter] at hw hw'
+  have h' : w.extractLsb' (128 - o) 128 = w'.extractLsb' (128 - o) 128 := h
+  have split : ∀ v : BitVec 256, v = v.extractLsb' 128 128 ++ v.extractLsb' 0 128 := fun v => by
+    rw [BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (x := v) (start₁ := 0)
+      (len₁ := 128) (start₂ := 128) (len₂ := 128) rfl]
+    exact BitVec.extractLsb'_eq_self.symm
+  rw [split w, split w']
+  rcases ho with rfl | rfl
+  · rw [Nat.sub_zero] at h'
+    rw [hw.2, hw'.2, h']
+  · rw [Nat.sub_self] at h'
+    rw [hw.2, hw'.2, h']
+
+attribute [local semireducible] hashBits in
+theorem card_slice_le (k : Fin numChains) (j : ℕ) (a : Word) :
+    (Finset.univ.filter fun w : BitVec hashBits => P.slice k j w = a).card ≤ 2 ^ 128 :=
+  card_half_le (P.stepOff k j) (by unfold Params.stepOff; split <;> simp) a
+
 theorem rate_two : rate * 2 = ((2 : ℝ≥0∞) ^ 128)⁻¹ := by
   unfold rate
   rw [show (2 : ℝ≥0∞) ^ 129 = 2 ^ 128 * 2 by rw [← pow_succ],
@@ -445,9 +472,9 @@ theorem word_putSource_zero (ξ : Record P) (k : Fin numChains) (x : Word) :
 
 theorem word_putAnswer_prev (ξ : Record P) (k : Fin numChains) (j : ℕ) (hj : j < P.len k - 1)
     (x : BitVec hashBits) :
-    (ξ.putAnswer (.inl ⟨k, ⟨j, hj⟩⟩) x).word k (j + 1) = x.extractLsb' 0 128 := by
+    (ξ.putAnswer (.inl ⟨k, ⟨j, hj⟩⟩) x).word k (j + 1) = P.slice k j x := by
   rw [Record.word_succ _ k j hj]
-  exact congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (putAnswer_get ξ _ x)
+  exact congrArg (P.slice k j) (putAnswer_get ξ _ x)
 
 /-- Every word strictly before the cut is uniform given the public data of the cut. -/
 theorem hidden_word_charge (d : Cut) (hd : ValidCut P d) (v : PublicData P) (k : Fin numChains)
@@ -476,7 +503,7 @@ theorem hidden_word_charge (d : Cut) (hd : ValidCut P d) (v : PublicData P) (k :
     rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
     calc
       _ ≤ (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * ((2 ^ 128 : ℕ) * w) :=
-        mul_le_mul' le_rfl (mul_le_mul' (Nat.cast_le.mpr (card_low_le x)) le_rfl)
+        mul_le_mul' le_rfl (mul_le_mul' (Nat.cast_le.mpr (card_slice_le k j x)) le_rfl)
       _ = rate * 2 * w := by rw [← mul_assoc, inv_card_mul_two_pow_128]
 
 theorem record_chain_query_eq_iff (ξ ζ : Record P) (k : Fin numChains) (j : Fin (P.len k - 1)) :

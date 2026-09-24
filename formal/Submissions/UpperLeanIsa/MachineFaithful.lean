@@ -4,8 +4,8 @@ import Submissions.UpperLeanIsa.MachineHonest
 # The HL-TRI machine submission and its machine clauses
 
 * `machineSubmission`: the FLAT-42 layer scheme (`Flat.scheme`), the HL-TRI bytecode (`program`),
-  memory `2 ^ 16`, the honest prover (`prover`) and the step count `260` (every completing run
-  executes exactly `260` instructions, `totalSteps_eq`).
+  memory `2 ^ 16`, the honest prover (`prover`) and the step count `258` (every completing run
+  executes exactly `258` instructions, `totalSteps_eq`).
 * `faithful`: under every fixed table, the honest run completes when the verifier accepts
   (`honest_run`) and only then (`fixed_sound`).
 * `machine_sound`, `machine_cycles`, `machine_valid`, `machine_seededRows`: the other machine
@@ -25,7 +25,7 @@ def machineSubmission : LeanIsa.Submission where
   program := program
   memLog := 16
   prover := prover
-  steps := fun _ _ _ => 260
+  steps := fun _ _ _ => 258
 
 open scoped Classical in
 theorem decision_false {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool}
@@ -45,11 +45,11 @@ set_option linter.constructorNameAsVariable false in
 /-- Fixed-table soundness on the honest image. -/
 theorem honest_sound (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) {c : ℕ}
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 260
+      (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 258
         Regs.initial))) :
     bits.length = sigBits ∧ FP.Accepted (idxValue f FP m (decodeNonce bits) pk) ∧
       rootValue f FP (topsOf f FP (idxValue f FP m (decodeNonce bits) pk) bits) = pk := by
-  generalize (260 : ℕ) = n at h
+  generalize (258 : ℕ) = n at h
   exact fixed_sound (le_refl 16) (by norm_num) f pk m bits _ h
 
 set_option linter.constructorNameAsVariable false in
@@ -61,17 +61,17 @@ theorem faithful : machineSubmission.Faithful := by
   intro f
   have hrun : simulateQ (unifFwdAnswerImpl f) (machineSubmission.honestRun pk m bits) =
       (fun o : Option ℕ => o.isSome) <$> simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 260
+        (LeanIsa.runCost program (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 258
           Regs.initial) := by
     show simulateQ _ (prover pk m bits >>= fun L => (fun o : Option ℕ => o.isSome) <$>
-      LeanIsa.runCost program (LeanIsa.loadInput pk m bits L) 260 Regs.initial) = _
+      LeanIsa.runCost program (LeanIsa.loadInput pk m bits L) 258 Regs.initial) = _
     rw [simulateQ_bind, fixed_prover, pure_bind, simulateQ_map]
   have hver : machineSubmission.scheme.verify pk m bits = FP.verify pk m bits := rfl
   have hs := fun c => honest_sound (c := c) f pk m bits
   have hh := fun h1 h2 h3 => honest_run (f := f) (pk := pk) (m := m) (bits := bits) h1 h2 h3
   rw [simulateQ_bind, hrun, hver]
   generalize simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost program
-    (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 260 Regs.initial) = X at hs hh ⊢
+    (LeanIsa.loadInput pk m bits (imageF f pk m bits)) 258 Regs.initial) = X at hs hh ⊢
   simp only [simulateQ_bind, simulateQ_pure, fixed_verify, pure_bind]
   intro hmem
   rw [mem_support_bind_iff] at hmem
@@ -96,11 +96,11 @@ theorem faithful : machineSubmission.Faithful := by
 /-- **Sound** for the machine submission. -/
 theorem machine_sound : machineSubmission.Sound := sound machineSubmission rfl rfl
 
-/-- **Cycles** for the machine submission: every completing run costs `1433`. -/
+/-- **Cycles** for the machine submission: every completing run costs `1422`. -/
 theorem machine_cycles : machineSubmission.CyclesAtMost claim := cycles machineSubmission rfl
 
 /-- The claim constant. -/
-theorem claim_eq : claim = 1433 := rfl
+theorem claim_eq : claim = 1422 := rfl
 
 /-- **Valid** bytecode. -/
 theorem machine_valid : LeanIsa.BytecodeValid machineSubmission.program := valid
