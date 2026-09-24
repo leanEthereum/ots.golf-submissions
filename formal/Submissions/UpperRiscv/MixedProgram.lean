@@ -1,6 +1,6 @@
 import Submissions.UpperRiscv.Program
 
-/-! The 360-cycle mixed-width candidate image. This module proves image validity;
+/-! The 359-cycle mixed-width candidate image. This module proves image validity;
 the complete execution/refinement certificate is a separate obligation.
 
 Chains 7, 11, 15 and 19 are hashed in place: each wire value starts five bytes into its own cell,
@@ -42,16 +42,16 @@ def work (k : ℕ) : ℕ := if expands k then slot k else wireSlot k
 def outAddr (k : ℕ) : ℕ := slot k - 8
 def fineWidth (_q : ℕ) : ℕ := 4
 def copies (_q : ℕ) : ℕ := 16
-/-- Row group of each pair: `[12,1,8] / [13,9,4] / [14,10,6] / [11,0,15] / [3,5,2] / [7]`. -/
-def group (q : ℕ) : ℕ := [3,0,4,4,1,4,2,5,0,1,2,3,0,1,2,3].getD q 0
-def withinGroup (q : ℕ) : ℕ := [1,1,2,0,2,1,2,0,2,1,1,0,0,0,0,2].getD q 0
-def copyCapacity (q : ℕ) : ℕ := if q = 7 then 128 else if withinGroup q = 2 then 48 else 40
+/-- Words 0, 2 and 3 share dispatch bases: their corresponding pairs occupy one row group. -/
+def group (q : ℕ) : ℕ := [0,1,2,3,4,4,5,4,0,1,2,3,0,1,2,3].getD q 0
+def withinGroup (q : ℕ) : ℕ := [0,0,2,0,2,0,0,1,2,1,0,1,1,2,1,2].getD q 0
+def copyCapacity (q : ℕ) : ℕ := if q = 6 then 128 else if withinGroup q = 2 then 48 else 40
 def groupOffset (g : ℕ) : ℕ := 2048*g
-def copiesStart : ℕ := 4096 + 4 * 52
+def copiesStart : ℕ := 4096 + 4 * 51
 def copyStart (q d : ℕ) : ℕ :=
   copiesStart + 4 * (groupOffset (group q) + 128 * (copies q - 1 - d) + 40 * withinGroup q)
 def landing0 (q : ℕ) : ℕ := copyStart q 0 + 4 * (2 ^ fineWidth q - 1)
-def baseLane (q : ℕ) : ℕ := min (landing0 (if q < 12 then q else q - 4)) 65532
+def baseLane (q : ℕ) : ℕ := min (landing0 (if q < 8 then q else q % 4)) 65532
 def baseWord (g : ℕ) : ℕ :=
   (List.range 4).foldl (fun n j => n + baseLane (4 * g + j) * 2 ^ (16 * j)) 0
 def jumpImm (q : ℕ) : ℤ := (landing0 q : ℤ) - baseLane q
@@ -59,7 +59,7 @@ def jumpImm (q : ℕ) : ℤ := (landing0 q : ℤ) - baseLane q
 def loadWords : Code :=
   [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
    .LD .x25 .x12 40, .LD .x1 .x12 48, .LD .x2 .x12 56,
-   .LD .x3 .x12 80, .LD .x4 .x12 88, .LD .x7 .x12 96]
+   .LD .x3 .x12 80, .LD .x4 .x12 88]
 def maskReg (_g : ℕ) : Reg := .x25
 def laneWord (g : ℕ) : Code :=
   let dst := if g = 0 then Reg.x27 else Reg.x26
@@ -91,8 +91,8 @@ def copyBody (q d : ℕ) : Code :=
 def copyCode (q d : ℕ) : Code :=
   copyBody q d ++ List.replicate (copyCapacity q - (copyBody q d).length) nop
 def groupPairs (g : ℕ) : List ℕ :=
-  if g = 0 then [12,1,8] else if g = 1 then [13,9,4] else if g = 2 then [14,10,6] else
-    if g = 3 then [11,0,15] else if g = 4 then [3,5,2] else [7]
+  if g = 0 then [0,12,8] else if g = 1 then [1,9,13] else if g = 2 then [10,14,2] else
+    if g = 3 then [3,11,15] else if g = 4 then [5,7,4] else [6]
 def groupCode (g : ℕ) : Code :=
   (List.range 16).flatMap fun c =>
     (groupPairs g).flatMap fun q => copyCode q (copies q - 1 - c)
@@ -102,12 +102,12 @@ def firstMask : ℕ := broadcast 0x1e3c
 def dataImage : List (BitVec 8) :=
   List.replicate 32 0 ++ wordBytes firstMask ++ wordBytes (broadcast 0x1e3c) ++
     wordBytes (broadcast 0x1fc) ++ wordBytes 65535 ++ wordBytes 0 ++ wordBytes 5504 ++
-    wordBytes (baseWord 0) ++ wordBytes (baseWord 1) ++ wordBytes (baseWord 2)
+    wordBytes (baseWord 0) ++ wordBytes (baseWord 1)
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
-theorem index_length : indexPhase.length = 46 := by decide +kernel
-theorem code_length : verifier.length = 12340 := by decide +kernel
-theorem data_length : dataImage.length = 104 := by decide +kernel
+theorem index_length : indexPhase.length = 45 := by decide +kernel
+theorem code_length : verifier.length = 12339 := by decide +kernel
+theorem data_length : dataImage.length = 96 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel
 theorem image_valid : image.Valid := by
   refine ⟨?_, ?_, ?_⟩

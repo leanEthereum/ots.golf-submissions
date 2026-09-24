@@ -8,7 +8,7 @@ open OptimalOTS.Dag
 open Forest Forest.Name
 
 abbrev target : ℕ := OptimalOTS.target
-def blockZero : ℕ := 4096 + 4*46
+def blockZero : ℕ := 4096 + 4*45
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q

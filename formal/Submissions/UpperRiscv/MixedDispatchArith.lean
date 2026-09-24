@@ -16,7 +16,9 @@ theorem baseWord_expand (g : ℕ) (hg : g < 4) : baseWord g =
 theorem baseWord_toNat (g : ℕ) (hg : g < 4) : (W (baseWord g)).toNat = baseWord g := by
   interval_cases g <;> decide +kernel
 
-theorem baseWord_last : baseWord 3 = baseWord 2 := by decide +kernel
+theorem baseWord_third : baseWord 2 = baseWord 0 := by decide +kernel
+
+theorem baseWord_last : baseWord 3 = baseWord 0 := by decide +kernel
 
 theorem lane_extract (x0 x1 x2 x3 l : ℕ) (h0 : x0 < 2 ^ 16) (h1 : x1 < 2 ^ 16)
     (h2 : x2 < 2 ^ 16) (h3 : x3 < 2 ^ 16) (hl : l < 4) :

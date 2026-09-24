@@ -1,3 +1,64 @@
+# Two dispatch bases: 359-cycle candidate
+
+This extends scaraven's verified 360-cycle construction (#30), checked source
+`16be83e74b3eb670535bcf09c00f1e9f9ca2d5ab`, and retains its scheme and memory layout.
+
+Assisted by: Codex
+
+## Change
+
+The three base words previously loaded for packed dispatch are reduced to two.
+Index words 0, 2 and 3 share the same base word: for each lane their pairs now
+occupy a common row group. Index word 1 uses the other base word.
+
+Rows are `[0,12,8] / [1,9,13] / [10,14,2] / [3,11,15] / [5,7,4] / [6]`.
+Slots are still 40, 40 and 48 instructions. The bodies larger than 40 instructions
+occupy the third slot or the standalone row. All jump displacements fit signed
+12-bit immediates, and all stored destinations fit unsigned halfwords.
+
+`LD x7, x12, 96` is removed; words 2 and 3 now use x3. The unused final embedded
+constant is removed too. The proof checks the new finite layout facts and proves
+`baseWord 2 = baseWord 0` and `baseWord 3 = baseWord 0`.
+
+No nonce, accepted index, chain state width, payload permutation, truncation,
+root input, or oracle query changes. In particular, security and availability
+proofs are reused unchanged.
+
+Accounting: **39 index + 299 chains + 21 root/decision = 359 cycles**.
+The image has 12,339 instructions and 96 data bytes: **49,452 bytes**.
+
+## Validation
+
+- The full exported 359-cycle certificate and image-size theorem build with the
+  pinned Lean toolchain. The certificate's axiom guard passes with only `propext`,
+  `Classical.choice`, and `Quot.sound`.
+- An independent generator exactly matches the Lean-exported instruction and
+  data images, for both the 360 baseline and this candidate.
+- 4,456 candidate executions agree with a chain-level reference on every oracle
+  query and verdict; eight honest cases cost exactly 39/299/21. Rejection cases
+  include wrong lengths, index sums 156/158/412, root mismatches, and mutations.
+- The official verifier was attempted unchanged but fails the host's Landlock
+  preflight before proof checking. This is an infrastructure failure, not a
+  hosted proof verdict. No production isolation requirement was bypassed.
+- The pinned development comparator passes: it exports the required statements
+  and permitted axioms, replays them in Lean's default kernel, and reports
+  "Your solution is okay!" This uses the genuine landrun binary but the local
+  development build; it is not a hosted verdict or a production-isolation check.
+
+## Search scope and next direction
+
+The first experiment changed row placement and base sharing only. For the four
+choices of a single index word kept separate, only word 1 lets each corresponding
+three-pair group have at most one body larger than 40 instructions. A single
+shared base word would require four bodies per corresponding lane group, outside
+this three-body layout. This does not establish global optimality.
+
+Further gains need different index arithmetic, dispatch encoding, or a broader
+layout/construction search. The earlier research notes follow for attribution
+and their rejected directions.
+
+---
+
 # In-place chains above the cell: 360-cycle candidate
 
 This extends dhsorens's 364-cycle ascending cell grid (PR #28), which extends the 372-cycle dense
