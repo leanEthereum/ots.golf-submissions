@@ -1,9 +1,9 @@
 import Submissions.UpperLeanIsa.FlatSecurity
 import Submissions.UpperLeanIsa.MachineFaithful
 
-/-! The leanISA submission: the HL-FLAT-A layer scheme (`SchemeFlat.lean`, 42 Winternitz chains
-on one hypercube layer, nonce-ground index), its straight-line bytecode (`MachineProgram.lean`)
-and the six certificate clauses. -/
+/-! The leanISA submission: the FLAT-42 layer scheme (`SchemeFlat.lean`, 42 Winternitz chains
+on one hypercube layer, nonce-ground index), its grouped hinted-landing bytecode HL-TRI
+(`MachineProgram.lean`) and the six certificate clauses. -/
 
 namespace OptimalOTS.Challenge.UpperLeanIsa
 
@@ -15,8 +15,8 @@ noncomputable def submission : LeanIsa.Submission := HLFlat.machineSubmission
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1598` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1598 where
+`1439` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1439 where
   admissible := Flat.admissible
   secure := Flat.secure
   valid := HLFlat.machine_valid

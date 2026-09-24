@@ -1,20 +1,22 @@
 import Submissions.UpperLeanIsa.MachineCycles
 
 /-!
-# Soundness of the HL-FLAT-A machine under a fixed oracle table
+# Soundness of the HL-TRI machine under a fixed oracle table
 
 `accept_of_path`: cell values satisfying the fixed-table relations along the path of a digit
-vector `s`, with the landings of `s`, and agreeing with the loader on the pinned cells, certify
-a signature that `Flat.params.verify` accepts under the table.
+vector `s`, and agreeing with the loader on the pinned cells, certify a signature that
+`Flat.params.verify` accepts under the table.
 
 1. The prologue pins `Z, ONE, LEN, TIDX, g, K0` and the symbols; the length cell pins
    `|σ| = 5504`, so the loader's cells are the 42 words and the nonce.
 2. The index `BLAKE2S` is the scheme's index query; its low half `I` is the index cell.
-3. The tie accumulates the tie patterns into the index cell (`acc_eq`), so `digit I k = s k`;
-   the exponent identity (`layer_of_facts`, hash-free) gives `Σ s = 106`, so `I` is accepted.
+3. The group ties accumulate the tie words into the index cell (`idx_of_facts`); the words' bit
+   fields are disjoint, so `I` is the digit vector (`tie_sum`) and `digit I k = s k`; the layer
+   products force `Σ s = 106` (`layer_of_facts`), so `I` is accepted.
 4. The inline `BLAKE2S` compute the verifier's chain tops (`chain_top`), the ten root calls
    compute its root (`root_state`), and the pk `XOR` compares it with the public key.
 -/
+
 
 namespace OptimalOTS.HLFlat
 
@@ -47,8 +49,6 @@ theorem msg_split (a b : BitVec 128) (m : Message) :
   conv_rhs => rw [← h]
   rw [BitVec.append_assoc (x₁ := a ++ b)]
   exact BitVec.cast_eq _ _
-
-theorem fpat_zero (k : ℕ) : fpat k 0 = 0 := by unfold fpat; rw [Nat.zero_mul]; exact natV_zero
 
 /-- The oracle relation of a `BLAKE2S` gives its low output half. -/
 theorem oracle_lo {f : HashTable} {m : Fin 4 → E} {cv0 cv1 o0 o1 md : E}
@@ -125,6 +125,96 @@ theorem chainSeq_eq_src (v : ℕ → E) {k n t : ℕ} (ht : t < n) :
   · rw [if_pos h0, if_pos h0]
   · rw [if_neg h0, if_neg h0, if_neg (by omega)]
 
+
+/-! ## The tie -/
+
+/-- The digit vector, zero past the chains. -/
+def sz (s : ℕ → ℕ) (k : ℕ) : ℕ := if k < 42 then s k else 0
+
+theorem sz_lt {s : ℕ → ℕ} (hV : Valid s) (k : ℕ) : sz s k < 2 ^ Flat.wid k := by
+  unfold sz Flat.wid
+  by_cases hk : k < 42
+  · rw [if_pos hk]
+    have := hV k hk
+    unfold W at this
+    split_ifs at * <;> omega
+  · rw [if_neg hk, if_neg (by omega), if_neg hk]; norm_num
+
+/-- The cells of `n` disjoint digit fields add up to the cell of their number. -/
+theorem natV_digits_sum (c : ℕ → ℕ) (hc : ∀ k, c k < 2 ^ Flat.wid k) :
+    ∀ n, n ≤ 42 → ∑ k ∈ Finset.range n, natV (c k * 2 ^ posW Flat.wid k) =
+      natV (ofDigitsW Flat.wid c n) := by
+  intro n
+  induction n with
+  | zero => intro _; rw [Finset.sum_range_zero, ofDigitsW_zero, natV_zero]
+  | succ n ih =>
+    intro hn
+    have hlt := ofDigitsW_lt Flat.wid c hc n
+    have hlt2 := ofDigitsW_lt Flat.wid c hc (n + 1)
+    have hpow : 2 ^ posW Flat.wid (n + 1) ≤ 2 ^ 128 :=
+      Nat.pow_le_pow_right (by norm_num) (by rw [← Flat.pos_42]; exact posW_mono Flat.wid hn)
+    rw [Finset.sum_range_succ, ih (by omega), ofDigitsW_succ] at *
+    rw [natV_add_disjoint hlt (by omega)]
+
+/-- A digit in its field stays below the next field. -/
+theorem field_lt {N x k : ℕ} (hN : N < 2 ^ posW Flat.wid k) (hx : x < 2 ^ Flat.wid k) :
+    N + x * 2 ^ posW Flat.wid k < 2 ^ posW Flat.wid (k + 1) := by
+  rw [posW_succ, pow_add]
+  have : (x + 1) * 2 ^ posW Flat.wid k ≤ 2 ^ Flat.wid k * 2 ^ posW Flat.wid k :=
+    Nat.mul_le_mul_right _ hx
+  rw [mul_comm (2 ^ posW Flat.wid k)]
+  nlinarith
+
+theorem natV_field {N x k : ℕ} (hk : k < 42) (hN : N < 2 ^ posW Flat.wid k)
+    (hx : x < 2 ^ Flat.wid k) :
+    natV N + natV (x * 2 ^ posW Flat.wid k) = natV (N + x * 2 ^ posW Flat.wid k) := by
+  have h1 := field_lt hN hx
+  have h2 : 2 ^ posW Flat.wid (k + 1) ≤ 2 ^ 128 :=
+    Nat.pow_le_pow_right (by norm_num) (by rw [← Flat.pos_42]; exact posW_mono Flat.wid (by omega))
+  exact natV_add_disjoint hN (by omega)
+
+theorem gch_mono {g : ℕ} (hg : g < 14) : gch g 0 < gch g 1 ∧ gch g 1 < gch g 2 := by
+  unfold gch; split_ifs <;> omega
+
+/-- The tie word of a group is the sum of its three fields. -/
+theorem natV_gword {g a b c : ℕ} (hg : g < 14) (ha : a < 2 ^ Flat.wid (gch g 0))
+    (hb : b < 2 ^ Flat.wid (gch g 1)) (hc : c < 2 ^ Flat.wid (gch g 2)) :
+    natV (gword g a b c) = natV (a * 2 ^ posW Flat.wid (gch g 0)) +
+      natV (b * 2 ^ posW Flat.wid (gch g 1)) + natV (c * 2 ^ posW Flat.wid (gch g 2)) := by
+  obtain ⟨h01, h12⟩ := gch_mono hg
+  have hl2 := gch_lt hg (show 2 < 3 by omega)
+  have ha' := field_lt (N := 0) (Nat.two_pow_pos _) ha
+  rw [Nat.zero_add] at ha'
+  have ha1 : a * 2 ^ posW Flat.wid (gch g 0) < 2 ^ posW Flat.wid (gch g 1) :=
+    lt_of_lt_of_le ha' (Nat.pow_le_pow_right (by norm_num) (posW_mono Flat.wid h01))
+  have hb2 : a * 2 ^ posW Flat.wid (gch g 0) + b * 2 ^ posW Flat.wid (gch g 1) <
+      2 ^ posW Flat.wid (gch g 2) :=
+    lt_of_lt_of_le (field_lt ha1 hb) (Nat.pow_le_pow_right (by norm_num) (posW_mono Flat.wid h12))
+  unfold gword
+  rw [← natV_field hl2 hb2 hc, ← natV_field (by omega) ha1 hb]
+
+/-- The groups partition the 42 chains. -/
+theorem sum_groups {M : Type*} [AddCommMonoid M] (e : ℕ → M) :
+    ∑ j ∈ Finset.range 14, (e (gch j 0) + e (gch j 1) + e (gch j 2)) =
+      ∑ k ∈ Finset.range 42, e k := by
+  simp only [Finset.sum_range_succ, Finset.sum_range_zero, gch]
+  norm_num
+  abel
+
+/-- **The tie words.** The fourteen group words add up to the cell of the digit vector. -/
+theorem tie_sum (c : ℕ → ℕ) (hc : ∀ k, c k < 2 ^ Flat.wid k) :
+    ∑ j ∈ Finset.range 14, natV (gwordS c j) = natV (ofDigitsW Flat.wid c 42) := by
+  unfold gwordS
+  rw [Finset.sum_congr rfl fun j hj => natV_gword (Finset.mem_range.mp hj) (hc _) (hc _) (hc _),
+    sum_groups (fun k => natV (c k * 2 ^ posW Flat.wid k))]
+  exact natV_digits_sum c hc 42 le_rfl
+
+/-- The group words of a digit vector only read the 42 chains. -/
+theorem gwordS_sz (s : ℕ → ℕ) {j : ℕ} (hj : j < 14) : gwordS (sz s) j = gwordS s j := by
+  unfold gwordS sz
+  rw [if_pos (gch_lt hj (by omega)), if_pos (gch_lt hj (by omega)), if_pos (gch_lt hj (by omega))]
+
+
 /-! ## The path -/
 
 section Path
@@ -133,13 +223,8 @@ variable {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool} {v : 
   {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s)
 
 include hP in
-theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 58) (hc : cinstrAt t = ci) : ci.Rel f v := by
+theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 36) (hc : cinstrAt t = ci) : ci.Rel f v := by
   have := hP.pro t ht; rwa [hc] at this
-
-include hV hP in
-theorem blk_rel {k i : ℕ} (hk : k < 42) (hi0 : 0 < i) (hi : i ≤ 1 + pre k + s k + post k) :
-    (blockOp k (s k) i).Rel f v := by
-  have := hP.blk k hk i hi0 hi; rwa [cinstrAt_blk hk (hV k hk) hi0 hi] at this
 
 include hP in
 theorem root_rel {t : ℕ} (ht : t < 11) : (rootOp t).Rel f v := by
@@ -182,30 +267,20 @@ include hV in
 theorem chain_top (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : ℕ} (hk : k < 42) :
     cellBits (v (rootTop k)) =
       chainValue f FP ⟨k, hk⟩ (W k - 1 - s k) (s k) (cellBits (v (wCell k))) := by
-  have hs := hV k hk
+  have hR : ∀ t, (fun t => (cinstrAt t).Rel f v) t → (cinstrAt t).RelNH v :=
+    fun _ h => CInstr.relNH_of_relB h
   have hz := v_z hP
+  have hs := hV k hk
   by_cases h0 : s k = 0
-  · rw [h0]
-    show cellBits (v (rootTop k)) = cellBits (v (wCell k))
-    by_cases hk0 : k = 0
-    · subst hk0
-      have h := blk_rel hV hP (k := 0) (i := s 0 + 2) hk (by omega)
-        (by rw [pre_zero, post_zero]; omega)
-      unfold blockOp at h
-      rw [if_pos rfl, if_neg (by omega), if_neg (by omega), if_pos rfl, if_pos h0] at h
-      have h' : v cvCell = v (wCell 0) + v zCell := h
-      rw [show rootTop 0 = cvCell from rfl, h', hz, add_zero]
-    · have h := blk_rel hV hP (k := k) (i := 1) hk (by omega) (by omega)
-      unfold blockOp at h
-      rw [if_neg hk0, if_pos rfl, if_pos h0] at h
-      have h' : v (rootTop k) = v (wCell k) + v zCell := h
-      rw [h', hz, add_zero]
+  · rw [h0, zero_copy_of_facts hR hV hP hk h0, hz, add_zero]
+    rfl
   · -- the inline steps
     have hstep : ∀ t < s k, chainSeq v k (s k) (t + 1) =
         (f ⟨896, FP.chainInput ⟨k, hk⟩ (W k - 1 - s k + t) (chainSeq v k (s k) t)⟩).extractLsb' 0 128 := by
       intro t ht
-      have h := blk_rel hV hP (k := k) (i := 1 + pre k + t) hk (by omega) (by omega)
-      rw [blockOp_chain ht] at h
+      have hr := stepOff_range hV hk ht
+      have h := hP.blk (grp k) (grp_lt hk).1 _ hr.1 hr.2
+      simp only [cinstrAt_step hV hk ht] at h
       unfold chainOp at h
       have hlo := oracle_lo h
       rw [chainOp_query hP hk (by omega)] at hlo
@@ -216,70 +291,8 @@ theorem chain_top (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : ℕ} (
     rw [chainSeq_last h0, chainSeq_zero] at hend
     by_cases hk0 : k = 0
     · subst hk0
-      have h := blk_rel hV hP (k := 0) (i := s 0 + 2) hk (by omega)
-        (by rw [pre_zero, post_zero]; omega)
-      unfold blockOp at h
-      rw [if_pos rfl, if_neg (by omega), if_neg (by omega), if_pos rfl, if_neg h0] at h
-      have h' : v cvCell = v (topCell 0) + v zCell := h
-      rw [show rootTop 0 = cvCell from rfl, h', hz, add_zero, ← hend]; rfl
-    · rw [show rootTop k = chainOut k by unfold rootTop chainOut; rw [if_neg hk0],
-        hend]
-
-/-! ### The tie -/
-
-/-- The digit vector, zero past the chains. -/
-def sz (s : ℕ → ℕ) (k : ℕ) : ℕ := if k < 42 then s k else 0
-
-omit hP in
-theorem sz_lt (hV : Valid s) (k : ℕ) : sz s k < 2 ^ Flat.wid k := by
-  unfold sz Flat.wid
-  by_cases hk : k < 42
-  · rw [if_pos hk]
-    have := hV k hk
-    unfold W at this
-    split_ifs at * <;> omega
-  · rw [if_neg hk, if_neg (by omega), if_neg hk]; norm_num
-
-omit hV hP in
-theorem posW_le_42 {k : ℕ} (hk : k ≤ 42) : posW Flat.wid k ≤ 128 := by
-  rw [← Flat.pos_42]; exact posW_mono Flat.wid hk
-
-include hV hP in
-/-- **The tie.** The accumulator after chain `k` holds the digits `s 0, …, s k`. -/
-theorem acc_eq : ∀ k < 42, v (accCell k) = natV (ofDigitsW Flat.wid (sz s) (k + 1)) := by
-  intro k
-  induction k with
-  | zero =>
-    intro hk
-    have h := blk_rel hV hP (k := 0) (i := 1) hk (by omega) (by rw [pre_zero]; omega)
-    unfold blockOp at h
-    rw [if_pos rfl, if_pos rfl] at h
-    have h' : v (accCell 0) = fpat 0 (s 0) := h
-    rw [h', ofDigitsW_succ, ofDigitsW_zero, Nat.zero_add]
-    unfold fpat sz; rw [if_pos hk]
-  | succ k ih =>
-    intro hk
-    have hop : v (if s (k + 1) = 0 then zCell else tCell (k + 1)) = fpat (k + 1) (s (k + 1)) := by
-      by_cases h0 : s (k + 1) = 0
-      · rw [if_pos h0, v_z hP, h0, fpat_zero]
-      · rw [if_neg h0]
-        have h := blk_rel hV hP (k := k + 1) (i := 1) hk (by omega) (by omega)
-        unfold blockOp at h
-        rw [if_neg (by omega), if_pos rfl, if_neg h0] at h
-        exact h
-    have h := blk_rel hV hP (k := k + 1) (i := 2) hk (by omega)
-      (by rw [pre_pos (by omega)]; omega)
-    unfold blockOp at h
-    rw [if_neg (by omega), if_neg (by omega), if_pos rfl, Nat.add_sub_cancel] at h
-    have h' : v (accCell (k + 1)) = v (accCell k) + v (if s (k + 1) = 0 then zCell else tCell (k + 1)) := h
-    have hlt := ofDigitsW_lt Flat.wid (sz s) (sz_lt hV) (k + 1)
-    have hlt2 := ofDigitsW_lt Flat.wid (sz s) (sz_lt hV) (k + 1 + 1)
-    have h42 := posW_le_42 (k := k + 1 + 1) (by omega)
-    have hpow : 2 ^ posW Flat.wid (k + 1 + 1) ≤ 2 ^ 128 := Nat.pow_le_pow_right (by norm_num) h42
-    rw [h', hop, ih (by omega)]
-    unfold fpat
-    rw [show s (k + 1) = sz s (k + 1) by unfold sz; rw [if_pos hk],
-      natV_add_disjoint hlt (by rw [← ofDigitsW_succ]; omega), ← ofDigitsW_succ]
+      rw [show rootTop 0 = cvCell from rfl, copy0_of_facts hR hV hP h0, hz, add_zero, ← hend]; rfl
+    · rw [show rootTop k = chainOut k by unfold rootTop chainOut; rw [if_neg hk0], hend]
 
 /-! ### The root -/
 
@@ -366,19 +379,21 @@ section Accept
 
 variable {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool} {v : ℕ → E}
 
-/-- **Fixed-table acceptance.** Cell values satisfying the relations along the path of `s`, with
-its landings, and agreeing with the loader on the pinned cells, certify a signature the verifier
-accepts under the table. -/
+/-- **Fixed-table acceptance.** Cell values satisfying the relations along the path of `s`, and
+agreeing with the loader on the pinned cells, certify a signature the verifier accepts under the
+table. -/
 theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ → ℕ} (hV : Valid s)
-    (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) (hL : Landing v s) :
+    (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) :
     bits.length = sigBits ∧ FP.Accepted (idxValue f FP m (decodeNonce bits) pk) ∧
       rootValue f FP (topsOf f FP (idxValue f FP m (decodeNonce bits) pk) bits) = pk := by
+  have hR : ∀ t, (fun t => (cinstrAt t).Rel f v) t → (cinstrAt t).RelNH v :=
+    fun _ h => CInstr.relNH_of_relB h
   -- the length
   have hlen : bits.length = 5504 :=
     length_of_inputWord_len pk m bits ((hpin 3 (by omega)).symm.trans (v_len hP))
   -- the index
   have hidx : idxValue f FP m (decodeNonce bits) pk = cellBits (v idxCell) := by
-    have h := pro_rel hP (by omega) cinstrAt_55
+    have h := pro_rel hP (by omega) cinstrAt_33
     have hlo := oracle_lo h
     have hpk : cellBits (v pkCell) = pk := by
       rw [show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
@@ -396,8 +411,9 @@ theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ
     rw [hq] at hlo
     exact hlo.symm
   -- the tie
-  have hacc := acc_eq hV hP 41 (by omega)
-  rw [show accCell 41 = idxCell from rfl] at hacc
+  have hacc : v idxCell = natV (ofDigitsW Flat.wid (sz s) 42) := by
+    rw [idx_of_facts hR hV hP, ← tie_sum (sz s) (sz_lt hV)]
+    exact Finset.sum_congr rfl fun j hj => by rw [gwordS_sz s (Finset.mem_range.mp hj)]
   have hI : (idxValue f FP m (decodeNonce bits) pk).toNat = ofDigitsW Flat.wid (sz s) 42 := by
     rw [hidx, hacc, cellBits_natV, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
     have := ofDigitsW_lt Flat.wid (sz s) (sz_lt hV) 42
@@ -408,7 +424,7 @@ theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ
     rw [hI, digitW_ofDigitsW Flat.wid (sz s) (sz_lt hV) 42 k k.isLt]
     unfold sz; rw [if_pos k.isLt]
   -- the layer
-  have hsum := layer_of_facts (fun t h => CInstr.relNH_of_relB h) hV hP hL
+  have hsum := layer_of_facts hR hV hP
   refine ⟨hlen, ?_, ?_⟩
   · show ∑ k : Fin numChains, FP.digit _ k = 106
     rw [Finset.sum_congr rfl (fun k _ => hdig k)]
@@ -467,8 +483,8 @@ theorem fixed_sound {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 32) (f : HashTabl
   rw [initial_eq] at h
   have hpin := pinned_of_sem (simSem f) (oracleRel f) (sim_straight h16 hκ f) h
   have hw := walk_of_sim h16 hκ f hpin (by norm_num) h
-  obtain ⟨hV, hP, hL, -, -⟩ := walk_full (fun t h => CInstr.relNH_of_relB h) hw
-  exact accept_of_path (fun c hc => Lx_loadInput_pin h16 pk m bits L hc) hV hP hL
+  obtain ⟨hV, hP, -, -, -⟩ := walk_full (fun t h => CInstr.relNH_of_relB h) hw
+  exact accept_of_path (fun c hc => Lx_loadInput_pin h16 pk m bits L hc) hV hP
 
 open scoped Classical in
 /-- The fixed-table verifier accepts when `fixed_sound`'s conclusion holds. -/
@@ -480,7 +496,7 @@ theorem decision_true {f : HashTable} {pk : PublicKey} {m : Message} {bits : Lis
       else false) = true := by
   rw [if_pos ⟨h.1, h.2.1⟩, h.2.2]; simp
 
-/-- **Sound**: any submission running this bytecode for the HL-FLAT-A scheme is sound. -/
+/-- **Sound**: any submission running this bytecode for the FLAT-42 scheme is sound. -/
 theorem sound (S : LeanIsa.Submission) (hs : S.scheme = Flat.scheme) (hp : S.program = program) :
     S.Sound := by
   intro pk m bits κ h16 h32 L n

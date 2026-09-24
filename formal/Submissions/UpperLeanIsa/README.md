@@ -1,20 +1,24 @@
-# leanISA — 1598 cycles (HL-FLAT-A)
+# leanISA — 1439 cycles (HL-TRI)
 
-Replaces the 85343-cycle Winternitz record with a one-layer hypercube scheme and a
-straight-line bytecode whose every completing run costs exactly
-`308 + 10·117 + 120 = 1598` cycles (425 instructions, 117 `BLAKE2S`).
+This root keeps HL-FLAT-A's scheme and security proofs unchanged (42 chains of 3-bit and 4-bit
+digits, nonce-ground index on layer 106, 10-call tagged root). It replaces the bytecode so that
+three chains share one landing:
+- 14 groups, one frame and one dispatch per group;
+- one tie word per group into the index accumulator;
+- one layer factor `g^σ` per group, with `g^2..g^7` precomputed.
 
-- **Scheme** (`SchemeFlat`, `Layer*`): 42 chains of 128-bit words, widths 3 (chains 0..39,
-  length 8) and 4 (chains 40, 41, length 16). A fresh uniform 128-bit nonce is ground until
-  the 128-bit index `H(m, pk, η)` has digits on layer 106; the signature is 42 words plus the
-  nonce, 5504 bits. Chain steps, the index and the 10 root calls are separated by metadata and
-  tags. Keygen 640, sign `2^20`, verify 234 compressions.
-- **Security** (`Records` … `Security`, `FlatHyp`, `FlatSecurity`): generic in `P : Params`
-  under `P.Hyp`; `Pr ≤ B/2^128 < B/2^127`. The index-grinding analysis is ported from UpperRiscv.
-- **Bytecode** (`MachineProgram`): `logSize = 18`, `memLog = 16`, hinted-landing dispatch with
-  digit-independent block costs, so `steps = 425` is constant.
-- **Machine proofs**: `MachineRun`/`MachinePath` (every completing run is one path),
-  `MachineCycles` (exponent identity `Σ s = 106`), `MachineSound`, `MachineProver`,
-  `MachineHonest`, `MachineFaithful`. `seededRows = 2^18 + 2^16 < 2^20`.
+Every completing run executes 266 instructions (117 `BLAKE2S`):
+`149 + 10·117 + 120 = 1439` cycles.
 
-Build with `lake build Submissions.UpperLeanIsa.Solution`. Design, model and credits: `NOTES.md`.
+- `MachineProgram`: `logSize = 18`, `memLog = 16`. Entries `BASE g + SP g · rank`. Frame-entry
+  `I0` jumps pin every landing, and bodies run in frame 1.
+- `MachineRun`, `MachinePath`: every completing run is the forced walk of one layer vector.
+- `MachineCycles`: the tie gives `acc_13 = idx` and the layer product gives `Σ s = 106`, both
+  hash-free. The run is exactly 266 steps and 1319 cycles.
+- `MachineSound`, `MachineProver`, `MachineHonest`, `MachineFaithful`: as HL-FLAT-A, per group.
+
+Design, the rejected entry-assertion variant, the model and next steps are in `NOTES.md`. The
+scheme, security, layer-count and index-grinding proofs are HL-FLAT-A's (credits in `NOTES.md` section 7). The grouped bytecode and machine proofs were prepared with
+Claude Opus 5.5.
+
+Build with `lake build Submissions.UpperLeanIsa.Solution`.
