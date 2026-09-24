@@ -5,10 +5,10 @@ import Submissions.UpperLeanIsa.BasicProperties
 # FLAT-42 satisfies the standing hypotheses
 
 `Flat.hyp : Flat.params.Hyp`: the digit fields tile the index (digits determine the index), the
-tag symbols `3 + p % 7, 3 + p / 7 % 7, 3 + p / 49` determine the step position `p = off k + j`
-and hence `(k, j)`, and the metadata values `1` (chains), `10` (index) and `0, 2, …, 9, 5504`
-(root calls) are pairwise distinct. Hence `Flat.admissible`, with the concrete budgets
-`keygen 640`, `sign 2 ^ 20` and `verify 234`.
+tag symbols `sym (p % 7), sym (p / 7 % 7), sym (p / 49)` (`sym` is injective below `7`)
+determine the step position `p = off k + j` and hence `(k, j)`, and the metadata values `1`
+(chains), `10` (index) and `0, 2, 4, …, 128, 5504, 3` (root calls) are pairwise distinct. Hence
+`Flat.admissible`, with the concrete budgets `keygen 640`, `sign 2 ^ 20` and `verify 234`.
 -/
 
 open OracleSpec OracleComp
@@ -43,11 +43,7 @@ theorem digit_inj (I I' : Word) (h : ∀ k, digit I k = digit I' k) : I = I' := 
   rw [this]
 
 theorem sym_inj {a b : ℕ} (ha : a < 7) (hb : b < 7) (h : sym a = sym b) : a = b := by
-  have hn := congrArg BitVec.toNat h
-  unfold sym at hn
-  rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega),
-    Nat.mod_eq_of_lt (by omega)] at hn
-  omega
+  interval_cases a <;> interval_cases b <;> first | rfl | exact absurd h (by decide)
 
 theorem tag_inj (k k' : Fin numChains) (j j' : ℕ) (hj : j + 1 < len k) (hj' : j' + 1 < len k')
     (h0 : tag k j 0 = tag k' j' 0) (h1 : tag k j 1 = tag k' j' 1)
@@ -67,12 +63,6 @@ theorem tag_inj (k k' : Fin numChains) (j j' : ℕ) (hj : j + 1 < len k) (hj' : 
   have hkk : k.val = k'.val ∧ j = j' := by split_ifs at hpp hj hj' <;> omega
   exact ⟨Fin.ext hkk.1, hkk.2⟩
 
-theorem rootMd_toNat (r : ℕ) (hr : r < 10) :
-    (rootMd r).toNat = if r = 0 then 0 else if r = 1 then 2 else if r < 9 then r + 1 else 5504 := by
-  unfold rootMd
-  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
-  split_ifs <;> omega
-
 theorem hyp : params.Hyp where
   len_pos := fun k => Nat.one_le_two_pow
   digit_lt := digit_lt
@@ -82,19 +72,11 @@ theorem hyp : params.Hyp where
   chain_idx := chainMd_ne
   chain_root := by
     intro r hr h
-    have hn := congrArg BitVec.toNat h
-    change (chainMd).toNat = (rootMd r).toNat at hn
-    rw [rootMd_toNat r hr] at hn
-    have h1 : (chainMd).toNat = 1 := rfl
-    rw [h1] at hn
-    split_ifs at hn <;> omega
+    interval_cases r <;> exact absurd h (by decide)
   root_idx := rootMd_ne
   root_inj := by
     intro r s hr hs h
-    have hn := congrArg BitVec.toNat h
-    change (rootMd r).toNat = (rootMd s).toNat at hn
-    rw [rootMd_toNat r hr, rootMd_toNat s hs] at hn
-    split_ifs at hn <;> omega
+    interval_cases r <;> interval_cases s <;> first | rfl | exact absurd h (by decide)
   numValid_ge := numValid_ge
   numValid_le := by rw [numValid_eq]; norm_num
   keygen_le := by

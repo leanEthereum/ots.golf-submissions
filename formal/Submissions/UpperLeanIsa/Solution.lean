@@ -15,8 +15,8 @@ noncomputable def submission : LeanIsa.Submission := HLFlat.machineSubmission
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1439` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1439 where
+`1433` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1433 where
   admissible := Flat.admissible
   secure := Flat.secure
   valid := HLFlat.machine_valid

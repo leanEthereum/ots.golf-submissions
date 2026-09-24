@@ -1,9 +1,9 @@
-# HL-TRI: three chains per landing, 1439 cycles
+# HL-TRI-TM: three chains per landing and reused constant cells, 1433 cycles
 
-Lineage: HL-FLAT-A (1598, this root's previous contents) → HL-TRI (this root, claim 1439).
-**The scheme and security half is byte-identical to HL-FLAT-A.** Only the bytecode and the
-machine proofs (`MachineProgram`, `MachineRun`, `MachinePath`, `MachineCycles`, `MachineSound`,
-`MachineProver`, `MachineHonest`, `MachineFaithful`) and `Solution.lean` changed.
+Lineage: HL-FLAT-A (1598) → HL-TRI (1439, grouped dispatch) → HL-TRI-TM (this root, claim 1433,
+reused constant cells). Relative to HL-FLAT-A, the security proof is unchanged; the scheme
+changes only in its tag-symbol and root-metadata *values* (`SchemeFlat.sym`, `rootMd`,
+re-proved in `FlatHyp`). The bytecode and the machine proofs are new.
 
 ## 1. Where HL-FLAT-A's cycles were
 
@@ -31,8 +31,11 @@ the frame-shifted entry `I0`, the tie `SET T; XOR`, and the landing product `MUL
   HL-FLAT-A. The contract's `steps` must not depend on the oracle's index answer, so every block
   of a group pads with `XOR(Z, Z, Z)` to the group's maximum non-hash count
   (`[6]*12 + [7, 7]` before the tail).
-- Every completing run: 266 instructions, 117 `BLAKE2S`: `149 + 1170 = 1319`, claim
-  `1319 + 120 = 1439`.
+- Every completing run of HL-TRI: 266 instructions, 117 `BLAKE2S`: `149 + 1170 = 1319`, 1439.
+- HL-TRI-TM (section 6, first item, now done): 260 instructions, `143 + 1170 = 1313`, claim
+  `1313 + 120 = 1433`. The tag symbols are the cells `Z, ONE, g, g^2..g^5` (values
+  `0, 1, 2, 4, 8, 16, 32`), the root metadata `0, 2, 4, …, 128, 5504, 3` (one new `SET` for 3),
+  and the seven symbol `SET`s are gone. The prologue is 30 slots.
 
 ## 3. A tempting design that is unsound
 
@@ -58,14 +61,14 @@ completes on the 1425 model and is rejected on this one.
 ## 5. Validation
 
 - `lake build Submissions.UpperLeanIsa.Solution` from a clean copy of the pinned contract.
-- `check_submission.py upper-leanisa`: ok, claim 1439.
-- `certificate : submission.Certificate 1439` and `seeded_rows` type-check against the stub's
+- `check_submission.py upper-leanisa`: ok, claim 1433.
+- `certificate : submission.Certificate 1433` and `seeded_rows` type-check against the stub's
   statements; axioms are `propext`, `Classical.choice`, `Quot.sound` only.
 - No `sorry`, `native_decide` or `admit` in the root.
 
 ## 6. What next
 
-- **Tag and metadata constants (model: 1433).** Tag symbols `{0, 1, 2, 4, 8, 16, 32}` are
+- **Tag and metadata constants (done in this root: 1433).** Tag symbols `{0, 1, 2, 4, 8, 16, 32}` are
   exactly the existing cells `Z, ONE, g, g^2..g^5`, and the root metadata can use
   `0, 2, 4, …, 128, 5504` plus one new constant. That removes the seven symbol `SET`s and nets −6.
   It changes only `SchemeFlat`'s `sym`/`rootMd`/`idxMd` and `FlatHyp`'s decidable facts; the
