@@ -1,3 +1,23 @@
+# RISC-V upper bound: 353 cycles with 144/192-bit chain states
+
+This candidate extends Nicolas Consigny's officially verified 358-cycle record
+in PR #33 (`b6dbcb94fdecd2cd0ad00501d201ca1fb26e52fa`). It proves exact signing
+availability without a key-generation collision penalty, allowing sixteen
+144-bit states and sixteen 192-bit states. Repacking the same 5376-bit payload
+removes four redirects and one width change.
+
+The certificate bounds every accepting or rejecting execution by
+**353 = 38 index + 294 chains + 21 root/decision** cycles and proves exact
+oracle-computation refinement for every raw input. The fixed image has
+15,701 instructions and 88 data bytes: **62,892 bytes**, strictly below 1 MiB.
+The nonce is still 128 bits and the full signature is still 5504 bits.
+
+See `NOTES.md` for the proof, validation, limitations, and attribution.
+The notes below describe historical versions, not this candidate's current
+parameters or hosted status.
+
+---
+
 # RISC-V upper bound: 359 cycles with two dispatch bases
 
 This candidate extends the verified 360-cycle image from PR #30. Repacking its

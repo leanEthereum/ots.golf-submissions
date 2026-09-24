@@ -1,9 +1,8 @@
 import Mathlib
 
 /-! The abstract graph numbers chains in execution order, which is also the order of their
-24-byte working cells. The wire stores chains 0–19 in four 768-bit blocks, each holding
-one 152-bit chain on the cell grid followed by one 160-bit and three 152-bit chains, so
-that sixteen wire values need no expansion; chains 20–31 are stored in place. `index`
+24-byte working cells. The wire permutes sixteen 144-bit states, followed by
+sixteen 192-bit states stored in place. Twenty-four wire values need no expansion. `index`
 gives the wire position of a graph payload bit and `coindex` the graph position of a
 wire bit; they are mutually inverse on 5376-bit payloads and the identity elsewhere. -/
 
@@ -11,38 +10,82 @@ set_option maxRecDepth 100000
 
 namespace OptimalOTS.Payload
 
+/-- Chain-index permutation and inverse on the sixteen narrow states. -/
+def order (k : ℕ) : ℕ := [1,2,5,6,0,9,3,4,10,7,8,13,11,12,14,15].getD k 0
+def inverseOrder (k : ℕ) : ℕ := [4,0,1,6,7,2,3,9,10,5,8,12,13,11,14,15].getD k 0
+
+private theorem order_lt : ∀ k < 16, order k < 16 := by decide +kernel
+private theorem inverseOrder_lt : ∀ k < 16, inverseOrder k < 16 := by decide +kernel
+private theorem inverse_order : ∀ k < 16, inverseOrder (order k) = k := by decide +kernel
+private theorem order_inverse : ∀ k < 16, order (inverseOrder k) = k := by decide +kernel
+
 /-- Wire offset (in bits) of graph payload bit `i`. -/
 def index (len i : ℕ) : ℕ :=
-  if len = 5376 ∧ i < 3072 then
-    if i < 640 then 768 * (i / 160) + 152 + i % 160
-    else 768 * ((i - 640) / 152 / 4) +
-      (if (i - 640) / 152 % 4 = 0 then 0 else if (i - 640) / 152 % 4 = 1 then 312
-        else if (i - 640) / 152 % 4 = 2 then 464 else 616) + (i - 640) % 152
+  if len = 5376 ∧ i < 2304 then
+    144 * order (i / 144) + i % 144
   else i
 
 /-- Graph payload offset of wire bit `i`. -/
 def coindex (len i : ℕ) : ℕ :=
-  if len = 5376 ∧ i < 3072 then
-    if i % 768 < 152 then 640 + 608 * (i / 768) + i % 768
-    else if i % 768 < 312 then 160 * (i / 768) + (i % 768 - 152)
-    else if i % 768 < 464 then 640 + 608 * (i / 768) + 152 + (i % 768 - 312)
-    else if i % 768 < 616 then 640 + 608 * (i / 768) + 304 + (i % 768 - 464)
-    else 640 + 608 * (i / 768) + 456 + (i % 768 - 616)
+  if len = 5376 ∧ i < 2304 then
+    144 * inverseOrder (i / 144) + i % 144
   else i
 
-theorem index_lt (len i : ℕ) (hi : i < len) : index len i < len := by
+private theorem index_lt_5376 : ∀ i < 5376, index 5376 i < 5376 := by
+  intro i hi
   unfold index
-  split_ifs <;> omega
+  split_ifs with h
+  · have := order_lt (i / 144) (by omega); omega
+  · exact hi
+
+private theorem coindex_lt_5376 : ∀ i < 5376, coindex 5376 i < 5376 := by
+  intro i hi
+  unfold coindex
+  split_ifs with h
+  · have := inverseOrder_lt (i / 144) (by omega); omega
+  · exact hi
+
+theorem index_lt (len i : ℕ) (hi : i < len) : index len i < len := by
+  by_cases h : len = 5376
+  · subst h; exact index_lt_5376 i hi
+  · simpa [index, h] using hi
 
 theorem coindex_lt (len i : ℕ) (hi : i < len) : coindex len i < len := by
-  unfold coindex
-  split_ifs <;> omega
+  by_cases h : len = 5376
+  · subst h; exact coindex_lt_5376 i hi
+  · simpa [coindex, h] using hi
 
 theorem coindex_index_5376 : ∀ i < 5376, coindex 5376 (index 5376 i) = i := by
-  decide +kernel
+  intro i _
+  by_cases h : i < 2304
+  · have hk : i / 144 < 16 := by omega
+    have hp := order_lt (i / 144) hk
+    have hr : 144 * order (i / 144) + i % 144 < 2304 := by omega
+    unfold index
+    rw [if_pos ⟨rfl, h⟩]
+    unfold coindex
+    rw [if_pos ⟨rfl, hr⟩]
+    rw [show (144 * order (i / 144) + i % 144) / 144 = order (i / 144) by omega,
+      show (144 * order (i / 144) + i % 144) % 144 = i % 144 by omega,
+      inverse_order _ hk]
+    omega
+  · simp [index, coindex, h]
 
 theorem index_coindex_5376 : ∀ i < 5376, index 5376 (coindex 5376 i) = i := by
-  decide +kernel
+  intro i _
+  by_cases h : i < 2304
+  · have hk : i / 144 < 16 := by omega
+    have hp := inverseOrder_lt (i / 144) hk
+    have hr : 144 * inverseOrder (i / 144) + i % 144 < 2304 := by omega
+    unfold coindex
+    rw [if_pos ⟨rfl, h⟩]
+    unfold index
+    rw [if_pos ⟨rfl, hr⟩]
+    rw [show (144 * inverseOrder (i / 144) + i % 144) / 144 = inverseOrder (i / 144) by omega,
+      show (144 * inverseOrder (i / 144) + i % 144) % 144 = i % 144 by omega,
+      order_inverse _ hk]
+    omega
+  · simp [index, coindex, h]
 
 theorem coindex_index (len i : ℕ) (hi : i < len) : coindex len (index len i) = i := by
   by_cases h : len = 5376

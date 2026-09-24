@@ -5,8 +5,8 @@ import Submissions.UpperRiscv.Resample
 
 A record is good (`GoodRec`) when its keygen points are pairwise distinct and no honest output
 simulates another hash node with an input of the same length. Both failures are collision events
-on 192 bits between two coordinates of the uniform record; the union bound over the ordered pairs
-of hash nodes gives `δ = 2 · 1025² · 2⁻¹⁹²` (`sum_w_not_goodRec_le`).
+on at least 144 bits between two coordinates of the uniform record; the union bound over the
+ordered pairs of hash nodes gives `δ = 2 · 1025² · 2⁻¹⁴⁴` (`sum_w_not_goodRec_le`).
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -25,21 +25,21 @@ open Name
 
 /-! ## Generic resampling bounds -/
 
-/-- Resampling a hash coordinate on a closed set: an event with at most `2 ^ 104` good values
+/-- Resampling a hash coordinate on a closed set: an event with at most `2 ^ 112` good values
 of the coordinate has weight at most `ε₁`. -/
 theorem sum_ind_le_of_card_updHash (s : Name) (hs : ∀ k, s ≠ src k) (S : Finset Rec)
     (hS : ∀ ξ ∈ S, ∀ b : BitVec 256, updHash ξ s b ∈ S) (f : Rec → Prop) [DecidablePred f]
-    (hf : ∀ ξ, (Finset.univ.filter fun b : BitVec 256 => f (updHash ξ s b)).card ≤ 2 ^ 104) :
+    (hf : ∀ ξ, (Finset.univ.filter fun b : BitVec 256 => f (updHash ξ s b)).card ≤ 2 ^ 112) :
     ∑ ξ ∈ S, (if f ξ then w else 0) ≤ ε₁ * ∑ ξ ∈ S, w := by
   rw [Finset.mul_sum, sum_updHash S s hs hS (fun ξ => if f ξ then w else 0)]
   refine Finset.sum_le_sum fun ξ _ => ?_
   rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
   have hle' : ((Finset.univ.filter fun b : BitVec 256 => f (updHash ξ s b)).card : ℝ≥0∞) ≤
-      2 ^ 104 := by exact_mod_cast hf ξ
+      2 ^ 112 := by exact_mod_cast hf ξ
   calc (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
         (((Finset.univ.filter fun b : BitVec 256 => f (updHash ξ s b)).card : ℝ≥0∞) * w)
-      ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 104 * w) := by gcongr
-    _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_104]
+      ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 112 * w) := by gcongr
+    _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_112]
 
 /-- Resampling a source on a closed set: an event with at most one good value of the source has
 weight at most `ε₁`. -/
@@ -131,7 +131,7 @@ theorem card_pair_updHash_le {h p h' p' : Name} (hp : hashParent h = some p)
     (hp' : hashParent h' = some p') (hne : h ≠ h') (ξ : Rec) (hs : ∀ k, coordOf h ≠ src k) :
     (Finset.univ.filter fun b : BitVec 256 =>
       pointOf (updHash ξ (coordOf h) b) h p = pointOf (updHash ξ (coordOf h) b) h' p').card ≤
-      2 ^ 104 := by
+      2 ^ 112 := by
   have hinv : ∀ b, pointOf (updHash ξ (coordOf h) b) h' p' = pointOf ξ h' p' := fun b => by
     unfold pointOf
     rw [val_updHash_of_not_mem_deps _ _ _ _ (coordOf_not_mem_deps hp hp' hne)]

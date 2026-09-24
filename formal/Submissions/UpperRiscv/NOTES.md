@@ -1,3 +1,86 @@
+# Exact availability and thinner states: 353-cycle candidate
+
+This extends Nicolas Consigny's officially verified 358-cycle record in PR #33,
+checked source `b6dbcb94fdecd2cd0ad00501d201ca1fb26e52fa` (836.1 seconds hosted).
+The earlier construction and attribution notes are retained below as historical
+snapshots. Assisted by: Codex.
+
+## Mathematical change
+
+The former availability proof compared actual key generation with an independent
+ideal record, charging for collisions. That was unnecessarily pessimistic:
+key generation only queries inputs of chain-state length or root length, never
+the index-query length. `FreshKeygen` proves that actual cached graph evaluation
+leaves every index query fresh even if some key-generation queries collide.
+The signer uses distinct nonces. `Availability.signingFailure_exact` therefore
+proves exact failure `miss ^ trials` for every public-key-dependent message.
+No collision allowance is needed for availability.
+
+This allows the first sixteen chain states to be 144 bits and the last sixteen
+to be 192 bits: still exactly 5376 payload bits. The security proof still accounts
+for collisions. Its resampling bound becomes `2^-144`; fixing a state leaves at
+most 112 answer bits free. The same strong-security argument closes using
+`1025 * 2^112 <= 2^128` and `4 * 1025^2 < 1036 * 2^17`.
+No assumption of collision-free actual key generation is introduced.
+
+## Machine change
+
+The first sixteen 18-byte wire offsets relative to the payload are
+`[18,36,90,108,0,162,54,72,180,126,144,234,198,216,252,270]`.
+The remaining sixteen 24-byte states follow at offset 288 in execution order.
+Cells remain `BASE - 32 + 24*k`, with 32-byte hash outputs starting eight bytes
+below each cell. Chains 6, 9, 12 and 15 keep state bits `[112,256)` and hash in
+place six bytes above their cells; other states use offset 64. Twenty-four
+chains now hash in place. The eight redirect chains are 0, 1, 2, 3, 5, 8, 11, 14.
+There is one width change, at pair 8, from 144 to 192.
+
+The shared-base dispatch arithmetic and digit mapping from 358 are unchanged.
+The row slots are repacked to
+`[0,63,126,190] / [25,87,152,213] / [48,112,175,236] / [72,137,198,259]`.
+`MixedCode.wellPlaced` proves non-overlap and `MixedLayout` proves payload and
+memory geometry. `Payload` proves the wire permutation via a 16-entry inverse
+check and general quotient/remainder arithmetic, not a per-bit enumeration.
+
+The root still commits the low 192 bits of every final answer: 6144 bits and
+twelve compressions. There remain 32 four-bit digits, target sum 157, 189 chain
+hashes, and a 128-bit nonce. Accounting is
+**38 + (189 + 64 + 32 + 8 + 1) + 21 = 353 cycles**.
+The image contains **15,701 instructions + 88 data bytes = 62,892 bytes**.
+
+## Validation status
+
+- The full Lean certificate, strict image-size theorem, and permitted-axiom guard
+  build against contract `da1418bfec2a599ac36d035f3a1ec551e73d73a0`.
+- The actual Lean-exported code and data exactly match the independent generator.
+  All 20,840 transcript tests pass, including every one of the 4,096 pair/digit
+  landings. Eight honest cases cost exactly 38/294/21; 20,832 cases reject.
+- The pinned development comparator rebuilds the complete candidate from cold
+  submission-module caches, checks the statements and permitted axioms, and
+  replays the proof through Lean's default kernel: "Your solution is okay!"
+  Local wall time is 291.395 seconds, not a hosted-runtime estimate or an
+  official resource-limit measurement. Genuine pinned landrun and lean4export
+  tools are used; the trusted contract is unchanged.
+- Source-policy and contract-pin checks pass. Changes stay in UpperRiscv.
+- The unchanged official verifier fails this local host's Landlock preflight,
+  before checking the proof. No production isolation requirement is bypassed.
+  No hosted verdict for 353 is claimed; 358 remains the verified checkpoint.
+
+## Rejected directions and next experiments
+
+Exact enumeration of 100 mixed-radix mixtures with 128 index bits (3-, 4-, and
+5-bit digits) did not beat the earlier layout family. Simpler quotient-checksum
+tests alias valid sum 157 with invalid sums; weakening the rejection predicate
+without a new availability/security argument is not an optimization. Reducing
+the root to eleven blocks is not available in this 24-byte-cell construction.
+These are scoped search results, not global lower bounds.
+
+Further improvements could change the number of chains, acceptance code, or
+memory grid. Cost the complete dispatch and root before porting another proof.
+The useful mathematical idea here is a conditional-independence argument for
+fresh queries; no result of Weil or Bourbaki is assumed by the certificate.
+
+---
+
 # One dispatch base: 358-cycle candidate
 
 This extends the officially verified 359-cycle submission in PR #32, checked

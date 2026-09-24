@@ -180,7 +180,7 @@ theorem sum_fin32_ge (v : ℕ) : ∑ t : Fin 32, (if v ≤ t.val then 1 else 0) 
     omega
   rw [this, Nat.card_Ico]
 
-/-- Every cut reveals four 160-bit, sixteen 152-bit and twelve 192-bit states. -/
+/-- Every cut reveals sixteen 144-bit and sixteen 192-bit states. -/
 theorem reveal_cutOf (c : Choice) : ∑ n ∈ cutOf c, n.len = 5376 := by
   unfold cutOf
   rw [Finset.sum_image]

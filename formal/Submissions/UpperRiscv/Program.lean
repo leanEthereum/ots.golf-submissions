@@ -138,7 +138,7 @@ def sumCheck : Code :=
    .BEQ .x27 .x0 16] ++ reject
 
 /-- The chain input length; the input pointer still holds the public-key address. -/
-def setup : Code := [.ADDI .x11 .x0 160]
+def setup : Code := [.ADDI .x11 .x0 144]
 
 def indexPhase : Code :=
   indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++ lanes ++ fold ++ sumCheck ++ setup

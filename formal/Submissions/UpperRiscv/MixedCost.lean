@@ -53,16 +53,16 @@ theorem all_chain_hashes (index : Idx) :
     ∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k) = 189 := by
   exact fixedPositions_sum index
 
-/-- Chain work plus all pointer updates, dispatches, redirects, and the two length changes. -/
+/-- Chain work plus all pointer updates, dispatches, redirects, and the single length change. -/
 def chainsCost (index : Idx) : ℕ :=
   (∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k)) +
-    2*32 + 2*16 + (∑ k : Fin 32, earlyHash k) + 2
+    2*32 + 2*16 + (∑ k : Fin 32, earlyHash k) + 1
 
-theorem chainsCost_eq (index : Idx) : chainsCost index = 299 := by
-  have he : ∑ k : Fin 32, earlyHash k = 12 := by decide +kernel
+theorem chainsCost_eq (index : Idx) : chainsCost index = 294 := by
+  have he : ∑ k : Fin 32, earlyHash k = 8 := by decide +kernel
   rw [chainsCost, all_chain_hashes, he]
 
-theorem totalCost (index : Idx) : 38+chainsCost index+21 = 358 := by
+theorem totalCost (index : Idx) : 38+chainsCost index+21 = 353 := by
   rw [chainsCost_eq]
 
 end OptimalOTS.RiscvMixedProgram

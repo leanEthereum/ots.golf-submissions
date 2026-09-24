@@ -1,10 +1,10 @@
 import Submissions.UpperRiscv.Program
 
-/-! The 358-cycle mixed-width candidate image. This module proves image validity;
+/-! The 353-cycle mixed-width candidate image. This module proves image validity;
 the complete execution/refinement certificate is a separate obligation.
 
-Chains 7, 11, 15 and 19 are hashed in place: each wire value starts five bytes into its own cell,
-inside the chain's 32-byte answer buffer at byte 13, so the chain has no expansion hash and no
+Chains 6, 9, 12 and 15 are hashed in place: each wire value starts six bytes into its own cell,
+inside the chain's 32-byte answer buffer at byte 14, so the chain has no expansion hash and no
 redirect, and while it hashes `x10` points at its wire value (`work k = wireSlot k`). -/
 
 set_option maxRecDepth 100000
@@ -17,14 +17,11 @@ open Riscv2Program (Code imm12 reject indexPrefix lengthCheck wordReg
 
 /-- Working cell of chain `k`: 24-byte cells from 0x3FFFE0, in execution order. -/
 def slot (k : ℕ) : ℕ := 0x3FFFE0 + 24 * k
-/-- Byte offset of chain `k`'s value in the wire payload: four 96-byte blocks holding
-chains `4b+4, b, 4b+5, 4b+6, 4b+7`, then chains 20–31 in place. -/
+/-- Wire byte offsets: sixteen permuted 18-byte states, then sixteen 24-byte states. -/
 def wireByte (k : ℕ) : ℕ :=
-  if k < 4 then 96 * k + 19
-  else if k < 20 then 96 * ((k - 4) / 4) +
-    (if (k - 4) % 4 = 0 then 0 else if (k - 4) % 4 = 1 then 39
-      else if (k - 4) % 4 = 2 then 58 else 77)
-  else 384 + 24 * (k - 20)
+  if k < 16 then
+    [18,36,90,108,0,162,54,72,180,126,144,234,198,216,252,270].getD k 0
+  else 288 + 24 * (k - 16)
 def wireSlot (k : ℕ) : ℕ := 0x400040 + wireByte k
 /-- Chains whose wire value is not already in its cell and need an expansion step. -/
 def narrow (k : ℕ) : Bool := decide (wireSlot k ≠ slot k)
@@ -35,8 +32,8 @@ theorem wireSlot_eq_slot_of_not_narrow {k : ℕ} (hn : ¬ narrow k = true) : wir
 theorem wireSlot_ne_slot_of_narrow {k : ℕ} (hn : narrow k = true) : wireSlot k ≠ slot k := by
   unfold narrow at hn; simpa using hn
 /-- Chains whose first hash moves the wire value into the cell, followed by the redirect. A value
-at its cell (byte 8 of the answer buffer) or five bytes above it (byte 13) is hashed in place. -/
-def expands (k : ℕ) : Bool := decide (wireSlot k ≠ slot k ∧ wireSlot k ≠ slot k + 5)
+at its cell (byte 8 of the answer buffer) or six bytes above it (byte 14) is hashed in place. -/
+def expands (k : ℕ) : Bool := decide (wireSlot k ≠ slot k ∧ wireSlot k ≠ slot k + 6)
 /-- The input address while the chain hashes. -/
 def work (k : ℕ) : ℕ := if expands k then slot k else wireSlot k
 def outAddr (k : ℕ) : ℕ := slot k - 8
@@ -48,7 +45,7 @@ def group (q : ℕ) : ℕ := q % 4
 def withinGroup (q : ℕ) : ℕ := q / 4
 def groupOffset (g : ℕ) : ℕ := 3840*g
 def slotOffset (q : ℕ) : ℕ :=
-  ([[0,64,128,192], [25,90,154,215], [49,112,177,238], [75,138,200,261]].getD
+  ([[0,63,126,190], [25,87,152,213], [48,112,175,236], [72,137,198,259]].getD
     (group q) []).getD (withinGroup q) 0
 def copiesStart : ℕ := 4096 + 4 * 50
 def copyStart (q d : ℕ) : ℕ :=
@@ -74,14 +71,14 @@ def fold : Code :=
 def sumCheck : Code := [.REMU .x27 .x27 .x2, .XORI .x27 .x27 628, .BEQ .x27 .x0 16] ++ reject
 def indexPhase : Code :=
   indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++
-    (List.range 4).flatMap laneWord ++ fold ++ sumCheck ++ [.ADDI .x11 .x0 160]
+    (List.range 4).flatMap laneWord ++ fold ++ sumCheck ++ [.ADDI .x11 .x0 144]
 
 def enter (k previous : ℕ) : Code :=
   [.ADDI .x10 .x10 (imm12 ((wireSlot k : ℤ) - previous)),
    .ADDI .x12 .x10 (imm12 ((outAddr k : ℤ) - wireSlot k))] ++
     if expands k then [.ECALL, .ADDI .x10 .x12 8] else []
 def prologue (q : ℕ) : Code :=
-  (if q = 2 then [.ADDI .x11 .x0 152] else if q = 10 then [.ADDI .x11 .x0 192] else []) ++
+  (if q = 8 then [.ADDI .x11 .x0 192] else []) ++
     enter (2*q) (if q = 0 then hashBase else work (2*q-1)) ++
     [.LHU .x28 .x12 (imm12 ((laneBase + 2*q : ℤ) - outAddr (2*q))),
      .JALR .x0 .x28 (imm12 (jumpImm q))]
@@ -120,7 +117,7 @@ def dataImage : List (BitVec 8) :=
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
 theorem index_length : indexPhase.length = 44 := by decide +kernel
-theorem code_length : verifier.length = 15703 := by decide +kernel
+theorem code_length : verifier.length = 15701 := by decide +kernel
 theorem data_length : dataImage.length = 88 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel
 theorem image_valid : image.Valid := by

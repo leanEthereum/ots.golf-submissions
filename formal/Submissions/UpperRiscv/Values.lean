@@ -16,8 +16,8 @@ coordinates each value depends on (`deps`), with the two coordinate updates `upd
 
 The oracle has no labels and the scheme uses none. A keygen point is the bare input
 `⟨p.len, val ξ p⟩` of a hash node. Points of distinct hash nodes are distinct only for *good*
-records (`DistinctRec`), which is all but a `2 ^ (-173)` fraction of them; every statement that
-needs the keygen cache to be read back node by node assumes it. A keygen point never has the
+records (`DistinctRec`), whose exceptional probability is bounded in `GoodRec`; every statement
+that needs the keygen cache to be read back node by node assumes it. A keygen point never has the
 length of an index query (`pointOf_ne_encQuery`).
 -/
 
@@ -180,12 +180,12 @@ theorem child_hashParent {h p : Name} (hp : hashParent h = some p) : child p = s
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   all_goals rfl
 
-/-- The input of a hash node has length 152, 160, 192 (chains) or 6144 (root). -/
+/-- The input of a hash node has length 144, 192 (chains) or 6144 (root). -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 152 ∨ p.len = 160 ∨ p.len = 192 ∨ p.len = 6144 := by
+    p.len = 144 ∨ p.len = 192 ∨ p.len = 6144 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · rename_i k t
-    rcases chainBits_cases k with hk | hk | hk <;> simp [Name.len, hk]
+    rcases chainBits_cases k with hk | hk <;> simp [Name.len, hk]
   · simp [Name.len]
 
 /-- Key generation and indexing use disjoint input lengths. -/
@@ -193,7 +193,7 @@ theorem len_hashParent_ne_enc {h p : Name} (hp : hashParent h = some p) :
     p.len ≠ emsgBits + nonceBits := by
   have e : emsgBits + nonceBits = 512 := rfl
   rw [e]
-  rcases len_hashParent_cases hp with e | e | e | e <;> omega
+  rcases len_hashParent_cases hp with e | e | e <;> omega
 
 /-- The keygen point of the hash node `h` with parent `p`: the bare input of `h`. The hash node
 is not written next to the input (the oracle has no labels, the scheme no headers). -/
@@ -604,10 +604,10 @@ theorem card_filter_extract_le (o c : ℕ) (hoc : o + c ≤ 256) (a : BitVec c) 
   rw [Finset.card_univ, Fintype.card_bitVec, he] at key
   exact key
 
-/-- Fixing a chain's state slice (at least 152 bits, at bit `truncOff k`) leaves at most 104
+/-- Fixing a chain's state slice (at least 144 bits, at bit `truncOff k`) leaves at most 112
 unconstrained bits. -/
 theorem card_filter_trunc_le' (k : Fin 32) (a : BitVec (chainBits k)) :
-    (Finset.univ.filter fun w : BitVec 256 => trunc k w = a).card ≤ 2 ^ 104 := by
+    (Finset.univ.filter fun w : BitVec 256 => trunc k w = a).card ≤ 2 ^ 112 := by
   refine le_trans (Finset.card_le_card fun w hw => ?_)
     ((card_filter_extract_le (truncOff k) (chainBits k) (truncOff_add_le k) a).trans
       (Nat.pow_le_pow_right (by norm_num) (by have := chainBits_ge k; omega)))
@@ -616,11 +616,11 @@ theorem card_filter_trunc_le' (k : Fin 32) (a : BitVec (chainBits k)) :
 
 /-- The root slice pins 192 of the 256 bits of a top. -/
 theorem card_filter_rootSlice_le (k : Fin 32) (a : BitVec 192) :
-    (Finset.univ.filter fun w : BitVec 256 => rootSlice k w = a).card ≤ 2 ^ 104 :=
+    (Finset.univ.filter fun w : BitVec 256 => rootSlice k w = a).card ≤ 2 ^ 112 :=
   (card_filter_lo192_le' a).trans (by norm_num)
 
 theorem card_filter_sim_le' (ξ : Rec) (h : Name) (hh : h ≠ rh) :
-    (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 104 := by
+    (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 112 := by
   cases h with
   | ch k t =>
     by_cases ht : t.val = 31
@@ -681,7 +681,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
       exact hn hl.symm
     refine (Finset.card_le_card hsub).trans ((Finset.card_biUnion_le).trans ?_)
     calc ∑ h ∈ hashNodes, (Finset.univ.filter fun w : BitVec 256 => sim ξ h w ∧ h ≠ rh).card
-        ≤ ∑ _h ∈ hashNodes, 2 ^ 104 := by
+        ≤ ∑ _h ∈ hashNodes, 2 ^ 112 := by
           refine Finset.sum_le_sum fun h _ => ?_
           by_cases hh : h = rh
           · subst hh
@@ -692,7 +692,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
           · refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_sim_le' ξ h hh)
             rw [Finset.mem_filter] at hw ⊢
             exact ⟨hw.1, hw.2.1⟩
-      _ = 1025 * 2 ^ 104 := by rw [Finset.sum_const, card_hashNodes, smul_eq_mul]
+      _ = 1025 * 2 ^ 112 := by rw [Finset.sum_const, card_hashNodes, smul_eq_mul]
       _ ≤ 2 ^ 128 := by norm_num
 
 theorem inv_card_bitVec_mul_two_pow : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * ((2 ^ 128 : ℕ) : ℝ≥0∞) = ε := by
