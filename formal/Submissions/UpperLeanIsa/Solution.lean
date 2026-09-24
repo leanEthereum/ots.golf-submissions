@@ -1,34 +1,32 @@
-import Submissions.UpperLeanIsa.Security
+import Submissions.UpperLeanIsa.FlatSecurity
 import Submissions.UpperLeanIsa.MachineFaithful
-import Submissions.UpperLeanIsa.MachineCycles
 
-/-! The leanISA submission: the Winternitz scheme of `Algorithms.lean`, its straight-line bytecode
-(`MachineProgram.lean`, Rice-tree `JUMP` dispatch) and the six certificate clauses. -/
+/-! The leanISA submission: the HL-FLAT-A layer scheme (`SchemeFlat.lean`, 42 Winternitz chains
+on one hypercube layer, nonce-ground index), its straight-line bytecode (`MachineProgram.lean`)
+and the six certificate clauses. -/
 
 namespace OptimalOTS.Challenge.UpperLeanIsa
 
-open OptimalOTS OptimalOTS.LeanIsaBaseline
+open OptimalOTS OptimalOTS.LeanIsaBaseline.Layer
 
 /-- The OTS, the bytecode, the announced memory size, the prover's memory-filling strategy and
 the step count. -/
-noncomputable def submission : LeanIsa.Submission := Honest.machineSubmission
+noncomputable def submission : LeanIsa.Submission := HLFlat.machineSubmission
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`33843` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 33843 where
-  admissible := LeanIsaBaseline.admissible
-  secure := LeanIsaBaseline.secure
-  valid := Machine.valid
-  faithful := Honest.faithful
-  sound := Honest.sound submission rfl rfl
-  cycles := by
-    have h := Machine.cycles submission rfl
-    rwa [Machine.claim_eq] at h
+`1598` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1598 where
+  admissible := Flat.admissible
+  secure := Flat.secure
+  valid := HLFlat.machine_valid
+  faithful := HLFlat.faithful
+  sound := HLFlat.machine_sound
+  cycles := HLFlat.claim_eq ▸ HLFlat.machine_cycles
 
 /-- The bytecode slots and memory cells the prover must seed and finalize, together fewer than
 `LeanIsa.maxSeededRows`. -/
 theorem seeded_rows : submission.seededRows < LeanIsa.maxSeededRows :=
-  Machine.seededRows_lt submission rfl rfl
+  HLFlat.machine_seededRows
 
 end OptimalOTS.Challenge.UpperLeanIsa

@@ -1,408 +1,511 @@
 import Submissions.UpperLeanIsa.MachineCycles
-import Submissions.UpperLeanIsa.MachineProver
 
 /-!
-# Soundness of the leanISA machine under a fixed oracle table
+# Soundness of the HL-FLAT-A machine under a fixed oracle table
 
-`CRel f v ci` is the relation the cell-level instruction `ci` asserts on the cell values `v`,
-with `BLAKE2S` answered by the table `f`; `CRelNH v ci` is its hash-free part. `accept_of_path`
-(design `NOTES.md` §6): cell values satisfying the relations along a path with leaf
-vector `D` (`PathFacts`), and agreeing with the loader on the pinned cells, certify a signature
-that the verifier accepts under `f`.
+`accept_of_path`: cell values satisfying the fixed-table relations along the path of a digit
+vector `s`, with the landings of `s`, and agreeing with the loader on the pinned cells, certify
+a signature that `Flat.params.verify` accepts under the table.
 
-1. The constants pin the position cells, the zero pair, the checksum target and the length
-   (`constFacts_of`).
-2. The tie ops accumulate the leaf indices `D k − off k` into the message cells (`tie_facts`,
-   `tie_chain`), so the message leaves are the message digits (`tie_iff`).
-3. The checksum products give `Σ_{k<41} D k + 64 · (D 41 − 64) + D 42 = 5271`
-   (`checksum_of_path`, hash-free), so the checksum leaves are the checksum digits.
-4. The leaf and body `BLAKE2S` compute the chain ends (`chain_from`), the absorptions fold them
-   to the root (`root_sound`), and the pk `XOR` compares it with the public key.
+1. The prologue pins `Z, ONE, LEN, TIDX, g, K0` and the symbols; the length cell pins
+   `|σ| = 5504`, so the loader's cells are the 42 words and the nonce.
+2. The index `BLAKE2S` is the scheme's index query; its low half `I` is the index cell.
+3. The tie accumulates the tie patterns into the index cell (`acc_eq`), so `digit I k = s k`;
+   the exponent identity (`layer_of_facts`, hash-free) gives `Σ s = 106`, so `I` is accepted.
+4. The inline `BLAKE2S` compute the verifier's chain tops (`chain_top`), the ten root calls
+   compute its root (`root_state`), and the pk `XOR` compares it with the public key.
 -/
 
-namespace OptimalOTS.LeanIsaBaseline.Honest
+namespace OptimalOTS.HLFlat
 
 open OracleComp LeanerVM.Parameters LeanerVM.Semantics
-open OptimalOTS.LeanIsa (cellBits cellOfBits cellBits_cellOfBits blake2sQuery
-  hashInput inputWord statementBits OracleCompressCells)
-open OptimalOTS.LeanIsaBaseline.Machine
+open OptimalOTS.LeanIsaBaseline.Layer
+open OptimalOTS.LeanIsa (cellBits cellOfBits cellBits_cellOfBits blake2sQuery hashInput
+  inputWord OracleCompressCells)
 
 noncomputable section
 
-/-! ## The relation of one instruction -/
+/-- The scheme's parameters. -/
+abbrev FP : Params := Flat.params
 
-/-- The relation the cell-level instruction asserts on the cell values `v` under table `f`:
-`CInstr.Rel` of `MachineRun` without the range conditions. The trap `.pad` never holds. -/
-def CRel (f : HashTable) (v : ℕ → E) : CInstr → Prop
-  | .xor a b c => v c = v a + v b
-  | .mul a b c => v c = v a * v b
-  | .setc a k => v a = k
-  | .blake m0 m1 m2 m3 cv out md =>
-      OracleCompressCells ![v m0, v m1, v m2, v m3] (v cv) (v (cv + 1)) (v out) (v (out + 1))
-        (v md) (f ⟨896, blake2sQuery ![v m0, v m1, v m2, v m3] (v cv) (v (cv + 1)) (v md)⟩)
-  | .jump a b c => IsInK (v a) ∧ IsInK (v b) ∧ IsInK (v c)
-  | .pad => False
+/-! ## Cell values and queries -/
 
-/-- The hash-free relation on the cell values: `XOR`, `MUL` and `SET` equations only. -/
-def CRelNH (v : ℕ → E) : CInstr → Prop
-  | .xor a b c => v c = v a + v b
-  | .mul a b c => v c = v a * v b
-  | .setc a k => v a = k
-  | .blake .. => True
-  | .jump .. => True
-  | .pad => False
+theorem blake2sQuery_eq (a b c d cv0 cv1 md : E) :
+    blake2sQuery ![a, b, c, d] cv0 cv1 md =
+      hashInput (cellBits cv1 ++ cellBits cv0) (cellBits d ++ cellBits c ++ cellBits b ++ cellBits a)
+        (cellBits md) := rfl
 
-theorem crelNH_of_crel {f : HashTable} {v : ℕ → E} {ci : CInstr} (h : CRel f v ci) :
-    CRelNH v ci := by
-  cases ci
-  all_goals first | exact h | trivial
+theorem cellBits_oneV : cellBits oneV = 1 := by rw [oneV, cellBits_ofK]; decide
 
-theorem crelNH_of_relNH {κ : ℕ} {L : MemImage κ} {ci : CInstr} (h : ci.RelNH L) :
-    CRelNH (Lx L) ci := by
-  cases ci
-  all_goals first | trivial | exact h.2.2.2 | exact h.2
+theorem cellBits_gV : cellBits gV = BitVec.ofNat 128 2 := by rw [gV, cellBits_ofK]; decide
 
-section Access
+theorem cv_const : (1 : BitVec 128) ++ (0 : BitVec 128) = Flat.cv := by unfold Flat.cv; decide
 
-variable {v : ℕ → E}
+theorem msg_split (a b : BitVec 128) (m : Message) :
+    a ++ b ++ m.extractLsb' 128 128 ++ m.extractLsb' 0 128 = a ++ b ++ m := by
+  have h := hi_append_lo m
+  conv_rhs => rw [← h]
+  rw [BitVec.append_assoc (x₁ := a ++ b)]
+  exact BitVec.cast_eq _ _
 
-theorem nh_setc {ci : CInstr} {a : ℕ} {k : E} (h : CRelNH v ci) (hs : ci = .setc a k) :
-    v a = k := by
-  subst hs; exact h
+theorem fpat_zero (k : ℕ) : fpat k 0 = 0 := by unfold fpat; rw [Nat.zero_mul]; exact natV_zero
 
-theorem nh_xor {ci : CInstr} {a b c : ℕ} (h : CRelNH v ci) (hs : ci = .xor a b c) :
-    v c = v a + v b := by
-  subst hs; exact h
+/-- The oracle relation of a `BLAKE2S` gives its low output half. -/
+theorem oracle_lo {f : HashTable} {m : Fin 4 → E} {cv0 cv1 o0 o1 md : E}
+    (h : oracleRel f m cv0 cv1 o0 o1 md) :
+    cellBits o0 = (f ⟨896, blake2sQuery m cv0 cv1 md⟩).extractLsb' 0 128 := h.2.2.2.2.2.2.1
 
-theorem nh_mul {ci : CInstr} {a b c : ℕ} (h : CRelNH v ci) (hs : ci = .mul a b c) :
-    v c = v a * v b := by
-  subst hs; exact h
+/-- The oracle relation of a `BLAKE2S` gives its whole output pair. -/
+theorem oracle_pair {f : HashTable} {m : Fin 4 → E} {cv0 cv1 o0 o1 md : E}
+    (h : oracleRel f m cv0 cv1 o0 o1 md) :
+    cellBits o1 ++ cellBits o0 = f ⟨896, blake2sQuery m cv0 cv1 md⟩ :=
+  out_pair _ _ _ h.2.2.2.2.2.2.1 h.2.2.2.2.2.2.2
 
-/-! ## Reading a path's slots
+/-! ## Chains under the table -/
 
-`Q` is any instruction predicate that the slot predicate `R` implies. -/
-
-theorem Valid.off_le {D : ℕ → ℕ} (hD : Valid D) {k : ℕ} (hk : k < 43) : off k ≤ D k := by
-  by_cases h41 : k = 41
-  · subst h41
-    rw [off_41]
-    exact hD.2.1
-  · exact (hD.1 k (by omega)).1
-
-variable {R : ℕ → Prop} {Q : CInstr → Prop} (hQ : ∀ s, R s → Q (cinstrAt s)) {D : ℕ → ℕ}
-include hQ
-
-theorem leaf_at (hP : PathFacts R D) (hD : Valid D) {k : ℕ} (hk : k < 41 ∨ k = 42) {i : ℕ}
-    (hi : i < leafLen k (D k)) : Q (leafOp k (D k) i) := by
-  have h := hQ _ (hP.leaf k hk i hi)
-  rwa [cinstrAt_leaf hk (hD.1 k hk).1 (hD.1 k hk).2
-    (by have := leafLen_le k (D k); omega)] at h
-
-theorem core_at (hP : PathFacts R D) (hD : Valid D) {k : ℕ} (hk : k < 41 ∨ k = 42) {j : ℕ}
-    (hj : tieLen k + j < leafLen k (D k)) : Q (coreOp k (D k) j) := by
-  have h := leaf_at hQ hP hD hk hj
-  rwa [leafOp_core] at h
-
-theorem leafHi_at (hP : PathFacts R D) (hD : Valid D) {i : ℕ} (hi : i < 5) :
-    Q (hiLeafOp (D 41 - 64) i) := by
-  have h := hQ _ (hP.leafHi i hi)
-  rwa [cinstrAt_hileaf (by have := hD.2.2; omega) hi] at h
-
-theorem body_at (hP : PathFacts R D) (hD : Valid D) {k j : ℕ} (hk : k < 43) (hj : D k < j)
-    (hj2 : j ≤ 126) : Q (bodyInstr k j) := by
-  have h := hQ _ (hP.body k hk j hj hj2)
-  have := Valid.off_le hD hk
-  rwa [cinstrAt_body hk (by unfold bodyFirst; omega) hj2] at h
-
-theorem root_at (hP : PathFacts R D) {t : ℕ} (ht : t < 43) : Q (rootInstr t) := by
-  have h := hQ _ (hP.root t ht)
-  rwa [cinstrAt_root ht] at h
-
-theorem pk_at (hP : PathFacts R D) : Q pkInstr := by
-  have h := hQ _ hP.pk
-  rwa [cinstrAt_pk] at h
-
-end Access
-
-theorem leafLen_of_lt {k e : ℕ} (he : e < 127) : leafLen k e = tieLen k + 4 := by
-  unfold leafLen; rw [if_pos he]
-
-theorem leafLen_of_ge {k e : ℕ} (he : ¬ e < 127) : leafLen k e = tieLen k + 5 := by
-  unfold leafLen; rw [if_neg he]
-
-/-! ## The constants -/
-
-/-- What the constant slots `0 … 130` pin. -/
-structure ConstFacts (v : ℕ → E) : Prop where
-  pos : ∀ j, 1 ≤ j → j ≤ 127 → v (posCell j) = posV j
-  k0 : v k0Cell = tgtV K0
-  len : v lenCell = lenV
-  z0 : v zCell = 0
-  z1 : v (zCell + 1) = 0
-
-theorem constFacts_of {v : ℕ → E} {R : ℕ → Prop} (hR : ∀ s, R s → CRelNH v (cinstrAt s))
-    (hc : ∀ s < 131, R s) : ConstFacts v where
-  pos j hj1 hj2 := by
-    have h := nh_setc (hR _ (hc (j - 1) (by omega))) (cinstrAt_const (s := j - 1) (by omega))
-    rwa [show j - 1 + 1 = j by omega] at h
-  k0 := nh_setc (hR _ (hc 127 (by norm_num))) cinstrAt_k0
-  len := nh_setc (hR _ (hc 128 (by norm_num))) cinstrAt_len
-  z0 := nh_setc (hR _ (hc 129 (by norm_num))) cinstrAt_z0
-  z1 := nh_setc (hR _ (hc 130 (by norm_num))) cinstrAt_z1
-
-theorem oneCell_val {v : ℕ → E} (hc : ConstFacts v) : v oneCell = oneV := by
-  rw [← posCell_one, hc.pos 1 le_rfl (by norm_num), posV_one]
-
-theorem ConstFacts.pos_all {v : ℕ → E} (hc : ConstFacts v) {j : ℕ} (hj : j ≤ 127) :
-    v (posCell j) = posV j := by
-  rcases Nat.eq_zero_or_pos j with rfl | hj0
-  · rw [posCell_zero, hc.z0, posV_zero]
-  · exact hc.pos j hj0 hj
-
-/-! ## The checksum (hash-free) -/
-
-/-- The checksum cells of a Rice leaf: `T_k = g ^ (s0 k + e + 1)` and `G_k = G_{k-1} · T_k`. -/
-theorem leaf_checksum {v : ℕ → E} {R : ℕ → Prop} (hR : ∀ s, R s → CRelNH v (cinstrAt s))
-    {D : ℕ → ℕ} (hP : PathFacts R D) (hD : Valid D) {k : ℕ} (hk : k < 41 ∨ k = 42) :
-    v (tCell k) = tgtV (s0 k + D k + 1) ∧ v (gOut k) = v (gPrev k) * v (tCell k) := by
-  by_cases he : D k < 127
-  · have hL := leafLen_of_lt (k := k) he
-    exact ⟨nh_setc (core_at hR hP hD hk (j := 2) (by omega)) (coreOp_set he),
-      nh_mul (core_at hR hP hD hk (j := 1) (by omega)) (coreOp_mul he)⟩
-  · have hL := leafLen_of_ge (k := k) he
-    have h127 : D k = 127 := by have := hD.lt_128 hk; omega
-    refine ⟨?_, nh_mul (core_at hR hP hD hk (j := 2) (by omega)) (coreOp127_mul (by omega))⟩
-    rw [nh_setc (core_at hR hP hD hk (j := 1) (by omega)) (coreOp127_setT (by omega)), h127]
-
-theorem s0_lt_of_lt {i : ℕ} (hi : i < 41) : s0 i < 65491 := by
-  have h := s0_le (k := i) (by omega)
-  have : rootBase = 65491 := rfl
-  omega
-
-/-- The checksum identity, from the hash-free relations of any path: the leaf landing constants
-multiply to `g ^ K0`. -/
-theorem checksum_of_path {v : ℕ → E} {R : ℕ → Prop} (hR : ∀ s, R s → CRelNH v (cinstrAt s))
-    {D : ℕ → ℕ} (hP : PathFacts R D) (hD : Valid D) :
-    ∑ k ∈ Finset.range 41, D k + 64 * (D 41 - 64) + D 42 = 5271 := by
-  have hc := constFacts_of hR hP.const
-  have hprod : ∀ k < 41, v (gCell k) = tgtV (∑ i ∈ Finset.range (k + 1), (s0 i + D i + 1)) := by
-    intro k
-    induction k with
-    | zero =>
-      intro _
-      obtain ⟨hT, hG⟩ := leaf_checksum hR hP hD (k := 0) (Or.inl (by norm_num))
-      rw [gOut_of (by norm_num), gPrev_zero, oneCell_val hc, hT, ← tgtV_zero, tgtV_mul,
-        Nat.zero_add] at hG
-      rw [hG, Finset.sum_range_one]
-    | succ k ih =>
-      intro hk
-      obtain ⟨hT, hG⟩ := leaf_checksum hR hP hD (k := k + 1) (Or.inl hk)
-      rw [gOut_of (by omega), gPrev_of (by omega), Nat.add_sub_cancel,
-        ih (by omega), hT, tgtV_mul] at hG
-      rw [hG, Finset.sum_range_succ _ (k + 1)]
-  have hU := nh_setc (leafHi_at hR hP hD (i := 1) (by norm_num)) (hiLeafOp_setU _)
-  have hG41 := nh_mul (leafHi_at hR hP hD (i := 2) (by norm_num)) (hiLeafOp_mul _)
-  obtain ⟨hT42, hG42⟩ := leaf_checksum hR hP hD (k := 42) (Or.inr rfl)
-  have h40 : v (gCell 40) = tgtV (∑ i ∈ Finset.range 41, (s0 i + D i + 1)) := hprod 40 (by norm_num)
-  rw [h40, hU, tgtV_mul] at hG41
-  rw [gOut_42, gPrev_42, hG41, hT42, tgtV_mul, hc.k0] at hG42
-  have hbound : ∑ i ∈ Finset.range 41, (s0 i + D i + 1) ≤ ∑ _i ∈ Finset.range 41, 65619 :=
-    Finset.sum_le_sum fun i hi => by
-      have hi' := Finset.mem_range.mp hi
-      have := hD.lt_128 (Or.inl hi')
-      have := s0_lt_of_lt hi'
-      omega
-  rw [Finset.sum_const, Finset.card_range, smul_eq_mul] at hbound
-  have hsplit : ∑ i ∈ Finset.range 41, (s0 i + D i + 1) =
-      ∑ i ∈ Finset.range 41, (s0 i + 1) + ∑ i ∈ Finset.range 41, D i := by
-    rw [← Finset.sum_add_distrib]
-    exact Finset.sum_congr rfl fun i _ => by omega
-  have hK0 : K0 = ∑ i ∈ Finset.range 41, (s0 i + 1) + (s0 42 + 1) + 5271 := rfl
-  have h41 := hD.2.2
-  have h42 := hD.lt_128 (Or.inr rfl)
-  have hs42 : s0 42 = 65364 := s0_42
-  have hbig : (2700000 + 64 * 50 + 65500 : ℕ) < 2 ^ 64 - 1 := by norm_num
-  have heq := tgtV_inj (lt_of_le_of_lt (le_of_eq K0_eq) (by norm_num))
-    (lt_of_le_of_lt (by omega) hbig) hG42
-  have hK := K0_eq
-  omega
-
-/-! ## The tie (hash-free) -/
-
-/-- The tie ops of the leaves `D 0 … D 40` close message cells 2 and 1 on the tie sums of the
-leaf indices `D k − off k`. -/
-theorem tie_facts {v : ℕ → E} {R : ℕ → Prop} (hR : ∀ s, R s → CRelNH v (cinstrAt s))
-    {D : ℕ → ℕ} (hP : PathFacts R D) (hD : Valid D)
-    (hpos : ∀ j ≤ 127, v (posCell j) = posV j) :
-    v 2 = tieHi (fun k => D k - off k) ∧ v 1 = tieLo (fun k => D k - off k) := by
-  have hL : ∀ k, 4 ≤ leafLen k (D k) := fun k => leafLen_ge k (D k)
-  have hw : ∀ k < 41, vV (tieShift k) (D k - off k) = tieWord (fun k => D k - off k) k :=
-    fun k hk => vV_tieShift (fun k => D k - off k) hk
-  have hlast : ∀ k, (k = 19 ∨ k = 40) →
-      v (posCell (D k - off k)) = tieWord (fun k => D k - off k) k := by
-    intro k hk
-    rw [tieWord_last _ hk, hpos _ (by have := hD.lt_128 (k := k) (Or.inl (by omega)); omega)]
+/-- A sequence obeying the chain recursion is the fixed-table chain. -/
+theorem chainValue_of_seq (f : HashTable) (P : Params) (k : Fin numChains) :
+    ∀ (n j0 : ℕ) (X : ℕ → Word),
+      (∀ t < n, X (t + 1) = (f ⟨896, P.chainInput k (j0 + t) (X t)⟩).extractLsb' 0 128) →
+        X n = chainValue f P k j0 n (X 0) := by
+  intro n
+  induction n with
+  | zero => intro j0 X _; rfl
+  | succ n ih =>
+    intro j0 X h
+    have h0 := h 0 (by omega)
+    rw [Nat.add_zero] at h0
+    have := ih (j0 + 1) (fun t => X (t + 1)) (fun t ht => by
+      rw [h (t + 1) (by omega), show j0 + (t + 1) = j0 + 1 + t by ring])
+    rw [this, h0]
     rfl
-  refine tie_chain _ (fun k => v (accCell k)) (v 1) (v 2) ?_ ?_ ?_ ?_ ?_
-  · rw [← hw 0 (by norm_num)]
-    exact nh_setc (leaf_at hR hP hD (k := 0) (Or.inl (by norm_num)) (i := 0)
-      (by have := hL 0; omega)) (leafOp_tie0 _)
-  · intro k h1 h39 h19 h20
-    have hk : k < 41 ∨ k = 42 := Or.inl (by omega)
-    have hf := nh_setc (leaf_at hR hP hD hk (i := 0) (by have := hL k; omega))
-      (leafOp_mid0 h1 h39 h19 h20)
-    have h := nh_xor (leaf_at hR hP hD hk (i := 1) (by have := hL k; omega))
-      (leafOp_mid1 h1 h39 h19 h20)
-    show v (accCell k) = v (accCell (k - 1)) + _
-    rw [h, hf, hw k (by omega)]
-  · have h := nh_xor (leaf_at hR hP hD (k := 19) (Or.inl (by norm_num)) (i := 0)
-      (by have := hL 19; omega)) (leafOp_tie19 _)
-    rw [h, hlast 19 (Or.inl rfl)]
-  · rw [← hw 20 (by norm_num)]
-    exact nh_setc (leaf_at hR hP hD (k := 20) (Or.inl (by norm_num)) (i := 0)
-      (by have := hL 20; omega)) (leafOp_tie20 _)
-  · have h := nh_xor (leaf_at hR hP hD (k := 40) (Or.inl (by norm_num)) (i := 0)
-      (by have := hL 40; omega)) (leafOp_tie40 _)
-    rw [h, hlast 40 (Or.inr rfl)]
 
-/-! ## Chains -/
+/-- A sequence obeying the root recursion is the fixed-table root state. -/
+theorem rootState_of_seq (f : HashTable) (P : Params) (t : Fin numChains → Word) :
+    ∀ (n r : ℕ) (Y : ℕ → BitVec 256),
+      (∀ i < n, Y (i + 1) = f ⟨896, P.rootInput t (r + i) (Y i)⟩) →
+        rootState f P t r n (Y 0) = Y n := by
+  intro n
+  induction n with
+  | zero => intro r Y _; rfl
+  | succ n ih =>
+    intro r Y h
+    have h0 : Y 1 = f ⟨896, P.rootInput t r (Y 0)⟩ := by simpa using h 0 (by omega)
+    calc rootState f P t r (n + 1) (Y 0) = rootState f P t (r + 1) n (Y 1) := by rw [h0]; rfl
+      _ = Y (n + 1) := ih (r + 1) (fun i => Y (i + 1)) (fun i hi => by
+        rw [h (i + 1) (by omega), show r + (i + 1) = r + 1 + i by ring])
 
-/-- A chain-step `BLAKE2S` with pinned position cells computes the scheme's chain step. -/
-theorem blake_chain_out {f : HashTable} {v : ℕ → E}
-    (hpos : ∀ j ≤ 127, cellBits (v (posCell j)) = BitVec.ofNat 128 j)
-    (hz0 : v zCell = 0) (hz1 : v (zCell + 1) = 0) {a k j out : ℕ} (hk : k ≤ 127) (hj : j ≤ 127)
-    (h : CRel f v (.blake a (posCell k) (posCell j) zCell zCell out oneCell)) :
-    cellBits (v out) = (f ⟨896, chainInput k j (cellBits (v a))⟩).extractLsb' 0 128 := by
-  have hq : blake2sQuery ![v a, v (posCell k), v (posCell j), v zCell] (v zCell) (v (zCell + 1))
-      (v oneCell) = chainInput k j (cellBits (v a)) :=
-    blake2sQuery_chain k j _ _ _ _ _ _ _ (hpos k hk) (hpos j hj)
-      (by rw [hz0]; exact cellBits_zero_E) (by rw [hz0]; exact cellBits_zero_E)
-      (by rw [hz1]; exact cellBits_zero_E) (by rw [← posCell_one]; exact hpos 1 (by norm_num))
-  obtain ⟨-, -, -, -, -, -, h2, -⟩ := h
-  rw [hq] at h2
-  exact h2
+/-! ## The chain sequence of a block -/
 
-/-- The end of chain `k`: `x_{k,127} = chainValue f k (D k) (127 - D k) σ_k`. -/
-theorem chain_end {f : HashTable} {v : ℕ → E} {D : ℕ → ℕ}
-    (hP : PathFacts (CRel f v ∘ cinstrAt) D) (hD : Valid D)
-    (hpos : ∀ j ≤ 127, cellBits (v (posCell j)) = BitVec.ofNat 128 j)
-    (hz0 : v zCell = 0) (hz1 : v (zCell + 1) = 0) {k : ℕ} (hk : k < 43) :
-    cellBits (v (xCell k 127)) =
-      chainValue f k (D k) (127 - D k) (cellBits (v (sigCell k))) := by
-  have hQ : ∀ s, (CRel f v ∘ cinstrAt) s → CRel f v (cinstrAt s) := fun _ h => h
-  have hDk : D k ≤ 127 := by
-    by_cases h41 : k = 41
-    · subst h41; have := hD.2.2; omega
-    · have := hD.lt_128 (k := k) (by omega); omega
-  refine chain_from f k (D k) hDk _ (fun j => cellBits (v (xCell k j))) ?_ ?_ ?_
-  · intro he
-    by_cases h41 : k = 41
-    · subst h41
-      have h := leafHi_at hQ hP hD (i := 0) (by norm_num)
-      rw [hiLeafOp_blake, show 64 + (D 41 - 64) = D 41 by have := hD.2.1; omega] at h
-      exact blake_chain_out hpos hz0 hz1 (by norm_num) (by omega) h
-    · have hk' : k < 41 ∨ k = 42 := by omega
-      have hL := leafLen_of_lt (k := k) he
-      exact blake_chain_out hpos hz0 hz1 (by omega) (by omega)
-        ((coreOp_blake he) ▸ core_at hQ hP hD hk' (j := 0) (by omega))
-  · intro j hj1 hj2
-    exact blake_chain_out hpos hz0 hz1 (by omega) (by omega) (body_at hQ hP hD hk hj1 hj2)
-  · intro he
-    have hk' : k < 41 ∨ k = 42 := by
-      by_cases h41 : k = 41
-      · subst h41; have := hD.2.2; omega
-      · omega
-    have hL := leafLen_of_ge (k := k) (show ¬ D k < 127 by omega)
-    have h := nh_xor (crelNH_of_crel (core_at hQ hP hD hk' (j := 0) (by omega)))
-      (coreOp127_xor (by omega))
-    show cellBits (v (xCell k 127)) = cellBits (v (sigCell k))
-    rw [h, hz0, add_zero]
+/-- The chain values a block walks through: the revealed word, the intermediate pairs, and the
+chain's output cell after the last step. -/
+def chainSeq (v : ℕ → E) (k n : ℕ) (t : ℕ) : Word :=
+  cellBits (v (if t = 0 then wCell k else if t = n then chainOut k else xCell k (t - 1)))
 
-/-! ## Fixed-table soundness -/
+theorem chainSeq_zero (v : ℕ → E) (k n : ℕ) : chainSeq v k n 0 = cellBits (v (wCell k)) := by
+  unfold chainSeq; rw [if_pos rfl]
 
-/-- Cell values satisfying the relations along a path with leaf vector `D`, and agreeing with
-the loader on the pinned cells, certify a signature the verifier accepts under the table. -/
-theorem accept_of_path (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool)
-    (v : ℕ → E) (hpin : ∀ c < 47, v c = inputWord pk m bits c) {D : ℕ → ℕ} (hD : Valid D)
-    (h : PathFacts (CRel f v ∘ cinstrAt) D) :
-    bits.length = 5504 ∧ rootValue f (reconstructedWords f m bits) = pk := by
-  have hR : ∀ s, (CRel f v ∘ cinstrAt) s → CRelNH v (cinstrAt s) :=
-    fun _ h => crelNH_of_crel h
-  have hQ : ∀ s, (CRel f v ∘ cinstrAt) s → CRel f v (cinstrAt s) := fun _ h => h
-  have hc := constFacts_of hR h.const
+theorem chainSeq_last {v : ℕ → E} {k n : ℕ} (hn : n ≠ 0) :
+    chainSeq v k n n = cellBits (v (chainOut k)) := by
+  unfold chainSeq; rw [if_neg hn, if_pos rfl]
+
+/-- Step `t` writes the pair of `chainSeq (t + 1)`. -/
+theorem chainSeq_succ (v : ℕ → E) (k n t : ℕ) :
+    chainSeq v k n (t + 1) = cellBits (v (if t + 1 = n then chainOut k else xCell k t)) := by
+  unfold chainSeq; rw [if_neg (by omega)]
+  by_cases h : t + 1 = n
+  · rw [if_pos h, if_pos h]
+  · rw [if_neg h, if_neg h, Nat.add_sub_cancel]
+
+/-- Step `t < n` reads `chainSeq t`. -/
+theorem chainSeq_eq_src (v : ℕ → E) {k n t : ℕ} (ht : t < n) :
+    cellBits (v (if t = 0 then wCell k else xCell k (t - 1))) = chainSeq v k n t := by
+  unfold chainSeq
+  by_cases h0 : t = 0
+  · rw [if_pos h0, if_pos h0]
+  · rw [if_neg h0, if_neg h0, if_neg (by omega)]
+
+/-! ## The path -/
+
+section Path
+
+variable {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool} {v : ℕ → E}
+  {s : ℕ → ℕ} (hV : Valid s) (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s)
+
+include hP in
+theorem pro_rel {t : ℕ} {ci : CInstr} (ht : t < 58) (hc : cinstrAt t = ci) : ci.Rel f v := by
+  have := hP.pro t ht; rwa [hc] at this
+
+include hV hP in
+theorem blk_rel {k i : ℕ} (hk : k < 42) (hi0 : 0 < i) (hi : i ≤ 1 + pre k + s k + post k) :
+    (blockOp k (s k) i).Rel f v := by
+  have := hP.blk k hk i hi0 hi; rwa [cinstrAt_blk hk (hV k hk) hi0 hi] at this
+
+include hP in
+theorem root_rel {t : ℕ} (ht : t < 11) : (rootOp t).Rel f v := by
+  have := hP.root t ht; rwa [cinstrAt_root ht] at this
+
+section Consts
+
+include hP
+
+theorem v_z : v zCell = 0 := pro_rel hP (by omega) cinstrAt_set0
+theorem v_one : v oneCell = oneV := pro_rel hP (by omega) cinstrAt_set1
+theorem v_len : v lenCell = natV 5504 := pro_rel hP (by omega) cinstrAt_set2
+theorem v_tidx : v tidxCell = natV 10 := pro_rel hP (by omega) cinstrAt_set3
+theorem v_g : v gCell = gV := pro_rel hP (by omega) cinstrAt_set4
+theorem v_sym {i : ℕ} (hi : i < 7) : v (symCell i) = natV (i + 3) :=
+  pro_rel hP (by omega) (cinstrAt_sym hi)
+
+theorem cb_z : cellBits (v zCell) = 0 := by rw [v_z hP]; exact cellBits_zero_E
+
+theorem cb_cv : cellBits (v (zCell + 1)) ++ cellBits (v zCell) = Flat.cv := by
+  rw [show zCell + 1 = oneCell from rfl, v_one hP, cb_z hP, cellBits_oneV, cv_const]
+
+end Consts
+
+/-- The chain-step query of a chain op. -/
+theorem chainOp_query (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : ℕ} (hk : k < 42)
+    {j : ℕ} (hj : j < W k) (x : E) :
+    blake2sQuery ![x, v (symCell (tagPos k j % 7)), v (symCell (tagPos k j / 7 % 7)),
+        v (symCell (tagPos k j / 49))] (v zCell) (v (zCell + 1)) (v oneCell) =
+      FP.chainInput ⟨k, hk⟩ j (cellBits x) := by
+  have hp : tagPos k j < 343 := by
+    have := @W_le k; unfold tagPos Flat.off; split_ifs <;> omega
+  rw [blake2sQuery_eq, v_sym hP (Nat.mod_lt _ (by norm_num)), v_sym hP (Nat.mod_lt _ (by norm_num)),
+    v_sym hP (by omega), cellBits_natV, cellBits_natV, cellBits_natV, cb_cv hP, v_one hP,
+    cellBits_oneV]
+  rfl
+
+include hV in
+/-- **Chain tops.** The root reads the verifier's chain top of chain `k`. -/
+theorem chain_top (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) {k : ℕ} (hk : k < 42) :
+    cellBits (v (rootTop k)) =
+      chainValue f FP ⟨k, hk⟩ (W k - 1 - s k) (s k) (cellBits (v (wCell k))) := by
+  have hs := hV k hk
+  have hz := v_z hP
+  by_cases h0 : s k = 0
+  · rw [h0]
+    show cellBits (v (rootTop k)) = cellBits (v (wCell k))
+    by_cases hk0 : k = 0
+    · subst hk0
+      have h := blk_rel hV hP (k := 0) (i := s 0 + 2) hk (by omega)
+        (by rw [pre_zero, post_zero]; omega)
+      unfold blockOp at h
+      rw [if_pos rfl, if_neg (by omega), if_neg (by omega), if_pos rfl, if_pos h0] at h
+      have h' : v cvCell = v (wCell 0) + v zCell := h
+      rw [show rootTop 0 = cvCell from rfl, h', hz, add_zero]
+    · have h := blk_rel hV hP (k := k) (i := 1) hk (by omega) (by omega)
+      unfold blockOp at h
+      rw [if_neg hk0, if_pos rfl, if_pos h0] at h
+      have h' : v (rootTop k) = v (wCell k) + v zCell := h
+      rw [h', hz, add_zero]
+  · -- the inline steps
+    have hstep : ∀ t < s k, chainSeq v k (s k) (t + 1) =
+        (f ⟨896, FP.chainInput ⟨k, hk⟩ (W k - 1 - s k + t) (chainSeq v k (s k) t)⟩).extractLsb' 0 128 := by
+      intro t ht
+      have h := blk_rel hV hP (k := k) (i := 1 + pre k + t) hk (by omega) (by omega)
+      rw [blockOp_chain ht] at h
+      unfold chainOp at h
+      have hlo := oracle_lo h
+      rw [chainOp_query hP hk (by omega)] at hlo
+      rw [chainSeq_eq_src v ht] at hlo
+      rw [chainSeq_succ]
+      exact hlo
+    have hend := chainValue_of_seq f FP ⟨k, hk⟩ (s k) (W k - 1 - s k) (chainSeq v k (s k)) hstep
+    rw [chainSeq_last h0, chainSeq_zero] at hend
+    by_cases hk0 : k = 0
+    · subst hk0
+      have h := blk_rel hV hP (k := 0) (i := s 0 + 2) hk (by omega)
+        (by rw [pre_zero, post_zero]; omega)
+      unfold blockOp at h
+      rw [if_pos rfl, if_neg (by omega), if_neg (by omega), if_pos rfl, if_neg h0] at h
+      have h' : v cvCell = v (topCell 0) + v zCell := h
+      rw [show rootTop 0 = cvCell from rfl, h', hz, add_zero, ← hend]; rfl
+    · rw [show rootTop k = chainOut k by unfold rootTop chainOut; rw [if_neg hk0],
+        hend]
+
+/-! ### The tie -/
+
+/-- The digit vector, zero past the chains. -/
+def sz (s : ℕ → ℕ) (k : ℕ) : ℕ := if k < 42 then s k else 0
+
+omit hP in
+theorem sz_lt (hV : Valid s) (k : ℕ) : sz s k < 2 ^ Flat.wid k := by
+  unfold sz Flat.wid
+  by_cases hk : k < 42
+  · rw [if_pos hk]
+    have := hV k hk
+    unfold W at this
+    split_ifs at * <;> omega
+  · rw [if_neg hk, if_neg (by omega), if_neg hk]; norm_num
+
+omit hV hP in
+theorem posW_le_42 {k : ℕ} (hk : k ≤ 42) : posW Flat.wid k ≤ 128 := by
+  rw [← Flat.pos_42]; exact posW_mono Flat.wid hk
+
+include hV hP in
+/-- **The tie.** The accumulator after chain `k` holds the digits `s 0, …, s k`. -/
+theorem acc_eq : ∀ k < 42, v (accCell k) = natV (ofDigitsW Flat.wid (sz s) (k + 1)) := by
+  intro k
+  induction k with
+  | zero =>
+    intro hk
+    have h := blk_rel hV hP (k := 0) (i := 1) hk (by omega) (by rw [pre_zero]; omega)
+    unfold blockOp at h
+    rw [if_pos rfl, if_pos rfl] at h
+    have h' : v (accCell 0) = fpat 0 (s 0) := h
+    rw [h', ofDigitsW_succ, ofDigitsW_zero, Nat.zero_add]
+    unfold fpat sz; rw [if_pos hk]
+  | succ k ih =>
+    intro hk
+    have hop : v (if s (k + 1) = 0 then zCell else tCell (k + 1)) = fpat (k + 1) (s (k + 1)) := by
+      by_cases h0 : s (k + 1) = 0
+      · rw [if_pos h0, v_z hP, h0, fpat_zero]
+      · rw [if_neg h0]
+        have h := blk_rel hV hP (k := k + 1) (i := 1) hk (by omega) (by omega)
+        unfold blockOp at h
+        rw [if_neg (by omega), if_pos rfl, if_neg h0] at h
+        exact h
+    have h := blk_rel hV hP (k := k + 1) (i := 2) hk (by omega)
+      (by rw [pre_pos (by omega)]; omega)
+    unfold blockOp at h
+    rw [if_neg (by omega), if_neg (by omega), if_pos rfl, Nat.add_sub_cancel] at h
+    have h' : v (accCell (k + 1)) = v (accCell k) + v (if s (k + 1) = 0 then zCell else tCell (k + 1)) := h
+    have hlt := ofDigitsW_lt Flat.wid (sz s) (sz_lt hV) (k + 1)
+    have hlt2 := ofDigitsW_lt Flat.wid (sz s) (sz_lt hV) (k + 1 + 1)
+    have h42 := posW_le_42 (k := k + 1 + 1) (by omega)
+    have hpow : 2 ^ posW Flat.wid (k + 1 + 1) ≤ 2 ^ 128 := Nat.pow_le_pow_right (by norm_num) h42
+    rw [h', hop, ih (by omega)]
+    unfold fpat
+    rw [show s (k + 1) = sz s (k + 1) by unfold sz; rw [if_pos hk],
+      natV_add_disjoint hlt (by rw [← ofDigitsW_succ]; omega), ← ofDigitsW_succ]
+
+/-! ### The root -/
+
+/-- The root state after call `r`. -/
+def stVal (v : ℕ → E) (r : ℕ) : BitVec 256 := cellBits (v (stCell r + 1)) ++ cellBits (v (stCell r))
+
+/-- The tops the root reads. -/
+def topsV (v : ℕ → E) (k : Fin numChains) : Word := cellBits (v (rootTop k.val))
+
+theorem topAt_topsV (v : ℕ → E) {i : ℕ} (hi : i < 42) :
+    Params.topAt (topsV v) i = cellBits (v (rootTop i)) := by
+  unfold Params.topAt; rw [dif_pos hi]; rfl
+
+theorem rhoCell_eq {r : ℕ} (h2 : 2 ≤ r) (h9 : r < 9) : rhoCell r = symCell (r - 2) := by
+  unfold rhoCell; rw [if_neg (by omega), if_neg (by omega), if_pos h9]
+
+theorem rootMd_eq {r : ℕ} (h2 : 2 ≤ r) (h9 : r < 9) : FP.rootMd r = BitVec.ofNat 128 (r + 1) := by
+  show Flat.rootMd r = _
+  unfold Flat.rootMd; rw [if_neg (by omega), if_neg (by omega), if_pos h9]
+
+include hP in
+theorem rho_md {r : ℕ} (hr : r < 10) : cellBits (v (rhoCell r)) = FP.rootMd r := by
+  by_cases h0 : r = 0
+  · subst h0; rw [show rhoCell 0 = zCell from rfl, cb_z hP]; rfl
+  by_cases h1 : r = 1
+  · subst h1; rw [show rhoCell 1 = gCell from rfl, v_g hP, cellBits_gV]; rfl
+  by_cases h9 : r < 9
+  · rw [rhoCell_eq (by omega) h9, rootMd_eq (by omega) h9, v_sym hP (by omega), cellBits_natV,
+      show r - 2 + 3 = r + 1 by omega]
+  · obtain rfl : r = 9 := by omega
+    rw [show rhoCell 9 = lenCell from rfl, v_len hP, cellBits_natV]; rfl
+
+/-- The root state sequence: the initial cv pair, then the states. -/
+def rootSeq (v : ℕ → E) (i : ℕ) : BitVec 256 :=
+  if i = 0 then Params.rootInit (topsV v) else stVal v (i - 1)
+
+theorem rootCv_pair (v : ℕ → E) (i : ℕ) :
+    cellBits (v (rootCv i + 1)) ++ cellBits (v (rootCv i)) = rootSeq v i := by
+  unfold rootCv rootSeq
+  by_cases h0 : i = 0
+  · rw [if_pos h0, if_pos h0]
+    unfold Params.rootInit
+    rw [topAt_topsV v (by omega), topAt_topsV v (by omega)]
+    rfl
+  · rw [if_neg h0, if_neg h0]; rfl
+
+include hP in
+theorem root_step {i : ℕ} (hi : i < 10) :
+    rootSeq v (i + 1) = f ⟨896, FP.rootInput (topsV v) i (rootSeq v i)⟩ := by
+  have hrel := root_rel hP (t := i) (by omega)
+  unfold rootOp at hrel
+  rw [if_pos hi] at hrel
+  have hp := oracle_pair hrel
+  have hq : blake2sQuery ![v (rootTop (4 * i + 2)), v (rootTop (4 * i + 3)),
+      v (rootTop (4 * i + 4)), v (rootTop (4 * i + 5))] (v (rootCv i)) (v (rootCv i + 1))
+      (v (rhoCell i)) = FP.rootInput (topsV v) i (rootSeq v i) := by
+    rw [blake2sQuery_eq, rootCv_pair, rho_md hP hi]
+    unfold Params.rootInput
+    rw [topAt_topsV v (by omega), topAt_topsV v (by omega), topAt_topsV v (by omega),
+      topAt_topsV v (by omega)]
+  rw [hq] at hp
+  unfold rootSeq
+  rw [if_neg (by omega), Nat.add_sub_cancel]
+  exact hp
+
+include hP in
+/-- **The root.** The ten root calls compute the fixed-table root of the tops. -/
+theorem root_state : rootState f FP (topsV v) 0 10 (Params.rootInit (topsV v)) = stVal v 9 := by
+  have h := rootState_of_seq f FP (topsV v) 10 0 (rootSeq v) (fun i hi => by
+    rw [Nat.zero_add]; exact root_step hP hi)
+  unfold rootSeq at h
+  rw [if_pos rfl, if_neg (by omega)] at h
+  exact h
+
+include hP in
+theorem rootValue_topsV : rootValue f FP (topsV v) = cellBits (v (stCell 9)) := by
+  unfold rootValue
+  rw [root_state hP]
+  exact BitVec.extractLsb'_append_eq_right
+
+end Path
+
+section Accept
+
+variable {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool} {v : ℕ → E}
+
+/-- **Fixed-table acceptance.** Cell values satisfying the relations along the path of `s`, with
+its landings, and agreeing with the loader on the pinned cells, certify a signature the verifier
+accepts under the table. -/
+theorem accept_of_path (hpin : ∀ c < 47, v c = inputWord pk m bits c) {s : ℕ → ℕ} (hV : Valid s)
+    (hP : PathFacts (fun t => (cinstrAt t).Rel f v) s) (hL : Landing v s) :
+    bits.length = sigBits ∧ FP.Accepted (idxValue f FP m (decodeNonce bits) pk) ∧
+      rootValue f FP (topsOf f FP (idxValue f FP m (decodeNonce bits) pk) bits) = pk := by
   -- the length
   have hlen : bits.length = 5504 :=
-    length_of_inputWord_len pk m bits ((hpin 3 (by norm_num)).symm.trans hc.len)
-  refine ⟨hlen, ?_⟩
-  have hz0 := hc.z0
-  have hz1 := hc.z1
-  have hzb : cellBits (v zCell) = 0 := by rw [hz0]; exact cellBits_zero_E
-  have hpos : ∀ j ≤ 127, v (posCell j) = posV j := fun j hj => hc.pos_all hj
-  have hposb : ∀ j ≤ 127, cellBits (v (posCell j)) = BitVec.ofNat 128 j := by
-    intro j hj; rw [hpos j hj]; exact cellBits_cellOfBits _
-  -- the revealed words
-  have hsig : ∀ i : Fin 43, cellBits (v (sigCell i.val)) = decode bits i := by
-    intro i
-    have h1 : v (sigCell i.val) = inputWord pk m bits (4 + i.val) :=
-      hpin (4 + i.val) (by have := i.isLt; omega)
-    rw [h1, inputWord_sigDecode pk m bits hlen i]
-    exact cellBits_cellOfBits _
-  -- the message digits
-  obtain ⟨h2, h1⟩ := tie_facts hR h hD hpos
-  have hdig : ∀ k (hk : k < 41), D k = digit m ⟨k, by omega⟩ := by
-    have ht := (tie_iff m (fun k => D k - off k) (fun k hk => by
-      have := hD.1 k (Or.inl hk)
-      rw [← nLeaves_eq_pow]
-      show D k - off k < nLeaves k
-      omega)).mp ⟨by rw [← h2, hpin 2 (by norm_num), inputWord_two],
-        by rw [← h1, hpin 1 (by norm_num), inputWord_one]⟩
-    intro k hk
-    have e := ht k hk
-    have := Valid.off_le hD (k := k) (by omega)
-    rw [← off_eq_digitOff] at e
-    omega
-  -- the checksum digits
-  have hck := checksum_digits m D hdig hD.2.1
-    (by have := (hD.1 42 (Or.inr rfl)).1; rwa [off_42] at this)
-    (hD.lt_128 (Or.inr rfl)) (checksum_of_path hR h hD)
-  have hall : ∀ i : Fin 43, D i.val = digit m i := by
-    intro i
-    by_cases hi : i.val < 41
-    · exact hdig i.val hi
-    · by_cases h41 : i.val = 41
-      · rw [show i = 41 from Fin.ext h41]; exact hck.1
-      · rw [show i = 42 from Fin.ext (show i.val = 42 by have := i.isLt; omega)]
-        exact hck.2
-  -- the endpoints
-  have hend : ∀ i : Fin 43, reconstructedWords f m bits i = cellBits (v (xCell i.val 127)) := by
-    intro i
-    have h1 := chain_end h hD hposb hz0 hz1 i.isLt
-    rw [hall i, hsig i] at h1
-    exact h1.symm
-  -- the root
-  have hroot : cellBits (v (rootStateCell 43)) = rootValue f (reconstructedWords f m bits) := by
-    have habs : ∀ k < 43, blake2sQuery ![v (xCell k 127), v zCell, v zCell, v zCell]
-        (v (rootStateCell k)) (v (rootStateCell k + 1)) (v (posCell (44 - k))) =
-        hashInput (cellBits (v (rootStateCell k + 1)) ++ cellBits (v (rootStateCell k)))
-          ((cellBits (v (xCell k 127))).setWidth 512) (BitVec.ofNat 128 (2 + (42 - k))) :=
-      fun k hk => blake2sQuery_absorb (42 - k) _ _ _ _ _ _ _ hzb hzb hzb
-        (by rw [hposb _ (by omega), show 2 + (42 - k) = 44 - k by omega])
-    refine root_sound f _ (fun k => v (xCell k 127)) (fun k => v (rootStateCell k))
-      (fun k => v (rootStateCell k + 1)) hend (by rw [rootStateCell_zero]; exact hzb)
-      (by rw [rootStateCell_zero, hz1]; exact cellBits_zero_E) (fun k hk => ?_) (fun k hk => ?_)
-    · obtain ⟨-, -, -, -, -, -, h2, -⟩ := root_at hQ h hk
-      rw [habs k hk] at h2
-      exact h2
-    · obtain ⟨-, -, -, -, -, -, -, h2⟩ := root_at hQ h hk
-      rw [habs k hk] at h2
-      exact h2
-  -- the public key
-  have hpk := nh_xor (crelNH_of_crel (pk_at hQ h)) rfl
-  rw [hz0, add_zero] at hpk
-  have h0 : v pkCell = cellOfBits pk := (hpin 0 (by norm_num)).trans (inputWord_pk pk m bits)
-  rw [← hroot, ← hpk, h0]
-  exact cellBits_cellOfBits pk
+    length_of_inputWord_len pk m bits ((hpin 3 (by omega)).symm.trans (v_len hP))
+  -- the index
+  have hidx : idxValue f FP m (decodeNonce bits) pk = cellBits (v idxCell) := by
+    have h := pro_rel hP (by omega) cinstrAt_55
+    have hlo := oracle_lo h
+    have hpk : cellBits (v pkCell) = pk := by
+      rw [show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
+      exact cellBits_cellOfBits pk
+    have hq : blake2sQuery ![v msgLo, v msgHi, v nonceCell, v pkCell] (v zCell) (v (zCell + 1))
+        (v tidxCell) = FP.idxInput m (decodeNonce bits) pk := by
+      rw [blake2sQuery_eq, cb_cv hP, v_tidx hP, cellBits_natV,
+        show nonceCell = 46 from rfl, show msgHi = 2 from rfl,
+        show msgLo = 1 from rfl, hpin 46 (by omega), hpin 2 (by omega),
+        hpin 1 (by omega), inputWord_nonce pk m bits hlen, inputWord_two,
+        inputWord_one, cellBits_cellOfBits (decodeNonce bits),
+        cellBits_cellOfBits (m.extractLsb' 128 128), cellBits_cellOfBits (m.extractLsb' 0 128),
+        msg_split, hpk]
+      rfl
+    rw [hq] at hlo
+    exact hlo.symm
+  -- the tie
+  have hacc := acc_eq hV hP 41 (by omega)
+  rw [show accCell 41 = idxCell from rfl] at hacc
+  have hI : (idxValue f FP m (decodeNonce bits) pk).toNat = ofDigitsW Flat.wid (sz s) 42 := by
+    rw [hidx, hacc, cellBits_natV, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
+    have := ofDigitsW_lt Flat.wid (sz s) (sz_lt hV) 42
+    rwa [Flat.pos_42] at this
+  have hdig : ∀ k : Fin numChains, FP.digit (idxValue f FP m (decodeNonce bits) pk) k = s k := by
+    intro k
+    show digitW Flat.wid _ k = _
+    rw [hI, digitW_ofDigitsW Flat.wid (sz s) (sz_lt hV) 42 k k.isLt]
+    unfold sz; rw [if_pos k.isLt]
+  -- the layer
+  have hsum := layer_of_facts (fun t h => CInstr.relNH_of_relB h) hV hP hL
+  refine ⟨hlen, ?_, ?_⟩
+  · show ∑ k : Fin numChains, FP.digit _ k = 106
+    rw [Finset.sum_congr rfl (fun k _ => hdig k)]
+    rw [Fin.sum_univ_eq_sum_range (fun k => s k) 42]
+    exact hsum
+  · -- the tops
+    have htops : topsOf f FP (idxValue f FP m (decodeNonce bits) pk) bits = topsV v := by
+      funext k
+      have hw : cellBits (v (wCell k.val)) = decodeWord bits k := by
+        have hk := k.isLt
+        rw [hpin (wCell k.val) (by unfold wCell numChains at *; omega),
+          show wCell k.val = 4 + k.val from rfl, inputWord_word pk m bits hlen k,
+          cellBits_cellOfBits]
+      unfold topsOf topsV
+      rw [chain_top hV hP k.isLt, hdig k, show FP.len k = W k.val from (W_eq_len k).symm, hw]
+    rw [htops, rootValue_topsV hP]
+    -- the public key
+    have h := root_rel hP (t := 10) (by omega)
+    unfold rootOp at h
+    rw [if_neg (by omega)] at h
+    have h' : v pkCell = v (stCell 9) + v zCell := h
+    rw [v_z hP, add_zero] at h'
+    rw [← h', show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
+    exact cellBits_cellOfBits pk
+
+end Accept
+
+
+/-! ## Fixed-table soundness and the `Sound` clause -/
+
+theorem inputCells_eq : LeanIsa.inputCells = 47 := rfl
+
+theorem Lx_loadInput {κ : ℕ} (pk : PublicKey) (m : Message) (bits : List Bool) (L : MemImage κ)
+    {c : ℕ} (h : c < 2 ^ κ) :
+    Lx (LeanIsa.loadInput pk m bits L) c = if c < 47 then inputWord pk m bits c else Lx L c := by
+  unfold Lx
+  rw [dif_pos h, dif_pos h]
+  show (if c < LeanIsa.inputCells then inputWord pk m bits c else L ⟨c, h⟩) = _
+  rw [inputCells_eq]
+
+theorem Lx_loadInput_pin {κ : ℕ} (hκ : 16 ≤ κ) (pk : PublicKey) (m : Message)
+    (bits : List Bool) (L : MemImage κ) {c : ℕ} (hc : c < 47) :
+    Lx (LeanIsa.loadInput pk m bits L) c = inputWord pk m bits c := by
+  have h16 : (2 : ℕ) ^ 16 ≤ 2 ^ κ := Nat.pow_le_pow_right (by norm_num) hκ
+  have h2 : c < 2 ^ κ := Nat.lt_of_lt_of_le hc (le_trans (by norm_num) h16)
+  rw [Lx_loadInput pk m bits L h2, if_pos hc]
+
+/-- **Fixed-table soundness.** If the run on the loaded image completes under the table `f`,
+the verifier's fixed-table decision is `true`. -/
+theorem fixed_sound {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 32) (f : HashTable)
+    (pk : PublicKey) (m : Message) (bits : List Bool) (L : MemImage κ) {n c : ℕ}
+    (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
+      (LeanIsa.runCost program (LeanIsa.loadInput pk m bits L) n Regs.initial))) :
+    bits.length = sigBits ∧ FP.Accepted (idxValue f FP m (decodeNonce bits) pk) ∧
+      rootValue f FP (topsOf f FP (idxValue f FP m (decodeNonce bits) pk) bits) = pk := by
+  rw [initial_eq] at h
+  have hpin := pinned_of_sem (simSem f) (oracleRel f) (sim_straight h16 hκ f) h
+  have hw := walk_of_sim h16 hκ f hpin (by norm_num) h
+  obtain ⟨hV, hP, hL, -, -⟩ := walk_full (fun t h => CInstr.relNH_of_relB h) hw
+  exact accept_of_path (fun c hc => Lx_loadInput_pin h16 pk m bits L hc) hV hP hL
+
+open scoped Classical in
+/-- The fixed-table verifier accepts when `fixed_sound`'s conclusion holds. -/
+theorem decision_true {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool}
+    (h : bits.length = sigBits ∧ FP.Accepted (idxValue f FP m (decodeNonce bits) pk) ∧
+      rootValue f FP (topsOf f FP (idxValue f FP m (decodeNonce bits) pk) bits) = pk) :
+    (if bits.length = sigBits ∧ FP.Accepted (idxValue f FP m (decodeNonce bits) pk) then
+        rootValue f FP (topsOf f FP (idxValue f FP m (decodeNonce bits) pk) bits) == pk
+      else false) = true := by
+  rw [if_pos ⟨h.1, h.2.1⟩, h.2.2]; simp
+
+/-- **Sound**: any submission running this bytecode for the HL-FLAT-A scheme is sound. -/
+theorem sound (S : LeanIsa.Submission) (hs : S.scheme = Flat.scheme) (hp : S.program = program) :
+    S.Sound := by
+  intro pk m bits κ h16 h32 L n
+  apply probTrue_zero_of_fixed
+  intro f
+  have hexec : S.exec L n pk m bits =
+      LeanIsa.runCost program (LeanIsa.loadInput pk m bits L) n Regs.initial := by
+    unfold LeanIsa.Submission.exec
+    rw [hp]
+  have hver : S.scheme.verify pk m bits = FP.verify pk m bits := by
+    rw [hs]
+    rfl
+  rw [hexec, hver]
+  simp only [simulateQ_bind, simulateQ_pure, fixed_verify, pure_bind]
+  intro hmem
+  rw [mem_support_bind_iff] at hmem
+  obtain ⟨o, ho, hmem⟩ := hmem
+  rw [mem_support_pure_iff] at hmem
+  cases o with
+  | none => simp at hmem
+  | some c =>
+    have hd := decision_true (fixed_sound h16 h32 f pk m bits L ho)
+    rw [hd] at hmem
+    simp at hmem
 
 end
 
-end OptimalOTS.LeanIsaBaseline.Honest
+end OptimalOTS.HLFlat

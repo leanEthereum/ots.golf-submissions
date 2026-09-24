@@ -1,558 +1,283 @@
 import Submissions.UpperLeanIsa.MachineProgram
-import Submissions.UpperLeanIsa.Correctness
-import OptimalOTS.LeanIsa
+import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 /-!
-# Running the RT-MX bytecode
+# Running the HL-FLAT-A bytecode
 
-The execution framework for `Machine.program` (design `NOTES.md` §9.2):
+The execution framework for `HLFlat.program`:
 
-* `Lx L c`, the total view of an image, and the cell-read lemmas;
-* the pure instructions (`exec_xor_iff` … `exec_jump_iff`) and the `BLAKE2S` tail;
-* `CInstr.Rel f L` (the relation of an instruction under the fixed table `f`), `CInstr.RelNH L`
-  (the same with `BLAKE2S ↦ True`, the only information the `support` semantics yields), and
-  `Holds` / `HoldsNH` at a slot; `.pad` has relation `False`: it is the trap;
-* `slotOf`, `nextSlot` and the `Walk`: a slot sequence from `s` to the sentinel along which a
-  relation `R` holds at every executed slot, with its step count and cost;
-* the semantic bridges: a completing run under a fixed table is a `Walk (Holds f L)`
-  (`walk_of_sim`), a completing run in the `support` semantics is a `Walk (HoldsNH L)`
-  (`walk_of_supp`), and a `Walk (Holds f L)` is a completing run (`sim_of_walk`).
-
-All three run in frame `fp = 1`; every `JUMP` of the program has frame operand `oneCell`
-(`jump_f`), and slot 0 pins `oneCell := oneV` (`one_of_sim`, `one_of_supp`), so a taken `JUMP`
-keeps `fp = 1`.
+* the relation of a cell-level instruction on cell values, `CInstr.RelB B v`, parametric in the
+  `BLAKE2S` relation `B`: `Rel f` (answers from a fixed table `f`) and `RelNH` (`BLAKE2S ↦ True`,
+  all a run in the cache-free `support` semantics yields). A dispatch's relation records the
+  landing: `[H_k] ∈ K` is `g ^ e` for an entry `e` of chain `k`, and `[H'_k] ∈ K`;
+* frame-1 normal forms of every instruction (`exec_xor` … `exec_blake`), and the composite
+  dispatch step `runCost_dispatch`: the landing in frame `F_k` and the entry's return are
+  collapsed into one deterministic two-instruction step (`frame_fail` rules out every other
+  landing);
+* the `Walk`: a slot sequence in frame `1` from `s` to the sentinel along which the relation holds,
+  a dispatch counting two instructions;
+* the bridges: a completing run in any semantics `Sem` is a `Walk` (`walk_of_sem`; instances
+  for the fixed-table and the `support` semantics), and a `Walk` of fixed-table relations is a
+  completing run (`sim_of_walk`).
 -/
 
-namespace OptimalOTS.LeanIsaBaseline.Machine
+namespace OptimalOTS.HLFlat
 
 open LeanerVM.Parameters LeanerVM.Semantics OracleComp
+open OptimalOTS.LeanIsaBaseline.Layer
 
 noncomputable section
 
-set_option backward.isDefEq.respectTransparency false
-set_option backward.isDefEq.respectTransparency.types false
+/-! ## Relations -/
 
-/-! ## Reading cells -/
+/-- A relation on the nine `BLAKE2S` cells `m, cv₀, cv₁, out₀, out₁, md`. -/
+abbrev BlakeRel := (Fin 4 → E) → E → E → E → E → E → Prop
 
-/-- The word of cell `c`, total: `0` past the end of the image. -/
-def Lx {κ : ℕ} (L : MemImage κ) (c : ℕ) : E := if h : c < 2 ^ κ then L ⟨c, h⟩ else 0
+/-- The `BLAKE2S` relation under the fixed table `f`. -/
+def oracleRel (f : HashTable) : BlakeRel := fun m cv0 cv1 o0 o1 md =>
+  LeanIsa.OracleCompressCells m cv0 cv1 o0 o1 md (f ⟨896, LeanIsa.blake2sQuery m cv0 cv1 md⟩)
 
-theorem Lx_of_lt {κ : ℕ} (L : MemImage κ) {c : ℕ} (h : c < 2 ^ κ) : Lx L c = L ⟨c, h⟩ :=
-  dif_pos h
+/-- The trivial `BLAKE2S` relation of the cache-free semantics. -/
+def trueRel : BlakeRel := fun _ _ _ _ _ _ => True
 
-theorem Lx_of_not_lt {κ : ℕ} (L : MemImage κ) {c : ℕ} (h : ¬ c < 2 ^ κ) : Lx L c = 0 :=
-  dif_neg h
-
-theorem lt64_of_le_maxLogMem {κ : ℕ} (hκ : κ ≤ maxLogMem) : κ < 64 :=
-  lt_of_le_of_lt hκ (by decide)
-
-theorem lt_order_of_lt {c : ℕ} (h : c < 65536) : c < 2 ^ 64 - 1 :=
-  lt_of_lt_of_le h (by norm_num)
-
-theorem read_op_of_lt {κ : ℕ} (hκ : κ < 64) (L : MemImage κ) {c : ℕ} (h : c < 2 ^ κ) :
-    L.read (op c) = some (Lx L c) := by
-  rw [Lx_of_lt L h]
-  exact MemImage.read_gpow hκ L ⟨c, h⟩
-
-theorem read_op_of_ge {κ : ℕ} (L : MemImage κ) {c : ℕ} (h : 2 ^ κ ≤ c)
-    (hc : c < 2 ^ 64 - 1) : L.read (op c) = none := by
-  show L.read (gpow c) = none
-  rw [MemImage.read, gLog?_gpow_eq_none h hc, Option.map_none]
-
-theorem read_op_eq_some_iff {κ : ℕ} (hκ : κ < 64) (L : MemImage κ) {c : ℕ}
-    (hc : c < 2 ^ 64 - 1) {v : E} : L.read (op c) = some v ↔ c < 2 ^ κ ∧ Lx L c = v := by
-  by_cases h : c < 2 ^ κ
-  · rw [read_op_of_lt hκ L h]
-    exact ⟨fun e => ⟨h, Option.some.inj e⟩, fun e => by rw [e.2]⟩
-  · rw [read_op_of_ge L (Nat.le_of_not_lt h) hc]
-    exact ⟨fun e => (Option.some_ne_none v e.symm).elim, fun e => absurd e.1 h⟩
-
-/-- The cell-read lemma: in frame `1`, the operand `gpow c` reads cell `c`. -/
-theorem read_one_mul_gpow_iff {κ : ℕ} (hκ : κ < 64) (L : MemImage κ) {c : ℕ}
-    (hc : c < 2 ^ 64 - 1) {v : E} :
-    L.read (1 * gpow c) = some v ↔ ∃ h : c < 2 ^ κ, L ⟨c, h⟩ = v := by
-  rw [one_mul]
-  change L.read (op c) = some v ↔ _
-  rw [read_op_eq_some_iff hκ L hc]
-  constructor
-  · rintro ⟨h, e⟩
-    exact ⟨h, by rw [← Lx_of_lt L h]; exact e⟩
-  · rintro ⟨h, e⟩
-    exact ⟨h, by rw [Lx_of_lt L h]; exact e⟩
-
-/-! ## `guard` in `Option` -/
-
-theorem optGuard_eq_some {p : Prop} {hd : Decidable p} {u : Unit}
-    (h : (guard p : Option Unit) = some u) : p := by
-  by_contra hp
-  have hg : (guard p : Option Unit) = none := if_neg hp
-  rw [hg] at h
-  exact Option.some_ne_none u h.symm
-
-theorem optGuard_bind_eq_some_iff {α : Type} (p : Prop) {hd : Decidable p}
-    (f : Unit → Option α) (b : α) : Option.bind (guard p) f = some b ↔ p ∧ f () = some b := by
-  by_cases hp : p
-  · have hg : (guard p : Option Unit) = some () := if_pos hp
-    rw [hg, Option.bind_some]
-    exact ⟨fun h => ⟨hp, h⟩, fun h => h.2⟩
-  · have hg : (guard p : Option Unit) = none := if_neg hp
-    rw [hg, Option.bind_none]
-    exact ⟨fun h => (Option.some_ne_none b h.symm).elim, fun h => absurd h.1 hp⟩
-
-theorem optGuard_bind_of_pos {α : Type} {p : Prop} {hd : Decidable p} (hp : p)
-    (f : Unit → Option α) : Option.bind (guard p) f = f () := by
-  have hg : (guard p : Option Unit) = some () := if_pos hp
-  rw [hg, Option.bind_some]
-
-/-! ## The pure instructions -/
-
-section Pure
-
-variable {κ : ℕ}
-
-theorem exec_xor_iff (hκ : κ < 64) (L : MemImage κ) (pc : K) {a b c : ℕ}
-    (ha : a < 2 ^ 64 - 1) (hb : b < 2 ^ 64 - 1) (hc : c < 2 ^ 64 - 1) (y : Regs K) :
-    LeanerVM.Semantics.execute L ⟨pc, 1⟩ (.xor (op a) (op b) (op c)) = some y ↔
-      (a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ Lx L c = Lx L a + Lx L b) ∧ y = ⟨g * pc, 1⟩ := by
-  constructor
-  · intro h
-    simp only [LeanerVM.Semantics.execute, one_mul, Option.bind_eq_bind,
-      Option.bind_eq_some_iff] at h
-    obtain ⟨va, hva, vb, hvb, vc, hvc, u, hu, hy⟩ := h
-    obtain ⟨ha', rfl⟩ := (read_op_eq_some_iff hκ L ha).mp hva
-    obtain ⟨hb', rfl⟩ := (read_op_eq_some_iff hκ L hb).mp hvb
-    obtain ⟨hc', rfl⟩ := (read_op_eq_some_iff hκ L hc).mp hvc
-    exact ⟨⟨ha', hb', hc', optGuard_eq_some hu⟩, (Option.some.inj hy).symm⟩
-  · rintro ⟨⟨ha', hb', hc', hrel⟩, rfl⟩
-    simp only [LeanerVM.Semantics.execute, one_mul, read_op_of_lt hκ L ha',
-      read_op_of_lt hκ L hb', read_op_of_lt hκ L hc', Option.bind_eq_bind, Option.bind_some]
-    rw [optGuard_bind_eq_some_iff]
-    exact ⟨hrel, rfl⟩
-
-theorem exec_mul_iff (hκ : κ < 64) (L : MemImage κ) (pc : K) {a b c : ℕ}
-    (ha : a < 2 ^ 64 - 1) (hb : b < 2 ^ 64 - 1) (hc : c < 2 ^ 64 - 1) (y : Regs K) :
-    LeanerVM.Semantics.execute L ⟨pc, 1⟩ (.mulNative (op a) (op b) (op c)) = some y ↔
-      (a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ Lx L c = Lx L a * Lx L b) ∧ y = ⟨g * pc, 1⟩ := by
-  constructor
-  · intro h
-    simp only [LeanerVM.Semantics.execute, one_mul, Option.bind_eq_bind,
-      Option.bind_eq_some_iff] at h
-    obtain ⟨va, hva, vb, hvb, vc, hvc, u, hu, hy⟩ := h
-    obtain ⟨ha', rfl⟩ := (read_op_eq_some_iff hκ L ha).mp hva
-    obtain ⟨hb', rfl⟩ := (read_op_eq_some_iff hκ L hb).mp hvb
-    obtain ⟨hc', rfl⟩ := (read_op_eq_some_iff hκ L hc).mp hvc
-    exact ⟨⟨ha', hb', hc', optGuard_eq_some hu⟩, (Option.some.inj hy).symm⟩
-  · rintro ⟨⟨ha', hb', hc', hrel⟩, rfl⟩
-    simp only [LeanerVM.Semantics.execute, one_mul, read_op_of_lt hκ L ha',
-      read_op_of_lt hκ L hb', read_op_of_lt hκ L hc', Option.bind_eq_bind, Option.bind_some]
-    rw [optGuard_bind_eq_some_iff]
-    exact ⟨hrel, rfl⟩
-
-theorem exec_set_iff (hκ : κ < 64) (L : MemImage κ) (pc : K) {a : ℕ}
-    (ha : a < 2 ^ 64 - 1) (v : E) (y : Regs K) :
-    LeanerVM.Semantics.execute L ⟨pc, 1⟩ (.setConstant (op a) v) = some y ↔
-      (a < 2 ^ κ ∧ Lx L a = v) ∧ y = ⟨g * pc, 1⟩ := by
-  constructor
-  · intro h
-    simp only [LeanerVM.Semantics.execute, one_mul, Option.bind_eq_bind,
-      Option.bind_eq_some_iff] at h
-    obtain ⟨va, hva, u, hu, hy⟩ := h
-    obtain ⟨ha', rfl⟩ := (read_op_eq_some_iff hκ L ha).mp hva
-    exact ⟨⟨ha', optGuard_eq_some hu⟩, (Option.some.inj hy).symm⟩
-  · rintro ⟨⟨ha', hv⟩, rfl⟩
-    simp only [LeanerVM.Semantics.execute, one_mul, read_op_of_lt hκ L ha',
-      Option.bind_eq_bind, Option.bind_some]
-    rw [optGuard_bind_eq_some_iff]
-    exact ⟨hv, rfl⟩
-
-theorem exec_xor_next (L : MemImage κ) (r : Regs K) (oa ob oc : K) {y : Regs K}
-    (h : LeanerVM.Semantics.execute L r (.xor oa ob oc) = some y) : y = r.next := by
-  simp only [LeanerVM.Semantics.execute, Option.bind_eq_bind, Option.bind_eq_some_iff] at h
-  obtain ⟨_, _, _, _, _, _, _, _, hy⟩ := h
-  exact (Option.some.inj hy).symm
-
-theorem exec_mul_next (L : MemImage κ) (r : Regs K) (oa ob oc : K) {y : Regs K}
-    (h : LeanerVM.Semantics.execute L r (.mulNative oa ob oc) = some y) : y = r.next := by
-  simp only [LeanerVM.Semantics.execute, Option.bind_eq_bind, Option.bind_eq_some_iff] at h
-  obtain ⟨_, _, _, _, _, _, _, _, hy⟩ := h
-  exact (Option.some.inj hy).symm
-
-theorem exec_set_next (L : MemImage κ) (r : Regs K) (o : K) (v : E) {y : Regs K}
-    (h : LeanerVM.Semantics.execute L r (.setConstant o v) = some y) : y = r.next := by
-  simp only [LeanerVM.Semantics.execute, Option.bind_eq_bind, Option.bind_eq_some_iff] at h
-  obtain ⟨_, _, _, _, hy⟩ := h
-  exact (Option.some.inj hy).symm
-
-/-- The `JUMP` successor: `(g · pc, 1)` when the condition cell is `0`, otherwise the target and
-frame cells' `K` values. All three cells are in range and in `K` either way. -/
-theorem exec_jump_iff (hκ : κ < 64) (L : MemImage κ) (pc : K) {a b c : ℕ}
-    (ha : a < 2 ^ 64 - 1) (hb : b < 2 ^ 64 - 1) (hc : c < 2 ^ 64 - 1) (y : Regs K) :
-    LeanerVM.Semantics.execute L ⟨pc, 1⟩ (.jump (op a) (op b) (op c)) = some y ↔
-      (a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧
-        IsInK (Lx L a) ∧ IsInK (Lx L b) ∧ IsInK (Lx L c)) ∧
-      y = if Lx L a = 0 then ⟨g * pc, 1⟩ else ⟨(Lx L b).limb 0, (Lx L c).limb 0⟩ := by
-  constructor
-  · intro h
-    simp only [LeanerVM.Semantics.execute, one_mul, Option.bind_eq_bind,
-      Option.bind_eq_some_iff] at h
-    obtain ⟨va, hva, vb, hvb, vc, hvc, u, hu, hy⟩ := h
-    obtain ⟨ha', rfl⟩ := (read_op_eq_some_iff hκ L ha).mp hva
-    obtain ⟨hb', rfl⟩ := (read_op_eq_some_iff hκ L hb).mp hvb
-    obtain ⟨hc', rfl⟩ := (read_op_eq_some_iff hκ L hc).mp hvc
-    obtain ⟨i1, i2, i3⟩ := optGuard_eq_some hu
-    exact ⟨⟨ha', hb', hc', i1, i2, i3⟩, (Option.some.inj hy).symm⟩
-  · rintro ⟨⟨ha', hb', hc', i1, i2, i3⟩, rfl⟩
-    simp only [LeanerVM.Semantics.execute, one_mul, read_op_of_lt hκ L ha',
-      read_op_of_lt hκ L hb', read_op_of_lt hκ L hc', Option.bind_eq_bind, Option.bind_some]
-    rw [optGuard_bind_eq_some_iff]
-    exact ⟨⟨i1, i2, i3⟩, rfl⟩
-
-/-- The trap: `Instr.xor 0 0 0` reads address `0`, which is never an address. -/
-theorem exec_pad (L : MemImage κ) (r : Regs K) :
-    LeanerVM.Semantics.execute L r (.xor 0 0 0) = none := by
-  simp only [LeanerVM.Semantics.execute, mul_zero, MemImage.read_zero, Option.bind_eq_bind,
-    Option.bind_none]
-
-end Pure
-
-/-! ## `BLAKE2S` -/
-
-/-- The nine reads of a `BLAKE2S`, exactly as `LeanIsa.execute` performs them. -/
-def blakeReads {κ : ℕ} (L : MemImage κ) (r : Regs K) (om : Fin 4 → K) (ocv oout omd : K) :
-    Option ((Fin 4 → E) × E × E × E × E × E) := do
-  let m0 ← L.read (r.fp * om 0)
-  let m1 ← L.read (r.fp * om 1)
-  let m2 ← L.read (r.fp * om 2)
-  let m3 ← L.read (r.fp * om 3)
-  let cv0 ← L.read (r.fp * ocv)
-  let cv1 ← L.read (r.fp * (g * ocv))
-  let out0 ← L.read (r.fp * oout)
-  let out1 ← L.read (r.fp * (g * oout))
-  let md ← L.read (r.fp * omd)
-  pure ((![m0, m1, m2, m3] : Fin 4 → E), cv0, cv1, out0, out1, md)
-
-/-- The oracle step of a `BLAKE2S` whose reads succeeded, exactly as `LeanIsa.execute`. -/
-def blakeTail (r : Regs K) :
-    (Fin 4 → E) × E × E × E × E × E → OracleComp Spec (Option (Regs K))
-  | (m, cv0, cv1, out0, out1, md) => do
-    let answer ← hash (LeanIsa.blake2sQuery m cv0 cv1 md)
-    pure (if LeanIsa.OracleCompressCells m cv0 cv1 out0 out1 md answer then some r.next
-      else none)
-
-theorem blakeReads_eq_some_iff {κ : ℕ} (hκ : κ < 64) (L : MemImage κ) (pc : K)
-    {m0 m1 m2 m3 cv out md : ℕ}
-    (hb : (CInstr.blake m0 m1 m2 m3 cv out md).Bounded (2 ^ 64 - 1))
-    (p : (Fin 4 → E) × E × E × E × E × E) :
-    blakeReads L ⟨pc, 1⟩ ![op m0, op m1, op m2, op m3] (op cv) (op out) (op md) = some p ↔
-      (m0 < 2 ^ κ ∧ m1 < 2 ^ κ ∧ m2 < 2 ^ κ ∧ m3 < 2 ^ κ ∧ cv < 2 ^ κ ∧ cv + 1 < 2 ^ κ ∧
-        out < 2 ^ κ ∧ out + 1 < 2 ^ κ ∧ md < 2 ^ κ) ∧
-      p = (![Lx L m0, Lx L m1, Lx L m2, Lx L m3], Lx L cv, Lx L (cv + 1), Lx L out,
-        Lx L (out + 1), Lx L md) := by
-  obtain ⟨b0, b1, b2, b3, b4, b5, b6⟩ := hb
-  have b4' : cv < 2 ^ 64 - 1 := by omega
-  have b5' : out < 2 ^ 64 - 1 := by omega
-  constructor
-  · intro h
-    simp only [blakeReads, Matrix.cons_val, Fin.isValue, one_mul, g_mul_op,
-      Option.bind_eq_bind, Option.bind_eq_some_iff] at h
-    obtain ⟨x0, h0, x1, h1, x2, h2, x3, h3, x4, h4, x5, h5, x6, h6, x7, h7, x8, h8, hp⟩ := h
-    obtain ⟨c0, rfl⟩ := (read_op_eq_some_iff hκ L b0).mp h0
-    obtain ⟨c1, rfl⟩ := (read_op_eq_some_iff hκ L b1).mp h1
-    obtain ⟨c2, rfl⟩ := (read_op_eq_some_iff hκ L b2).mp h2
-    obtain ⟨c3, rfl⟩ := (read_op_eq_some_iff hκ L b3).mp h3
-    obtain ⟨c4, rfl⟩ := (read_op_eq_some_iff hκ L b4').mp h4
-    obtain ⟨c5, rfl⟩ := (read_op_eq_some_iff hκ L b4).mp h5
-    obtain ⟨c6, rfl⟩ := (read_op_eq_some_iff hκ L b5').mp h6
-    obtain ⟨c7, rfl⟩ := (read_op_eq_some_iff hκ L b5).mp h7
-    obtain ⟨c8, rfl⟩ := (read_op_eq_some_iff hκ L b6).mp h8
-    exact ⟨⟨c0, c1, c2, c3, c4, c5, c6, c7, c8⟩, (Option.some.inj hp).symm⟩
-  · rintro ⟨⟨c0, c1, c2, c3, c4, c5, c6, c7, c8⟩, rfl⟩
-    simp only [blakeReads, Matrix.cons_val, Fin.isValue, one_mul, g_mul_op,
-      read_op_of_lt hκ L c0, read_op_of_lt hκ L c1, read_op_of_lt hκ L c2,
-      read_op_of_lt hκ L c3, read_op_of_lt hκ L c4, read_op_of_lt hκ L c5,
-      read_op_of_lt hκ L c6, read_op_of_lt hκ L c7, read_op_of_lt hκ L c8,
-      Option.bind_eq_bind, Option.bind_some]
-    all_goals rfl
-
-theorem sim_blakeTail (f : HashTable) (r : Regs K) (m : Fin 4 → E) (cv0 cv1 out0 out1 md : E) :
-    simulateQ (unifFwdAnswerImpl f) (blakeTail r (m, cv0, cv1, out0, out1, md)) =
-      pure (if LeanIsa.OracleCompressCells m cv0 cv1 out0 out1 md
-          (f ⟨896, LeanIsa.blake2sQuery m cv0 cv1 md⟩) then some r.next else none) := by
-  rw [blakeTail, simulateQ_bind, fixed_hash, pure_bind, simulateQ_pure]
-
-theorem supp_blakeTail (r : Regs K) (p : (Fin 4 → E) × E × E × E × E × E)
-    {x : Option (Regs K)} (hx : x ∈ support (blakeTail r p)) : x = none ∨ x = some r.next := by
-  obtain ⟨m, cv0, cv1, out0, out1, md⟩ := p
-  rw [blakeTail, mem_support_bind_iff] at hx
-  obtain ⟨ans, -, hx⟩ := hx
-  rw [mem_support_pure_iff] at hx
-  split_ifs at hx
-  · exact Or.inr hx
-  · exact Or.inl hx
-
-
-/-! ## The relation of an instruction -/
-
-/-- The relation of a cell-level instruction on the image, read in frame `1` under the table `f`,
-as plain equations on `Lx`: every cell read is in range and the instruction's relation holds.
-For `BLAKE2S` the answer is `f ⟨896, blake2sQuery …⟩`. The trap `.pad` never holds. -/
-def CInstr.Rel (f : HashTable) {κ : ℕ} (L : MemImage κ) : CInstr → Prop
-  | .xor a b c => a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ Lx L c = Lx L a + Lx L b
-  | .mul a b c => a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ Lx L c = Lx L a * Lx L b
-  | .setc a v => a < 2 ^ κ ∧ Lx L a = v
+/-- The relation an instruction asserts on the cell values `v` in frame `1`. A dispatch's is its
+landing; entries (only executable in their frame) and the trap never hold. -/
+def CInstr.RelB (B : BlakeRel) (v : ℕ → E) : CInstr → Prop
+  | .xor a b c => v c = v a + v b
+  | .mul a b c => v c = v a * v b
+  | .setc a k => v a = k
   | .blake m0 m1 m2 m3 cv out md =>
-      (m0 < 2 ^ κ ∧ m1 < 2 ^ κ ∧ m2 < 2 ^ κ ∧ m3 < 2 ^ κ ∧ cv < 2 ^ κ ∧ cv + 1 < 2 ^ κ ∧
-        out < 2 ^ κ ∧ out + 1 < 2 ^ κ ∧ md < 2 ^ κ) ∧
-      LeanIsa.OracleCompressCells ![Lx L m0, Lx L m1, Lx L m2, Lx L m3] (Lx L cv)
-        (Lx L (cv + 1)) (Lx L out) (Lx L (out + 1)) (Lx L md)
-        (f ⟨896, LeanIsa.blake2sQuery ![Lx L m0, Lx L m1, Lx L m2, Lx L m3] (Lx L cv)
-          (Lx L (cv + 1)) (Lx L md)⟩)
-  | .jump a b c =>
-      a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ IsInK (Lx L a) ∧ IsInK (Lx L b) ∧ IsInK (Lx L c)
+      B ![v m0, v m1, v m2, v m3] (v cv) (v (cv + 1)) (v out) (v (out + 1)) (v md)
+  | .dispatch k => IsInK (v (hCell k)) ∧ IsInK (v (h1Cell k)) ∧
+      ∃ e, IsEntry k e ∧ (v (hCell k)).limb 0 = gpow e
+  | .exit => IsInK (v k0Cell)
+  | .entry _ => False
   | .pad => False
 
-/-- The hash-free relation: `Rel` with `BLAKE2S ↦ True`. It does not mention the table, and it
-is all a completing run in the `support` semantics (no oracle cache) tells about a slot. -/
-def CInstr.RelNH {κ : ℕ} (L : MemImage κ) : CInstr → Prop
-  | .xor a b c => a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ Lx L c = Lx L a + Lx L b
-  | .mul a b c => a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ Lx L c = Lx L a * Lx L b
-  | .setc a v => a < 2 ^ κ ∧ Lx L a = v
-  | .blake .. => True
-  | .jump a b c =>
-      a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ IsInK (Lx L a) ∧ IsInK (Lx L b) ∧ IsInK (Lx L c)
-  | .pad => False
+/-- The fixed-table relation. -/
+abbrev CInstr.Rel (f : HashTable) (v : ℕ → E) (ci : CInstr) : Prop := ci.RelB (oracleRel f) v
 
-/-- The relation of slot `s` holds on `L` in frame `1` under the table `f`. -/
-def Holds (f : HashTable) {κ : ℕ} (L : MemImage κ) (s : ℕ) : Prop := (cinstrAt s).Rel f L
+/-- The hash-free relation. -/
+abbrev CInstr.RelNH (v : ℕ → E) (ci : CInstr) : Prop := ci.RelB trueRel v
 
-/-- The hash-free relation of slot `s` holds on `L` in frame `1`. -/
-def HoldsNH {κ : ℕ} (L : MemImage κ) (s : ℕ) : Prop := (cinstrAt s).RelNH L
-
-theorem CInstr.relNH_of_rel {f : HashTable} {κ : ℕ} {L : MemImage κ} {ci : CInstr}
-    (h : ci.Rel f L) : ci.RelNH L := by
+theorem CInstr.relNH_of_relB {B : BlakeRel} {v : ℕ → E} {ci : CInstr} (h : ci.RelB B v) :
+    ci.RelNH v := by
   cases ci
   all_goals first | exact h | trivial
 
-theorem holdsNH_of_holds {f : HashTable} {κ : ℕ} {L : MemImage κ} {s : ℕ} (h : Holds f L s) :
-    HoldsNH L s := CInstr.relNH_of_rel h
+/-- The constants every jump relies on: `ONE` and the 42 frames. -/
+def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 42, v (fCell k) = frameV k
 
-/-- The value a slot's `SET` pins, read off any relation implying `HoldsNH`. -/
-theorem setc_of_holdsNH {κ : ℕ} {L : MemImage κ} {s a : ℕ} {v : E} (hs : cinstrAt s = .setc a v)
-    (h : HoldsNH L s) : a < 2 ^ κ ∧ Lx L a = v := by
-  unfold HoldsNH at h
-  rw [hs] at h
-  exact h
+/-! ## The successor slot -/
 
-theorem xor_of_holdsNH {κ : ℕ} {L : MemImage κ} {s a b c : ℕ} (hs : cinstrAt s = .xor a b c)
-    (h : HoldsNH L s) : a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ Lx L c = Lx L a + Lx L b := by
-  unfold HoldsNH at h
-  rw [hs] at h
-  exact h
+/-- The slot index of a program counter: `i` when `pc = g ^ i` with `i < 2 ^ 18`, else `2 ^ 18`. -/
+def slotOf (pc : K) : ℕ :=
+  if h : ∃ i, i < 2 ^ 18 ∧ pc = gpow i then Classical.choose h else 2 ^ 18
 
-theorem mul_of_holdsNH {κ : ℕ} {L : MemImage κ} {s a b c : ℕ} (hs : cinstrAt s = .mul a b c)
-    (h : HoldsNH L s) : a < 2 ^ κ ∧ b < 2 ^ κ ∧ c < 2 ^ κ ∧ Lx L c = Lx L a * Lx L b := by
-  unfold HoldsNH at h
-  rw [hs] at h
-  exact h
+theorem slotOf_gpow {i : ℕ} (hi : i < 2 ^ 18) : slotOf (gpow i) = i := by
+  unfold slotOf
+  have h : ∃ j, j < 2 ^ 18 ∧ gpow i = gpow j := ⟨i, hi, rfl⟩
+  rw [dif_pos h]
+  obtain ⟨hj, hji⟩ := Classical.choose_spec h
+  exact (gpow_inj (by omega) (by omega) hji).symm
 
-theorem not_holdsNH_pad {κ : ℕ} {L : MemImage κ} {s : ℕ} (hs : cinstrAt s = .pad) :
-    ¬ HoldsNH L s := by
-  unfold HoldsNH
-  rw [hs]
-  exact id
+theorem slotOf_spec {pc : K} (h : slotOf pc < 2 ^ 18) : pc = gpow (slotOf pc) := by
+  unfold slotOf at h ⊢
+  split_ifs at h ⊢ with hex
+  · exact (Classical.choose_spec hex).2
+  · omega
 
-theorem CInstr.isJump_eq_true {ci : CInstr} (h : ci.isJump = true) :
-    ∃ a b c, ci = .jump a b c := by
-  cases ci
-  all_goals first | exact ⟨_, _, _, rfl⟩ | simp [CInstr.isJump] at h
+/-- The successor slot of an instruction at slot `s` on the cell values `v`. -/
+def CInstr.nextOf (v : ℕ → E) (s : ℕ) : CInstr → ℕ
+  | .dispatch k => slotOf ((v (h1Cell k)).limb 0)
+  | .exit => slotOf ((v k0Cell).limb 0)
+  | _ => s + 1
 
-/-! ## One instruction under a fixed table -/
+/-- The successor of slot `s`. -/
+def nextSlot (v : ℕ → E) (s : ℕ) : ℕ := (cinstrAt s).nextOf v s
 
-section Fixed
+/-- A walk: from slot `s`, `n` executed instructions of total cost `c`, every visited slot
+satisfying `R` and below the sentinel, each followed by its `nextSlot`, ending at the sentinel. -/
+inductive Walk (R : ℕ → Prop) (v : ℕ → E) : ℕ → ℕ → ℕ → Prop
+  | done : Walk R v 0 sentinel 0
+  | step {n s c : ℕ} : s < sentinel → R s → Walk R v n (nextSlot v s) c →
+      Walk R v (n + (cinstrAt s).steps) s ((cinstrAt s).cost + c)
 
-variable {κ : ℕ}
+theorem Walk.le_sentinel {R : ℕ → Prop} {v : ℕ → E} {n s c : ℕ} (h : Walk R v n s c) :
+    s ≤ sentinel := by
+  cases h with
+  | done => exact le_refl _
+  | step hs _ _ => exact le_of_lt hs
 
-theorem exec_pad_eq (L : MemImage κ) (r : Regs K) :
-    LeanIsa.execute L r CInstr.pad.toInstr = pure none := by
-  show (pure (LeanerVM.Semantics.execute L r (.xor 0 0 0)) : OracleComp Spec (Option (Regs K))) = _
-  rw [exec_pad]
+/-! ## Values -/
 
-theorem exec_jump_eq (L : MemImage κ) (r : Regs K) (a b c : ℕ) :
-    LeanIsa.execute L r (CInstr.jump a b c).toInstr =
-      pure (LeanerVM.Semantics.execute L r (.jump (op a) (op b) (op c))) := rfl
+theorem isInK_ofK (a : K) : IsInK (ofK a) := (isInK_iff _).mpr ⟨a, rfl⟩
 
-theorem sim_exec_pos (hκ : κ < 64) (f : HashTable) (L : MemImage κ) (pc : K) {ci : CInstr}
-    (hb : ci.Bounded (2 ^ 64 - 1)) (hj : ci.isJump = false) (hr : ci.Rel f L) :
-    simulateQ (unifFwdAnswerImpl f) (LeanIsa.execute L ⟨pc, 1⟩ ci.toInstr) =
-      pure (some ⟨g * pc, 1⟩) := by
-  cases ci with
-  | xor a b c =>
-    obtain ⟨ha, hb', hc⟩ := hb
-    have hx := (exec_xor_iff hκ L pc ha hb' hc ⟨g * pc, 1⟩).mpr ⟨hr, rfl⟩
-    show simulateQ (unifFwdAnswerImpl f)
-      (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.xor (op a) (op b) (op c)))) = _
-    rw [hx, simulateQ_pure]
-  | mul a b c =>
-    obtain ⟨ha, hb', hc⟩ := hb
-    have hx := (exec_mul_iff hκ L pc ha hb' hc ⟨g * pc, 1⟩).mpr ⟨hr, rfl⟩
-    show simulateQ (unifFwdAnswerImpl f)
-      (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.mulNative (op a) (op b) (op c)))) = _
-    rw [hx, simulateQ_pure]
-  | setc a v =>
-    have hx := (exec_set_iff hκ L pc hb v ⟨g * pc, 1⟩).mpr ⟨hr, rfl⟩
-    show simulateQ (unifFwdAnswerImpl f)
-      (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.setConstant (op a) v))) = _
-    rw [hx, simulateQ_pure]
-  | blake m0 m1 m2 m3 cv out md =>
-    obtain ⟨⟨c0, c1, c2, c3, c4, c5, c6, c7, c8⟩, hocc⟩ := hr
-    -- Rewrite the nine reads inside the contract's own `match`, which then reduces.
-    simp only [CInstr.toInstr, LeanIsa.execute, Matrix.cons_val, Fin.isValue, one_mul, g_mul_op,
-      read_op_of_lt hκ L c0, read_op_of_lt hκ L c1, read_op_of_lt hκ L c2,
-      read_op_of_lt hκ L c3, read_op_of_lt hκ L c4, read_op_of_lt hκ L c5,
-      read_op_of_lt hκ L c6, read_op_of_lt hκ L c7, read_op_of_lt hκ L c8,
-      Option.bind_eq_bind, Option.bind_some, Option.pure_def]
-    exact (sim_blakeTail f ⟨pc, 1⟩ ![Lx L m0, Lx L m1, Lx L m2, Lx L m3] (Lx L cv)
-      (Lx L (cv + 1)) (Lx L out) (Lx L (out + 1)) (Lx L md)).trans
-      (by rw [if_pos hocc]; all_goals rfl)
-  | jump a b c => exact absurd hj (by simp [CInstr.isJump])
-  | pad => exact hr.elim
+theorem limb_ofK_zero (a : K) : (ofK a).limb 0 = a := by simp
 
-/-- Every outcome of one instruction under a fixed table fails, or steps to the next slot with
-the instruction's relation holding. -/
-theorem sim_exec_supp (hκ : κ < 64) (f : HashTable) (L : MemImage κ) (pc : K) {ci : CInstr}
-    (hb : ci.Bounded (2 ^ 64 - 1)) (hj : ci.isJump = false) {x : Option (Regs K)}
-    (hx : x ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.execute L ⟨pc, 1⟩ ci.toInstr))) :
-    x = none ∨ (x = some (Regs.next ⟨pc, 1⟩) ∧ ci.Rel f L) := by
-  cases ci with
-  | xor a b c =>
-    obtain ⟨ha, hb', hc⟩ := hb
-    change x ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.xor (op a) (op b) (op c))) :
-        OracleComp Spec (Option (Regs K)))) at hx
-    rw [simulateQ_pure, mem_support_pure_iff] at hx
-    rw [hx]
-    cases h : LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.xor (op a) (op b) (op c)) with
-    | none => exact Or.inl rfl
-    | some y =>
-      obtain ⟨hrel, hy⟩ := (exec_xor_iff hκ L pc ha hb' hc y).mp h
-      rw [hy]
-      exact Or.inr ⟨rfl, hrel⟩
-  | mul a b c =>
-    obtain ⟨ha, hb', hc⟩ := hb
-    change x ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.mulNative (op a) (op b) (op c))) :
-        OracleComp Spec (Option (Regs K)))) at hx
-    rw [simulateQ_pure, mem_support_pure_iff] at hx
-    rw [hx]
-    cases h : LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.mulNative (op a) (op b) (op c)) with
-    | none => exact Or.inl rfl
-    | some y =>
-      obtain ⟨hrel, hy⟩ := (exec_mul_iff hκ L pc ha hb' hc y).mp h
-      rw [hy]
-      exact Or.inr ⟨rfl, hrel⟩
-  | setc a v =>
-    change x ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.setConstant (op a) v)) :
-        OracleComp Spec (Option (Regs K)))) at hx
-    rw [simulateQ_pure, mem_support_pure_iff] at hx
-    rw [hx]
-    cases h : LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.setConstant (op a) v) with
-    | none => exact Or.inl rfl
-    | some y =>
-      obtain ⟨hrel, hy⟩ := (exec_set_iff hκ L pc hb v y).mp h
-      rw [hy]
-      exact Or.inr ⟨rfl, hrel⟩
-  | blake m0 m1 m2 m3 cv out md =>
-    simp only [CInstr.toInstr, LeanIsa.execute] at hx
-    split at hx
-    · rw [simulateQ_pure, mem_support_pure_iff] at hx
-      exact Or.inl hx
-    · rename_i hR
-      obtain ⟨hbnd, hp⟩ := (blakeReads_eq_some_iff hκ L pc hb _).mp
-        hR
-      simp only [Prod.mk.injEq] at hp
-      obtain ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ := hp
-      rw [simulateQ_bind, mem_support_bind_iff] at hx
-      obtain ⟨ans, hans, hx⟩ := hx
-      rw [fixed_hash, mem_support_pure_iff] at hans
-      subst hans
-      rw [simulateQ_pure, mem_support_pure_iff] at hx
-      split_ifs at hx with hocc
-      · exact Or.inr ⟨hx, hbnd, hocc⟩
-      · exact Or.inl hx
-  | jump a b c => exact absurd hj (by simp [CInstr.isJump])
-  | pad =>
-    rw [exec_pad_eq, simulateQ_pure, mem_support_pure_iff] at hx
-    exact Or.inl hx
+theorem ofK_one_ne_zero : ofK (1 : K) ≠ 0 := by
+  intro h
+  have := congrArg (fun z : E => z.limb 0) h
+  simp [limb_zero] at this
 
-end Fixed
+theorem ofK_limb {x : E} (h : IsInK x) : x = ofK (x.limb 0) := by
+  obtain ⟨a, rfl⟩ := (isInK_iff x).mp h
+  rw [limb_ofK_zero]
 
-/-! ## One instruction in the `support` semantics -/
+/-! ## Reads -/
 
-section Support
+section Reads
 
-variable {κ : ℕ}
+variable {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 32) (L : MemImage κ)
+include h16 hκ
 
-/-- In the `support` semantics a non-jump instruction fails, or steps to the next slot with its
-hash-free relation holding. -/
-theorem supp_exec (hκ : κ < 64) (L : MemImage κ) (pc : K) {ci : CInstr}
-    (hb : ci.Bounded (2 ^ 64 - 1)) (hj : ci.isJump = false) {x : Option (Regs K)}
-    (hx : x ∈ support (LeanIsa.execute L ⟨pc, 1⟩ ci.toInstr)) :
-    x = none ∨ (x = some (Regs.next ⟨pc, 1⟩) ∧ ci.RelNH L) := by
-  cases ci with
-  | xor a b c =>
-    obtain ⟨ha, hb', hc⟩ := hb
-    change x ∈ support (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
-      (Instr.xor (op a) (op b) (op c))) : OracleComp Spec (Option (Regs K))) at hx
-    rw [mem_support_pure_iff] at hx
-    rw [hx]
-    cases h : LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.xor (op a) (op b) (op c)) with
-    | none => exact Or.inl rfl
-    | some y =>
-      obtain ⟨hrel, hy⟩ := (exec_xor_iff hκ L pc ha hb' hc y).mp h
-      rw [hy]
-      exact Or.inr ⟨rfl, hrel⟩
-  | mul a b c =>
-    obtain ⟨ha, hb', hc⟩ := hb
-    change x ∈ support (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
-      (Instr.mulNative (op a) (op b) (op c))) : OracleComp Spec (Option (Regs K))) at hx
-    rw [mem_support_pure_iff] at hx
-    rw [hx]
-    cases h : LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.mulNative (op a) (op b) (op c)) with
-    | none => exact Or.inl rfl
-    | some y =>
-      obtain ⟨hrel, hy⟩ := (exec_mul_iff hκ L pc ha hb' hc y).mp h
-      rw [hy]
-      exact Or.inr ⟨rfl, hrel⟩
-  | setc a v =>
-    change x ∈ support (pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
-      (Instr.setConstant (op a) v)) : OracleComp Spec (Option (Regs K))) at hx
-    rw [mem_support_pure_iff] at hx
-    rw [hx]
-    cases h : LeanerVM.Semantics.execute L ⟨pc, 1⟩ (Instr.setConstant (op a) v) with
-    | none => exact Or.inl rfl
-    | some y =>
-      obtain ⟨hrel, hy⟩ := (exec_set_iff hκ L pc hb v y).mp h
-      rw [hy]
-      exact Or.inr ⟨rfl, hrel⟩
-  | blake m0 m1 m2 m3 cv out md =>
-    simp only [CInstr.toInstr, LeanIsa.execute] at hx
-    split at hx
-    · rw [mem_support_pure_iff] at hx
-      exact Or.inl hx
-    · rw [mem_support_bind_iff] at hx
-      obtain ⟨ans, -, hx⟩ := hx
-      rw [mem_support_pure_iff] at hx
-      split_ifs at hx
-      · exact Or.inr ⟨hx, trivial⟩
-      · exact Or.inl hx
-  | jump a b c => exact absurd hj (by simp [CInstr.isJump])
-  | pad =>
-    rw [exec_pad_eq, mem_support_pure_iff] at hx
-    exact Or.inl hx
+/-- In frame `1`, operand `gpow c` reads cell `c` (`c < 2 ^ 16 ≤ 2 ^ κ`). -/
+theorem read_one {c : ℕ} (hc : c < 2 ^ 16) : L.read (1 * gpow c) = some (Lx L c) := by
+  rw [one_mul]
+  exact read_gpow_some hκ L (mod_ord_of_lt (by unfold ordG; omega))
+    (lt_of_lt_of_le hc (Nat.pow_le_pow_right (by norm_num) h16))
 
-end Support
+theorem read_one_g {c : ℕ} (hc : c + 1 < 2 ^ 16) :
+    L.read (1 * (g * gpow c)) = some (Lx L (c + 1)) := by
+  rw [g_mul_gpow]; exact read_one h16 hκ L hc
+
+/-- In frame `F_k`, the shifted operand `sop k c` reads cell `c`. -/
+theorem read_frame_sop {k c : ℕ} (hk : k < 42) (hc : c < 2 ^ 16) :
+    L.read (frame k * sop k c) = some (Lx L c) := by
+  rw [frame, sop, gpow_mul_gpow]
+  refine read_gpow_some hκ L ?_ (lt_of_lt_of_le hc (Nat.pow_le_pow_right (by norm_num) h16))
+  rw [mod_ord_of_ge (by unfold frameExp ordG; omega) (by unfold frameExp ordG; omega)]
+  unfold frameExp ordG; omega
+
+end Reads
+
+/-! ## Frame-1 normal forms -/
+
+theorem guard_some {p : Prop} [Decidable p] (r : Regs K) :
+    ((guard p : Option Unit).bind fun _ => some r) = if p then some r else none := by
+  by_cases hp : p
+  · rw [if_pos hp, show (guard p : Option Unit) = some () from if_pos hp]; rfl
+  · rw [if_neg hp, show (guard p : Option Unit) = none from if_neg hp]; rfl
+
+theorem limb_oneV : oneV.limb 0 = 1 := limb_ofK_zero 1
+
+section Normal
+
+variable {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 32) (L : MemImage κ) (pc : K)
+include h16 hκ
+
+theorem exec_xor {a b c : ℕ} (hb : (CInstr.xor a b c).Bounded) :
+    LeanIsa.execute L ⟨pc, 1⟩ (CInstr.xor a b c).toInstr =
+      pure (if Lx L c = Lx L a + Lx L b then some ⟨g * pc, 1⟩ else none) := by
+  obtain ⟨ha, hb, hc⟩ := hb
+  show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (.xor (gpow a) (gpow b) (gpow c))) = _
+  congr 1
+  simp only [LeanerVM.Semantics.execute, read_one h16 hκ L ha, read_one h16 hκ L hb,
+    read_one h16 hκ L hc, Option.bind_eq_bind, Option.bind_some]
+  exact guard_some _
+
+theorem exec_mul {a b c : ℕ} (hb : (CInstr.mul a b c).Bounded) :
+    LeanIsa.execute L ⟨pc, 1⟩ (CInstr.mul a b c).toInstr =
+      pure (if Lx L c = Lx L a * Lx L b then some ⟨g * pc, 1⟩ else none) := by
+  obtain ⟨ha, hb, hc⟩ := hb
+  show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (.mulNative (gpow a) (gpow b) (gpow c))) = _
+  congr 1
+  simp only [LeanerVM.Semantics.execute, read_one h16 hκ L ha, read_one h16 hκ L hb,
+    read_one h16 hκ L hc, Option.bind_eq_bind, Option.bind_some]
+  exact guard_some _
+
+theorem exec_setc {a : ℕ} {k : E} (hb : (CInstr.setc a k).Bounded) :
+    LeanIsa.execute L ⟨pc, 1⟩ (CInstr.setc a k).toInstr =
+      pure (if Lx L a = k then some ⟨g * pc, 1⟩ else none) := by
+  show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩ (.setConstant (gpow a) k)) = _
+  congr 1
+  simp only [LeanerVM.Semantics.execute, read_one h16 hκ L hb, Option.bind_eq_bind,
+    Option.bind_some]
+  exact guard_some _
+
+theorem exec_blake {m0 m1 m2 m3 cv out md : ℕ} (hb : (CInstr.blake m0 m1 m2 m3 cv out md).Bounded) :
+    LeanIsa.execute L ⟨pc, 1⟩ (CInstr.blake m0 m1 m2 m3 cv out md).toInstr =
+      (hash (LeanIsa.blake2sQuery ![Lx L m0, Lx L m1, Lx L m2, Lx L m3] (Lx L cv) (Lx L (cv + 1))
+          (Lx L md)) >>= fun ans =>
+        pure (if LeanIsa.OracleCompressCells ![Lx L m0, Lx L m1, Lx L m2, Lx L m3] (Lx L cv)
+          (Lx L (cv + 1)) (Lx L out) (Lx L (out + 1)) (Lx L md) ans
+          then some ⟨g * pc, 1⟩ else none)) := by
+  obtain ⟨c0, c1, c2, c3, c4, c5, c6⟩ := hb
+  simp only [CInstr.toInstr, LeanIsa.execute, Matrix.cons_val, Fin.isValue,
+    read_one h16 hκ L c0, read_one h16 hκ L c1, read_one h16 hκ L c2, read_one h16 hκ L c3,
+    read_one h16 hκ L (show cv < 2 ^ 16 by omega), read_one_g h16 hκ L c4,
+    read_one h16 hκ L (show out < 2 ^ 16 by omega), read_one_g h16 hκ L c5,
+    read_one h16 hκ L c6, Option.bind_eq_bind, Option.bind_some, Option.pure_def]
+  rfl
+
+/-- The dispatch `JUMP(ONE, H_k, F_k)` in frame `1`. -/
+theorem exec_dispatch {k : ℕ} (hk : k < 42) (hpin : Pinned (Lx L)) :
+    LeanIsa.execute L ⟨pc, 1⟩ (CInstr.dispatch k).toInstr =
+      pure (if IsInK (Lx L (hCell k)) then some ⟨(Lx L (hCell k)).limb 0, frame k⟩ else none) := by
+  show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
+    (.jump (gpow oneCell) (gpow (hCell k)) (gpow (fCell k)))) = _
+  congr 1
+  simp only [LeanerVM.Semantics.execute,
+    read_one h16 hκ L (show oneCell < 2 ^ 16 by unfold oneCell; omega),
+    read_one h16 hκ L (show hCell k < 2 ^ 16 by unfold hCell; omega),
+    read_one h16 hκ L (show fCell k < 2 ^ 16 by unfold fCell; omega),
+    Option.bind_eq_bind, Option.bind_some, hpin.1, hpin.2 k hk]
+  by_cases hH : IsInK (Lx L (hCell k))
+  · have hin : IsInK oneV ∧ IsInK (Lx L (hCell k)) ∧ IsInK (frameV k) :=
+      ⟨isInK_ofK 1, hH, isInK_ofK _⟩
+    rw [show (guard (IsInK oneV ∧ IsInK (Lx L (hCell k)) ∧ IsInK (frameV k)) : Option Unit) =
+      some () from if_pos hin, if_pos hH]
+    simp only [Option.bind_some, oneV, if_neg ofK_one_ne_zero, frameV, limb_ofK_zero]
+    rfl
+  · rw [show (guard (IsInK oneV ∧ IsInK (Lx L (hCell k)) ∧ IsInK (frameV k)) : Option Unit) =
+      none from if_neg (fun h => hH h.2.1), if_neg hH]
+    rfl
+
+/-- The exit `JUMP(ONE, K0, ONE)` in frame `1`. -/
+theorem exec_exit (hpin : Pinned (Lx L)) :
+    LeanIsa.execute L ⟨pc, 1⟩ CInstr.exit.toInstr =
+      pure (if IsInK (Lx L k0Cell) then some ⟨(Lx L k0Cell).limb 0, 1⟩ else none) := by
+  show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
+    (.jump (gpow oneCell) (gpow k0Cell) (gpow oneCell))) = _
+  congr 1
+  simp only [LeanerVM.Semantics.execute,
+    read_one h16 hκ L (show oneCell < 2 ^ 16 by unfold oneCell; omega),
+    read_one h16 hκ L (show k0Cell < 2 ^ 16 by unfold k0Cell; omega),
+    Option.bind_eq_bind, Option.bind_some, hpin.1]
+  by_cases hH : IsInK (Lx L k0Cell)
+  · have hin : IsInK oneV ∧ IsInK (Lx L k0Cell) ∧ IsInK oneV :=
+      ⟨isInK_ofK 1, hH, isInK_ofK 1⟩
+    rw [show (guard (IsInK oneV ∧ IsInK (Lx L k0Cell) ∧ IsInK oneV) : Option Unit) =
+      some () from if_pos hin, if_pos hH]
+    simp only [Option.bind_some, oneV, if_neg ofK_one_ne_zero, limb_ofK_zero]
+    rfl
+  · rw [show (guard (IsInK oneV ∧ IsInK (Lx L k0Cell) ∧ IsInK oneV) : Option Unit) =
+      none from if_neg (fun h => hH h.2.1), if_neg hH]
+    rfl
+
+/-- The entry `I0_k` in its own frame returns to frame `1` at `[H'_k]`. -/
+theorem exec_entry_own {k : ℕ} (hk : k < 42) (hpin : Pinned (Lx L)) :
+    LeanIsa.execute L ⟨pc, frame k⟩ (CInstr.entry k).toInstr =
+      pure (if IsInK (Lx L (h1Cell k)) then some ⟨(Lx L (h1Cell k)).limb 0, 1⟩ else none) := by
+  show pure (LeanerVM.Semantics.execute L ⟨pc, frame k⟩
+    (.jump (sop k oneCell) (sop k (h1Cell k)) (sop k oneCell))) = _
+  congr 1
+  simp only [LeanerVM.Semantics.execute,
+    read_frame_sop h16 hκ L hk (show oneCell < 2 ^ 16 by unfold oneCell; omega),
+    read_frame_sop h16 hκ L hk (show h1Cell k < 2 ^ 16 by unfold h1Cell; omega),
+    Option.bind_eq_bind, Option.bind_some, hpin.1]
+  by_cases hH : IsInK (Lx L (h1Cell k))
+  · have hin : IsInK oneV ∧ IsInK (Lx L (h1Cell k)) ∧ IsInK oneV :=
+      ⟨isInK_ofK 1, hH, isInK_ofK 1⟩
+    rw [show (guard (IsInK oneV ∧ IsInK (Lx L (h1Cell k)) ∧ IsInK oneV) : Option Unit) =
+      some () from if_pos hin, if_pos hH]
+    simp only [Option.bind_some, oneV, if_neg ofK_one_ne_zero, limb_ofK_zero]
+    rfl
+  · rw [show (guard (IsInK oneV ∧ IsInK (Lx L (h1Cell k)) ∧ IsInK oneV) : Option Unit) =
+      none from if_neg (fun h => hH h.2.1), if_neg hH]
+    rfl
+
+end Normal
 
 /-! ## The loop -/
 
@@ -561,13 +286,9 @@ section Loop
 variable {κ : ℕ}
 
 theorem initial_eq : (Regs.initial : Regs K) = ⟨gpow 0, 1⟩ :=
-  congrArg (fun x : K => (⟨x, 1⟩ : Regs K)) gpow_zero.symm
+  congrArg (fun x : K => (⟨x, 1⟩ : Regs K)) gpow_zero'.symm
 
-theorem next_gpow (k : ℕ) : Regs.next (⟨gpow k, 1⟩ : Regs K) = ⟨gpow (k + 1), 1⟩ :=
-  congrArg (fun x : K => (⟨x, 1⟩ : Regs K)) (g_mul_gpow k)
-
-/-- One step of the loop, for an arbitrary program and registers: nothing concrete is ever
-unfolded, so the kernel check of the instance below stays small. -/
+/-- One step of the loop, for an arbitrary program and registers. -/
 theorem runCost_succ_of (prog : Program) (L : MemImage κ) (m : ℕ) (r : Regs K) (ins : Instr)
     (hne : r.pc ≠ prog.finalPc) (hf : prog.fetch r.pc = some ins) :
     LeanIsa.runCost prog L (m + 1) r =
@@ -579,408 +300,448 @@ theorem runCost_succ_of (prog : Program) (L : MemImage κ) (m : ℕ) (r : Regs K
     LeanIsa.execute L r ins >>= F) (funext fun x => ?_)
   cases x <;> rfl
 
+theorem runCost_slot (L : MemImage κ) (m : ℕ) {s : ℕ} (hs : s < sentinel) (fp : K) :
+    LeanIsa.runCost program L (m + 1) ⟨gpow s, fp⟩ =
+      (LeanIsa.execute L ⟨gpow s, fp⟩ (cinstrAt s).toInstr >>= fun x =>
+        x.elim (pure none) fun next =>
+          Option.map (LeanIsa.weight (cinstrAt s).toInstr.opcode + ·) <$>
+            LeanIsa.runCost program L m next) :=
+  runCost_succ_of program L m ⟨gpow s, fp⟩ _ (gpow_ne_finalPc hs)
+    (fetch_eq (by unfold sentinel at hs; omega))
+
 theorem runCost_zero_eq (L : MemImage κ) (r : Regs K) :
     LeanIsa.runCost program L 0 r =
       pure (if r.pc = program.finalPc ∧ r.fp = 1 then some 0 else none) := by
   rw [LeanIsa.runCost.eq_1]
 
-theorem runCost_succ_final (L : MemImage κ) (n : ℕ) {r : Regs K} (h : r.pc = program.finalPc) :
-    LeanIsa.runCost program L (n + 1) r = pure none := by
-  rw [LeanIsa.runCost.eq_2]; exact if_pos h
+theorem runCost_zero_slot (L : MemImage κ) {s : ℕ} (hs : s < sentinel) :
+    LeanIsa.runCost program L 0 ⟨gpow s, 1⟩ = pure none := by
+  rw [runCost_zero_eq, if_neg (fun e => gpow_ne_finalPc hs e.1)]
 
-theorem runCost_succ_fetch_none (L : MemImage κ) (n : ℕ) {r : Regs K}
-    (hne : r.pc ≠ program.finalPc) (hf : program.fetch r.pc = none) :
-    LeanIsa.runCost program L (n + 1) r = pure none := by
-  rw [LeanIsa.runCost.eq_2, if_neg hne, hf]
+theorem runCost_zero_sentinel (L : MemImage κ) :
+    LeanIsa.runCost program L 0 ⟨gpow sentinel, 1⟩ = pure (some 0) := by
+  rw [runCost_zero_eq, if_pos ⟨finalPc_eq.symm, rfl⟩]
 
-theorem runCost_succ_eq (L : MemImage κ) (m s : ℕ) (hs : s < sentinel) :
-    LeanIsa.runCost program L (m + 1) ⟨gpow s, 1⟩ =
-      (LeanIsa.execute L ⟨gpow s, 1⟩ (cinstrAt s).toInstr >>= fun x =>
-        x.elim (pure none) fun next =>
-          Option.map (LeanIsa.weight (cinstrAt s).toInstr.opcode + ·) <$>
-            LeanIsa.runCost program L m next) :=
-  runCost_succ_of program L m ⟨gpow s, 1⟩ (cinstrAt s).toInstr (gpow_ne_finalPc hs)
-    (fetch_eq (by rw [sentinel] at hs; omega))
+theorem runCost_succ_sentinel (L : MemImage κ) (n : ℕ) (fp : K) :
+    LeanIsa.runCost program L (n + 1) ⟨gpow sentinel, fp⟩ = pure none := by
+  rw [LeanIsa.runCost.eq_2]; exact if_pos finalPc_eq.symm
 
-theorem gpow_sentinel : gpow sentinel = program.finalPc := by
-  rw [finalPc_eq]; rfl
+/-- A landed state `⟨h, F_k⟩` never completes unless `h` is an entry of chain `k`. -/
+theorem runCost_frame_none (hκ : κ ≤ 32) (L : MemImage κ) {k : ℕ} (hk : k < 42) {h : K}
+    (hno : ∀ e, IsEntry k e → h ≠ gpow e) (n : ℕ) :
+    LeanIsa.runCost program L n ⟨h, frame k⟩ = pure none := by
+  cases n with
+  | zero =>
+    rw [LeanIsa.runCost.eq_1]
+    exact congrArg pure (if_neg fun hc => frame_ne_one hk hc.2)
+  | succ n =>
+    rw [LeanIsa.runCost.eq_2]
+    split_ifs with hf
+    · rfl
+    · split
+      · rfl
+      · rename_i ins hins
+        obtain ⟨i, hi, rfl⟩ := program.fetch_eq_some_iff.mp hins
+        have hs : ¬ IsEntry k i := fun he => hno i he hi
+        rw [show LeanIsa.execute L ⟨h, frame k⟩ (program.code i) = pure none from
+          frame_fail hκ L h hk hs, pure_bind]
 
-theorem eq_sentinel_of_gpow {s : ℕ} (hs : s < 2 ^ 16) (h : gpow s = program.finalPc) :
-    s = sentinel := by
-  rw [finalPc_eq] at h
-  exact gpow_injOn (lt_of_lt_of_le hs (by norm_num)) (show 2 ^ 16 - 1 < 2 ^ 64 - 1 by norm_num) h
+theorem map_map_add (a b : ℕ) (x : OracleComp Spec (Option ℕ)) :
+    Option.map (a + ·) <$> (Option.map (b + ·) <$> x) = Option.map ((a + b) + ·) <$> x := by
+  rw [Functor.map_map]
+  congr 1
+  funext o
+  cases o <;> simp [Nat.add_assoc]
 
-theorem finalPc_ne_of_lt {s : ℕ} (hs : s < sentinel) : gpow s ≠ program.finalPc :=
-  gpow_ne_finalPc hs
+variable (h16 : 16 ≤ κ) (hκ : κ ≤ 32) (L : MemImage κ)
+include h16 hκ
+
+open scoped Classical in
+/-- **The composite dispatch step.** From a dispatch slot, two instructions later the run is in
+frame `1` at `[H'_k]` when the landing relation holds, and fails otherwise. -/
+theorem runCost_dispatch (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
+    (hci : cinstrAt s = .dispatch k) (n : ℕ) :
+    LeanIsa.runCost program L (n + 2) ⟨gpow s, 1⟩ =
+      if (CInstr.dispatch k).RelNH (Lx L) then
+        Option.map (2 + ·) <$> LeanIsa.runCost program L n ⟨(Lx L (h1Cell k)).limb 0, 1⟩
+      else pure none := by
+  have hk : k < 42 := by have := cinstrAt_bounded s; rw [hci] at this; exact this
+  rw [runCost_slot L (n + 1) hs, hci, exec_dispatch h16 hκ L _ hk hpin]
+  by_cases hH : IsInK (Lx L (hCell k))
+  · rw [if_pos hH, pure_bind, Option.elim_some]
+    by_cases hex : ∃ e, IsEntry k e ∧ (Lx L (hCell k)).limb 0 = gpow e
+    · obtain ⟨e, he, hx⟩ := hex
+      have hlt := isEntry_lt he
+      rw [hx, runCost_slot L n (by unfold sentinel; omega), cinstrAt_of_entry he,
+        exec_entry_own h16 hκ L _ he.1 hpin]
+      by_cases hH1 : IsInK (Lx L (h1Cell k))
+      · rw [if_pos hH1, pure_bind, Option.elim_some, if_pos ⟨hH, hH1, e, he, hx⟩, map_map_add]
+        rfl
+      · rw [if_neg hH1, pure_bind, Option.elim_none, if_neg (fun h => hH1 h.2.1), map_pure]
+        rfl
+    · have hno : ∀ e, IsEntry k e → (Lx L (hCell k)).limb 0 ≠ gpow e :=
+        fun e he h => hex ⟨e, he, h⟩
+      rw [runCost_frame_none hκ L (by omega) hno, map_pure, if_neg (fun h => hex h.2.2)]
+      rfl
+  · rw [if_neg hH, pure_bind, Option.elim_none, if_neg (fun h => hH h.1)]
+
+theorem runCost_dispatch_one (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
+    (hci : cinstrAt s = .dispatch k) :
+    LeanIsa.runCost program L 1 ⟨gpow s, 1⟩ = pure none := by
+  have hk : k < 42 := by have := cinstrAt_bounded s; rw [hci] at this; exact this
+  rw [runCost_slot L 0 hs, hci, exec_dispatch h16 hκ L _ hk hpin]
+  split_ifs
+  · rw [pure_bind, Option.elim_some, LeanIsa.runCost.eq_1,
+      if_neg (fun hc => frame_ne_one hk hc.2), map_pure]; rfl
+  · rw [pure_bind, Option.elim_none]
+
+open scoped Classical in
+/-- The exit step. -/
+theorem runCost_exit (hpin : Pinned (Lx L)) {s : ℕ} (hs : s < sentinel)
+    (hci : cinstrAt s = .exit) (n : ℕ) :
+    LeanIsa.runCost program L (n + 1) ⟨gpow s, 1⟩ =
+      if CInstr.exit.RelNH (Lx L) then
+        Option.map (1 + ·) <$> LeanIsa.runCost program L n ⟨(Lx L k0Cell).limb 0, 1⟩
+      else pure none := by
+  rw [runCost_slot L n hs, hci, exec_exit h16 hκ L _ hpin]
+  by_cases hH : IsInK (Lx L k0Cell)
+  · rw [if_pos hH, pure_bind, Option.elim_some,
+      if_pos (show CInstr.exit.RelNH (Lx L) from hH)]; rfl
+  · rw [if_neg hH, pure_bind, Option.elim_none,
+      if_neg (show ¬ CInstr.exit.RelNH (Lx L) from hH)]
+
+omit h16 in
+/-- Entries and pads fail in frame `1`. -/
+theorem runCost_dead {s : ℕ} (hs : s < sentinel) (hci : (cinstrAt s).RelNH (Lx L) = False ∧
+    (cinstrAt s).straight = false ∧ (∀ k, cinstrAt s ≠ .dispatch k) ∧ cinstrAt s ≠ .exit)
+    (n : ℕ) : LeanIsa.runCost program L (n + 1) ⟨gpow s, 1⟩ = pure none := by
+  obtain ⟨-, hst, hd, hx⟩ := hci
+  rw [runCost_slot L n hs]
+  generalize hc : cinstrAt s = ci at hst hd hx
+  cases ci with
+  | entry k =>
+    have hk : IsEntry k s := cinstrAt_eq_entry hc
+    rw [show LeanIsa.execute L ⟨gpow s, 1⟩ (CInstr.entry k).toInstr = pure none by
+      rw [← hc]; exact entry_fail_frame_one hκ L _ hk, pure_bind]; rfl
+  | pad => rw [exec_pad, pure_bind]; rfl
+  | dispatch k => exact absurd rfl (hd k)
+  | exit => exact absurd rfl hx
+  | xor => simp [CInstr.straight] at hst
+  | mul => simp [CInstr.straight] at hst
+  | setc => simp [CInstr.straight] at hst
+  | blake => simp [CInstr.straight] at hst
 
 end Loop
 
-/-! ## Slots, successors and walks -/
+/-! ## Semantics -/
 
-/-- The slot index of a program counter: `i` when `pc = g ^ i` with `i < 2 ^ 16`, else `2 ^ 16`
-(past the sentinel, where no walk lives). -/
-def slotOf (pc : K) : ℕ :=
-  if h : ∃ i, i < 2 ^ 16 ∧ pc = gpow i then Classical.choose h else 2 ^ 16
+/-- A set-valued semantics of oracle computations with the monad laws the bridges need: the
+fixed-table semantics and the cache-free `support` semantics are instances. -/
+structure Sem where
+  S : {α : Type} → OracleComp Spec α → Set α
+  pure_iff : ∀ {α : Type} (a x : α), x ∈ S (pure a) ↔ x = a
+  bind_iff : ∀ {α β : Type} (oa : OracleComp Spec α) (f : α → OracleComp Spec β) (y : β),
+    y ∈ S (oa >>= f) ↔ ∃ a ∈ S oa, y ∈ S (f a)
 
-theorem slotOf_gpow {i : ℕ} (hi : i < 2 ^ 16) : slotOf (gpow i) = i := by
-  unfold slotOf
-  have h : ∃ j, j < 2 ^ 16 ∧ gpow i = gpow j := ⟨i, hi, rfl⟩
-  rw [dif_pos h]
-  obtain ⟨hj, hji⟩ := Classical.choose_spec h
-  exact (gpow_injOn (lt_of_lt_of_le hi (by norm_num)) (lt_of_lt_of_le hj (by norm_num)) hji).symm
+/-- The fixed-table semantics. -/
+def simSem (f : HashTable) : Sem where
+  S oa := support (simulateQ (unifFwdAnswerImpl f) oa)
+  pure_iff a x := by rw [simulateQ_pure, mem_support_pure_iff]
+  bind_iff oa g y := by rw [simulateQ_bind, mem_support_bind_iff]
 
-theorem slotOf_spec {pc : K} (h : slotOf pc < 2 ^ 16) : pc = gpow (slotOf pc) := by
-  unfold slotOf at h ⊢
-  split_ifs at h ⊢ with hex
-  · exact (Classical.choose_spec hex).2
-  · omega
+/-- The cache-free `support` semantics. -/
+def suppSem : Sem where
+  S oa := support oa
+  pure_iff a x := mem_support_pure_iff x a
+  bind_iff oa g y := mem_support_bind_iff oa g y
 
-/-- The successor slot of an instruction at slot `s`: the fall-through `s + 1`, or for a taken
-`JUMP` the slot of its target cell's `K` value. -/
-def CInstr.nextOf {κ : ℕ} (L : MemImage κ) (s : ℕ) : CInstr → ℕ
-  | .jump a b _ => if Lx L a = 0 then s + 1 else slotOf ((Lx L b).limb 0)
-  | _ => s + 1
+theorem Sem.map_iff (Sm : Sem) {α β : Type} (oa : OracleComp Spec α) (f : α → β) (y : β) :
+    y ∈ Sm.S (f <$> oa) ↔ ∃ a ∈ Sm.S oa, f a = y := by
+  rw [map_eq_bind_pure_comp, Sm.bind_iff]
+  simp only [Function.comp_apply, Sm.pure_iff]
+  exact ⟨fun ⟨a, ha, h⟩ => ⟨a, ha, h.symm⟩, fun ⟨a, ha, h⟩ => ⟨a, ha, h.symm⟩⟩
 
-/-- The successor of slot `s` on the image `L`. -/
-def nextSlot {κ : ℕ} (L : MemImage κ) (s : ℕ) : ℕ := (cinstrAt s).nextOf L s
+theorem Sem.some_not_pure_none (Sm : Sem) {c : ℕ} : some c ∉ Sm.S (pure none) := by
+  rw [Sm.pure_iff]; exact Option.some_ne_none c
 
-theorem nextSlot_of_jump {κ : ℕ} (L : MemImage κ) {s a b c : ℕ} (h : cinstrAt s = .jump a b c) :
-    nextSlot L s = if Lx L a = 0 then s + 1 else slotOf ((Lx L b).limb 0) := by
-  unfold nextSlot
-  rw [h]
-  rfl
+theorem Sem.some_map_add (Sm : Sem) {a c : ℕ} {x : OracleComp Spec (Option ℕ)}
+    (h : some c ∈ Sm.S (Option.map (a + ·) <$> x)) : ∃ c', c = a + c' ∧ some c' ∈ Sm.S x := by
+  rw [Sm.map_iff] at h
+  obtain ⟨o, ho, hc⟩ := h
+  cases o with
+  | none => exact absurd hc (by simp)
+  | some c' => exact ⟨c', (Option.some.inj hc).symm, ho⟩
 
-theorem nextSlot_of_not_jump {κ : ℕ} (L : MemImage κ) {s : ℕ} (h : (cinstrAt s).isJump = false) :
-    nextSlot L s = s + 1 := by
-  unfold nextSlot
-  generalize cinstrAt s = ci at h
-  cases ci
-  all_goals first | rfl | simp [CInstr.isJump] at h
-
-/-- A walk: from slot `s`, `n` executed slots of total cost `c`, every one satisfying `R` and
-below the sentinel, each followed by its `nextSlot`, ending exactly at the sentinel. -/
-inductive Walk (R : ℕ → Prop) {κ : ℕ} (L : MemImage κ) : ℕ → ℕ → ℕ → Prop
-  | done : Walk R L 0 sentinel 0
-  | step {n s c : ℕ} : s < sentinel → R s → Walk R L n (nextSlot L s) c →
-      Walk R L (n + 1) s ((cinstrAt s).cost + c)
-
-theorem Walk.le_sentinel {R : ℕ → Prop} {κ : ℕ} {L : MemImage κ} {n s c : ℕ}
-    (h : Walk R L n s c) : s ≤ sentinel := by
-  cases h with
-  | done => exact le_refl _
-  | step hs _ _ => exact le_of_lt hs
-
-/-- `Lx L oneCell = oneV` makes `(Lx L oneCell).limb 0 = 1`: a taken `JUMP` keeps `fp = 1`. -/
-theorem limb_one {κ : ℕ} {L : MemImage κ} (hone : Lx L oneCell = oneV) :
-    (Lx L oneCell).limb 0 = 1 := by
-  rw [hone, oneV]; simp
-
-theorem limb_tgtV (t : ℕ) : (tgtV t).limb 0 = gpow t := by
-  rw [tgtV]; simp
-
-/-- The registers after a `JUMP` in frame `1` whose frame cell holds ONE. -/
-def jumpPc {κ : ℕ} (L : MemImage κ) (a b s : ℕ) : K :=
-  if Lx L a = 0 then gpow (s + 1) else (Lx L b).limb 0
-
-theorem exec_jump_one {κ : ℕ} (hκ : κ < 64) (L : MemImage κ) (hone : Lx L oneCell = oneV) {s a b : ℕ}
-    (ha : a < 2 ^ 64 - 1) (hb : b < 2 ^ 64 - 1) (y : Regs K) :
-    LeanerVM.Semantics.execute L ⟨gpow s, 1⟩ (.jump (op a) (op b) (op oneCell)) = some y ↔
-      (CInstr.jump a b oneCell).RelNH L ∧ y = ⟨jumpPc L a b s, 1⟩ := by
-  rw [exec_jump_iff hκ L (gpow s) ha hb (lt_order_of_lt (by decide)) y, limb_one hone,
-    g_mul_gpow, jumpPc]
-  constructor
-  · rintro ⟨h1, h2⟩
-    refine ⟨h1, ?_⟩
-    rw [h2]; split_ifs <;> rfl
-  · rintro ⟨h1, h2⟩
-    refine ⟨h1, ?_⟩
-    rw [h2]; split_ifs <;> rfl
-
-/-! ## The semantic bridges -/
+/-! ## The bridges -/
 
 section Bridges
 
-variable {κ : ℕ}
+variable {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 32) {L : MemImage κ}
 
-theorem bounded64 (s : ℕ) : (cinstrAt s).Bounded (2 ^ 64 - 1) :=
-  (cinstrAt_bounded s).mono (by norm_num)
-
-theorem cinstrAt_zero : cinstrAt 0 = .setc oneCell oneV := by
-  rw [cinstrAt_const (show 0 < 127 by decide), Nat.zero_add, posCell_one, posV_one]
-
-/-- A completing run under a fixed table starts at a slot of the program. -/
-theorem runCost_pc_valid_sim (f : HashTable) (L : MemImage κ) {n c : ℕ} {r : Regs K}
-    (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost program L n r))) :
-    ∃ i, i < 2 ^ 16 ∧ r.pc = gpow i := by
+/-- A completing run starts at a slot of the program. -/
+theorem runCost_pc_valid (Sm : Sem) {n c : ℕ} {r : Regs K}
+    (h : some c ∈ Sm.S (LeanIsa.runCost program L n r)) : ∃ i, i < 2 ^ 18 ∧ r.pc = gpow i := by
   by_contra hno
   have hne : r.pc ≠ program.finalPc := fun e =>
-    hno ⟨2 ^ 16 - 1, by norm_num, e.trans finalPc_eq⟩
+    hno ⟨sentinel, by unfold sentinel; omega, e.trans finalPc_eq⟩
   cases n with
   | zero =>
-    rw [runCost_zero_eq, if_neg (fun e => hne e.1), simulateQ_pure, mem_support_pure_iff] at h
-    exact Option.some_ne_none c h
+    rw [runCost_zero_eq, if_neg (fun e => hne e.1)] at h
+    exact Sm.some_not_pure_none h
   | succ n =>
     have hf : program.fetch r.pc = none :=
       (Program.fetch_eq_none_iff program).mpr fun i hi => hno ⟨(i : ℕ), i.isLt, hi⟩
-    rw [runCost_succ_fetch_none L n hne hf, simulateQ_pure, mem_support_pure_iff] at h
-    exact Option.some_ne_none c h
+    rw [LeanIsa.runCost.eq_2, if_neg hne, hf] at h
+    exact Sm.some_not_pure_none h
 
-/-- A completing run in the `support` semantics starts at a slot of the program. -/
-theorem runCost_pc_valid_supp (L : MemImage κ) {n c : ℕ} {r : Regs K}
-    (h : some c ∈ support (LeanIsa.runCost program L n r)) :
-    ∃ i, i < 2 ^ 16 ∧ r.pc = gpow i := by
-  by_contra hno
-  have hne : r.pc ≠ program.finalPc := fun e =>
-    hno ⟨2 ^ 16 - 1, by norm_num, e.trans finalPc_eq⟩
-  cases n with
-  | zero =>
-    rw [runCost_zero_eq, if_neg (fun e => hne e.1), mem_support_pure_iff] at h
-    exact Option.some_ne_none c h
-  | succ n =>
-    have hf : program.fetch r.pc = none :=
-      (Program.fetch_eq_none_iff program).mpr fun i hi => hno ⟨(i : ℕ), i.isLt, hi⟩
-    rw [runCost_succ_fetch_none L n hne hf, mem_support_pure_iff] at h
-    exact Option.some_ne_none c h
+theorem straight_steps {ci : CInstr} (h : ci.straight = true) : ci.steps = 1 := by
+  cases ci <;> simp_all [CInstr.straight, CInstr.steps]
 
-theorem runCost_zero_not_mem_sim (f : HashTable) (L : MemImage κ) {s : ℕ} (hs : s < sentinel)
-    (c : ℕ) : some c ∉ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost program L 0 ⟨gpow s, 1⟩)) := by
-  rw [runCost_zero_eq, if_neg (fun e => finalPc_ne_of_lt hs e.1), simulateQ_pure,
-    mem_support_pure_iff]
-  exact Option.some_ne_none c
+theorem straight_weight {ci : CInstr} (h : ci.straight = true) :
+    LeanIsa.weight ci.toInstr.opcode = ci.cost := by
+  cases ci <;> simp_all [CInstr.straight, CInstr.cost, CInstr.toInstr, LeanIsa.weight] <;> rfl
 
-theorem runCost_zero_not_mem_supp (L : MemImage κ) {s : ℕ} (hs : s < sentinel) (c : ℕ) :
-    some c ∉ support (LeanIsa.runCost program L 0 ⟨gpow s, 1⟩) := by
-  rw [runCost_zero_eq, if_neg (fun e => finalPc_ne_of_lt hs e.1), mem_support_pure_iff]
-  exact Option.some_ne_none c
+theorem nextOf_straight {ci : CInstr} (h : ci.straight = true) (v : ℕ → E) (s : ℕ) :
+    ci.nextOf v s = s + 1 := by
+  cases ci <;> simp_all [CInstr.straight, CInstr.nextOf]
 
-/-- Slot 0 pins ONE: every completing run under a fixed table has `oneCell = oneV`. -/
-theorem one_of_sim (hκ : κ ≤ maxLogMem) {f : HashTable} {L : MemImage κ} {n c : ℕ}
-    (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost program L n ⟨gpow 0, 1⟩))) : Lx L oneCell = oneV := by
-  cases n with
-  | zero => exact absurd h (runCost_zero_not_mem_sim f L (by decide) c)
-  | succ n =>
-    rw [runCost_succ_eq L n 0 (by decide), simulateQ_bind, mem_support_bind_iff] at h
-    obtain ⟨x, hx, hc⟩ := h
-    have hb := bounded64 0
-    rw [cinstrAt_zero] at hb hx hc
-    rcases sim_exec_supp (lt64_of_le_maxLogMem hκ) f L (gpow 0) hb rfl hx with rfl | ⟨rfl, hrel⟩
-    · rw [Option.elim_none, simulateQ_pure, mem_support_pure_iff] at hc
-      exact absurd hc (Option.some_ne_none c)
-    · exact hrel.2
+theorem nextSlot_straight (v : ℕ → E) {s : ℕ} (h : (cinstrAt s).straight = true) :
+    nextSlot v s = s + 1 := nextOf_straight h v s
 
-/-- Slot 0 pins ONE: every completing run in the `support` semantics has `oneCell = oneV`. -/
-theorem one_of_supp (hκ : κ ≤ maxLogMem) {L : MemImage κ} {n c : ℕ}
-    (h : some c ∈ support (LeanIsa.runCost program L n ⟨gpow 0, 1⟩)) : Lx L oneCell = oneV := by
-  cases n with
-  | zero => exact absurd h (runCost_zero_not_mem_supp L (by decide) c)
-  | succ n =>
-    rw [runCost_succ_eq L n 0 (by decide), mem_support_bind_iff] at h
-    obtain ⟨x, hx, hc⟩ := h
-    have hb := bounded64 0
-    rw [cinstrAt_zero] at hb hx hc
-    rcases supp_exec (lt64_of_le_maxLogMem hκ) L (gpow 0) hb rfl hx with rfl | ⟨rfl, hrel⟩
-    · rw [Option.elim_none, mem_support_pure_iff] at hc
-      exact absurd hc (Option.some_ne_none c)
-    · exact hrel.2
-
-theorem lt_sentinel_of_mem_sim (f : HashTable) (L : MemImage κ) {n s c : ℕ} (hs : s < 2 ^ 16)
-    (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost program L (n + 1) ⟨gpow s, 1⟩))) : s < sentinel := by
-  by_contra hge
-  have hs' : s = sentinel := by rw [sentinel] at hge ⊢; omega
-  rw [runCost_succ_final L n (show (⟨gpow s, 1⟩ : Regs K).pc = program.finalPc by
-    rw [hs']; exact gpow_sentinel), simulateQ_pure, mem_support_pure_iff] at h
-  exact Option.some_ne_none c h
-
-theorem lt_sentinel_of_mem_supp (L : MemImage κ) {n s c : ℕ} (hs : s < 2 ^ 16)
-    (h : some c ∈ support (LeanIsa.runCost program L (n + 1) ⟨gpow s, 1⟩)) : s < sentinel := by
-  by_contra hge
-  have hs' : s = sentinel := by rw [sentinel] at hge ⊢; omega
-  rw [runCost_succ_final L n (show (⟨gpow s, 1⟩ : Regs K).pc = program.finalPc by
-    rw [hs']; exact gpow_sentinel), mem_support_pure_iff] at h
-  exact Option.some_ne_none c h
-
-/-- The successor slot of a `JUMP` from a valid program counter. -/
-theorem nextSlot_of_jumpPc (L : MemImage κ) {s a b c i : ℕ} (hci : cinstrAt s = .jump a b c)
-    (hs : s < sentinel) (hi : i < 2 ^ 16) (hpc : jumpPc L a b s = gpow i) : nextSlot L s = i := by
-  rw [nextSlot_of_jump L hci]
-  unfold jumpPc at hpc
-  split_ifs at hpc ⊢
-  · rw [sentinel] at hs
-    exact gpow_injOn (lt_order_of_lt (by omega)) (lt_order_of_lt (by omega)) hpc
-  · rw [hpc, slotOf_gpow hi]
-
-/-- `nextSlot` of a `JUMP` below the sentinel is its `jumpPc`. -/
-theorem jumpPc_of_le (L : MemImage κ) {s a b c : ℕ} (hci : cinstrAt s = .jump a b c)
-    (hle : nextSlot L s ≤ sentinel) : jumpPc L a b s = gpow (nextSlot L s) := by
-  rw [nextSlot_of_jump L hci] at hle ⊢
-  unfold jumpPc
-  split_ifs at hle ⊢
-  · rfl
-  · exact slotOf_spec (by rw [sentinel] at hle; omega)
-
-/-- **Walk of a fixed-table run.** A completing run under a fixed table from slot `s` is a walk
-along which every executed slot's relation holds. -/
-theorem walk_of_sim (hκ : κ ≤ maxLogMem) {f : HashTable} {L : MemImage κ}
-    (hone : Lx L oneCell = oneV) {n s c : ℕ} (hs : s < 2 ^ 16)
-    (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost program L n ⟨gpow s, 1⟩))) : Walk (Holds f L) L n s c := by
-  have hκ' := lt64_of_le_maxLogMem hκ
-  induction n generalizing s c with
-  | zero =>
-    rw [runCost_zero_eq, simulateQ_pure, mem_support_pure_iff] at h
-    split_ifs at h with h0
-    · obtain rfl : c = 0 := (Option.some.inj h)
-      obtain rfl := eq_sentinel_of_gpow hs h0.1
+include h16 hκ in
+/-- **Walk of a run.** In any semantics whose straight-line steps yield the relation `RelB B`, a
+completing run from slot `s` is a walk of `RelB B`. -/
+theorem walk_of_sem (Sm : Sem) (B : BlakeRel) (hpin : Pinned (Lx L))
+    (hst : ∀ s pc x, (cinstrAt s).straight = true →
+      x ∈ Sm.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr) →
+        x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).RelB B (Lx L))) :
+    ∀ n s c, s < 2 ^ 18 → some c ∈ Sm.S (LeanIsa.runCost program L n ⟨gpow s, 1⟩) →
+      Walk (fun s => (cinstrAt s).RelB B (Lx L)) (Lx L) n s c := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+  intro s c hs h
+  by_cases hsen : s = sentinel
+  · subst hsen
+    cases n with
+    | zero =>
+      rw [runCost_zero_sentinel, Sm.pure_iff] at h
+      obtain rfl := Option.some.inj h
       exact Walk.done
-  | succ n ih =>
-    have hlt := lt_sentinel_of_mem_sim f L hs h
-    rw [runCost_succ_eq L n s hlt, simulateQ_bind, mem_support_bind_iff] at h
+    | succ n =>
+      rw [runCost_succ_sentinel] at h
+      exact absurd h Sm.some_not_pure_none
+  have hlt : s < sentinel := by unfold sentinel at hsen ⊢; omega
+  cases n with
+  | zero => rw [runCost_zero_slot L hlt] at h; exact absurd h Sm.some_not_pure_none
+  | succ m =>
+  cases hstr : (cinstrAt s).straight with
+  | true =>
+    rw [runCost_slot L m hlt, Sm.bind_iff] at h
     obtain ⟨x, hx, hc⟩ := h
-    cases hj : (cinstrAt s).isJump with
-    | false =>
-      rcases sim_exec_supp hκ' f L (gpow s) (bounded64 s) hj hx with rfl | ⟨rfl, hrel⟩
-      · rw [Option.elim_none, simulateQ_pure, mem_support_pure_iff] at hc
-        exact absurd hc (Option.some_ne_none c)
-      · rw [Option.elim_some, simulateQ_map, support_map] at hc
-        obtain ⟨o, ho, hoc⟩ := hc
-        rcases o with _ | c'
-        · simp at hoc
-        · rw [CInstr.weight_toInstr] at hoc
-          obtain rfl : c = (cinstrAt s).cost + c' := (Option.some.inj hoc).symm
-          rw [next_gpow] at ho
-          have hw := ih (s := s + 1) (by rw [sentinel] at hlt; omega) ho
-          rw [← nextSlot_of_not_jump L hj] at hw
-          exact Walk.step hlt hrel hw
-    | true =>
-      obtain ⟨a, b, c0, hci⟩ := CInstr.isJump_eq_true hj
-      obtain rfl := jump_f hci
-      have hb := bounded64 s
-      rw [hci] at hb
-      obtain ⟨ha, hb', -⟩ := hb
-      rw [hci, exec_jump_eq, simulateQ_pure, mem_support_pure_iff] at hx
-      subst hx
-      cases hy : LeanerVM.Semantics.execute L ⟨gpow s, 1⟩ (.jump (op a) (op b) (op oneCell)) with
-      | none =>
-        rw [hy, Option.elim_none, simulateQ_pure, mem_support_pure_iff] at hc
-        exact absurd hc (Option.some_ne_none c)
-      | some y =>
-        obtain ⟨hrel, rfl⟩ := (exec_jump_one hκ' L hone ha hb' y).mp hy
-        rw [hy, Option.elim_some, simulateQ_map, support_map] at hc
-        obtain ⟨o, ho, hoc⟩ := hc
-        rcases o with _ | c'
-        · simp at hoc
-        · rw [CInstr.weight_toInstr] at hoc
-          obtain rfl : c = (cinstrAt s).cost + c' := (Option.some.inj hoc).symm
-          have hH : Holds f L s := by
-            unfold Holds; rw [hci]; exact hrel
-          obtain ⟨i, hi, hpc⟩ := runCost_pc_valid_sim f L ho
-          change jumpPc L a b s = gpow i at hpc
-          rw [hpc] at ho
-          have hw := ih hi ho
-          rw [← nextSlot_of_jumpPc L hci hlt hi hpc] at hw
-          exact Walk.step hlt hH hw
+    rcases hst s _ x hstr hx with rfl | ⟨rfl, hrel⟩
+    · exact absurd hc Sm.some_not_pure_none
+    · rw [Option.elim_some, straight_weight hstr, g_mul_gpow] at hc
+      obtain ⟨c', rfl, hc'⟩ := Sm.some_map_add hc
+      have hw := ih m (by omega) (s + 1) c' (by unfold sentinel at hlt; omega) hc'
+      rw [← nextSlot_straight (Lx L) hstr] at hw
+      have := Walk.step hlt hrel hw
+      rwa [straight_steps hstr] at this
+  | false =>
+  generalize hci : cinstrAt s = ci at hstr
+  cases ci with
+  | dispatch k =>
+    cases m with
+    | zero => rw [runCost_dispatch_one h16 hκ L hpin hlt hci] at h
+              exact absurd h Sm.some_not_pure_none
+    | succ m' =>
+      rw [runCost_dispatch h16 hκ L hpin hlt hci] at h
+      split_ifs at h with hrel
+      · obtain ⟨c', rfl, hc'⟩ := Sm.some_map_add h
+        obtain ⟨i, hi, hpc⟩ := runCost_pc_valid Sm hc'
+        change (Lx L (h1Cell k)).limb 0 = gpow i at hpc
+        rw [hpc] at hc'
+        have hw := ih m' (by omega) i c' hi hc'
+        have hn : nextSlot (Lx L) s = i := by
+          unfold nextSlot; rw [hci]; show slotOf _ = i; rw [hpc, slotOf_gpow hi]
+        rw [← hn] at hw
+        have := Walk.step (R := fun s => (cinstrAt s).RelB B (Lx L)) hlt
+          (show (cinstrAt s).RelB B (Lx L) by rw [hci]; exact hrel) hw
+        rwa [hci] at this
+      · exact absurd h Sm.some_not_pure_none
+  | exit =>
+    rw [runCost_exit h16 hκ L hpin hlt hci] at h
+    split_ifs at h with hrel
+    · obtain ⟨c', rfl, hc'⟩ := Sm.some_map_add h
+      obtain ⟨i, hi, hpc⟩ := runCost_pc_valid Sm hc'
+      change (Lx L k0Cell).limb 0 = gpow i at hpc
+      rw [hpc] at hc'
+      have hw := ih m (by omega) i c' hi hc'
+      have hn : nextSlot (Lx L) s = i := by
+        unfold nextSlot; rw [hci]; show slotOf _ = i; rw [hpc, slotOf_gpow hi]
+      rw [← hn] at hw
+      have := Walk.step (R := fun s => (cinstrAt s).RelB B (Lx L)) hlt
+        (show (cinstrAt s).RelB B (Lx L) by rw [hci]; exact hrel) hw
+      rwa [hci] at this
+    · exact absurd h Sm.some_not_pure_none
+  | entry k =>
+    rw [runCost_dead hκ L hlt (by rw [hci]; exact ⟨rfl, rfl, by simp, by simp⟩)] at h
+    exact absurd h Sm.some_not_pure_none
+  | pad =>
+    rw [runCost_dead hκ L hlt (by rw [hci]; exact ⟨rfl, rfl, by simp, by simp⟩)] at h
+    exact absurd h Sm.some_not_pure_none
+  | xor => simp [CInstr.straight] at hstr
+  | mul => simp [CInstr.straight] at hstr
+  | setc => simp [CInstr.straight] at hstr
+  | blake => simp [CInstr.straight] at hstr
 
-/-- **Walk of a `support` run.** A completing run in the `support` semantics from slot `s` is a
-walk along which every executed slot's hash-free relation holds. -/
-theorem walk_of_supp (hκ : κ ≤ maxLogMem) {L : MemImage κ} (hone : Lx L oneCell = oneV)
-    {n s c : ℕ} (hs : s < 2 ^ 16)
+include h16 hκ in
+/-- The fixed-table straight-line step. -/
+theorem sim_straight (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
+    (hs : (cinstrAt s).straight = true)
+    (hx : x ∈ (simSem f).S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr)) :
+    x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).Rel f (Lx L)) := by
+  have hb := cinstrAt_bounded s
+  generalize cinstrAt s = ci at hs hx hb
+  change x ∈ support (simulateQ (unifFwdAnswerImpl f) _) at hx
+  cases ci with
+  | xor a b c =>
+    rw [exec_xor h16 hκ L pc hb, simulateQ_pure, mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
+  | mul a b c =>
+    rw [exec_mul h16 hκ L pc hb, simulateQ_pure, mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
+  | setc a k =>
+    rw [exec_setc h16 hκ L pc hb, simulateQ_pure, mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
+  | blake m0 m1 m2 m3 cv out md =>
+    rw [exec_blake h16 hκ L pc hb, simulateQ_bind, fixed_hash, pure_bind, simulateQ_pure,
+      mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
+  | _ => simp [CInstr.straight] at hs
+
+include h16 hκ in
+/-- The cache-free straight-line step. -/
+theorem supp_straight (s : ℕ) (pc : K) (x : Option (Regs K))
+    (hs : (cinstrAt s).straight = true)
+    (hx : x ∈ suppSem.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr)) :
+    x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).RelNH (Lx L)) := by
+  have hb := cinstrAt_bounded s
+  generalize cinstrAt s = ci at hs hx hb
+  change x ∈ support _ at hx
+  cases ci with
+  | xor a b c =>
+    rw [exec_xor h16 hκ L pc hb, mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
+  | mul a b c =>
+    rw [exec_mul h16 hκ L pc hb, mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
+  | setc a k =>
+    rw [exec_setc h16 hκ L pc hb, mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
+  | blake m0 m1 m2 m3 cv out md =>
+    rw [exec_blake h16 hκ L pc hb, mem_support_bind_iff] at hx
+    obtain ⟨ans, -, hx⟩ := hx
+    rw [mem_support_pure_iff] at hx
+    split_ifs at hx
+    · exact Or.inr ⟨hx, trivial⟩
+    · exact Or.inl hx
+  | _ => simp [CInstr.straight] at hs
+
+include h16 hκ in
+/-- **Walk of a fixed-table run.** -/
+theorem walk_of_sim (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
+    (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
+      (LeanIsa.runCost program L n ⟨gpow s, 1⟩))) :
+    Walk (fun s => (cinstrAt s).Rel f (Lx L)) (Lx L) n s c :=
+  walk_of_sem h16 hκ (simSem f) (oracleRel f) hpin (sim_straight h16 hκ f) n s c hs h
+
+include h16 hκ in
+/-- **Walk of a `support` run.** -/
+theorem walk_of_supp (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
     (h : some c ∈ support (LeanIsa.runCost program L n ⟨gpow s, 1⟩)) :
-    Walk (HoldsNH L) L n s c := by
-  have hκ' := lt64_of_le_maxLogMem hκ
-  induction n generalizing s c with
-  | zero =>
-    rw [runCost_zero_eq, mem_support_pure_iff] at h
-    split_ifs at h with h0
-    · obtain rfl : c = 0 := (Option.some.inj h)
-      obtain rfl := eq_sentinel_of_gpow hs h0.1
-      exact Walk.done
-  | succ n ih =>
-    have hlt := lt_sentinel_of_mem_supp L hs h
-    rw [runCost_succ_eq L n s hlt, mem_support_bind_iff] at h
-    obtain ⟨x, hx, hc⟩ := h
-    cases hj : (cinstrAt s).isJump with
-    | false =>
-      rcases supp_exec hκ' L (gpow s) (bounded64 s) hj hx with rfl | ⟨rfl, hrel⟩
-      · rw [Option.elim_none, mem_support_pure_iff] at hc
-        exact absurd hc (Option.some_ne_none c)
-      · rw [Option.elim_some, support_map] at hc
-        obtain ⟨o, ho, hoc⟩ := hc
-        rcases o with _ | c'
-        · simp at hoc
-        · rw [CInstr.weight_toInstr] at hoc
-          obtain rfl : c = (cinstrAt s).cost + c' := (Option.some.inj hoc).symm
-          rw [next_gpow] at ho
-          have hw := ih (s := s + 1) (by rw [sentinel] at hlt; omega) ho
-          rw [← nextSlot_of_not_jump L hj] at hw
-          exact Walk.step hlt hrel hw
-    | true =>
-      obtain ⟨a, b, c0, hci⟩ := CInstr.isJump_eq_true hj
-      obtain rfl := jump_f hci
-      have hb := bounded64 s
-      rw [hci] at hb
-      obtain ⟨ha, hb', -⟩ := hb
-      rw [hci, exec_jump_eq, mem_support_pure_iff] at hx
-      subst hx
-      cases hy : LeanerVM.Semantics.execute L ⟨gpow s, 1⟩ (.jump (op a) (op b) (op oneCell)) with
-      | none =>
-        rw [hy, Option.elim_none, mem_support_pure_iff] at hc
-        exact absurd hc (Option.some_ne_none c)
-      | some y =>
-        obtain ⟨hrel, rfl⟩ := (exec_jump_one hκ' L hone ha hb' y).mp hy
-        rw [hy, Option.elim_some, support_map] at hc
-        obtain ⟨o, ho, hoc⟩ := hc
-        rcases o with _ | c'
-        · simp at hoc
-        · rw [CInstr.weight_toInstr] at hoc
-          obtain rfl : c = (cinstrAt s).cost + c' := (Option.some.inj hoc).symm
-          have hH : HoldsNH L s := by
-            unfold HoldsNH; rw [hci]; exact hrel
-          obtain ⟨i, hi, hpc⟩ := runCost_pc_valid_supp L ho
-          change jumpPc L a b s = gpow i at hpc
-          rw [hpc] at ho
-          have hw := ih hi ho
-          rw [← nextSlot_of_jumpPc L hci hlt hi hpc] at hw
-          exact Walk.step hlt hH hw
+    Walk (fun s => (cinstrAt s).RelNH (Lx L)) (Lx L) n s c :=
+  walk_of_sem h16 hκ suppSem trueRel hpin (supp_straight h16 hκ) n s c hs h
 
-/-- **Run of a walk.** Under a fixed table, a walk from slot `s` whose relations hold is a
-completing run of exactly its steps and cost. -/
-theorem sim_of_walk (hκ : κ ≤ maxLogMem) {f : HashTable} {L : MemImage κ}
-    (hone : Lx L oneCell = oneV) {n s c : ℕ} (hw : Walk (Holds f L) L n s c) :
+include h16 hκ in
+/-- **Run of a walk.** Under a fixed table, a walk whose relations hold is a completing run of
+exactly its steps and cost. -/
+theorem sim_of_walk (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ}
+    (hw : Walk (fun s => (cinstrAt s).Rel f (Lx L)) (Lx L) n s c) :
     simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost program L n ⟨gpow s, 1⟩) =
       pure (some c) := by
-  have hκ' := lt64_of_le_maxLogMem hκ
   induction hw with
-  | done =>
-    rw [runCost_zero_eq, if_pos ⟨gpow_sentinel, rfl⟩, simulateQ_pure]
+  | done => rw [runCost_zero_sentinel, simulateQ_pure]
   | @step n s c hs hR hw ih =>
-    rw [runCost_succ_eq L n s hs, simulateQ_bind]
-    cases hj : (cinstrAt s).isJump with
-    | false =>
-      rw [sim_exec_pos hκ' f L (gpow s) (bounded64 s) hj hR, pure_bind, Option.elim_some,
-        simulateQ_map, g_mul_gpow, ← nextSlot_of_not_jump L hj, ih, map_pure, Option.map_some,
-        CInstr.weight_toInstr]
+    have hb := cinstrAt_bounded s
+    cases hstr : (cinstrAt s).straight with
     | true =>
-      obtain ⟨a, b, c0, hci⟩ := CInstr.isJump_eq_true hj
-      obtain rfl := jump_f hci
-      have hb := bounded64 s
-      rw [hci] at hb
-      obtain ⟨ha, hb', -⟩ := hb
-      have hrel : (CInstr.jump a b oneCell).RelNH L := by
-        have h' := hR
-        unfold Holds at h'
-        rw [hci] at h'
-        exact h'
-      have hex : LeanerVM.Semantics.execute L ⟨gpow s, 1⟩ (.jump (op a) (op b) (op oneCell)) =
-          some ⟨gpow (nextSlot L s), 1⟩ :=
-        (exec_jump_one hκ' L hone ha hb' _).mpr ⟨hrel, by rw [jumpPc_of_le L hci hw.le_sentinel]⟩
-      rw [CInstr.weight_toInstr, hci, exec_jump_eq, hex, simulateQ_pure, pure_bind,
-        Option.elim_some, simulateQ_map, ih, map_pure, Option.map_some]
+      rw [straight_steps hstr, runCost_slot L n hs, simulateQ_bind]
+      have hex : simulateQ (unifFwdAnswerImpl f)
+          (LeanIsa.execute L ⟨gpow s, 1⟩ (cinstrAt s).toInstr) = pure (some ⟨gpow (s + 1), 1⟩) := by
+        rw [← g_mul_gpow]
+        revert hR hb
+        generalize cinstrAt s = ci at hstr
+        intro hR hb
+        cases ci with
+        | xor a b c =>
+          have hR' : Lx L c = Lx L a + Lx L b := hR
+          rw [exec_xor h16 hκ L _ hb, if_pos hR', simulateQ_pure]
+        | mul a b c =>
+          have hR' : Lx L c = Lx L a * Lx L b := hR
+          rw [exec_mul h16 hκ L _ hb, if_pos hR', simulateQ_pure]
+        | setc a k =>
+          have hR' : Lx L a = k := hR
+          rw [exec_setc h16 hκ L _ hb, if_pos hR', simulateQ_pure]
+        | blake m0 m1 m2 m3 cv out md =>
+          rw [exec_blake h16 hκ L _ hb, simulateQ_bind, fixed_hash, pure_bind, simulateQ_pure]
+          exact congrArg pure (if_pos hR)
+        | _ => simp [CInstr.straight] at hstr
+      rw [hex, pure_bind, Option.elim_some, simulateQ_map, ← nextSlot_straight (Lx L) hstr, ih,
+        map_pure, Option.map_some, straight_weight hstr]
+    | false =>
+      generalize hci : cinstrAt s = ci at hstr hR hb
+      cases ci with
+      | dispatch k =>
+        rw [show (CInstr.dispatch k).steps = 2 from rfl, runCost_dispatch h16 hκ L hpin hs hci,
+          if_pos (CInstr.relNH_of_relB hR), simulateQ_map]
+        have hpc : (Lx L (h1Cell k)).limb 0 = gpow (nextSlot (Lx L) s) := by
+          have hn : nextSlot (Lx L) s = slotOf ((Lx L (h1Cell k)).limb 0) := by
+            unfold nextSlot; rw [hci]; rfl
+          rw [hn]
+          exact slotOf_spec (by rw [← hn]; have := hw.le_sentinel; unfold sentinel at this; omega)
+        rw [hpc, ih, map_pure, Option.map_some]
+        rfl
+      | exit =>
+        rw [show CInstr.exit.steps = 1 from rfl, runCost_exit h16 hκ L hpin hs hci,
+          if_pos (CInstr.relNH_of_relB hR), simulateQ_map]
+        have hpc : (Lx L k0Cell).limb 0 = gpow (nextSlot (Lx L) s) := by
+          have hn : nextSlot (Lx L) s = slotOf ((Lx L k0Cell).limb 0) := by
+            unfold nextSlot; rw [hci]; rfl
+          rw [hn]
+          exact slotOf_spec (by rw [← hn]; have := hw.le_sentinel; unfold sentinel at this; omega)
+        rw [hpc, ih, map_pure, Option.map_some]
+        rfl
+      | entry k => exact hR.elim
+      | pad => exact hR.elim
+      | _ => simp [CInstr.straight] at hstr
 
 end Bridges
 
 end
 
-end OptimalOTS.LeanIsaBaseline.Machine
+end OptimalOTS.HLFlat

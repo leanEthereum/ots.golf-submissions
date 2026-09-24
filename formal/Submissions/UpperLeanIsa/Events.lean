@@ -1,21 +1,23 @@
 import Submissions.UpperLeanIsa.Transcript
-import Submissions.UpperLeanIsa.CutTargets
+import Submissions.UpperLeanIsa.BasicProperties
 
 /-!
-# The forgery events of the second stage
+# The forgery structure
 
-On the run of the second stage from a cache containing the points exposed by the signature of
-`ζ` at `m₁` (but none of its hidden points), an accepted fresh pair yields either a query of a
-hidden point of `ζ`, or a cut-target hit (`events_stB`). Only the exposed data of `ζ` are used:
-a table that respects the exposed points (`RespectsExposed`) reproduces every chain value from
-the cut on (`chainValue_exposed`) and the public key (`rootValue_exposed`).
+Deterministic extraction on the verifier's cached paths. Let `c` contain the points of `ζ`
+exposed at a cut `d` (`RespectsExposed`), and let the verifier accept `(m₂, σ₂)` in `c` with
+index `I₂`. Then, unless `c` hits a hidden point of `ζ` or a cut target of `ζ`:
 
-* A root second preimage on the verifier's cached root fold is a hit of an exposed root target
-  (`root_spi_targetHit`).
-* A chain second preimage at or after the cut, on the verifier's cached chain path, is a hit of
-  an exposed chain target (`chain_spi_targetHit`).
-* For a different message, some chain moves backwards past the cut; reaching the honest word at
-  the cut from below is a hidden hit or a hit of the boundary target (`boundary_hit`).
+* the reconstructed tops are the honest tops (`root_binding`: the tagged 10-call root has no
+  second preimage on the verifier's cached calls, the internal calls comparing all 256 bits);
+* no chain starts strictly below the cut, and a chain that starts at the cut starts at the
+  honest word there (`accept_core`).
+
+After signing index `I₁` (cut `afterSigning I₁`), the accepted layer is an antichain: a
+different accepted index moves some chain below the cut, so the forged index is `I₁`, the words
+are the revealed ones, and a fresh pair must use a different message or nonce whose cached
+index answer is `I₁` (`events_some`). If signing failed (cut `beforeSigning`), every accepted
+index has a nonzero digit, which moves that chain below the tops (`events_none`).
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -24,68 +26,86 @@ noncomputable section
 
 open scoped Classical
 
-namespace OptimalOTS.LeanIsaBaseline
+namespace OptimalOTS.LeanIsaBaseline.Layer
 
--- `hashBits` stays reducible here: root states are `BitVec 256`, cache answers `BitVec hashBits`.
 set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
+set_option linter.constructorNameAsVariable false
+
+variable {P : Params}
 
 /-! ## Tables respecting the exposed points -/
 
-/-- The table respects `ζ` at every location exposed at cut `d` (all roots, and the chain
-locations `(i, j)` with `d i ≤ j`). -/
-def RespectsExposed (f : HashTable) (d : Cut) (ζ : Record) : Prop :=
+/-- The table respects `ζ` at every location exposed at cut `d`. -/
+def RespectsExposed (f : HashTable) (d : Cut) (ζ : Record P) : Prop :=
   ∀ a, ¬ Hidden d a → f (ζ.query a) = ζ.2 a
 
-theorem respectsExposed_of_sub (d : Cut) (ζ : Record) {c : Cache}
+theorem respectsExposed_of_sub (hP : P.Hyp) (d : Cut) (ζ : Record P) {c : Cache}
     (h : Cache.Sub (exposedCache d ζ) c) : RespectsExposed (table c) d ζ := by
   intro a ha
   have h1 : exposedCache d ζ (ζ.query a) = some (ζ.2 a) :=
-    (exposedCache_some_iff d ζ _ _).2 ⟨a, ha, rfl, rfl⟩
+    (exposedCache_some_iff hP d ζ _ _).2 ⟨a, ha, rfl, rfl⟩
   exact table_eq_of_some (h _ _ h1)
 
-theorem chainValue_exposed (f : HashTable) (d : Cut) (ζ : Record) (hf : RespectsExposed f d ζ)
-    (i : Fin 43) (j n : ℕ) (hj : (d i).val ≤ j) (hjn : j + n ≤ 127) :
-    chainValue f i.val j n (ζ.word i ⟨j, by omega⟩) = ζ.word i ⟨j + n, by omega⟩ := by
-  induction n generalizing j with
-  | zero => rfl
+theorem chainValue_exposed (f : HashTable) (d : Cut) (ζ : Record P)
+    (hf : RespectsExposed f d ζ) (k : Fin numChains) :
+    ∀ (n j : ℕ), d k ≤ j → j + n ≤ P.len k - 1 →
+      P.chainValue f k j n (ζ.word k j) = ζ.word k (j + n) := by
+  intro n
+  induction n with
+  | zero => intro j _ _; rfl
   | succ n ih =>
-    rw [chainValue]
-    have hq : f ⟨896, chainInput i.val j (ζ.word i ⟨j, by omega⟩)⟩ =
-        ζ.2 (.inl (i, ⟨j, by omega⟩)) :=
-      hf (.inl (i, ⟨j, by omega⟩)) (by show ¬ j < (d i).val; omega)
-    rw [hq]
-    have hw : ζ.word i ⟨j + 1, by omega⟩ =
-        (ζ.2 (.inl (i, ⟨j, by omega⟩))).extractLsb' 0 128 := by
-      simp only [Record.word, dif_neg (Nat.succ_ne_zero j), Nat.add_sub_cancel]
-    rw [← hw]
-    have hn : j + 1 + n = j + (n + 1) := by omega
-    simpa only [hn] using ih (j + 1) (by omega) (by omega)
+    intro j hj hjn
+    have hl : j < P.len k - 1 := by omega
+    rw [Params.chainValue_succ]
+    have hq : f ⟨896, P.chainInput k j (ζ.word k j)⟩ = ζ.2 (.inl ⟨k, ⟨j, hl⟩⟩) :=
+      hf (.inl ⟨k, ⟨j, hl⟩⟩) (by show ¬ j < d k; omega)
+    have hw : P.stepValue f k j (ζ.word k j) = ζ.word k (j + 1) := by
+      unfold Params.stepValue
+      rw [hq, Record.word_succ _ k j hl]
+    rw [hw, ih (j + 1) (by omega) (by omega), show j + 1 + n = j + (n + 1) by omega]
 
-/-- The public key is determined by the (always exposed) root answers. -/
-theorem rootValue_exposed (f : HashTable) (d : Cut) (ζ : Record) (hf : RespectsExposed f d ζ) :
-    rootValue f ζ.endpoint = ζ.publicKey :=
-  rootValue_record_of_roots f ζ (fun i => hf (.inr i) (fun h => h))
+/-- If two continuations merge, either they began at the same word or there is a step whose
+inputs differ and whose outputs agree. -/
+theorem chain_merge (f : HashTable) (k : Fin numChains) :
+    ∀ (n j : ℕ) (x y : Word), P.chainValue f k j n x = P.chainValue f k j n y →
+      x = y ∨ ∃ i, i < n ∧ P.chainValue f k j i x ≠ P.chainValue f k j i y ∧
+        P.stepValue f k (j + i) (P.chainValue f k j i x) =
+          P.stepValue f k (j + i) (P.chainValue f k j i y) := by
+  intro n
+  induction n with
+  | zero => intro j x y h; exact Or.inl h
+  | succ n ih =>
+    intro j x y h
+    by_cases hxy : x = y
+    · exact Or.inl hxy
+    · right
+      rcases ih (j + 1) (P.stepValue f k j x) (P.stepValue f k j y) h with
+        heq | ⟨i, hi, hne, heq⟩
+      · exact ⟨0, by omega, hxy, heq⟩
+      · refine ⟨i + 1, by omega, hne, ?_⟩
+        rw [Params.chainValue_succ, Params.chainValue_succ, show j + (i + 1) = j + 1 + i by omega]
+        exact heq
 
-/-- Reaching the honest endpoint from a word at an exposed position either starts at the honest
-word, or exhibits a second preimage of an honest step at or after that position. -/
-theorem endpoint_match_exposed (f : HashTable) (d : Cut) (ζ : Record)
-    (hf : RespectsExposed f d ζ) (i : Fin 43) (j : ℕ) (hj : (d i).val ≤ j) (hj' : j ≤ 127)
-    (x : Word) (h : chainValue f i.val j (127 - j) x = ζ.endpoint i) :
-    x = ζ.word i ⟨j, by omega⟩ ∨ ∃ k, ∃ hk : k < 127, j ≤ k ∧
-      chainValue f i.val j (k - j) x ≠ ζ.word i ⟨k, by omega⟩ ∧
-      stepValue f i.val k (chainValue f i.val j (k - j) x) =
-        stepValue f i.val k (ζ.word i ⟨k, by omega⟩) := by
-  have hend : ζ.word i ⟨j + (127 - j), by omega⟩ = ζ.endpoint i :=
-    congrArg (ζ.word i) (Fin.ext (by show j + (127 - j) = 127; omega))
-  have hhon : chainValue f i.val j (127 - j) (ζ.word i ⟨j, by omega⟩) = ζ.endpoint i :=
-    (chainValue_exposed f d ζ hf i j (127 - j) hj (by omega)).trans hend
-  rcases chain_merge f i.val j (127 - j) x (ζ.word i ⟨j, by omega⟩) (h.trans hhon.symm) with
-    heq | ⟨k, hk, hne, hstep⟩
+/-- Reaching the honest top from a word at an exposed position: the honest word, or a second
+preimage of an honest step at or after that position. -/
+theorem endpoint_match_exposed (f : HashTable) (d : Cut) (ζ : Record P)
+    (hf : RespectsExposed f d ζ) (k : Fin numChains) (j : ℕ) (hj : d k ≤ j)
+    (hj' : j ≤ P.len k - 1) (x : Word)
+    (h : P.chainValue f k j (P.len k - 1 - j) x = ζ.top k) :
+    x = ζ.word k j ∨ ∃ i, j ≤ i ∧ i < P.len k - 1 ∧
+      P.chainValue f k j (i - j) x ≠ ζ.word k i ∧
+      P.stepValue f k i (P.chainValue f k j (i - j) x) = P.stepValue f k i (ζ.word k i) := by
+  have hhon : P.chainValue f k j (P.len k - 1 - j) (ζ.word k j) = ζ.top k := by
+    rw [chainValue_exposed f d ζ hf k _ j hj (by omega)]
+    unfold Record.top
+    congr 1
+    omega
+  rcases chain_merge f k _ j x (ζ.word k j) (h.trans hhon.symm) with heq | ⟨i, hi, hne, hstep⟩
   · exact Or.inl heq
   · right
-    have hw := chainValue_exposed f d ζ hf i j k hj (by omega)
-    refine ⟨j + k, by omega, by omega, ?_, ?_⟩
+    have hw := chainValue_exposed f d ζ hf k i j hj (by omega)
+    refine ⟨j + i, by omega, by omega, ?_, ?_⟩
     · rw [Nat.add_sub_cancel_left]
       rw [hw] at hne
       exact hne
@@ -93,437 +113,426 @@ theorem endpoint_match_exposed (f : HashTable) (d : Cut) (ζ : Record)
       rw [hw] at hstep
       exact hstep
 
-/-! ## Records realising a given query -/
+/-! ## Records realising a query -/
 
 /-- A word placed in the low half of an answer. -/
-private def padWord (y : Word) : BitVec hashBits := (0 : BitVec 128) ++ y
+def padWord (y : Word) : BitVec hashBits := (0 : BitVec 128) ++ y
 
-private theorem padWord_low (y : Word) : (padWord y).extractLsb' 0 128 = y :=
+theorem padWord_low (y : Word) : (padWord y).extractLsb' 0 128 = y :=
   BitVec.extractLsb'_append_eq_right (a := (0 : BitVec 128)) (b := y)
 
-private def chainRecord (y : Word) : Record := (fun _ => y, fun _ => padWord y)
+/-- The record whose chain `k` is constantly `t k` and whose root answers are all `st`. -/
+def constRecord (t : Fin numChains → Word) (st : BitVec 256) : Record P :=
+  (t, Sum.elim (fun a => padWord (t a.1)) (fun _ => st))
 
-private def rootRecord (cv : BitVec 256) (x : Word) : Record :=
-  (fun _ => 0, Sum.elim (fun _ => padWord x) (fun _ => cv))
+theorem constRecord_word (t : Fin numChains → Word) (st : BitVec 256) (k : Fin numChains)
+    (j : ℕ) (hj : j ≤ P.len k - 1) : (constRecord (P := P) t st).word k j = t k := by
+  cases j with
+  | zero => rfl
+  | succ j =>
+    rw [Record.word_succ _ k j (by omega)]
+    exact padWord_low _
 
-/-- Every tagged chain input is the input of some record at its location. -/
-theorem exists_record_chainInput (i : Fin 43) (j : Fin 127) (y : Word) :
-    ∃ ζ : Record, ζ.query (.inl (i, j)) = ⟨896, chainInput i.val j.val y⟩ := by
-  refine ⟨chainRecord y, ?_⟩
-  have hw : (chainRecord y).word i j.castSucc = y := by
-    unfold Record.word
-    split
-    · rfl
-    · exact padWord_low y
-  exact congrArg (fun x : Word => (⟨896, chainInput i.val j.val x⟩ : Query)) hw
+theorem constRecord_top (t : Fin numChains → Word) (st : BitVec 256) :
+    (constRecord (P := P) t st).top = t :=
+  funext fun k => constRecord_word t st k _ le_rfl
 
-/-- Every tagged root input is the input of some record at its location; at the first root
-position the chaining value of every record is `0`. -/
-theorem exists_record_rootInput (k : Fin 43) (cv : BitVec 256) (x : Word)
-    (h0 : k.val = 0 → cv = 0) :
-    ∃ ζ : Record, ζ.query (.inr k) = ⟨896, rootInput (rootTag k) cv x⟩ := by
-  refine ⟨rootRecord cv x, ?_⟩
-  have he : (rootRecord cv x).endpoint k = x :=
-    ((rootRecord cv x).word_next k ⟨126, by omega⟩).trans (padWord_low x)
-  have hb : (rootRecord cv x).rootBefore k = cv := by
-    unfold Record.rootBefore
-    split
-    · rename_i h
-      exact (h0 h).symm
-    · rfl
-  exact congrArg₂ (fun (a : BitVec 256) (b : Word) => (⟨896, rootInput (rootTag k) a b⟩ : Query))
-    hb he
+theorem queryLocation_chainInput (hP : P.Hyp) (k : Fin numChains) (j : Fin (P.len k - 1))
+    (y : Word) : queryLocation P ⟨896, P.chainInput k j.val y⟩ = some (.inl ⟨k, j⟩) := by
+  have hq : (constRecord (P := P) (fun _ => y) 0).query (.inl ⟨k, j⟩) =
+      ⟨896, P.chainInput k j.val y⟩ := by
+    rw [Record.query_inl, constRecord_word _ _ k j.val (by have := j.isLt; omega)]
+  rw [← hq]
+  exact queryLocation_query hP _ _
 
-private theorem queryLocation_chainInput (i : Fin 43) (j : Fin 127) (y : Word) :
-    queryLocation ⟨896, chainInput i.val j.val y⟩ = some (.inl (i, j)) := by
-  obtain ⟨ζ', hζ'⟩ := exists_record_chainInput i j y
-  rw [← hζ']
-  exact queryLocation_query ζ' _
-
-private theorem queryLocation_rootInput (k : Fin 43) (cv : BitVec 256) (x : Word)
-    (h0 : k.val = 0 → cv = 0) :
-    queryLocation ⟨896, rootInput (rootTag k) cv x⟩ = some (.inr k) := by
-  obtain ⟨ζ', hζ'⟩ := exists_record_rootInput k cv x h0
-  rw [← hζ']
-  exact queryLocation_query ζ' _
-
-/-! ## Matching answers -/
-
-private theorem low_eq_setWidth {n : ℕ} (x : BitVec n) : x.extractLsb' 0 128 = x.setWidth 128 := by
-  rw [← BitVec.setWidth_ushiftRight_eq_extractLsb, BitVec.ushiftRight_zero]
-
-private theorem mem_lowAnswers {u v : BitVec hashBits}
-    (h : u.extractLsb' 0 128 = v.extractLsb' 0 128) : u ∈ lowAnswers v := by
-  unfold lowAnswers
-  rw [Finset.mem_filter, ← low_eq_setWidth, ← low_eq_setWidth]
-  exact ⟨Finset.mem_univ _, h⟩
-
-private theorem mem_matchingAnswers_chain (ζ : Record) (a : ChainLocation) {u : BitVec hashBits}
-    (hu : u ∈ lowAnswers (ζ.2 (.inl a))) : u ∈ matchingAnswers ζ (.inl a) := hu
-
-private theorem mem_matchingAnswers_root (ζ : Record) (k : Fin 43) (hk : k ≠ 42) :
-    ζ.2 (.inr k) ∈ matchingAnswers ζ (.inr k) := by
-  change ζ.2 (.inr k) ∈ (if k = 42 then lowAnswers (ζ.2 (.inr k)) else {ζ.2 (.inr k)})
-  rw [if_neg hk]
-  exact Finset.mem_singleton_self _
-
-private theorem mem_matchingAnswers_last (ζ : Record) (k : Fin 43) (hk : k = 42)
-    {u : BitVec hashBits} (hu : u ∈ lowAnswers (ζ.2 (.inr k))) :
-    u ∈ matchingAnswers ζ (.inr k) := by
-  change u ∈ (if k = 42 then lowAnswers (ζ.2 (.inr k)) else {ζ.2 (.inr k)})
-  rw [if_pos hk]
-  exact hu
+theorem queryLocation_rootInput (hP : P.Hyp) (r : Fin 10) (t : Fin numChains → Word)
+    (st : BitVec 256) (h0 : r.val = 0 → st = Params.rootInit t) :
+    queryLocation P ⟨896, P.rootInput t r.val st⟩ = some (.inr r) := by
+  have hq : (constRecord (P := P) t st).query (.inr r) = ⟨896, P.rootInput t r.val st⟩ := by
+    rw [Record.query_inr, constRecord_top]
+    congr 3
+    rcases r with ⟨r, hr⟩
+    cases r with
+    | zero => rw [Record.rootState_zero, constRecord_top]; exact (h0 rfl).symm
+    | succ r => rw [Record.rootState_succ_lt _ r (by omega)]; rfl
+  rw [← hq]
+  exact queryLocation_query hP _ _
 
 /-! ## Chain events -/
 
-/-- A chain second preimage at an exposed location, on a cached verifier step, is a cut-target
-hit. -/
-theorem chain_spi_targetHit (m : Message) (ζ : Record) (c : Cache)
-    (hc : Cache.Sub (exposedCache (afterSigning m) ζ) c)
-    (i : Fin 43) (k : ℕ) (hk : k < 127) (hexp : digit m i ≤ k) (y : Word)
-    (hy : y ≠ ζ.word i ⟨k, by omega⟩)
-    (hcached : (c ⟨896, chainInput i.val k y⟩).isSome)
-    (hmatch : stepValue (table c) i.val k y =
-      stepValue (table c) i.val k (ζ.word i ⟨k, by omega⟩)) :
-    TargetHit (cutTargets (afterSigning m) ζ) c := by
-  have hf := respectsExposed_of_sub (afterSigning m) ζ hc
-  have hnh : ¬ Hidden (afterSigning m) (.inl (i, ⟨k, hk⟩)) := by
-    show ¬ k < digit m i
+/-- A chain second preimage at an exposed step, on a cached verifier step, is a cut-target hit. -/
+theorem chain_spi_targetHit (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
+    (hc : Cache.Sub (exposedCache d ζ) c) (k : Fin numChains) (i : ℕ)
+    (hi : i < P.len k - 1) (hexp : d k ≤ i) (y : Word) (hy : y ≠ ζ.word k i)
+    (hcached : (c ⟨896, P.chainInput k i y⟩).isSome)
+    (hmatch : P.stepValue (table c) k i y = P.stepValue (table c) k i (ζ.word k i)) :
+    TargetHit (cutTargets P d ζ) c := by
+  have hf := respectsExposed_of_sub hP d ζ hc
+  have hnh : ¬ Hidden d (.inl ⟨k, ⟨i, hi⟩⟩) := by
+    show ¬ i < d k
     omega
   obtain ⟨u, hu⟩ := Option.isSome_iff_exists.1 hcached
-  refine ⟨⟨896, chainInput i.val k y⟩, u, hu, ?_⟩
-  have hloc : queryLocation ⟨896, chainInput i.val k y⟩ = some (.inl (i, ⟨k, hk⟩)) :=
-    queryLocation_chainInput i ⟨k, hk⟩ y
-  have hne : ζ.query (.inl (i, ⟨k, hk⟩)) ≠ ⟨896, chainInput i.val k y⟩ := by
+  refine ⟨⟨896, P.chainInput k i y⟩, u, hu, ?_⟩
+  have hne : ζ.query (.inl ⟨k, ⟨i, hi⟩⟩) ≠ ⟨896, P.chainInput k i y⟩ := by
     intro h
-    have h' : (⟨896, chainInput i.val k (ζ.word i ⟨k, by omega⟩)⟩ : Query) =
-        ⟨896, chainInput i.val k y⟩ := h
-    have hx := eq_of_heq (Sigma.mk.inj_iff.mp h').2
-    exact hy ((chainInput_eq_iff i i ⟨k, hk⟩ ⟨k, hk⟩ _ _).mp hx).2.2.symm
-  have h1 : stepValue (table c) i.val k y = u.extractLsb' 0 128 :=
+    rw [Record.query_inl] at h
+    exact hy ((Params.chainInput_same_iff k i _ _).mp (query_inj h)).symm
+  have h1 : P.stepValue (table c) k i y = u.extractLsb' 0 128 :=
     congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (table_eq_of_some hu)
-  have h2 : stepValue (table c) i.val k (ζ.word i ⟨k, by omega⟩) =
-      (ζ.2 (.inl (i, ⟨k, hk⟩))).extractLsb' 0 128 :=
-    congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (hf (.inl (i, ⟨k, hk⟩)) hnh)
-  exact mem_cutTargets_exposed hloc hnh hne
-    (mem_matchingAnswers_chain ζ (i, ⟨k, hk⟩) (mem_lowAnswers (h1.symm.trans (hmatch.trans h2))))
+  have h2 : P.stepValue (table c) k i (ζ.word k i) =
+      (ζ.2 (.inl ⟨k, ⟨i, hi⟩⟩)).extractLsb' 0 128 :=
+    congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (hf (.inl ⟨k, ⟨i, hi⟩⟩) hnh)
+  refine mem_cutTargets_exposed (queryLocation_chainInput hP k ⟨i, hi⟩ y) hnh hne ?_
+  rw [matchingAnswers_inl]
+  exact mem_lowAnswers.mpr (h1.symm.trans (hmatch.trans h2))
 
-/-- A cached verifier step just below the cut whose output is the signed word: either the
+/-- A cached verifier step just below the cut whose output is the public word at the cut: the
 honest hidden input was queried, or the boundary target was hit. -/
-theorem boundary_hit (m : Message) (ζ : Record) (c : Cache)
-    (hc : Cache.Sub (exposedCache (afterSigning m) ζ) c) (i : Fin 43) (hpos : 0 < digit m i)
-    (y : Word) (hcached : (c ⟨896, chainInput i.val (digit m i - 1) y⟩).isSome)
-    (hmatch : stepValue (table c) i.val (digit m i - 1) y =
-      ζ.word i ⟨digit m i, by have := digit_le m i; omega⟩) :
-    Cache.Hits c (hiddenCache (afterSigning m) ζ) ∨
-      TargetHit (cutTargets (afterSigning m) ζ) c := by
-  have hd := digit_le m i
-  have he : digit m i - 1 < 127 := by omega
-  have hhid : Hidden (afterSigning m) (.inl (i, ⟨digit m i - 1, he⟩)) := by
-    show digit m i - 1 < digit m i
+theorem boundary_hit (hP : P.Hyp) (d : Cut) (hd : ValidCut P d) (ζ : Record P) (c : Cache)
+    (hc : Cache.Sub (exposedCache d ζ) c) (k : Fin numChains) (hpos : 0 < d k)
+    (y : Word) (hcached : (c ⟨896, P.chainInput k (d k - 1) y⟩).isSome)
+    (hmatch : P.stepValue (table c) k (d k - 1) y = ζ.word k (d k)) :
+    Cache.Hits c (hiddenCache d ζ) ∨ TargetHit (cutTargets P d ζ) c := by
+  have hdk := hd k
+  have he : d k - 1 < P.len k - 1 := by omega
+  have hhid : Hidden d (.inl ⟨k, ⟨d k - 1, he⟩⟩) := by
+    show d k - 1 < d k
     omega
-  by_cases hy : y = ζ.word i ⟨digit m i - 1, by omega⟩
+  by_cases hy : y = ζ.word k (d k - 1)
   · left
-    refine ⟨⟨896, chainInput i.val (digit m i - 1) y⟩, ?_, hcached⟩
-    refine (hiddenCache_isSome_iff (afterSigning m) ζ _).2
-      ⟨.inl (i, ⟨digit m i - 1, he⟩), hhid, ?_⟩
-    exact (congrArg (fun x : Word => (⟨896, chainInput i.val (digit m i - 1) x⟩ : Query)) hy).symm
+    refine ⟨⟨896, P.chainInput k (d k - 1) y⟩, ?_, hcached⟩
+    refine (hiddenCache_isSome_iff hP d ζ _).2 ⟨.inl ⟨k, ⟨d k - 1, he⟩⟩, hhid, ?_⟩
+    rw [Record.query_inl, hy]
   · right
     obtain ⟨u, hu⟩ := Option.isSome_iff_exists.1 hcached
-    refine ⟨⟨896, chainInput i.val (digit m i - 1) y⟩, u, hu, ?_⟩
-    have hloc : queryLocation ⟨896, chainInput i.val (digit m i - 1) y⟩ =
-        some (.inl (i, ⟨digit m i - 1, he⟩)) :=
-      queryLocation_chainInput i ⟨digit m i - 1, he⟩ y
-    have hbd : Boundary (afterSigning m) (.inl (i, ⟨digit m i - 1, he⟩)) := by
-      show digit m i - 1 + 1 = digit m i
+    refine ⟨⟨896, P.chainInput k (d k - 1) y⟩, u, hu, ?_⟩
+    have hbd : Boundary d (.inl ⟨k, ⟨d k - 1, he⟩⟩) := by
+      show d k - 1 + 1 = d k
       omega
-    have h1 : stepValue (table c) i.val (digit m i - 1) y = u.extractLsb' 0 128 :=
+    have h1 : P.stepValue (table c) k (d k - 1) y = u.extractLsb' 0 128 :=
       congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (table_eq_of_some hu)
-    have h2 : ζ.word i ⟨digit m i, by omega⟩ =
-        (ζ.2 (.inl (i, ⟨digit m i - 1, he⟩))).extractLsb' 0 128 :=
-      (congrArg (ζ.word i) (Fin.ext (by show digit m i = digit m i - 1 + 1; omega))).trans
-        (ζ.word_next i ⟨digit m i - 1, he⟩)
-    exact mem_cutTargets_boundary hloc hhid hbd
-      (mem_matchingAnswers_chain ζ _ (mem_lowAnswers (h1.symm.trans (hmatch.trans h2))))
+    have h2 : ζ.word k (d k) = (ζ.2 (.inl ⟨k, ⟨d k - 1, he⟩⟩)).extractLsb' 0 128 := by
+      rw [← Record.word_succ _ k (d k - 1) he, Nat.sub_add_cancel hpos]
+    refine mem_cutTargets_boundary (queryLocation_chainInput hP k ⟨d k - 1, he⟩ y) hhid hbd ?_
+    rw [matchingAnswers_inl]
+    exact mem_lowAnswers.mpr (h1.symm.trans (hmatch.trans h2))
 
-/-- Same message, different signature: the decoded word at the cut differs from the signed one
-but reaches the honest endpoint, so an exposed chain target is hit. -/
-private theorem same_message_chain (m : Message) (ζ : Record) (c : Cache)
-    (hc : Cache.Sub (exposedCache (afterSigning m) ζ) c) (i : Fin 43) (y : Word)
-    (hy : y ≠ ζ.word i (afterSigning m i))
-    (hpath : ChainPath c i.val (digit m i) (127 - digit m i) y)
-    (hend : chainValue (table c) i.val (digit m i) (127 - digit m i) y = ζ.endpoint i) :
-    TargetHit (cutTargets (afterSigning m) ζ) c := by
-  have hd := digit_le m i
-  have hf := respectsExposed_of_sub (afterSigning m) ζ hc
-  rcases endpoint_match_exposed (table c) (afterSigning m) ζ hf i (digit m i) (Nat.le_refl _) hd
-      y hend with heq | ⟨k, hk, hjk, hne, hstep⟩
-  · exact absurd heq hy
-  · have hcached := hpath.cached (k := k) hjk (by omega)
-    exact chain_spi_targetHit m ζ c hc i k hk hjk _ hne hcached hstep
-
-/-- Different message: chain `i` starts strictly below the cut and reaches the honest endpoint.
-Either it passes the honest word at the cut (boundary event) or it merges later (exposed chain
-target). -/
-private theorem diff_message_chain (m : Message) (ζ : Record) (c : Cache)
-    (hc : Cache.Sub (exposedCache (afterSigning m) ζ) c) (i : Fin 43) (e : ℕ)
-    (he : e < digit m i) (y : Word) (hpath : ChainPath c i.val e (127 - e) y)
-    (hend : chainValue (table c) i.val e (127 - e) y = ζ.endpoint i) :
-    Cache.Hits c (hiddenCache (afterSigning m) ζ) ∨
-      TargetHit (cutTargets (afterSigning m) ζ) c := by
-  have hd := digit_le m i
-  have hf := respectsExposed_of_sub (afterSigning m) ζ hc
-  have hmid : chainValue (table c) i.val (digit m i) (127 - digit m i)
-      (chainValue (table c) i.val e (digit m i - e) y) = ζ.endpoint i := by
-    have h := chainValue_add (table c) i.val e (digit m i - e) (127 - digit m i) y
-    rw [show e + (digit m i - e) = digit m i by omega,
-      show digit m i - e + (127 - digit m i) = 127 - e by omega] at h
+/-- A chain that starts strictly below the cut and reaches the honest top passes the boundary
+(hidden or boundary hit) or merges later (exposed chain target). -/
+theorem lower_chain (hP : P.Hyp) (d : Cut) (hd : ValidCut P d) (ζ : Record P) (c : Cache)
+    (hc : Cache.Sub (exposedCache d ζ) c) (k : Fin numChains) (e : ℕ) (he : e < d k)
+    (y : Word) (hpath : P.ChainPath c k e (P.len k - 1 - e) y)
+    (hend : P.chainValue (table c) k e (P.len k - 1 - e) y = ζ.top k) :
+    Cache.Hits c (hiddenCache d ζ) ∨ TargetHit (cutTargets P d ζ) c := by
+  have hdk := hd k
+  have hf := respectsExposed_of_sub hP d ζ hc
+  have hmid : P.chainValue (table c) k (d k) (P.len k - 1 - d k)
+      (P.chainValue (table c) k e (d k - e) y) = ζ.top k := by
+    have h := P.chainValue_add (table c) k e (d k - e) (P.len k - 1 - d k) y
+    rw [show e + (d k - e) = d k by omega,
+      show d k - e + (P.len k - 1 - d k) = P.len k - 1 - e by omega] at h
     exact h.trans hend
-  rcases endpoint_match_exposed (table c) (afterSigning m) ζ hf i (digit m i) (Nat.le_refl _) hd
-      _ hmid with heq | ⟨k, hk, hjk, hne, hstep⟩
-  · -- the path passes the honest word at the cut: its previous step is the boundary step
-    have hpos : 0 < digit m i := by omega
-    have hcached' : (c ⟨896, chainInput i.val (digit m i - 1)
-        (chainValue (table c) i.val e (digit m i - 1 - e) y)⟩).isSome :=
-      hpath.cached (by omega) (by omega)
-    have hmatch' : stepValue (table c) i.val (digit m i - 1)
-        (chainValue (table c) i.val e (digit m i - 1 - e) y) =
-        ζ.word i ⟨digit m i, by omega⟩ := by
-      have h := chainValue_snoc (table c) i.val e (digit m i - 1 - e) y
-      rw [show digit m i - 1 - e + 1 = digit m i - e by omega,
-        show e + (digit m i - 1 - e) = digit m i - 1 by omega] at h
+  rcases endpoint_match_exposed (table c) d ζ hf k (d k) le_rfl hdk _ hmid with
+    heq | ⟨i, hji, hi, hne, hstep⟩
+  · have hpos : 0 < d k := by omega
+    have hcached' : (c ⟨896, P.chainInput k (d k - 1)
+        (P.chainValue (table c) k e (d k - 1 - e) y)⟩).isSome :=
+      Params.ChainPath.cached P hpath (by omega) (by omega)
+    have hmatch' : P.stepValue (table c) k (d k - 1)
+        (P.chainValue (table c) k e (d k - 1 - e) y) = ζ.word k (d k) := by
+      have h := P.chainValue_snoc (table c) k e (d k - 1 - e) y
+      rw [show d k - 1 - e + 1 = d k - e by omega,
+        show e + (d k - 1 - e) = d k - 1 by omega] at h
       exact h.symm.trans heq
-    exact boundary_hit m ζ c hc i hpos _ hcached' hmatch'
-  · -- the path merges with the honest chain at or after the cut
-    right
-    have hY : chainValue (table c) i.val (digit m i) (k - digit m i)
-        (chainValue (table c) i.val e (digit m i - e) y) =
-        chainValue (table c) i.val e (k - e) y := by
-      have h := chainValue_add (table c) i.val e (digit m i - e) (k - digit m i) y
-      rw [show e + (digit m i - e) = digit m i by omega,
-        show digit m i - e + (k - digit m i) = k - e by omega] at h
+    exact boundary_hit hP d hd ζ c hc k hpos _ hcached' hmatch'
+  · right
+    have hY : P.chainValue (table c) k (d k) (i - d k)
+        (P.chainValue (table c) k e (d k - e) y) = P.chainValue (table c) k e (i - e) y := by
+      have h := P.chainValue_add (table c) k e (d k - e) (i - d k) y
+      rw [show e + (d k - e) = d k by omega,
+        show d k - e + (i - d k) = i - e by omega] at h
       exact h
-    have hcached := hpath.cached (k := k) (by omega) (by omega)
+    have hcached := Params.ChainPath.cached P hpath (i := i) (by omega) (by omega)
     rw [← hY] at hcached
-    exact chain_spi_targetHit m ζ c hc i k hk hjk _ hne hcached hstep
+    exact chain_spi_targetHit hP d ζ c hc k i hi hji _ hne hcached hstep
+
+/-- A chain that starts at or above the cut and reaches the honest top starts at the honest
+word, or hits an exposed chain target. -/
+theorem upper_chain (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
+    (hc : Cache.Sub (exposedCache d ζ) c) (k : Fin numChains) (e : ℕ) (he : d k ≤ e)
+    (he' : e ≤ P.len k - 1) (y : Word) (hpath : P.ChainPath c k e (P.len k - 1 - e) y)
+    (hend : P.chainValue (table c) k e (P.len k - 1 - e) y = ζ.top k) :
+    y = ζ.word k e ∨ TargetHit (cutTargets P d ζ) c := by
+  have hf := respectsExposed_of_sub hP d ζ hc
+  rcases endpoint_match_exposed (table c) d ζ hf k e he he' y hend with
+    heq | ⟨i, hji, hi, hne, hstep⟩
+  · exact Or.inl heq
+  · right
+    have hcached := Params.ChainPath.cached P hpath (i := i) hji (by omega)
+    exact chain_spi_targetHit hP d ζ c hc k i hi (by omega) _ hne hcached hstep
 
 /-! ## Root events -/
 
-private theorem rootState_succ (ζ : Record) (j : ℕ) (hj : j < 43) :
-    ζ.rootState ⟨j + 1, by omega⟩ = ζ.2 (.inr ⟨j, hj⟩) :=
-  ζ.rootState_after ⟨j, hj⟩
+/-- The block of root call `r`. -/
+def rootBlock (t : Fin numChains → Word) (r : ℕ) : BitVec 512 :=
+  Params.topAt t (4 * r + 5) ++ Params.topAt t (4 * r + 4) ++ Params.topAt t (4 * r + 3) ++
+    Params.topAt t (4 * r + 2)
 
-/-- The honest absorption at root position `j` (with `r = 42 - j` words remaining). -/
-private theorem honest_absorb (ζ : Record) (f : HashTable)
-    (hroot : ∀ k : Fin 43, f (ζ.query (.inr k)) = ζ.2 (.inr k))
-    (j : ℕ) (hj : j < 43) (r : ℕ) (hr : r + j = 42) :
-    absorbValue f r (ζ.rootState ⟨j, by omega⟩) (ζ.endpoint ⟨j, hj⟩) = ζ.2 (.inr ⟨j, hj⟩) := by
-  have hr' : r = 42 - j := by omega
-  subst hr'
-  exact hroot ⟨j, hj⟩
+theorem rootInput_eq_iff' (hP : P.Hyp) {r : ℕ} (hr : r < 10) (t t' : Fin numChains → Word)
+    (st st' : BitVec 256) :
+    P.rootInput t r st = P.rootInput t' r st' ↔ st = st' ∧ rootBlock t r = rootBlock t' r := by
+  rw [Params.rootInput_eq_iff hP hr hr]
+  exact ⟨fun h => ⟨h.2.1, h.2.2⟩, fun h => ⟨rfl, h.1, h.2⟩⟩
 
-private theorem rsp_single (f : HashTable) (x y : Word) (cv dv : BitVec 256) :
-    RootSecondPreimage f [x] cv [y] dv ↔
-      (cv ≠ dv ∨ x ≠ y) ∧
-        (absorbValue f 0 cv x).extractLsb' 0 128 = (absorbValue f 0 dv y).extractLsb' 0 128 :=
-  Iff.rfl
+theorem tops_eq_of_blocks (t t' : Fin numChains → Word)
+    (h0 : Params.rootInit t = Params.rootInit t')
+    (hb : ∀ r < 10, rootBlock t r = rootBlock t' r) : t = t' := by
+  have htop : ∀ i, Params.topAt t i = Params.topAt t' i := by
+    intro i
+    by_cases hi : i < 42
+    · by_cases h2 : i < 2
+      · obtain ⟨h1, h0'⟩ := append_inj h0
+        interval_cases i
+        · exact h0'
+        · exact h1
+      · have hr : (i - 2) / 4 < 10 := by omega
+        have e := hb _ hr
+        unfold rootBlock at e
+        obtain ⟨e1, e2⟩ := append_inj e
+        obtain ⟨e3, e4⟩ := append_inj e1
+        obtain ⟨e5, e6⟩ := append_inj e3
+        have hmod : (i - 2) % 4 < 4 := Nat.mod_lt _ (by norm_num)
+        have hdecomp : i = 4 * ((i - 2) / 4) + 2 + (i - 2) % 4 := by omega
+        rcases (by omega : (i - 2) % 4 = 0 ∨ (i - 2) % 4 = 1 ∨ (i - 2) % 4 = 2 ∨
+            (i - 2) % 4 = 3) with h | h | h | h
+        · rw [show i = 4 * ((i - 2) / 4) + 2 by omega]; exact e2
+        · rw [show i = 4 * ((i - 2) / 4) + 3 by omega]; exact e4
+        · rw [show i = 4 * ((i - 2) / 4) + 4 by omega]; exact e6
+        · rw [show i = 4 * ((i - 2) / 4) + 5 by omega]; exact e5
+    · unfold Params.topAt
+      rw [dif_neg hi, dif_neg hi]
+  funext k
+  have := htop k.val
+  unfold Params.topAt at this
+  rwa [dif_pos k.isLt, dif_pos k.isLt] at this
 
-private theorem rsp_cons (f : HashTable) (x y : Word) (xs ys : List Word) (cv dv : BitVec 256)
-    (hx : xs ≠ []) :
-    RootSecondPreimage f (x :: xs) cv (y :: ys) dv ↔
-      ((cv ≠ dv ∨ x ≠ y) ∧ absorbValue f xs.length cv x = absorbValue f ys.length dv y) ∨
-        RootSecondPreimage f xs (absorbValue f xs.length cv x) ys
-          (absorbValue f ys.length dv y) := by
-  cases xs with
-  | nil => exact (hx rfl).elim
-  | cons x' xs => exact Iff.rfl
+/-- The honest root states are reproduced by any table that respects the (always exposed) root
+answers. -/
+theorem rootFromValue_honest (f : HashTable) (d : Cut) (ζ : Record P)
+    (hf : RespectsExposed f d ζ) :
+    ∀ r, r ≤ 10 → P.rootFromValue f ζ.top 0 r (Params.rootInit ζ.top) = ζ.rootState r := by
+  intro r
+  induction r with
+  | zero => intro _; rfl
+  | succ r ih =>
+    intro hr
+    rw [Params.rootFromValue_snoc, Nat.zero_add, ih (by omega)]
+    have h := hf (.inr ⟨r, by omega⟩) (not_hidden_inr d _)
+    rw [Record.query_inr] at h
+    rw [h, Record.rootState_succ_lt _ r (by omega)]
 
-private theorem ofFn_offset_succ (v : Fin 43 → Word) (n j : ℕ) (hj : j + (n + 1) = 43) :
-    List.ofFn (fun t : Fin (n + 1) => v ⟨j + t.val, by have := t.isLt; omega⟩) =
-      v ⟨j, by omega⟩ ::
-        List.ofFn (fun t : Fin n => v ⟨j + 1 + t.val, by have := t.isLt; omega⟩) := by
-  rw [List.ofFn_succ]
-  refine congrArg₂ List.cons ?_ ?_
-  · apply congrArg v
-    apply Fin.ext
-    simp
-  · apply congrArg List.ofFn
-    funext t
-    apply congrArg v
-    apply Fin.ext
-    first
-      | (show j + (t.val + 1) = j + 1 + t.val; omega)
-      | (simp only [Fin.val_succ]; omega)
-      | (dsimp; omega)
+theorem rootValue_honest (f : HashTable) (d : Cut) (ζ : Record P)
+    (hf : RespectsExposed f d ζ) : P.rootValue f ζ.top = ζ.pk := by
+  unfold Params.rootValue
+  rw [rootFromValue_honest f d ζ hf 10 le_rfl, Record.rootState_succ_lt _ 9 (by norm_num)]
+  rfl
 
-/-- A mismatching absorption at root position `k` with a matching (exposed) answer. -/
-private theorem root_targetHit (d : Cut) (ζ : Record) (c : Cache) (k : Fin 43) (r : ℕ)
-    (hr : r = 42 - k.val) (cv : BitVec 256) (x : Word) (h0 : k.val = 0 → cv = 0)
-    (hne : cv ≠ ζ.rootBefore k ∨ x ≠ ζ.endpoint k)
-    (hcached : (c ⟨896, LeanIsa.hashInput cv (x.setWidth 512)
-      (BitVec.ofNat 128 (2 + r))⟩).isSome)
-    (hmatch : absorbValue (table c) r cv x ∈ matchingAnswers ζ (.inr k)) :
-    TargetHit (cutTargets d ζ) c := by
-  subst hr
-  have hcached' : (c ⟨896, rootInput (rootTag k) cv x⟩).isSome := hcached
-  obtain ⟨u, hu⟩ := Option.isSome_iff_exists.1 hcached'
-  refine ⟨⟨896, rootInput (rootTag k) cv x⟩, u, hu, ?_⟩
-  have hnq : ζ.query (.inr k) ≠ ⟨896, rootInput (rootTag k) cv x⟩ := by
-    intro h
-    have h' : (⟨896, rootInput (rootTag k) (ζ.rootBefore k) (ζ.endpoint k)⟩ : Query) =
-        ⟨896, rootInput (rootTag k) cv x⟩ := h
-    obtain ⟨-, h1, h2⟩ :=
-      (rootInput_eq_iff _ _ _ _ _ _).mp (eq_of_heq (Sigma.mk.inj_iff.mp h').2)
-    rcases hne with hne | hne
-    · exact hne h1.symm
-    · exact hne h2.symm
-  have hnh : ¬ Hidden d (.inr k) := fun h => h
-  have hu' : absorbValue (table c) (42 - k.val) cv x = u := table_eq_of_some hu
-  rw [hu'] at hmatch
-  exact mem_cutTargets_exposed (queryLocation_rootInput k cv x h0) hnh hnq hmatch
-
-/-- Root second preimages on suffixes of the fold: the forged suffix from position `j` (state
-`cv`) against the honest suffix from position `j` (state `ζ.rootState j`). -/
-private theorem root_spi_suffix (d : Cut) (ζ : Record) (c : Cache)
-    (hroot : ∀ k : Fin 43, table c (ζ.query (.inr k)) = ζ.2 (.inr k)) (xs : Words) :
-    ∀ (n j : ℕ) (hj : j + n = 43) (cv : BitVec 256), (j = 0 → cv = 0) →
-      RootPath c (List.ofFn fun t : Fin n => xs ⟨j + t.val, by have := t.isLt; omega⟩) cv →
-      RootSecondPreimage (table c)
-        (List.ofFn fun t : Fin n => xs ⟨j + t.val, by have := t.isLt; omega⟩) cv
-        (List.ofFn fun t : Fin n => ζ.endpoint ⟨j + t.val, by have := t.isLt; omega⟩)
-        (ζ.rootState ⟨j, by omega⟩) →
-      TargetHit (cutTargets d ζ) c := by
-  intro n
-  induction n with
-  | zero =>
-    intro j hj cv _ _ hspi
-    simp only [List.ofFn_zero] at hspi
-    exact False.elim hspi
-  | succ n ih =>
-    intro j hj cv h0 hpath hspi
-    have hjlt : j < 43 := by omega
-    rw [ofFn_offset_succ xs n j hj] at hpath hspi
-    rw [ofFn_offset_succ ζ.endpoint n j hj] at hspi
-    obtain ⟨hcached, hpath'⟩ := hpath
-    cases n with
-    | zero =>
-      -- the last absorption (`j = 42`): only the low 128 output bits are compared
-      have hspi' : RootSecondPreimage (table c) [xs ⟨j, hjlt⟩] cv [ζ.endpoint ⟨j, hjlt⟩]
-          (ζ.rootState ⟨j, by omega⟩) := by
-        simpa only [List.ofFn_zero] using hspi
-      obtain ⟨hne, heq⟩ := (rsp_single (table c) _ _ _ _).1 hspi'
-      have hk : (⟨j, hjlt⟩ : Fin 43) = 42 :=
-        Fin.ext (by first | (show j = 42; omega) | (simp; omega) | simp)
-      have honest : absorbValue (table c) 0 (ζ.rootState ⟨j, by omega⟩) (ζ.endpoint ⟨j, hjlt⟩) =
-          ζ.2 (.inr ⟨j, hjlt⟩) :=
-        honest_absorb ζ (table c) hroot j hjlt 0 (by omega)
-      have hlow : (absorbValue (table c) 0 cv (xs ⟨j, hjlt⟩)).extractLsb' 0 128 =
-          (ζ.2 (.inr ⟨j, hjlt⟩)).extractLsb' 0 128 :=
-        heq.trans (congrArg (fun z : BitVec 256 => z.extractLsb' 0 128) honest)
-      rw [List.length_ofFn] at hcached
-      exact root_targetHit d ζ c ⟨j, hjlt⟩ 0 (by show 0 = 42 - j; omega) cv (xs ⟨j, hjlt⟩) h0
-        hne hcached (mem_matchingAnswers_last ζ ⟨j, hjlt⟩ hk (mem_lowAnswers hlow))
-    | succ n =>
-      have hLne : (List.ofFn fun t : Fin (n + 1) =>
-          xs ⟨j + 1 + t.val, by have := t.isLt; omega⟩) ≠ [] :=
-        List.ne_nil_of_length_pos (by rw [List.length_ofFn]; omega)
-      have hk : (⟨j, hjlt⟩ : Fin 43) ≠ 42 :=
-        fun h => absurd (congrArg Fin.val h)
-          (by first | (show j ≠ 42; omega) | (simp; omega) | simp)
-      have hH : absorbValue (table c) (List.ofFn fun t : Fin (n + 1) =>
-          ζ.endpoint ⟨j + 1 + t.val, by have := t.isLt; omega⟩).length
-          (ζ.rootState ⟨j, by omega⟩) (ζ.endpoint ⟨j, hjlt⟩) = ζ.2 (.inr ⟨j, hjlt⟩) := by
-        rw [List.length_ofFn]
-        exact honest_absorb ζ (table c) hroot j hjlt (n + 1) (by omega)
-      rcases (rsp_cons (table c) _ _ _ _ _ _ hLne).1 hspi with ⟨hne, heq⟩ | hrec
-      · -- first mismatch at position `j`, full 256-bit match
-        refine root_targetHit d ζ c ⟨j, hjlt⟩ _ ?_ cv (xs ⟨j, hjlt⟩) h0 hne hcached ?_
-        · rw [List.length_ofFn]
-          show n + 1 = 42 - j
-          omega
-        · rw [heq, hH]
-          exact mem_matchingAnswers_root ζ ⟨j, hjlt⟩ hk
-      · -- the honest states agree so far: continue at position `j + 1`
-        rw [hH, ← rootState_succ ζ j hjlt] at hrec
-        exact ih (j + 1) (by omega) _ (fun h => absurd h (Nat.succ_ne_zero j)) hpath' hrec
-
-/-- A root second preimage on the verifier's cached root fold is a cut-target hit. -/
-theorem root_spi_targetHit (m : Message) (ζ : Record) (c : Cache)
-    (hc : Cache.Sub (exposedCache (afterSigning m) ζ) c)
-    (xs : Words) (hpath : RootPath c (List.ofFn xs) 0)
-    (hspi : RootSecondPreimage (table c) (List.ofFn xs) 0 (List.ofFn ζ.endpoint) 0) :
-    TargetHit (cutTargets (afterSigning m) ζ) c := by
-  have hf := respectsExposed_of_sub (afterSigning m) ζ hc
-  have hroot : ∀ k : Fin 43, table c (ζ.query (.inr k)) = ζ.2 (.inr k) :=
-    fun k => hf (.inr k) (fun h => h)
-  have hx : (fun t : Fin 43 => xs ⟨0 + t.val, by have := t.isLt; omega⟩) = xs := by
-    funext t
-    simp only [Nat.zero_add]
-  have he : (fun t : Fin 43 => ζ.endpoint ⟨0 + t.val, by have := t.isLt; omega⟩) =
-      ζ.endpoint := by
-    funext t
-    simp only [Nat.zero_add]
-  have h0 : ζ.rootState ⟨0, by omega⟩ = 0 := by
-    first | rfl | simp [Record.rootState]
-  refine root_spi_suffix (afterSigning m) ζ c hroot xs 43 0 rfl 0 (fun _ => rfl) ?_ ?_
-  · rw [hx]
-    exact hpath
-  · rw [hx, he, h0]
-    exact hspi
+/-- **Root binding.** A cached tagged root path of the verifier that reaches the public key
+has the honest tops, or some call on it hits an exposed root target. -/
+theorem root_binding (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
+    (hc : Cache.Sub (exposedCache d ζ) c) (t : Fin numChains → Word)
+    (hpath : P.RootPath c t 0 10 (Params.rootInit t))
+    (hroot : P.rootValue (table c) t = ζ.pk)
+    (hno : ¬ TargetHit (cutTargets P d ζ) c) : t = ζ.top := by
+  have hf := respectsExposed_of_sub hP d ζ hc
+  set S : ℕ → BitVec 256 := fun r => P.rootFromValue (table c) t 0 r (Params.rootInit t) with hS
+  have hhon := rootFromValue_honest (table c) d ζ hf
+  -- the step at call `r`: a mismatching input with a matching answer is a target hit
+  have step : ∀ r (hr : r < 10),
+      (if r = 9 then (S (r + 1)).extractLsb' 0 128 = (ζ.rootState (r + 1)).extractLsb' 0 128
+        else S (r + 1) = ζ.rootState (r + 1)) →
+      S r = ζ.rootState r ∧ rootBlock t r = rootBlock ζ.top r := by
+    intro r hr hm
+    have hcached := hpath r hr
+    rw [Nat.zero_add] at hcached
+    by_cases hX : P.rootInput t r (S r) = P.rootInput ζ.top r (ζ.rootState r)
+    · exact (rootInput_eq_iff' hP hr _ _ _ _).mp hX
+    · exfalso
+      apply hno
+      obtain ⟨u, hu⟩ := Option.isSome_iff_exists.1 hcached
+      refine ⟨⟨896, P.rootInput t r (S r)⟩, u, hu, ?_⟩
+      have hSu : S (r + 1) = u := by
+        show P.rootFromValue (table c) t 0 (r + 1) (Params.rootInit t) = u
+        rw [Params.rootFromValue_snoc, Nat.zero_add]
+        exact table_eq_of_some hu
+      have hloc := queryLocation_rootInput hP ⟨r, hr⟩ t (S r) (fun h0 => by
+        simp only at h0
+        subst h0
+        rfl)
+      have hne : ζ.query (.inr ⟨r, hr⟩) ≠ ⟨896, P.rootInput t r (S r)⟩ := by
+        intro h
+        rw [Record.query_inr] at h
+        exact hX (query_inj h).symm
+      refine mem_cutTargets_exposed hloc (not_hidden_inr d _) hne ?_
+      rw [matchingAnswers_inr, ← Record.rootState_succ_lt _ r hr, ← hSu]
+      by_cases h9 : r = 9
+      · rw [if_pos (show (⟨r, hr⟩ : Fin 10).val = 9 from h9)]
+        rw [if_pos h9] at hm
+        exact mem_lowAnswers.mpr hm
+      · rw [if_neg (show ¬ (⟨r, hr⟩ : Fin 10).val = 9 from h9)]
+        rw [if_neg h9] at hm
+        rw [hm]
+        exact Finset.mem_singleton_self _
+  -- walk down from the last call
+  have key : ∀ n, n ≤ 10 → ∀ s, 10 - n ≤ s → s < 10 →
+      S s = ζ.rootState s ∧ rootBlock t s = rootBlock ζ.top s := by
+    intro n
+    induction n with
+    | zero => intro _ s hs hs'; omega
+    | succ n ih =>
+      intro hn s hs hs'
+      have hr : 9 - n < 10 := by omega
+      have hm : (if 9 - n = 9 then (S (9 - n + 1)).extractLsb' 0 128 =
+            (ζ.rootState (9 - n + 1)).extractLsb' 0 128
+          else S (9 - n + 1) = ζ.rootState (9 - n + 1)) := by
+        by_cases h9 : 9 - n = 9
+        · rw [if_pos h9, show 9 - n + 1 = 10 by omega]
+          have hr' : (S 10).extractLsb' 0 128 = ζ.pk := hroot
+          rw [hr', ← rootValue_honest (table c) d ζ hf]
+          unfold Params.rootValue
+          rw [hhon 10 le_rfl]
+        · rw [if_neg h9]
+          exact (ih (by omega) (9 - n + 1) (by omega) (by omega)).1
+      by_cases hs0 : s = 9 - n
+      · rw [hs0]
+        exact step (9 - n) hr hm
+      · exact ih (by omega) s (by omega) hs'
+  have h0 := key 10 le_rfl
+  apply tops_eq_of_blocks t ζ.top
+  · have := (h0 0 (by norm_num) (by norm_num)).1
+    exact this
+  · intro r hr
+    exact (h0 r (by omega) hr).2
 
 /-! ## The events lemma -/
 
-section StageB
+/-- The deterministic core: an accepted pair in a cache holding the exposed points of `ζ` and
+missing every hidden point and cut target of `ζ` has no chain starting below the cut, and the
+chains starting at the cut start at the honest words. -/
+theorem accept_core (hP : P.Hyp) (d : Cut) (hd : ValidCut P d) (ζ : Record P) (c : Cache)
+    (hc : Cache.Sub (exposedCache d ζ) c) (pk : PublicKey) (hpk : ζ.pk = pk)
+    (m₂ : Message) (σ₂ : List Bool) (hacc : P.Accepts c pk m₂ σ₂)
+    (hh : ¬ Cache.Hits c (hiddenCache d ζ)) (ht : ¬ TargetHit (cutTargets P d ζ) c) :
+    (∀ k, d k ≤ P.len k - 1 - P.digit (P.idxValue (table c) m₂ (decodeNonce σ₂) pk) k) ∧
+    (∀ k, P.len k - 1 - P.digit (P.idxValue (table c) m₂ (decodeNonce σ₂) pk) k = d k →
+      decodeWord σ₂ k = ζ.word k (d k)) := by
+  set I₂ := P.idxValue (table c) m₂ (decodeNonce σ₂) pk with hI₂
+  have hrec : P.reconWords (table c) I₂ σ₂ = ζ.top :=
+    root_binding hP d ζ c hc _ hacc.rootPath (hacc.root.trans hpk.symm) ht
+  have hchain : ∀ k, P.chainValue (table c) k (P.len k - 1 - P.digit I₂ k)
+      (P.len k - 1 - (P.len k - 1 - P.digit I₂ k)) (decodeWord σ₂ k) = ζ.top k ∧
+      P.ChainPath c k (P.len k - 1 - P.digit I₂ k)
+        (P.len k - 1 - (P.len k - 1 - P.digit I₂ k)) (decodeWord σ₂ k) := by
+    intro k
+    have hdl := hP.digit_lt I₂ k
+    have hn : P.len k - 1 - (P.len k - 1 - P.digit I₂ k) = P.digit I₂ k := by omega
+    rw [hn]
+    exact ⟨congrFun hrec k, hacc.chains k⟩
+  refine ⟨fun k => ?_, fun k hk => ?_⟩
+  · by_contra hlt
+    rcases lower_chain hP d hd ζ c hc k _ (by omega) _ (hchain k).2 (hchain k).1 with h | h
+    · exact hh h
+    · exact ht h
+  · have hdk := hd k
+    rcases upper_chain hP d ζ c hc k _ (by omega) (Nat.sub_le _ _) _ (hchain k).2
+        (hchain k).1 with h | h
+    · rw [h, hk]
+    · exact absurd h ht
+
+theorem digits_eq_of_le (hP : P.Hyp) {I J : Word} (hI : P.Accepted I) (hJ : P.Accepted J)
+    (h : ∀ k, P.digit J k ≤ P.digit I k) : J = I := by
+  apply hP.digit_inj
+  have hs : ∑ k, P.digit J k = ∑ k, P.digit I k := by
+    have h1 : ∑ k, P.digit J k = P.layer := hJ
+    have h2 : ∑ k, P.digit I k = P.layer := hI
+    rw [h1, h2]
+  intro k
+  exact (Finset.sum_eq_sum_iff_of_le (fun k _ => h k)).mp hs k (Finset.mem_univ k)
 
 variable (A : OracleAlgorithm.Adversary)
 
-/-- On the exposed stage-B run, an accepted fresh pair yields a hidden hit or a cut-target
-hit. -/
-theorem events_stB (pk : PublicKey) (m₁ : Message) (st : A.State) (ζ : Record) (c : Cache)
-    (hc : Cache.Sub (exposedCache (afterSigning m₁) ζ) c) (hpk : ζ.publicKey = pk)
-    (p : Bool × Cache) (hp : p ∈ support (run (stB A pk m₁ st (some (ζ.signature m₁))) c))
+/-- **Forgery events after signing index `I₁`.** On the second-stage run from a cache holding the
+points of `ζ` exposed by the signature, an accepted fresh pair yields a hidden hit, a cut-target
+hit, or a different message or nonce whose cached index answer is `I₁`. -/
+theorem events_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State) (ζ : Record P)
+    (c : Cache) (I₁ : Word) (hI₁ : P.Accepted I₁) (η₁ : Nonce)
+    (hc : Cache.Sub (exposedCache (afterSigning P I₁) ζ) c) (hpk : ζ.pk = pk)
+    (p : Bool × Cache)
+    (hp : p ∈ support (run (P.stB A pk m₁ st
+      (some (encode (fun k => ζ.word k (afterSigning P I₁ k)) η₁))) c))
     (hok : p.1 = true) :
-    Cache.Hits p.2 (hiddenCache (afterSigning m₁) ζ) ∨
-      TargetHit (cutTargets (afterSigning m₁) ζ) p.2 := by
-  obtain ⟨hcp, h⟩ := stB_support A pk m₁ st (some (ζ.signature m₁)) c p hp
-  obtain ⟨m₂, σ₂, hne, hlen, hroot, hchains, hrpath⟩ := h hok
-  have hsub : Cache.Sub (exposedCache (afterSigning m₁) ζ) p.2 := hc.trans hcp
-  have hf := respectsExposed_of_sub (afterSigning m₁) ζ hsub
-  have hroot' : rootValue (table p.2) (reconstructedWords (table p.2) m₂ σ₂) =
-      rootValue (table p.2) ζ.endpoint :=
-    hroot.trans ((rootValue_exposed (table p.2) (afterSigning m₁) ζ hf).trans hpk).symm
-  rcases root_value_match (table p.2) _ _ hroot' with hrec | hspi
-  · by_cases hm : m₂ = m₁
-    · -- same message, different signature
-      right
-      have hσ : σ₂ ≠ ζ.signature m₁ := by
-        intro h
-        apply hne
-        show some (m₁, ζ.signature m₁) = some (m₂, σ₂)
-        rw [hm, h]
-      have hd : decode σ₂ ≠ fun i => ζ.word i (afterSigning m₁ i) := by
-        intro h
-        apply hσ
-        show σ₂ = encode (fun i => ζ.word i (afterSigning m₁ i))
-        rw [← encode_decode σ₂ hlen, h]
-      obtain ⟨i, hi⟩ := Function.ne_iff.mp hd
-      have hpath : ChainPath p.2 i.val (digit m₁ i) (127 - digit m₁ i) (decode σ₂ i) := by
-        rw [← hm]
-        exact hchains i
-      have hend : chainValue (table p.2) i.val (digit m₁ i) (127 - digit m₁ i) (decode σ₂ i) =
-          ζ.endpoint i := by
-        rw [← hm]
-        exact congrFun hrec i
-      exact same_message_chain m₁ ζ p.2 hsub i (decode σ₂ i) hi hpath hend
-    · -- different message: some chain moves backwards past the cut
-      obtain ⟨i, hi⟩ := exists_lower_digit (Ne.symm hm)
-      exact diff_message_chain m₁ ζ p.2 hsub i (digit m₂ i) hi (decode σ₂ i) (hchains i)
-        (congrFun hrec i)
-  · right
-    exact root_spi_targetHit m₁ ζ p.2 hsub _ hrpath hspi
+    Cache.Hits p.2 (hiddenCache (afterSigning P I₁) ζ) ∨
+      TargetHit (cutTargets P (afterSigning P I₁) ζ) p.2 ∨
+      ∃ (m₂ : Message) (η₂ : Nonce), (m₂, η₂) ≠ (m₁, η₁) ∧
+        ∃ w, p.2 ⟨896, P.idxInput m₂ η₂ pk⟩ = some w ∧ w.extractLsb' 0 128 = I₁ := by
+  obtain ⟨hcp, h⟩ := P.stB_support A pk m₁ st _ c p hp
+  obtain ⟨m₂, σ₂, hne, hacc⟩ := h hok
+  have hsub := hc.trans hcp
+  by_cases hh : Cache.Hits p.2 (hiddenCache (afterSigning P I₁) ζ)
+  · exact Or.inl hh
+  by_cases ht : TargetHit (cutTargets P (afterSigning P I₁) ζ) p.2
+  · exact Or.inr (Or.inl ht)
+  right; right
+  obtain ⟨h1, h2⟩ := accept_core hP _ (afterSigning_valid I₁) ζ p.2 hsub pk hpk m₂ σ₂ hacc hh ht
+  set I₂ := P.idxValue (table p.2) m₂ (decodeNonce σ₂) pk with hI₂
+  have hle : ∀ k, P.digit I₂ k ≤ P.digit I₁ k := by
+    intro k
+    have := h1 k
+    have hd1 := hP.digit_lt I₁ k
+    have hd2 := hP.digit_lt I₂ k
+    unfold afterSigning at this
+    omega
+  have hII : I₂ = I₁ := digits_eq_of_le hP hI₁ hacc.accepted hle
+  have hwords : decodeWord σ₂ = fun k => ζ.word k (afterSigning P I₁ k) := by
+    funext k
+    exact h2 k (by rw [hII]; rfl)
+  refine ⟨m₂, decodeNonce σ₂, fun he => ?_, ?_⟩
+  · apply hne
+    obtain ⟨hm, hη⟩ := Prod.mk.inj he
+    have hσ : σ₂ = encode (fun k => ζ.word k (afterSigning P I₁ k)) η₁ :=
+      eq_of_decode_eq hacc.length (encode_length _ _)
+        (by rw [hwords]; funext k; rw [decodeWord_encode]) (by rw [hη, decodeNonce_encode])
+    rw [hm, hσ]
+    rfl
+  · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.1 hacc.idx_cached
+    refine ⟨w, hw, ?_⟩
+    rw [← hII, hI₂]
+    exact congrArg (fun z : BitVec hashBits => z.extractLsb' 0 128) (table_eq_of_some hw).symm
 
-end StageB
+/-- **Forgery events after a signing failure.** Every accepted pair yields a hidden hit or a
+cut-target hit at the cut before signing. -/
+theorem events_none (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State) (ζ : Record P)
+    (c : Cache) (hc : Cache.Sub (exposedCache (beforeSigning P) ζ) c) (hpk : ζ.pk = pk)
+    (p : Bool × Cache) (hp : p ∈ support (run (P.stB A pk m₁ st none) c))
+    (hok : p.1 = true) :
+    Cache.Hits p.2 (hiddenCache (beforeSigning P) ζ) ∨
+      TargetHit (cutTargets P (beforeSigning P) ζ) p.2 := by
+  obtain ⟨hcp, h⟩ := P.stB_support A pk m₁ st _ c p hp
+  obtain ⟨m₂, σ₂, -, hacc⟩ := h hok
+  have hsub := hc.trans hcp
+  by_contra hno
+  simp only [not_or] at hno
+  obtain ⟨h1, -⟩ := accept_core hP _ beforeSigning_valid ζ p.2 hsub pk hpk m₂ σ₂ hacc hno.1 hno.2
+  set I₂ := P.idxValue (table p.2) m₂ (decodeNonce σ₂) pk
+  have hz : ∀ k, P.digit I₂ k = 0 := by
+    intro k
+    have := h1 k
+    have hd2 := hP.digit_lt I₂ k
+    unfold beforeSigning at this
+    omega
+  have hsum : ∑ k, P.digit I₂ k = P.layer := hacc.accepted
+  simp only [hz, Finset.sum_const_zero] at hsum
+  have := hP.layer_pos
+  omega
 
-end OptimalOTS.LeanIsaBaseline
-
-end
+end OptimalOTS.LeanIsaBaseline.Layer
