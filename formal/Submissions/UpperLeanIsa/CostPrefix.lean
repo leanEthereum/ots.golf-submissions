@@ -107,10 +107,10 @@ theorem spends_rootFrom (t : Fin numChains → Word) : ∀ (r n : ℕ) (st : Bit
     have h := spends_bind (spends_hash (P.rootInput t r st)) (fun st' => ih (r + 1) st')
     simpa only [rootFrom, Nat.mul_succ, Nat.add_comm] using h
 
-def keygenCost : ℕ := 2 * (∑ k, (P.len k - 1)) + 16
+def keygenCost : ℕ := 2 * (∑ k, (P.len k - 1)) + 18
 
-theorem spends_root (t : Fin numChains → Word) : Spends (P.root t) 16 :=
-  spends_map (P.spends_rootFrom t 0 8 (rootInit t)) _
+theorem spends_root (t : Fin numChains → Word) : Spends (P.root t) 18 :=
+  spends_map (P.spends_rootFrom t 0 9 (rootInit t)) _
 
 theorem spends_keygen : Spends P.keygen P.keygenCost := by
   unfold keygen keygenCost

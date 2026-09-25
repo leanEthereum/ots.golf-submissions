@@ -245,12 +245,12 @@ theorem rootFrom_support (t : Fin numChains → Word) :
 
 theorem root_support (t : Fin numChains → Word) (c : Cache) :
     ∀ p ∈ support (run (P.root t) c),
-      Cache.Sub c p.2 ∧ p.1 = P.rootValue (table p.2) t ∧ P.RootPath p.2 t 0 8 (rootInit t) := by
+      Cache.Sub c p.2 ∧ p.1 = P.rootValue (table p.2) t ∧ P.RootPath p.2 t 0 9 (rootInit t) := by
   intro p hp
   unfold root at hp
   rw [run_map, support_map, Set.mem_image] at hp
   obtain ⟨q, hq, rfl⟩ := hp
-  obtain ⟨hsub, hval, hpath⟩ := P.rootFrom_support t 0 8 (rootInit t) c q hq
+  obtain ⟨hsub, hval, hpath⟩ := P.rootFrom_support t 0 9 (rootInit t) c q hq
   exact ⟨hsub, congrArg (fun z : BitVec 256 => z.extractLsb' 0 128) hval, hpath⟩
 
 theorem index_support (m : Message) (η : Nonce) (pk : PublicKey) (c : Cache) :
@@ -304,7 +304,7 @@ structure Accepts (c : Cache) (pk : PublicKey) (m : Message) (bits : List Bool) 
     (P.len k - 1 - P.digit (P.idxValue (table c) m (decodeNonce bits) pk) k)
     (P.digit (P.idxValue (table c) m (decodeNonce bits) pk) k) (decodeWord bits k)
   rootPath : P.RootPath c (P.reconWords (table c) (P.idxValue (table c) m (decodeNonce bits) pk)
-    bits) 0 8 (rootInit (P.reconWords (table c)
+    bits) 0 9 (rootInit (P.reconWords (table c)
       (P.idxValue (table c) m (decodeNonce bits) pk) bits))
   root : P.rootValue (table c)
     (P.reconWords (table c) (P.idxValue (table c) m (decodeNonce bits) pk) bits) = pk

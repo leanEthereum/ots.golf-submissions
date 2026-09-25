@@ -8,7 +8,8 @@ import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 For a fixed oracle table `f` every program of the layer scheme has an explicit value:
 `chainValue`, `chainListValue`, `idxValue`, `rootFromValue`, `rootValue`, and the exact verifier
 decision `verifyValue` on arbitrary raw inputs (`fixed_verify`). Signing under a fixed table only
-returns encodings of the revealed words at an accepted index (`fixed_signLoop_support`).
+returns encodings of the revealed words at an accepted index (`fixed_signLoop_support`): its
+best trial is always an accepted index of its nonce (`FixedBest`).
 Correctness under the shared cached random oracle follows from VCVio's cached-oracle support
 characterization (`probTrue_zero_of_fixed`), for every public-key-dependent message choice.
 -/
@@ -58,7 +59,7 @@ def rootFromValue (f : HashTable) (t : Fin numChains → Word) :
 
 /-- The public key of the tops `t` under a fixed table. -/
 def rootValue (f : HashTable) (t : Fin numChains → Word) : PublicKey :=
-  (P.rootFromValue f t 0 8 (rootInit t)).extractLsb' 0 128
+  (P.rootFromValue f t 0 9 (rootInit t)).extractLsb' 0 128
 
 /-- The tops reconstructed by the verifier from the words of `bits` at index `I`. -/
 def reconWords (f : HashTable) (I : Index) (bits : List Bool) : Fin numChains → Word :=
@@ -222,24 +223,56 @@ theorem fixed_keygen (f : HashTable) :
     (fun k => P.fixed_chainList f k _ _ _), pure_bind, fixed_root, pure_bind]
   rfl
 
+/-- The best trial under a fixed table is an accepted index of its nonce. -/
+def FixedBest (f : HashTable) (m : Message) (pk : PublicKey) (β : Option (Nonce × Index)) :
+    Prop :=
+  ∀ b, β = some b → P.Accepted (P.idxValue f m b.1 pk) ∧ b.2 = P.idxValue f m b.1 pk
+
+theorem fixedBest_upd (f : HashTable) (m : Message) (pk : PublicKey)
+    {β : Option (Nonce × Index)} (h : P.FixedBest f m pk β) (η : Nonce) :
+    P.FixedBest f m pk (P.upd β η (P.idxValue f m η pk)) := by
+  intro b hb
+  unfold upd at hb
+  split_ifs at hb with hbt
+  · obtain rfl := (Option.some.inj hb).symm
+    refine ⟨?_, rfl⟩
+    cases β with
+    | none => simpa [better] using hbt
+    | some b' =>
+      simp only [better, Bool.and_eq_true, decide_eq_true_eq] at hbt
+      exact hbt.1
+  · exact h b hb
+
 /-- Under a fixed table, signing only returns encodings of the revealed words at an accepted
 index of the nonce. -/
 theorem fixed_signLoop_support (f : HashTable) (sk : SecretKey) (m : Message) :
-    ∀ (k : ℕ) (tried : Finset Nonce) (σ : Option (List Bool)),
-      σ ∈ support (simulateQ (unifFwdAnswerImpl f) (P.signLoop sk m k tried)) →
+    ∀ (k : ℕ) (tried : Finset Nonce) (β : Option (Nonce × Index)),
+      P.FixedBest f m sk.pk β → ∀ σ : Option (List Bool),
+      σ ∈ support (simulateQ (unifFwdAnswerImpl f) (P.signLoop sk m k tried β)) →
       ∀ s, σ = some s → ∃ η : Nonce, P.Accepted (P.idxValue f m η sk.pk) ∧
         s = encode (P.revealed sk (P.idxValue f m η sk.pk)) η := by
+  have hbase : ∀ β : Option (Nonce × Index), P.FixedBest f m sk.pk β → ∀ s,
+      P.sigOf sk β = some s → ∃ η : Nonce, P.Accepted (P.idxValue f m η sk.pk) ∧
+        s = encode (P.revealed sk (P.idxValue f m η sk.pk)) η := by
+    intro β hβ s hs
+    cases β with
+    | none => cases hs
+    | some b =>
+      obtain ⟨h1, h2⟩ := hβ b rfl
+      refine ⟨b.1, h1, ?_⟩
+      simp only [sigOf, Option.map_some, Option.some.injEq] at hs
+      rw [← hs, ← h2]
   intro k
   induction k with
   | zero =>
-    intro tried σ hσ s hs
+    intro tried β hβ σ hσ s hs
     simp only [signLoop, simulateQ_pure, support_pure, Set.mem_singleton_iff] at hσ
     rw [hσ] at hs
-    cases hs
+    exact hbase β hβ s hs
   | succ k ih =>
-    intro tried σ hσ s hs
+    intro tried β hβ σ hσ s hs
     by_cases hc : 0 < (Finset.univ \ tried).card
-    · rw [P.signLoop_succ sk m k tried hc, simulateQ_bind, support_bind] at hσ
+    · rw [P.signLoop_succ sk m k tried β hc, simulateQ_bind, support_bind] at hσ
       simp only [Set.mem_iUnion] at hσ
       obtain ⟨j, -, hσ⟩ := hσ
       unfold loopBody at hσ
@@ -248,22 +281,17 @@ theorem fixed_signLoop_support (f : HashTable) (sk : SecretKey) (m : Message) :
         rfl
       rw [hq, simulateQ_bind, fixed_hash, pure_bind] at hσ
       unfold afterHash at hσ
-      by_cases ha : P.Accepted (lo (f ⟨896, P.idxInput m (nonceOf tried hc j) sk.pk⟩))
-      · rw [if_pos ha, simulateQ_pure, support_pure, Set.mem_singleton_iff] at hσ
-        rw [hσ] at hs
-        exact ⟨nonceOf tried hc j, ha, (Option.some.inj hs).symm⟩
-      · rw [if_neg ha] at hσ
-        exact ih _ σ hσ s hs
+      exact ih _ _ (P.fixedBest_upd f m sk.pk hβ (nonceOf tried hc j)) σ hσ s hs
     · rw [signLoop, dif_neg hc, simulateQ_pure, support_pure, Set.mem_singleton_iff] at hσ
       rw [hσ] at hs
-      cases hs
+      exact hbase β hβ s hs
 
 theorem fixed_sign_support (f : HashTable) (sk : SecretKey) (m : Message) (s : List Bool)
     (hs : some s ∈ support (simulateQ (unifFwdAnswerImpl f) (P.sign sk m))) :
     ∃ η : Nonce, P.Accepted (P.idxValue f m η sk.pk) ∧
       s = encode (P.revealed sk (P.idxValue f m η sk.pk)) η := by
   rw [P.sign_eq] at hs
-  exact P.fixed_signLoop_support f sk m trials ∅ _ hs s rfl
+  exact P.fixed_signLoop_support f sk m trials ∅ none (fun b h => by cases h) _ hs s rfl
 
 /-- The honest signature verifies under the table that produced the key. -/
 theorem verifyValue_honest (hP : P.Hyp) (f : HashTable) (seeds : Fin numChains → Word)

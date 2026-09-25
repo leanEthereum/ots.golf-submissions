@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.MachineFaithful
 import Submissions.UpperLeanIsa.MachineTable
 
-/-! The concrete 1281-cycle machine and its certificate clauses. -/
+/-! The concrete 1209-cycle machine and its certificate clauses. -/
 namespace OptimalOTS.HLG3
 open OptimalOTS.LeanIsaBaseline.Layer
 noncomputable section
@@ -15,7 +15,7 @@ theorem g3_faithful : g3machine.Faithful := faithful g3tab_hyp g3_compat
 
 theorem g3_sound : g3machine.Sound := machine_sound g3tab_hyp g3_compat
 
-theorem g3_cycles : g3machine.CyclesAtMost 1281 := machine_cycles g3tab_hyp
+theorem g3_cycles : g3machine.CyclesAtMost 1209 := machine_cycles g3tab_hyp
 
 theorem g3_valid : LeanIsa.BytecodeValid g3machine.program := machine_valid
 

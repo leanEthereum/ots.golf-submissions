@@ -75,19 +75,27 @@ namespace Params
 
 variable (P : Params)
 
+theorem sigOf_length (sk : SecretKey) {β : Option (Nonce × Index)} {s : List Bool}
+    (h : P.sigOf sk β = some s) : s.length = sigBits := by
+  cases β with
+  | none => cases h
+  | some b =>
+    rw [← Option.some.inj h]
+    exact encode_length _ _
+
 theorem signLoop_support_length (sk : SecretKey) (m : Message) :
-    ∀ (k : ℕ) (tried : Finset Nonce) (s : List Bool),
-      some s ∈ support (P.signLoop sk m k tried) → s.length = sigBits := by
+    ∀ (k : ℕ) (tried : Finset Nonce) (β : Option (Nonce × Index)) (s : List Bool),
+      some s ∈ support (P.signLoop sk m k tried β) → s.length = sigBits := by
   intro k
   induction k with
   | zero =>
-    intro tried s hs
+    intro tried β s hs
     simp only [signLoop, support_pure, Set.mem_singleton_iff] at hs
-    cases hs
+    exact P.sigOf_length sk hs.symm
   | succ k ih =>
-    intro tried s hs
+    intro tried β s hs
     by_cases hc : 0 < (Finset.univ \ tried).card
-    · rw [P.signLoop_succ sk m k tried hc, support_bind] at hs
+    · rw [P.signLoop_succ sk m k tried β hc, support_bind] at hs
       simp only [Set.mem_iUnion] at hs
       obtain ⟨j, -, hs⟩ := hs
       unfold loopBody at hs
@@ -95,19 +103,15 @@ theorem signLoop_support_length (sk : SecretKey) (m : Message) :
       simp only [Set.mem_iUnion] at hs
       obtain ⟨w, -, hs⟩ := hs
       unfold afterHash at hs
-      split at hs
-      · rw [support_pure, Set.mem_singleton_iff] at hs
-        rw [Option.some.inj hs]
-        exact encode_length _ _
-      · exact ih _ s hs
+      exact ih _ _ s hs
     · rw [signLoop, dif_neg hc, support_pure, Set.mem_singleton_iff] at hs
-      cases hs
+      exact P.sigOf_length sk hs.symm
 
 theorem signatureSize : P.scheme.SignatureSizeAtMost maxSignatureBits := by
   intro (sk : SecretKey) m s hs
   have hs' : some s ∈ support (P.sign sk m) := hs
   rw [P.sign_eq sk m] at hs'
-  rw [P.signLoop_support_length sk m trials ∅ s hs']
+  rw [P.signLoop_support_length sk m trials ∅ none s hs']
   norm_num [sigBits, maxSignatureBits]
 
 theorem deterministic_pure {α : Type} (x : α) :
@@ -181,7 +185,8 @@ theorem verifyDeterministic : P.scheme.VerifyDeterministic := by
 theorem admissible (hP : P.Hyp) : P.scheme.Admissible where
   correct := P.correct hP
   verifyDeterministic := P.verifyDeterministic
-  signingFailure := P.signingFailure hP.chain_idx hP.root_idx hP.numValid_ge
+  signingFailure := P.signingFailure hP.chain_idx hP.root_idx hP.tier.choose_spec.1
+    hP.tier.choose_spec.2
   signatureSize := P.signatureSize
   rejectsOversized := rejectsOversized P
   keygenCost := CostAtMost.mono P.cost_keygen (by unfold keygenBudget; exact hP.keygen_le)

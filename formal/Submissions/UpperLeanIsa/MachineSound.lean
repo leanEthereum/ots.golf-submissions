@@ -12,9 +12,9 @@ signature that the scheme `P` (any parameters with `Compat P T`) accepts under t
 2. The index `BLAKE2S` is the scheme's index query; its low half `I` is the index cell.
 3. The tie accumulates the field values into the index cell (`acc_eq`), so the group fields of
    `I` are `xs (u + 1)` and the digits are the table coordinates; the exponent identity
-   (`layer_of_facts`, hash-free) gives `xs 0 + Σ costs = 96`, so the free digit is `xs 0` and `I`
+   (`layer_of_facts`, hash-free) gives `xs 0 + Σ costs = 88`, so the free digit is `xs 0` and `I`
    is accepted.
-4. The inline `BLAKE2S` compute the verifier's chain tops (`top_eq`), the eight root calls in the
+4. The inline `BLAKE2S` compute the verifier's chain tops (`top_eq`), the nine root calls in the
    home blocks compute its root (`root_state`), and the last copy compares it with the public key.
 -/
 
@@ -380,70 +380,66 @@ def rootSeq (T : Tab) (v : ℕ → E) (xs : ℕ → ℕ) (i : ℕ) : BitVec 256 
 theorem cellBits_gV : cellBits gV = (2 : Word) := by
   simp [gV, ofK_eq_ofLimbs, cellBits, g]
 
-theorem rootCv_pair (T : Tab) (v : ℕ → E) (xs : ℕ → ℕ) {i : ℕ} (hi : i < 8) :
+theorem rootCv_pair (T : Tab) (v : ℕ → E) (xs : ℕ → ℕ) {i : ℕ} (hi : i < 9) :
     cellBits (v (rootCv i + 1)) ++ cellBits (v (rootCv i)) =
       Params.rootCv (topsV T v xs) i (rootSeq T v xs i) := by
   interval_cases i <;>
-    simp [rootCv, Params.rootCv, Params.rootCvTop, rootSeq, Params.rootInit, Params.topAt,
-      numChains, topsV, rtopCell, exported, topCell, cvCell, stVal_lo, stCell]
+    simp [rootCv, Params.rootCv, rootSeq, Params.rootInit, Params.topAt, stVal,
+      numChains, topsV, rtopCell, exported, topCell, cvCell, stCell]
 
 /-- The group that executes root call `r`: group 0 for call 1, groups 5 and 6 for calls 0 and 7,
-group `r + 5` otherwise. -/
-def homeU (r : ℕ) : ℕ := if r = 0 then 5 else if r = 1 then 0 else if r = 7 then 6 else r + 5
+group 12 for call 8, group `r + 5` otherwise. -/
+def homeU (r : ℕ) : ℕ :=
+  if r = 0 then 5 else if r = 1 then 0 else if r = 7 then 6 else if r = 8 then 12 else r + 5
 
-theorem homeU_home {r : ℕ} (hr : r < 8) : homeU r = 0 ∨ (5 ≤ homeU r ∧ homeU r < 12) := by
+theorem homeU_home {r : ℕ} (hr : r < 9) : homeU r = 0 ∨ 5 ≤ homeU r := by
   unfold homeU; split_ifs <;> omega
 
-theorem hcall_homeU {r : ℕ} (hr : r < 8) : hcall (homeU r) = r := by
+theorem homeU_lt {r : ℕ} (hr : r < 9) : homeU r < 13 := by
+  unfold homeU; split_ifs <;> omega
+
+theorem hcall_homeU {r : ℕ} (hr : r < 9) : hcall (homeU r) = r := by
   interval_cases r <;> rfl
 
 /-- The four physical message operands of root call r. -/
 def rootMsg (T : Tab) (xs : ℕ → ℕ) (r j : ℕ) : ℕ :=
   rt T (homeU r) (xs (homeU r + 1)) (zU (xs 0) (homeU r)) j
 
-theorem rootMsg_block {i : ℕ} (hi : i < 8) :
+theorem rootMsg_block {i : ℕ} (hi : i < 9) :
     cellBits (v (rootMsg T xs i 3)) ++ cellBits (v (rootMsg T xs i 2)) ++
       cellBits (v (rootMsg T xs i 1)) ++ cellBits (v (rootMsg T xs i 0)) =
       Params.rootBlock (topsV T v xs) i (rootSeq T v xs i) := by
   interval_cases i <;>
-    simp [rootMsg, homeU, rt, Params.rootBlock, rootSeq, stVal_lo, Params.topAt, numChains, topsV,
-      rtopCell, exported, dg, unitOf, coordOf, chainOf, zU]
+    simp [rootMsg, homeU, rt, hcall, Params.rootBlock, rootSeq, stVal_lo, Params.topAt, numChains,
+      topsV, rtopCell, exported, dg, unitOf, coordOf, chainOf, zU]
 
-/-- The metadata operand of a root call is the scheme's metadata: a frame constant, or the low
-cell of the state before the last call. -/
-theorem rootMd_cell_of (hC : Compat P T) (hfr : ∀ r < 7, v (fCell r) = frameV r) {i : ℕ}
-    (hi : i < 8) : cellBits (v (rmdCell i)) = P.rootTag i (rootSeq T v xs i) := by
-  by_cases h7 : i < 7
-  · rw [Params.rootTag_lt h7, hC.rootMd i h7, show rmdCell i = fCell i from if_neg (by omega),
-      hfr i h7]
-  · obtain rfl : i = 7 := by omega
-    rw [Params.rootTag_seven, show rmdCell 7 = stCell 6 from rfl]
-    unfold rootSeq
-    rw [if_neg (by omega), stVal_lo]
+/-- The metadata operand of root call `i` is its frame constant, the scheme's metadata. -/
+theorem rootMd_cell_of (hC : Compat P T) (hfr : ∀ r < 9, v (fCell r) = frameV r) {i : ℕ}
+    (hi : i < 9) : cellBits (v (fCell i)) = P.rootMd i := by
+  rw [hC.rootMd i hi, hfr i hi]
 
 include hP in
-theorem rootMd_cell (hC : Compat P T) {i : ℕ} (hi : i < 8) :
-    cellBits (v (rmdCell i)) = P.rootTag i (rootSeq T v xs i) :=
-  rootMd_cell_of hC (fun r _ => v_frame hP (by omega)) hi
+theorem rootMd_cell (hC : Compat P T) {i : ℕ} (hi : i < 9) : cellBits (v (fCell i)) = P.rootMd i :=
+  rootMd_cell_of hC (fun r hr => v_frame hP (by omega)) hi
 
 include hP in
-theorem root_step (hC : Compat P T) {i : ℕ} (hi : i < 8) :
+theorem root_step (hC : Compat P T) {i : ℕ} (hi : i < 9) :
     rootSeq T v xs (i + 1) = f ⟨896, P.rootInput (topsV T v xs) i (rootSeq T v xs i)⟩ := by
   have hmem : CInstr.blake (rootMsg T xs i 0) (rootMsg T xs i 1)
-      (rootMsg T xs i 2) (rootMsg T xs i 3) (rootCv i) (stCell i) (rmdCell i) ∈
+      (rootMsg T xs i 2) (rootMsg T xs i 3) (rootCv i) (stCell i) (fCell i) ∈
       bodyF T (frU (xs 0) (homeU i + 1)) (xs (homeU i + 1)) := by
-    rw [bodyF_frU_succ T _ (by unfold homeU; split_ifs <;> omega)]
+    rw [bodyF_frU_succ T _ (homeU_lt hi)]
     unfold body
     simp only [List.mem_append]
     left; left; right
     unfold rootIns
     rw [if_pos (homeU_home hi), hcall_homeU hi]
     exact List.mem_singleton_self _
-  have hrel := hP.blk (homeU i + 1) (by unfold homeU; split_ifs <;> omega) _ hmem
+  have hrel := hP.blk (homeU i + 1) (by have := homeU_lt hi; omega) _ hmem
   have hp := oracle_pair hrel
   have hq : blake2sQuery ![v (rootMsg T xs i 0), v (rootMsg T xs i 1),
       v (rootMsg T xs i 2), v (rootMsg T xs i 3)] (v (rootCv i)) (v (rootCv i + 1))
-      (v (rmdCell i)) = P.rootInput (topsV T v xs) i (rootSeq T v xs i) := by
+      (v (fCell i)) = P.rootInput (topsV T v xs) i (rootSeq T v xs i) := by
     rw [blake2sQuery_eq, rootCv_pair T v xs hi, rootMsg_block hi, rootMd_cell hP hC hi]
     rfl
   rw [hq] at hp
@@ -452,10 +448,10 @@ theorem root_step (hC : Compat P T) {i : ℕ} (hi : i < 8) :
   exact hp
 
 include hP in
-/-- **The root.** The eight root calls compute the fixed-table root of the tops. -/
+/-- **The root.** The nine root calls compute the fixed-table root of the tops. -/
 theorem root_state (hC : Compat P T) :
-    rootState f P (topsV T v xs) 0 8 (Params.rootInit (topsV T v xs)) = stVal v 7 := by
-  have h := rootState_of_seq f P (topsV T v xs) 8 0 (rootSeq T v xs) (fun i hi => by
+    rootState f P (topsV T v xs) 0 9 (Params.rootInit (topsV T v xs)) = stVal v 8 := by
+  have h := rootState_of_seq f P (topsV T v xs) 9 0 (rootSeq T v xs) (fun i hi => by
     rw [Nat.zero_add]; exact root_step hP hC hi)
   unfold rootSeq at h
   rw [if_pos rfl, if_neg (by omega)] at h
@@ -463,7 +459,7 @@ theorem root_state (hC : Compat P T) :
 
 include hP in
 theorem rootValue_topsV (hC : Compat P T) :
-    rootValue f P (topsV T v xs) = cellBits (v (stCell 7)) := by
+    rootValue f P (topsV T v xs) = cellBits (v (stCell 8)) := by
   unfold rootValue
   rw [root_state hP hC]
   exact BitVec.extractLsb'_append_eq_right
@@ -573,7 +569,7 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
     -- the public key
     have hb := hP.blk 13 (by omega)
     rw [show (13 : ℕ) = 12 + 1 from rfl, bodyF_frU_succ T _ (by omega)] at hb
-    have h : v pkCell = v (stCell 7) * v oneCell := hb (copy (stCell 7) pkCell) (by
+    have h : v pkCell = v (stCell 8) * v oneCell := hb (copy (stCell 8) pkCell) (by
       unfold body nextOp copy; simp)
     rw [v_one hP, mul_oneV] at h
     rw [← h, show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]

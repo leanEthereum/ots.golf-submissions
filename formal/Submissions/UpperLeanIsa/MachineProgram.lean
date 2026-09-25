@@ -2,7 +2,7 @@ import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.MachineLayout
 
 /-!
-# The 1281-cycle bytecode
+# The 1209-cycle bytecode
 
 A 21-slot prologue pins ONE, the 5503-bit length, g, and fifteen additional cost constants
 (`C_1 … C_15`; `C_16 = g`), then hashes the index and dispatches the free block (slot 20; slot
@@ -14,19 +14,19 @@ longer copies it. Group 0 has two block regions: frame 1 (`s > 0`, the top is re
 chain's output cell) and frame 14 (`s = 0`, the top is the signature cell). The free block of
 digit `s` dispatches the first group in frame `frG0 s`, so the variant is forced by `s`.
 
-The free block seeds g^sentinel / C_96 * C_s. Each group multiplies the landing product by its
-cost factor; the exit jumps to the last product GP_13 = g^(sentinel + Q (s + Σ costs - 96)).
-Only the layer s + Σ costs = 96 lands on the sentinel; every other reachable total lands on a
-pad (sentinel - 6 … sentinel - 1) or past the bytecode (`seed_table`, hash-free). Group 0 is the
-home of root call 1, groups 1 … 4 and 12 export the cv words of calls 0 … 7, groups 5 and 6 are
-the homes of calls 0 and 7, and groups 7 … 11 those of calls 2 … 6. The last call's metadata
-operand is the low cell of the state after call 6. The image is committed, so call 1 may run
-before call 0 writes its state. Designated high-half tops occupy adjacent cv cells without an
-extra copy.
+The free block seeds g^sentinel / C_88 * C_s. Each group multiplies the landing product by its
+cost factor; the exit jumps to the last product GP_13 = g^(sentinel + Q (s + Σ costs - 88)).
+Only the layer s + Σ costs = 88 lands on the sentinel; every other reachable total lands on a
+pad (sentinel - 5 … sentinel - 1) or past the bytecode (`seed_table`, hash-free). Group 0 is the
+home of root call 1, groups 1 … 4 export the cv words of calls 0 and 2 … 6, groups 5 and 6 are
+the homes of calls 0 and 7, groups 7 … 11 those of calls 2 … 6, and group 12 that of call 8.
+The image is committed, so call 1 may run before call 0 writes its state. Designated high-half
+tops occupy adjacent cv cells without an extra copy.
 
-The cost-17 entries of the (3,10) tables have no blocks, so no block multiplies by `C_17`.
-Every completing run executes 216 instructions: 111 non-hash and 105 BLAKE2S instructions.
-Its cost is 111+10*105+120=1281. Builders are irreducible; slots decode by cost-band arithmetic.
+Every live field value has its own block (aliases of a tuple walk the same chains). The dummy
+entries have no blocks. Costs are at most 16, so no block multiplies by `C_17`.
+Every completing run executes 207 instructions: 109 non-hash and 98 BLAKE2S instructions.
+Its cost is 109+10*98+120=1209. Builders are irreducible; slots decode by cost-band arithmetic.
 -/
 
 namespace OptimalOTS.HLG3
@@ -109,16 +109,15 @@ def cvCell : ℕ := 150
 /-- The free chain's last output pair. -/
 def tfCell : ℕ := 153
 
-/-- The selected top of exported chain k, arranged into adjacent root cv pairs: 38 and 41 for call
-0, 37 below the state after call 0, 39 and 40 in the former home cells of chains 39 and 40. -/
+/-- The selected top of exported chain k, arranged into adjacent root cv pairs: 38 and 37 for call
+0, then the pairs `(5r+2, 5r+3)` of calls `r = 2 … 6`. -/
 def topCell (k : ℕ) : ℕ :=
-  if k = 41 then 151 else if k = 39 then 232 else if k = 40 then 233
-  else if k = 38 then 150 else if k = 37 then 236
+  if k = 38 then 150 else if k = 37 then 151
   else if k < 3 then 155 + k else 160 + 4 * ((k - 7) / 5) + (k - 7) % 5
 
 /-- The last output pair of an in-block home chain `k`. Chains 1, 2, 7 and 8 use the former cv
-cells: the high-half tops 1 and 7 write `(xhCell k - 1, xhCell k)`. -/
-def xhCell (k : ℕ) : ℕ := [0, 156, 157, 187, 189, 191, 193, 160, 161, 195, 197, 199, 0, 0, 201, 203, 205, 0, 0, 207, 209, 211, 0, 0, 213, 215, 217, 0, 0, 219, 221, 223, 0, 0, 225, 227, 229, 0, 0, 231, 233, 235].getD k 0
+cells: the high-half tops 1, 7 and 39 write `(xhCell k - 1, xhCell k)`. -/
+def xhCell (k : ℕ) : ℕ := [0, 156, 157, 187, 189, 191, 193, 160, 161, 195, 197, 199, 0, 0, 201, 203, 205, 0, 0, 207, 209, 211, 0, 0, 213, 215, 217, 0, 0, 219, 221, 223, 0, 0, 225, 227, 229, 0, 0, 232, 233, 235].getD k 0
 
 /-- The root state pair after call `r`. -/
 def stCell (r : ℕ) : ℕ := 237 + 2 * r
@@ -129,17 +128,13 @@ def xcCell (k t : ℕ) : ℕ := xcBase k + 2 * t
 def rtopCell (k d : ℕ) : ℕ :=
   if k = 0 then (if d = 0 then wCell 0 else tfCell) else if exported k then topCell k
   else if d = 0 then wCell k else xhCell k
-/-- The cv pair of root call `r`: the tops `(38, 41)`, top 37 beside the state after call 0, then
-the exported top pairs `(5r+2, 5r+3)` for `r = 2 … 6`, and `(39, 40)`. -/
+/-- The cv pair of root call `r`: the tops `(38, 37)` for call 0, the state after call `r - 1`
+for calls 1, 7 and 8, the exported top pairs `(5r+2, 5r+3)` for `r = 2 … 6`. -/
 def rootCv (r : ℕ) : ℕ :=
-  if r = 0 then cvCell else if r = 1 then 236 else if r < 7 then 156 + 4 * r else 232
-
-/-- The metadata operand of root call `r`: its frame constant, or for the last call the low
-cell of the state after call 6. -/
-def rmdCell (r : ℕ) : ℕ := if r = 7 then stCell 6 else fCell r
+  if r = 0 then cvCell else if r = 1 ∨ 7 ≤ r then stCell (r - 1) else 156 + 4 * r
 
 /-- Offset selecting the high half at the final step. -/
-def topOff (k : ℕ) : ℕ := if k ∈ [1, 7, 12, 17, 22, 27, 32, 37, 38, 39] then 1 else 0
+def topOff (k : ℕ) : ℕ := if k ∈ [1, 7, 12, 17, 22, 27, 32, 38, 39] then 1 else 0
 
 theorem topOff_le (k : ℕ) : topOff k ≤ 1 := by unfold topOff; split_ifs <;> omega
 
@@ -362,7 +357,7 @@ def frG0 (s : ℕ) : ℕ := if s = 0 then 14 else 1
 /-- The straight part of the free chain's block of digit `s`: the seed, the `s` chain steps, and
 the first group's `MUL(H, g, H')`. -/
 def fbody (s : ℕ) : List CInstr :=
-  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 96 s))] ++
+  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 88 s))] ++
   (if s = 0 then [] else chainOps 0 s tfCell) ++ [.mul (hCell (frG0 s)) gCell (h1Cell (frG0 s))]
 
 /-- The tie of field value `v` of group `u`. -/
@@ -386,8 +381,9 @@ def zexp (T : Tab) (u v : ℕ) : ℕ :=
   ((List.range (gk u)).map (fun i => if copied u i ∧ T u v i = 0 then 1 else 0)).sum
 
 /-- The root call a home group executes: call 1 in group 0, calls 0 and 7 in groups 5 and 6, call
-`u − 5` in groups `7 … 11`. -/
-def hcall (u : ℕ) : ℕ := if u = 0 then 1 else if u = 5 then 0 else if u = 6 then 7 else u - 5
+`u − 5` in groups `7 … 11`, and call 8 in group 12. -/
+def hcall (u : ℕ) : ℕ :=
+  if u = 0 then 1 else if u = 5 then 0 else if u = 6 then 7 else if u = 12 then 8 else u - 5
 
 /-- The message cell `j < 4` of root call `hcall u` in the home block of `v`; the first group's
 variant `z` (free digit `0`) reads the free top from its signature cell. -/
@@ -396,14 +392,14 @@ def rt (T : Tab) (u v : ℕ) (z : Bool) (j : ℕ) : ℕ :=
     (if j = 0 then (if z then wCell 0 else tfCell) else rtopCell (chainOf 0 (j - 1)) (T u v (j - 1)))
   else if u = 5 then rtopCell (3 + j) (T u v j)
   else if u = 6 then rtopCell (8 + j) (T u v j)
-  else if j = 0 then stCell (u - 6)
+  else if j = 0 then stCell (hcall u - 1)
   else rtopCell (5 * (u - 5) + 3 + j) (T u v (j - 1))
 
-/-- The root call of a home block. -/
+/-- The root call of a home block; call `r` carries the frame constant `fCell r` as metadata. -/
 def rootIns (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=
-  if u = 0 ∨ (5 ≤ u ∧ u < 12) then
+  if u = 0 ∨ 5 ≤ u then
     [.blake (rt T u v z 0) (rt T u v z 1) (rt T u v z 2) (rt T u v z 3) (rootCv (hcall u))
-      (stCell (hcall u)) (rmdCell (hcall u))]
+      (stCell (hcall u)) (fCell (hcall u))]
   else []
 
 /-- Padding to the unit's constant non-hash count. -/
@@ -411,7 +407,7 @@ def npad (T : Tab) (u v : ℕ) : ℕ := gcu u - 4 - (tie u v).length - zexp T u 
 
 /-- The last straight op: the next group's `MUL(H, g, H')`, or the public-key copy. -/
 def nextOp (u : ℕ) : CInstr :=
-  if u < 12 then .mul (hCell (u + 2)) gCell (h1Cell (u + 2)) else copy (stCell 7) pkCell
+  if u < 12 then .mul (hCell (u + 2)) gCell (h1Cell (u + 2)) else copy (stCell 8) pkCell
 
 /-- The product op of the block of `v` in group `u`. -/
 def prodOp (T : Tab) (u v : ℕ) : CInstr := .mul (gpCell u) (cCell (cost T u v)) (gpCell (u + 1))
@@ -704,17 +700,18 @@ theorem zexp_le3 (T : Tab) (u v : ℕ) : zexp T u v ≤ 3 := by
     split_ifs <;> omega
   · rw [zexp_home T hu]; omega
 
-/-- Outside the first group, a band `0` value is the origin `v = 0`. -/
-theorem band_pos {u v : ℕ} (hu : u < 13) (hv : v < VF u) (hu0 : u ≠ 0) (hz : v ≠ 0) :
+/-- In an exporter group, a band `0` value is the origin `v = 0`. -/
+theorem band_pos {u v : ℕ} (hu : u < 13) (hv : v < VF u) (he : isExp u) (hz : v ≠ 0) :
     1 ≤ band u v := by
   obtain ⟨-, -, h2⟩ := band_spec hu hv
   by_contra h0
   have h0' : band u v = 0 := by omega
   rw [h0', A_succ, show A u 0 = 0 from rfl, Nat.zero_add] at h2
   have hp : pn u 0 = 1 := by
+    unfold isExp at he
     unfold pn prof
-    rw [if_neg hu0]
-    split_ifs <;> rfl
+    rw [if_neg (by omega), if_neg (by omega), if_pos (by omega)]
+    rfl
   rw [hp] at h2
   omega
 
@@ -728,7 +725,7 @@ theorem pad_fit {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u)
     have hg : gcu u = 8 := by unfold gcu; rw [if_neg hu0, if_pos hh]
     rw [hg]
     by_cases hz : v ≠ 0
-    · have hc : 1 ≤ cost T u v := by rw [hT.cost_eq u hu v hv]; exact band_pos hu hv hu0 hz
+    · have hc : 1 ≤ cost T u v := by rw [hT.cost_eq u hu v hv]; exact band_pos hu hv hh hz
       have := zexp_le T u v hc
       split_ifs <;> omega
     · split_ifs <;> omega
@@ -827,7 +824,7 @@ theorem rt_lt (T : Tab) {u v : ℕ} {z : Bool} {j : ℕ} (hu : u < 13) (hj : j <
   split_ifs <;> first
     | (unfold wCell; omega)
     | (unfold tfCell; omega)
-    | (unfold stCell; omega)
+    | (unfold stCell hcall; split_ifs <;> omega)
     | exact rtopCell_lt (by omega)
     | exact rtopCell_lt (chainOf_lt 0 (by omega) _ (by show j - 1 < 3; omega))
 
@@ -842,7 +839,7 @@ theorem rootIns_bounded (T : Tab) {u v : ℕ} {z : Bool} (hu : u < 13) :
     have b1 := rt_lt T (v := v) (z := z) hu (j := 1) (by omega)
     have b2 := rt_lt T (v := v) (z := z) hu (j := 2) (by omega)
     have b3 := rt_lt T (v := v) (z := z) hu (j := 3) (by omega)
-    simp only [CInstr.Bounded, rootCv, rmdCell, stCell, fCell, cCell, hcall, oneCell, cvCell]
+    simp only [CInstr.Bounded, rootCv, stCell, fCell, cCell, hcall, cvCell]
     split_ifs <;> omega
   · simp at hx
 

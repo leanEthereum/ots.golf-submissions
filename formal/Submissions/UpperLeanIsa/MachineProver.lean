@@ -5,7 +5,7 @@ import Submissions.UpperLeanIsa.MachineSound
 
 The honest prover queries the oracle exactly as the verifier does: the index, then for each chain
 `k` its `d k` steps from the revealed word (`d = dg T (hxs T I)`, the digits of the index `I`),
-then the eight root calls. It commits the image whose every cell is a pure function of the input
+then the nine root calls. It commits the image whose every cell is a pure function of the input
 and those answers (`hcell`): the constants, the index pair, the tie patterns and accumulators, the
 landing hints `H_f = g ^ ent f (xs f)`, `H'_f = H_f · g`, the landing products, the chain pairs
 and the root states. Under a fixed table the prover is `imageF` (`fixed_prover`).
@@ -145,11 +145,11 @@ def hiC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 128 128)
 
 /-- The honest landing product before group `u`. -/
 def gpV (I : Word) (u : ℕ) : E :=
-  ofK (LeanIsaFieldRescale.initialProduct 96 (hxs T I 0) *
+  ofK (LeanIsaFieldRescale.initialProduct 88 (hxs T I 0) *
     LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, cost T w (hxs T I (w + 1))))
 
 /-- The home chain of `XH` pair `i`. -/
-def xhK (i : ℕ) : ℕ := [3, 4, 5, 6, 9, 10, 11, 14, 15, 16, 19, 20, 21, 24, 25, 26, 29, 30, 31, 34, 35, 36, 39, 40, 37].getD i 0
+def xhK (i : ℕ) : ℕ := [3, 4, 5, 6, 9, 10, 11, 14, 15, 16, 19, 20, 21, 24, 25, 26, 29, 30, 31, 34, 35, 36, 39, 40, 41].getD i 0
 
 /-- The physical answer pair, placing the top at offset topOff k and the unused half beside it. -/
 def topPair (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (k b : ℕ) : E :=
@@ -174,7 +174,7 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if c < 149 then gpV T (idxOf y0) (c - 136)
   else if c = 149 then hiOf T y0 A 38
   else if c = 150 then cellOfBits (topOf T bits y0 A 38)
-  else if c < 153 then topPair T bits y0 A 41 (c - 151)
+  else if c < 153 then topPair T bits y0 A 37 (c - 151)
   else if c = 153 then cellOfBits (topOf T bits y0 A 0)
   else if c = 154 then hiOf T y0 A 0
   else if c = 183 then ofK (gpow (ent 14 (hxs T (idxOf y0) 1)))
@@ -185,10 +185,10 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
       else (if r = 0 then 2 else 5 * r + 3)
     topPair T bits y0 A k ((c - 155) % 2)
   else if c < 237 then topPair T bits y0 A (xhK ((c - 187) / 2)) ((c - 187) % 2)
-  else if c < 253 then
+  else if c < 255 then
     (if (c - 237) % 2 = 0 then loC (RA ((c - 237) / 2)) else hiC (RA ((c - 237) / 2)))
   else if c < 4096 then 0
-  else if c < 5490 then
+  else if c < 5430 then
     (if (c - xcBase (bandIdx xcBase 42 c)) % 2 = 0
       then loC (A (bandIdx xcBase 42 c) ((c - xcBase (bandIdx xcBase 42 c)) / 2))
       else hiC (A (bandIdx xcBase 42 c) ((c - xcBase (bandIdx xcBase 42 c)) / 2)))
@@ -207,7 +207,7 @@ def prover (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp Spec (
   let y0 ← hash896 (P.idxInput m (decodeNonce bits) pk)
   let CA ← tabulate (fun k : Fin numChains =>
     chainAnsQ P k (LEN k.val - 1 - hd T y0 k.val) (hd T y0 k.val) (sigW bits k.val))
-  let RA ← rootAnsQ P (topsOfV T bits y0 (chainTab CA)) 0 8
+  let RA ← rootAnsQ P (topsOfV T bits y0 (chainTab CA)) 0 9
     (Params.rootInit (topsOfV T bits y0 (chainTab CA)))
   pure (imageOf T bits y0 (chainTab CA) RA)
 
@@ -227,7 +227,7 @@ def AF : ℕ → ℕ → BitVec 256 :=
 
 /-- The root answers. -/
 def RAF : ℕ → BitVec 256 :=
-  rootAnsF P f (topsOfV T bits (y0F P f pk m bits) (AF P T f pk m bits)) 0 8
+  rootAnsF P f (topsOfV T bits (y0F P f pk m bits) (AF P T f pk m bits)) 0 9
     (Params.rootInit (topsOfV T bits (y0F P f pk m bits) (AF P T f pk m bits)))
 
 /-- The honest image under the table. -/

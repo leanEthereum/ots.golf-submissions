@@ -6,7 +6,7 @@ import Submissions.UpperLeanIsa.MachineProver
 Under a table `f` for which the verifier accepts, the honest image `imageF P T f pk m bits`, loaded
 with the statement, satisfies the fixed-table relation of every op on the path of the honest index
 vector `hxs T I` (`honest_path`), with the return hints the walk needs; so the machine
-completes in `216` instructions (`honest_run`). Together with `fixed_sound` this is `Faithful`.
+completes in `207` instructions (`honest_run`). Together with `fixed_sound` this is `Faithful`.
 -/
 
 namespace OptimalOTS.HLG3
@@ -31,7 +31,7 @@ def junkCell (k dst : ℕ) : ℕ := if topOff k = 0 then dst + 1 else dst - 1
 /-- Chains whose output pair sits at a fixed cv-pair cell: the exported chains and the home
 chains 1, 2, 7, 8 of the former cv pairs. -/
 def cvTop (k : ℕ) : Prop :=
-  k ∈ [1, 2, 7, 8, 12, 13, 17, 18, 22, 23, 27, 28, 32, 33, 37, 38, 39, 40, 41]
+  k ∈ [1, 2, 7, 8, 12, 13, 17, 18, 22, 23, 27, 28, 32, 33, 37, 38]
 
 instance (k : ℕ) : Decidable (cvTop k) := by unfold cvTop; infer_instance
 
@@ -41,12 +41,13 @@ theorem cvTop_of_exported {k : ℕ} (he : exported k) : cvTop k := by
 
 theorem xh_topCell : ∀ k < 42, cvTop k → ¬ exported k → xhCell k = topCell k := by decide
 
-theorem topOff_xh : ∀ k < 42, ¬ cvTop k → topOff k = 0 := by decide
-
 theorem xh_inv : ∀ k < 42, k ≠ 0 → ¬ cvTop k →
-    xhK ((xhCell k - 187) / 2) = k ∧ (xhCell k - 187) % 2 = 0 ∧
-      xhK ((xhCell k + 1 - 187) / 2) = k ∧ (xhCell k + 1 - 187) % 2 = 1 ∧
-      187 ≤ xhCell k ∧ xhCell k + 1 < 237 := by decide
+    xhK ((xhCell k - 187) / 2) = k ∧ (xhCell k - 187) % 2 = topOff k ∧
+      187 ≤ xhCell k ∧ xhCell k < 237 := by decide
+
+theorem xh_junk : ∀ k < 42, k ≠ 0 → ¬ cvTop k →
+    xhK ((junkCell k (xhCell k) - 187) / 2) = k ∧ (junkCell k (xhCell k) - 187) % 2 ≠ topOff k ∧
+      187 ≤ junkCell k (xhCell k) ∧ junkCell k (xhCell k) < 237 := by decide
 
 theorem xc_band {k t : ℕ} (hk : k < 42) (ht : 2 * t + 1 < 2 * LEN k) :
     bandIdx xcBase 42 (xcCell k t) = k ∧ bandIdx xcBase 42 (xcCell k t + 1) = k := by
@@ -127,14 +128,13 @@ theorem hc_xh {k : ℕ} (hk : k < 42) (hk0 : k ≠ 0) (he : ¬ exported k) :
       hcell T bits y0 A RA (junkCell k (xhCell k)) = hiOf T y0 A k := by
   by_cases hc : cvTop k
   · rw [xh_topCell k hk hc he]; exact hc_top T bits y0 A RA hk hc
-  obtain ⟨e1, e2, e3, e4, e5, e6⟩ := xh_inv k hk hk0 hc
-  have hoff : topOff k = 0 := topOff_xh k hk hc
-  rw [show junkCell k (xhCell k) = xhCell k + 1 by unfold junkCell; rw [if_pos hoff]]
+  obtain ⟨e1, e2, e5, e6⟩ := xh_inv k hk hk0 hc
+  obtain ⟨e3, e4, e7, e8⟩ := xh_junk k hk hk0 hc
   constructor
-  · unfold hcell; hsimp; rw [e1, e2]; simp [topPair, hoff]
-  · unfold hcell; hsimp; rw [e3, e4]; simp [topPair, hoff]
+  · unfold hcell; hsimp; rw [e1, e2]; simp [topPair]
+  · unfold hcell; hsimp; rw [e3]; simp [topPair, e4]
 
-theorem hc_st {r : ℕ} (hr : r < 8) :
+theorem hc_st {r : ℕ} (hr : r < 9) :
     hcell T bits y0 A RA (stCell r) = loC (RA r) ∧
       hcell T bits y0 A RA (stCell r + 1) = hiC (RA r) := by
   constructor
@@ -399,14 +399,12 @@ theorem hv_xh {k : ℕ} (hk : k < 42) (hk0 : k ≠ 0) (he : ¬ exported k) :
         hiOf T (y0F P f pk m bits) (AF P T f pk m bits) k := by
   by_cases hc : cvTop k
   · rw [xh_topCell k hk hc he]; exact hv_top hk hc
-  obtain ⟨-, -, -, -, i5, i6⟩ := xh_inv k hk hk0 hc
-  have hoff : topOff k = 0 := topOff_xh k hk hc
+  obtain ⟨-, -, i5, i6⟩ := xh_inv k hk hk0 hc
+  obtain ⟨-, -, i7, i8⟩ := xh_junk k hk hk0 hc
   obtain ⟨e1, e2⟩ := hc_xh T bits (y0F P f pk m bits) (AF P T f pk m bits) (RAF P T f pk m bits)
     hk hk0 he
-  have hj : junkCell k (xhCell k) = xhCell k + 1 := by unfold junkCell; rw [if_pos hoff]
-  rw [hj] at e2 ⊢
   exact ⟨hv_c (by omega) (by omega) e1, hv_c (by omega) (by omega) e2⟩
-theorem hv_st {r : ℕ} (hr : r < 8) :
+theorem hv_st {r : ℕ} (hr : r < 9) :
     hv P T f pk m bits (stCell r) = loC (RAF P T f pk m bits r) ∧
       hv P T f pk m bits (stCell r + 1) = hiC (RAF P T f pk m bits r) := by
   obtain ⟨e1, e2⟩ := hc_st T bits (y0F P f pk m bits) (AF P T f pk m bits) (RAF P T f pk m bits) hr
@@ -461,7 +459,7 @@ include hC hacc in
 theorem hlive : ∀ u < 13, field u (IF P f pk m bits) < VF u := hC.live _ hacc
 
 include hC hacc in
-theorem hsum : XF P T f pk m bits 0 + gsum T (XF P T f pk m bits) = 96 := by
+theorem hsum : XF P T f pk m bits 0 + gsum T (XF P T f pk m bits) = 88 := by
   have h : ∑ k : Fin numChains, P.digit (effective (IF P f pk m bits)) k = P.layer := hacc
   rw [hC.layer, Finset.sum_congr rfl (fun k _ => (hd_eq P T hC _ (hlive hC hacc) k).symm),
     Fin.sum_univ_eq_sum_range (fun k => hd T (y0F P f pk m bits) k) 42] at h
@@ -539,8 +537,8 @@ theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   apply congrArg ofK
   have hs := hsum hC hacc
   change hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,
-    cost T w (hxs T (IF P f pk m bits) (w + 1)) = 96 at hs
-  exact (LeanIsaFieldRescale.checksum_exact (by omega : 96 ≤ 300) (by omega)).mpr hs
+    cost T w (hxs T (IF P f pk m bits) (w + 1)) = 88 at hs
+  exact (LeanIsaFieldRescale.checksum_exact (by omega : 88 ≤ 300) (by omega)).mpr hs
 
 include hC hlen hacc in
 /-- **The honest prologue.** -/
