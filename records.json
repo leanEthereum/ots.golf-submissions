@@ -117,6 +117,32 @@
       "source_tree": "87da556a3dbcfd0a2597f9bbad6c01e41c89a01d",
       "submission_root": "formal/Submissions/UpperRiscv",
       "track": "upper-riscv"
+    },
+    "upper-riscv-hint": {
+      "claim": 349,
+      "commit": "d75e0361b8884db04ed104021183aab3bc382eeb",
+      "contract": "2e8ba38cb5cfb50d5446e9a5f200ca35ef459317e6ca7b7eb75f3ec1d663411e",
+      "contract_commit": "ca67ddc3fc9db8272fddedc3e739af59bd09fb90",
+      "finished_at": "2026-09-25T18:22:36.855493Z",
+      "id": "969e09e6de662e9666c076dac3451207",
+      "pr_number": 46,
+      "pr_url": "https://github.com/leanEthereum/ots.golf-submissions/pull/46",
+      "source_archive": {
+        "commit": "d75e0361b8884db04ed104021183aab3bc382eeb",
+        "contract": "2e8ba38cb5cfb50d5446e9a5f200ca35ef459317e6ca7b7eb75f3ec1d663411e",
+        "file_count": 103,
+        "sha256": "0357d509a9885df9258dca121a0b947e3bc0d2802d9ac6e8efe0cde492f00ed1",
+        "size_bytes": 971933,
+        "source_repo": "https://github.com/leanEthereum/ots.golf-submissions.git",
+        "submission_root": "formal/Submissions/UpperRiscvHint",
+        "total_bytes": 941079,
+        "track": "upper-riscv-hint",
+        "version": 1
+      },
+      "source_ref": "refs/tags/ots-source/969e09e6de662e9666c076dac3451207",
+      "source_tree": "0ca1b2f7cbdbec11a73c95c883fd3c0f5e769a03",
+      "submission_root": "formal/Submissions/UpperRiscvHint",
+      "track": "upper-riscv-hint"
     }
   },
   "version": 1
