@@ -2,18 +2,19 @@ import Submissions.UpperLeanIsa.ConstraintMath
 import Submissions.UpperLeanIsa.FieldRescale
 
 /-!
-# Layout and interfaces for the 1281-cycle Group3 machine
+# Layout and interfaces for the 1209-cycle Group3 machine
 
 The raw 128-bit index has widths [10,9,9,9,9,11,11,10,10,10,10,10,10]. Two adjacent entries
 of its first field share a tuple; the tie still checks every raw bit. MachineTable proves
 that these raw fields implement the 127-bit effective scheme index.
 
-Cost-banded blocks follow the prologue slots 0 … 21 (slot 21 is a pad). The (3,10) groups have no
-blocks for their cost-17 (dummy) entries: group `u` has `VF u` blocks. A second copy of the first
+Cost-banded blocks follow the prologue slots 0 … 21 (slot 21 is a pad), one block per live field
+value (aliases of a tuple have separate blocks). The (3,10) groups have no block for their dummy
+entry: group `u` has `VF u` blocks. A second copy of the first
 group's region (frame 14, used when the free digit is 0) follows at `gEnd … zEnd`. Free entries
 are 255615+68*s for s<64.
 Frames reuse C_(f+1), where C_c=g^(2^60*c); C_16=g and C_0=ONE. Compat states the
-scheme's lengths, digits, selected output halves, tags, metadata, and 96-step layer.
+scheme's lengths, digits, selected output halves, tags, metadata, and 88-step layer.
 -/
 
 namespace OptimalOTS.HLG3
@@ -107,32 +108,33 @@ def gb (u : ℕ) : ℕ := [10, 9, 9, 9, 9, 11, 11, 10, 10, 10, 10, 10, 10].getD 
 /-- The bit position of group `u`'s field. -/
 def POS (u : ℕ) : ℕ := posW gb u
 
-/-- The exporter groups: `1 … 4` and the last group `12`. -/
-def isExp (u : ℕ) : Prop := (1 ≤ u ∧ u < 5) ∨ u = 12
+/-- The exporter groups `1 … 4`. -/
+def isExp (u : ℕ) : Prop := 1 ≤ u ∧ u < 5
 
 instance (u : ℕ) : Decidable (isExp u) := by unfold isExp; infer_instance
 
 /-- The uniform non-hash instruction count of a block of group `u` (entry and exit included). -/
 def gcu (u : ℕ) : ℕ := if u = 0 then 5 else if isExp u then 8 else 6
 
-/-- Root calls in a block: none for the exporters `1 … 4, 12`, one for every home. Group `0` is
-the home of call 1, groups `5, 6` the homes of calls `0, 7`, groups `7 … 11` those of `2 … 6`. -/
-def hm (u : ℕ) : ℕ := if u = 0 ∨ (5 ≤ u ∧ u < 12) then 1 else 0
+/-- Root calls in a block: none for the exporters `1 … 4`, one for every home. Group `0` is the
+home of call 1, groups `5, 6` the homes of calls `0, 7`, groups `7 … 11` those of `2 … 6` and
+group `12` that of call `8`. -/
+def hm (u : ℕ) : ℕ := if u = 0 ∨ 5 ≤ u then 1 else 0
 
-/-- Layer profile of the (3, 9) tables. -/
+/-- Layer profile of the exporters' (3, 9) tables: field values of each cost. -/
 def P39 : List ℕ := [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57]
 
-/-- Layer profile of the (3, 10) tables, cut at cost 16 (the 55 cost-17 entries are dummies). -/
-def P310 : List ℕ := [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153]
+/-- Layer profile of the (3, 10) tables (aliases counted; the last field value is a dummy). -/
+def P310 : List ℕ := [1, 6, 48, 20, 15, 21, 28, 36, 44, 55, 66, 78, 91, 105, 120, 136, 153]
 
-/-- Raw first-group profile: the doubled (3,9) profile. -/
+/-- Raw first-group profile: the doubled profile of its (3,9) table. -/
 def P310no : List ℕ :=
-  [2, 6, 12, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 114]
+  [2, 6, 12, 18, 30, 42, 54, 70, 90, 110, 130, 156, 182, 118, 4]
 
 /-- Layer profile of the (4, 11) tables. -/
-def P411 : List ℕ := [1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 228]
+def P411 : List ℕ := [0, 4, 10, 20, 34, 55, 84, 120, 165, 219, 286, 363, 454, 229, 1, 0, 4]
 
-/-- The layer profile of group `u`'s table: `pn u c` tuples of cost `c`. -/
+/-- The layer profile of group `u`'s table: `pn u c` field values of cost `c`. -/
 def prof (u : ℕ) : List ℕ :=
   if u = 0 then P310no else if u = 5 ∨ u = 6 then P411 else if u < 5 then P39 else P310
 
@@ -158,18 +160,18 @@ def RS (u : ℕ) : ℕ := OFF u (nb u)
 def BASE (u : ℕ) : ℕ := 22 + psum RS u
 
 /-- End of the group regions. -/
-def gEnd : ℕ := 232545
+def gEnd : ℕ := 234654
 
 /-- Shift of the first group's `s = 0` region (frame 14) from its `s > 0` region: it starts at
 `gEnd`. -/
-def zOff : ℕ := 232523
+def zOff : ℕ := 234632
 
 /-- End of the first group's `s = 0` region. -/
-def zEnd : ℕ := 248361
+def zEnd : ℕ := 250526
 
 /-- The number of blocks (live field values) of group `u`: the (3,10) groups `7 … 12` omit their
-55 cost-17 entries. -/
-def VF (u : ℕ) : ℕ := if 7 ≤ u then 969 else 2 ^ gb u
+dummy entry. -/
+def VF (u : ℕ) : ℕ := if 7 ≤ u then 1023 else 2 ^ gb u
 
 /-- The cost band of field value `v` of group `u`. -/
 def band (u v : ℕ) : ℕ := bandIdx (A u) (nb u) v
@@ -200,7 +202,7 @@ theorem BASE_succ (u : ℕ) : BASE (u + 1) = BASE u + RS u := by
 
 theorem BASE_13 : BASE 13 = gEnd := by decide
 
-theorem BASE_one : BASE 1 = 15838 := by decide
+theorem BASE_one : BASE 1 = 15894 := by decide
 
 theorem A_full : ∀ u < 13, A u (nb u) = VF u := by decide
 
@@ -350,7 +352,7 @@ theorem block_lt_gEnd {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < L u 
 /-! ## Chains -/
 
 /-- Chain lengths (positions), from the tables' maximal coordinates. -/
-def LENL : List ℕ := [64, 13, 14, 13, 14, 14, 14, 14, 13, 14, 14, 14, 13, 14, 17, 18, 18, 14, 13, 17, 18, 18, 14, 14, 17, 18, 18, 13, 14, 17, 18, 18, 14, 13, 17, 18, 18, 14, 14, 17, 18, 18]
+def LENL : List ℕ := [64, 13, 13, 12, 13, 13, 13, 13, 12, 13, 13, 13, 13, 13, 17, 17, 17, 13, 13, 17, 17, 17, 13, 13, 17, 17, 17, 13, 13, 17, 17, 17, 13, 13, 17, 17, 17, 13, 13, 17, 17, 17]
 
 /-- Positions of chain `k`. -/
 def LEN (k : ℕ) : ℕ := LENL.getD k 0
@@ -367,7 +369,7 @@ theorem LEN_pos : ∀ k < 42, 2 ≤ LEN k := by decide
 
 theorem OFFT_bound : ∀ k < 42, OFFT k + LEN k ≤ 656 := by decide
 
-theorem xcBase_bound : ∀ k < 42, xcBase k + 2 * LEN k ≤ 5490 := by decide
+theorem xcBase_bound : ∀ k < 42, xcBase k + 2 * LEN k ≤ 5430 := by decide
 
 theorem xcBase_mono : Monotone xcBase := fun _ _ h =>
   Nat.add_le_add_left (Nat.mul_le_mul_left 2 (psum_mono LEN h)) 4096
@@ -375,21 +377,20 @@ theorem xcBase_mono : Monotone xcBase := fun _ _ h =>
 theorem xcBase_succ (k : ℕ) : xcBase (k + 1) = xcBase k + 2 * LEN k := by
   unfold xcBase; rw [psum_succ]; ring
 
-theorem xcBase_42 : xcBase 42 = 5490 := by decide
+theorem xcBase_42 : xcBase 42 = 5430 := by decide
 
 theorem xcBase_zero : xcBase 0 = 4096 := rfl
 
 /-- The explicit chain assignment: the home of call 1, four exporter groups, the homes of calls 0
-and 7, the homes of calls 2 … 6, and the fifth exporter. -/
+and 7, the homes of calls 2 … 6, and the home of call 8. -/
 def chainOf (u i : ℕ) : ℕ := ([[1, 2, 7], [12, 13, 17], [18, 22, 23], [27, 28, 32], [33, 37, 38], [3, 4, 5, 6], [8, 9, 10, 11], [14, 15, 16], [19, 20, 21], [24, 25, 26], [29, 30, 31], [34, 35, 36], [39, 40, 41]].getD u []).getD i 0
 
 def unitOf (k : ℕ) : ℕ := [0, 0, 0, 5, 5, 5, 5, 0, 6, 6, 6, 6, 1, 1, 7, 7, 7, 1, 2, 8, 8, 8, 2, 2, 9, 9, 9, 3, 3, 10, 10, 10, 3, 4, 11, 11, 11, 4, 4, 12, 12, 12].getD k 0
 
 def coordOf (k : ℕ) : ℕ := [0, 0, 1, 0, 1, 2, 3, 2, 0, 1, 2, 3, 0, 1, 0, 1, 2, 2, 0, 0, 1, 2, 1, 2, 0, 1, 2, 0, 1, 0, 1, 2, 2, 0, 0, 1, 2, 1, 2, 0, 1, 2].getD k 0
 
-/-- Tops placed at fixed cells: the cv words of root calls `1 … 7` and the second cv word of
-call `0`. -/
-def exported (k : ℕ) : Prop := k ∈ [12, 13, 17, 18, 22, 23, 27, 28, 32, 33, 37, 38, 39, 40, 41]
+/-- Tops placed at fixed cells: the cv words of root calls `0` and `2 … 6`. -/
+def exported (k : ℕ) : Prop := k ∈ [12, 13, 17, 18, 22, 23, 27, 28, 32, 33, 37, 38]
 
 instance (k : ℕ) : Decidable (exported k) := by unfold exported; infer_instance
 
@@ -464,8 +465,8 @@ structure Tab.Hyp (T : Tab) : Prop where
   cost_eq : ∀ u < 13, ∀ v < VF u, cost T u v = band u v
   coord_lt : ∀ u < 13, ∀ v < 2 ^ gb u, ∀ i < gk u, T u v i < LEN (chainOf u i)
 
-/-- The free chain's digit: `96 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
-def freeDigit (c : ℕ) : ℕ := if c ≤ 96 ∧ 96 - c ≤ 63 then 96 - c else 0
+/-- The free chain's digit: `88 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
+def freeDigit (c : ℕ) : ℕ := if c ≤ 88 ∧ 88 - c ≤ 63 then 88 - c else 0
 
 /-- Group `u`'s field of the index. -/
 def field (u : ℕ) (I : Word) : ℕ := digitW gb I.toNat u
@@ -476,7 +477,7 @@ def gcost (T : Tab) (I : Word) : ℕ := ((List.range 13).map (fun u => cost T u 
 /-- The facts about the scheme parameters the machine relies on. -/
 structure Compat (P : Params) (T : Tab) : Prop where
   len : ∀ k : Fin numChains, P.len k = LEN k.val
-  layer : P.layer = 96
+  layer : P.layer = 88
   digit_grp : ∀ (I : Word) (u i : ℕ) (hu : u < 13) (hi : i < gk u),
     P.digit (effective I) ⟨chainOf u i, chainOf_lt u hu i hi⟩ = T u (field u I) i
   digit_free : ∀ I : Word, (∀ u < 13, field u I < VF u) →
@@ -487,10 +488,10 @@ structure Compat (P : Params) (T : Tab) : Prop where
     P.tag k j 0 = cellBits (cV ((OFFT k.val + j) % 9)) ∧
       P.tag k j 1 = cellBits (cV ((OFFT k.val + j) / 9 % 9)) ∧
       P.tag k j 2 = cellBits (cV ((OFFT k.val + j) / 81))
-  hiTop : ∀ k : Fin numChains, P.hiTop k = decide (k.val ∈ [1, 7, 12, 17, 22, 27, 32, 37, 38, 39])
+  hiTop : ∀ k : Fin numChains, P.hiTop k = decide (k.val ∈ [1, 7, 12, 17, 22, 27, 32, 38, 39])
   cv : P.cv = cellBits gV ++ cellBits oneV
   chainMd : P.chainMd = cellBits oneV
   idxMd : P.idxMd = cellBits gV
-  rootMd : ∀ r < 7, P.rootMd r = cellBits (frameV r)
+  rootMd : ∀ r < 9, P.rootMd r = cellBits (frameV r)
 
 end OptimalOTS.HLG3

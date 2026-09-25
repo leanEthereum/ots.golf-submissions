@@ -91,12 +91,12 @@ theorem fixed_rootFrom (t : Fin numChains → Word) (r n : ℕ) (st : BitVec 256
 
 /-- The public key of the tops under the table. -/
 def rootValue (t : Fin numChains → Word) : PublicKey :=
-  (rootState f P t 0 8 (Params.rootInit t)).extractLsb' 0 128
+  (rootState f P t 0 9 (Params.rootInit t)).extractLsb' 0 128
 
 theorem fixed_root (t : Fin numChains → Word) :
     simulateQ (unifFwdAnswerImpl f) (P.root t) = pure (rootValue f P t) := by
   change simulateQ (unifFwdAnswerImpl f)
-      ((fun y : BitVec 256 => y.extractLsb' 0 128) <$> P.rootFrom t 0 8 (Params.rootInit t)) =
+      ((fun y : BitVec 256 => y.extractLsb' 0 128) <$> P.rootFrom t 0 9 (Params.rootInit t)) =
     (pure (rootValue f P t) : ProbComp (BitVec 128))
   rw [simulateQ_map, fixed_rootFrom, map_pure]
   rfl

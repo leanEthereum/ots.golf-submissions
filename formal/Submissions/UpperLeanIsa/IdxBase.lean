@@ -11,10 +11,7 @@ The vocabulary of the index-grinding analysis, ported from UpperRiscv (`SignIdx`
   query `encQuery (M ++ η)` is the index query `idxInput m η pk` (`encQuery_emsg`). Unlike the
   RISC-V layout, every leanISA query has 896 bits, so encoding queries are told apart from chain
   and root queries by their metadata (`chainInput_ne_encQuery`, `rootInput_ne_encQuery`), not by
-  their length;
-* the index of an answer `idxOf w` (the low 127 bits, as a natural number), the accepted
-  indices `validSet`, with `validSet.card = numValid` (`card_validSet`);
-* `card_idxOf_mem`: each index value is the index of exactly `2 ^ 127` answers.
+  their length.
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -111,112 +108,19 @@ theorem chainInput_ne_encQuery (hP : P.Hyp) (k : Fin numChains) (j : ℕ) (x : W
   intro h
   exact P.chainInput_ne_idxInput hP k j x _ _ _ (query_inj h)
 
-theorem rootInput_ne_encQuery (hP : P.Hyp) {r : ℕ} (hr : r < 7) (t : Fin numChains → Word)
+theorem rootInput_ne_encQuery (hP : P.Hyp) {r : ℕ} (hr : r < 9) (t : Fin numChains → Word)
     (st : BitVec 256) (u : EncInput) : (⟨896, P.rootInput t r st⟩ : Query) ≠ P.encQuery u := by
   intro h
   exact P.rootInput_ne_idxInput hP hr t st _ _ _ (query_inj h)
 
-theorem record_query_ne_encQuery (hP : P.Hyp) (ξ : Record P) (a : Loc P) (ha : ξ.ValidAt a)
-    (u : EncInput) : ξ.query a ≠ P.encQuery u := by
+theorem record_query_ne_encQuery (hP : P.Hyp) (ξ : Record P) (a : Loc P) (u : EncInput) :
+    ξ.query a ≠ P.encQuery u := by
   obtain ⟨M, η, rfl⟩ := exists_append u
   obtain ⟨m, pk, rfl⟩ := exists_emsg M
   rw [encQuery_emsg]
-  exact ξ.query_ne_idx hP a ha m η pk
-
-/-- Every encoding query is an index query. -/
-theorem isIdxQuery_encQuery (u : EncInput) : IsIdxQuery P (P.encQuery u) := by
-  obtain ⟨M, η, rfl⟩ := exists_append u
-  obtain ⟨m, pk, rfl⟩ := exists_emsg M
-  exact ⟨m, η, pk, P.encQuery_emsg m pk η⟩
-
-/-- A decoded query is not an encoding query. -/
-theorem not_enc_of_queryLocation (hP : P.Hyp) {q : Query} {a : Loc P}
-    (hl : queryLocation P q = some a) (u : EncInput) : q ≠ P.encQuery u := by
-  obtain ⟨M, η, rfl⟩ := exists_append u
-  obtain ⟨m, pk, rfl⟩ := exists_emsg M
-  rw [encQuery_emsg]
-  exact not_idx_of_queryLocation hP hl m η pk
-
-/-! ## Indices -/
-
-/-- The index of an answer: its low 127 bits as a number. -/
-def idxOf (w : BitVec hashBits) : ℕ := (indexSlice w).toNat
-
-theorem idxOf_lt (w : BitVec hashBits) : idxOf w < 2 ^ 127 := (indexSlice w).isLt
-
-/-- The accepted indices. -/
-def validSet : Finset ℕ := (Finset.range (2 ^ 127)).filter fun n => P.Accepted (BitVec.ofNat 127 n)
-
-/-- An accepted index. -/
-abbrev Idx : Type := {i : ℕ // i ∈ P.validSet}
-
-/-- The word of an index. -/
-def idxWord (i : ℕ) : Index := BitVec.ofNat 127 i
-
-theorem idxWord_idxOf (w : BitVec hashBits) : idxWord (idxOf w) = indexSlice w := by
-  unfold idxWord idxOf
-  rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
-
-theorem mem_validSet_lt {i : ℕ} (h : i ∈ P.validSet) : i < 2 ^ 127 := by
-  unfold validSet at h
-  exact Finset.mem_range.mp (Finset.mem_filter.mp h).1
-
-theorem mem_validSet_iff (w : BitVec hashBits) :
-    idxOf w ∈ P.validSet ↔ P.Accepted (indexSlice w) := by
-  unfold validSet
-  rw [Finset.mem_filter, ← idxWord, idxWord_idxOf]
-  exact ⟨fun h => h.2, fun h => ⟨Finset.mem_range.mpr (idxOf_lt w), h⟩⟩
-
-theorem accepted_of_mem {i : ℕ} (h : i ∈ P.validSet) : P.Accepted (idxWord i) := by
-  unfold validSet at h
-  exact (Finset.mem_filter.mp h).2
-
-theorem card_validSet : P.validSet.card = P.numValid := by
-  unfold validSet numValid
-  refine Finset.card_bij' (fun n _ => BitVec.ofNat 127 n) (fun I _ => I.toNat) ?_ ?_ ?_ ?_
-  · intro n hn
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hn ⊢
-    exact hn.2
-  · intro I hI
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hI
-    simp only [Finset.mem_filter, Finset.mem_range]
-    exact ⟨I.isLt, by rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]; exact hI⟩
-  · intro n hn
-    simp only [Finset.mem_filter, Finset.mem_range] at hn
-    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hn.1]
-  · intro I _
-    rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
-
-theorem numValid_le' : P.numValid ≤ 2 ^ 127 := by
-  rw [← card_validSet]
-  calc P.validSet.card ≤ (Finset.range (2 ^ 127)).card := Finset.card_filter_le _ _
-    _ = 2 ^ 127 := Finset.card_range _
+  exact ξ.query_ne_idx hP a m η pk
 
 end Params
-
-/-- Every effective 127-bit index has exactly 2^129 full-answer preimages. -/
-theorem card_idxOf_mem (A : Finset ℕ) (hA : ∀ n ∈ A, n < 2 ^ 127) :
-    (Finset.univ.filter fun y : BitVec hashBits => Params.idxOf y ∈ A).card =
-      A.card * 2 ^ (hashBits - 127) := by
-  have hc : (Finset.univ.filter fun i : Index => i.toNat ∈ A).card = A.card := by
-    refine Finset.card_nbij' (fun i : Index => i.toNat)
-      (fun n => BitVec.ofNat 127 n) ?_ ?_ ?_ ?_
-    · intro i hi
-      simpa only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq,
-        Finset.mem_coe] using hi
-    · intro n hn
-      simp only [Finset.mem_coe] at hn
-      simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq,
-        BitVec.toNat_ofNat, Nat.mod_eq_of_lt (hA n hn)]
-      exact hn
-    · intro i _
-      change BitVec.ofNat 127 i.toNat = i
-      rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
-    · intro n hn
-      exact Nat.mod_eq_of_lt (hA n hn)
-  change (Finset.univ.filter fun y : BitVec 256 => (indexSlice y).toNat ∈ A).card = _
-  rw [card_indexSlice (fun i : Index => i.toNat ∈ A), hc]
-  rfl
 
 theorem sum_fin_equivFin {α : Type*} {s : Finset α} {n : ℕ} (h : n = s.card) (G : α → ℝ≥0∞) :
     ∑ j : Fin n, G (s.equivFin.symm (Fin.cast h j)).1 = ∑ η ∈ s, G η := by

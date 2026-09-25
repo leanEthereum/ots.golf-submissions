@@ -1,13 +1,15 @@
 import Submissions.UpperLeanIsa.IdxLoop
+import Submissions.UpperLeanIsa.TierCodec
 
 /-!
 # Charges of index queries
 
 Ported from UpperRiscv `EncCharges.lean`. The number of index entries `encCount` and the event
-`IdxPost` (a new index entry with a given index) only change at index queries:
+`IdxPost` (a new index entry with a given class) only change at index queries:
 
 * `encCount` grows by at most one per query (`encCount_cacheQuery_le`);
-* a fresh index answer has a given index with probability `1 / 2 ^ 127` (`idxPost_charge`).
+* a fresh index answer has class `v` with probability `cweight v / 2 ^ 127`
+  (`idxPost_charge`).
 
 Every leanISA query has 896 bits; a query that is not an index query is recognised by its
 content (`∀ u, q ≠ encQuery u`), not by its length.
@@ -23,24 +25,19 @@ namespace OptimalOTS.LeanIsaBaseline.Layer
 
 set_option linter.constructorNameAsVariable false
 
-attribute [local irreducible] hashBits msgBits pkBits trials Params.validSet Params.encQuery
+attribute [local irreducible] hashBits msgBits pkBits trials Params.encQuery
 
 namespace Params
 
 variable (P : Params)
 
-
-
-
-
-
 /-- Number of encoding entries of a cache. -/
 def encCount (d : Cache) : ℕ :=
   (Finset.univ.filter fun u : EncInput => (d (P.encQuery u)).isSome).card
 
-/-- An encoding entry absent from `d'` is present in `c` with index `i`. -/
-def IdxPost (d' c : Cache) (i : ℕ) : Prop :=
-  ∃ u, d' (P.encQuery u) = none ∧ ∃ w, c (P.encQuery u) = some w ∧ idxOf w = i
+/-- An encoding entry absent from `d'` is present in `c` with class `v`. -/
+def IdxPost (d' c : Cache) (v : Cls) : Prop :=
+  ∃ u, d' (P.encQuery u) = none ∧ ∃ w, c (P.encQuery u) = some w ∧ P.cls w = some v
 
 theorem encCount_empty : P.encCount ∅ = 0 := by
   simp [Params.encCount]
@@ -84,66 +81,23 @@ theorem encCount_cacheQuery_le (d : Cache) (q : Query) (w : BitVec hashBits) :
     exact Nat.le_succ _
 
 theorem idxPost_cacheQuery_of_ne_enc (d' d : Cache) {q : Query}
-    (hq : ∀ u : EncInput, q ≠ P.encQuery u) (w : BitVec hashBits) (i : ℕ) :
-    P.IdxPost d' (d.cacheQuery q w) i ↔ P.IdxPost d' d i := by
+    (hq : ∀ u : EncInput, q ≠ P.encQuery u) (w : BitVec hashBits) (v : Cls) :
+    P.IdxPost d' (d.cacheQuery q w) v ↔ P.IdxPost d' d v := by
   have h : ∀ u : EncInput, (d.cacheQuery q w) (P.encQuery u) = d (P.encQuery u) :=
     fun u => QueryCache.cacheQuery_of_ne _ _ (hq u).symm
   simp only [Params.IdxPost, h]
 
 theorem not_idxPost_extend_of_enc_none (d' f : Cache) (hf : ∀ u : EncInput, f (P.encQuery u) = none)
-    (i : ℕ) : ¬ P.IdxPost d' (Cache.extend d' f) i := by
+    (v : Cls) : ¬ P.IdxPost d' (Cache.extend d' f) v := by
   rintro ⟨u, hu, w, hw, -⟩
   rw [Cache.extend_apply, hu, hf] at hw
   simp at hw
 
-/-! ### Auxiliary counting facts -/
-
-
-/-- Averaging `a * 2 ^ (hashBits - 127)` over the `2 ^ hashBits` answers gives `a / 2 ^ 127`. -/
-theorem inv_card_mul_pow (hidx : 127 ≤ hashBits) (a : ℝ≥0∞) :
-    (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * (a * (2 ^ (hashBits - 127) : ℕ)) =
-      a / 2 ^ 127 := by
-  have hc : (Fintype.card (BitVec hashBits) : ℝ≥0∞) =
-      2 ^ 127 * 2 ^ (hashBits - 127) := by
-    rw [Fintype.card_bitVec, ← pow_add, Nat.add_sub_cancel' hidx]
-    push_cast
-    rfl
-  have h2 : ((2 : ℝ≥0∞) ^ (hashBits - 127))⁻¹ * 2 ^ (hashBits - 127) = 1 :=
-    ENNReal.inv_mul_cancel (by simp) (by simp)
-  rw [hc, Nat.cast_pow, Nat.cast_ofNat, ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)),
-    div_eq_mul_inv]
-  calc ((2 : ℝ≥0∞) ^ 127)⁻¹ * ((2 : ℝ≥0∞) ^ (hashBits - 127))⁻¹ *
-        (a * 2 ^ (hashBits - 127))
-      = a * ((2 : ℝ≥0∞) ^ 127)⁻¹ *
-          (((2 : ℝ≥0∞) ^ (hashBits - 127))⁻¹ * 2 ^ (hashBits - 127)) := by ring
-    _ = a * ((2 : ℝ≥0∞) ^ 127)⁻¹ := by rw [h2, mul_one]
-
-/-- The number of answers with a given index is at most `2 ^ (hashBits - 127)`. -/
-theorem card_idxOf_eq_le (hidx : 127 ≤ hashBits) (i : ℕ) :
-    (Finset.univ.filter fun w : BitVec hashBits => idxOf w = i).card ≤
-      2 ^ (hashBits - 127) := by
-  have h1 : (Finset.univ.filter fun w : BitVec hashBits => idxOf w = i) =
-      Finset.univ.filter fun w : BitVec hashBits =>
-        idxOf w ∈ ({i} : Finset ℕ).filter fun n => n < 2 ^ 127 := by
-    ext w
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_singleton]
-    constructor
-    · rintro rfl
-      exact ⟨rfl, idxOf_lt w⟩
-    · rintro ⟨h, -⟩
-      exact h
-  rw [h1, card_idxOf_mem _ (fun n hn => (Finset.mem_filter.1 hn).2)]
-  calc _ ≤ 1 * 2 ^ (hashBits - 127) :=
-        Nat.mul_le_mul_right _ (le_trans (Finset.card_filter_le _ _) (by simp))
-    _ = _ := one_mul _
-
-/-! ### `P.IdxPost` -/
-
 /-- A fresh encoding answer at `u` realises `P.IdxPost` (when it did not hold before) iff `u` is
-absent from `d'` and the answer has index `i`. -/
-theorem idxPost_cacheQuery_enc {d' d : Cache} (u : EncInput) (w : BitVec hashBits) {i : ℕ}
-    (h : ¬ P.IdxPost d' d i) :
-    P.IdxPost d' (d.cacheQuery (P.encQuery u) w) i ↔ d' (P.encQuery u) = none ∧ idxOf w = i := by
+absent from `d'` and the answer has class `v`. -/
+theorem idxPost_cacheQuery_enc {d' d : Cache} (u : EncInput) (w : BitVec hashBits) {v : Cls}
+    (h : ¬ P.IdxPost d' d v) :
+    P.IdxPost d' (d.cacheQuery (P.encQuery u) w) v ↔ d' (P.encQuery u) = none ∧ P.cls w = some v := by
   constructor
   · rintro ⟨u', hu', w', hw', hi⟩
     by_cases hu : u' = u
@@ -155,26 +109,35 @@ theorem idxPost_cacheQuery_enc {d' d : Cache} (u : EncInput) (w : BitVec hashBit
   · rintro ⟨hu, hi⟩
     exact ⟨u, hu, w, QueryCache.cacheQuery_self _ _ _, hi⟩
 
+theorem two_pow_129_mul_inv' :
+    (2 : ℝ≥0∞) ^ 129 * ((Fintype.card (BitVec hashBits) : ℝ≥0∞))⁻¹ = ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
+  rw [Fintype.card_bitVec]
+  unfold hashBits
+  rw [show (256 : ℕ) = 129 + 127 from rfl, Nat.cast_pow, Nat.cast_ofNat, pow_add,
+    ENNReal.mul_inv (Or.inl (pow_ne_zero _ two_ne_zero))
+      (Or.inl (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)),
+    ← mul_assoc, ENNReal.mul_inv_cancel (pow_ne_zero _ two_ne_zero)
+      (ENNReal.pow_ne_top ENNReal.ofNat_ne_top), one_mul]
+
 -- The bound does not use that `u` is fresh in `d` (`hq` is part of the fixed interface).
 set_option linter.unusedVariables false in
-/-- A fresh encoding answer has index `i` with probability `1 / 2 ^ 127`. -/
-theorem idxPost_charge (hidx : 127 ≤ hashBits) (d' d : Cache) (u : EncInput)
-    (hq : d (P.encQuery u) = none) (i : ℕ) :
+/-- A fresh encoding answer has class `v` with probability `cweight v / 2 ^ 127`. -/
+theorem idxPost_charge (d' d : Cache) (u : EncInput) (hq : d (P.encQuery u) = none) (v : Cls) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-        (if P.IdxPost d' (d.cacheQuery (P.encQuery u) w) i then 1 else 0) ≤
-      (if P.IdxPost d' d i then 1 else 0) + ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
-  by_cases h : P.IdxPost d' d i
+        (if P.IdxPost d' (d.cacheQuery (P.encQuery u) w) v then 1 else 0) ≤
+      (if P.IdxPost d' d v then 1 else 0) + (P.cweight v : ℝ≥0∞) / 2 ^ 127 := by
+  by_cases h : P.IdxPost d' d v
   · rw [if_pos h]
     calc ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-          (if P.IdxPost d' (d.cacheQuery (P.encQuery u) w) i then 1 else 0)
+          (if P.IdxPost d' (d.cacheQuery (P.encQuery u) w) v then 1 else 0)
         ≤ ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * 1 :=
           Finset.sum_le_sum fun w _ => mul_le_mul_right (by split_ifs <;> simp) _
       _ = 1 := sum_inv_card_mul 1
-      _ ≤ 1 + ((2 : ℝ≥0∞) ^ 127)⁻¹ := le_self_add
+      _ ≤ 1 + (P.cweight v : ℝ≥0∞) / 2 ^ 127 := le_self_add
   · rw [if_neg h, zero_add]
     have hle : ∀ w : BitVec hashBits,
-        (if P.IdxPost d' (d.cacheQuery (P.encQuery u) w) i then (1 : ℝ≥0∞) else 0) ≤
-          if idxOf w = i then 1 else 0 := by
+        (if P.IdxPost d' (d.cacheQuery (P.encQuery u) w) v then (1 : ℝ≥0∞) else 0) ≤
+          if P.cls w = some v then 1 else 0 := by
       intro w
       rw [P.idxPost_cacheQuery_enc u w h]
       split_ifs with h₁ h₂ h₂
@@ -183,20 +146,16 @@ theorem idxPost_charge (hidx : 127 ≤ hashBits) (d' d : Cache) (u : EncInput)
       · exact zero_le
       · exact le_rfl
     calc ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-          (if P.IdxPost d' (d.cacheQuery (P.encQuery u) w) i then 1 else 0)
+          (if P.IdxPost d' (d.cacheQuery (P.encQuery u) w) v then 1 else 0)
         ≤ ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-            (if idxOf w = i then 1 else 0) :=
+            (if P.cls w = some v then 1 else 0) :=
           Finset.sum_le_sum fun w _ => mul_le_mul_right (hle w) _
       _ = (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-            ((Finset.univ.filter fun w : BitVec hashBits => idxOf w = i).card : ℝ≥0∞) := by
+            ((Finset.univ.filter fun w : BitVec hashBits => P.cls w = some v).card : ℝ≥0∞) := by
           rw [← Finset.mul_sum, Finset.sum_boole]
-      _ ≤ (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-            (1 * (2 ^ (hashBits - 127) : ℕ)) := by
-          rw [one_mul]
-          exact mul_le_mul_right (Nat.cast_le.2 (card_idxOf_eq_le hidx i)) _
-      _ = ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
-          rw [inv_card_mul_pow hidx, one_div]
-
+      _ = (P.cweight v : ℝ≥0∞) / 2 ^ 127 := by
+          rw [P.card_cls, Nat.cast_mul, Nat.cast_pow, Nat.cast_ofNat, div_eq_mul_inv, mul_comm,
+            mul_assoc, two_pow_129_mul_inv']
 
 end Params
 

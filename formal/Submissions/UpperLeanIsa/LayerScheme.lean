@@ -9,14 +9,16 @@ import VCVio.OracleComp.Constructions.SampleableType
 The 42 chains hold 128-bit words. Accepted remaining-step digits sum to a fixed layer,
 forming an antichain. Index queries use the zero-padded 127-bit nonce; answer bits 1..127
 select the effective index. The signature has 42 words plus the nonce, totaling 5503 bits.
-Signing samples fresh untried nonces for at most 2^19 trials.
+Signing makes 2^19 trials at fresh untried nonces and keeps the accepted trial of least weight
+(the number of accepted indices with its digits), the earliest among equals.
 
 Chain steps retain the low answer half except the last step of a designated high-top chain.
-The 8-call root absorbs every top once. Call 0 uses cv (top 38, top 41) and block tops 3..6 with
-tag `rootMd 0`. Call 1 uses cv (top 37, lo(previous)), block tops [0, 1, 2, 7] and tag
-`rootMd 1`. Call r=2..6 uses cv (top (5r+2), top (5r+3)), block [lo(previous), tops 5r+4..5r+6]
-and tag `rootMd r`. Call 7 uses cv (top 39, top 40), block tops 8..11, and the low half of the
-previous state as its metadata. The public key is its low answer half.
+The tagged 9-call root absorbs every top once; call `r` carries the metadata `rootMd r`. Call 0
+uses cv (top 38, top 37) and block tops 3..6. Call 1 uses the state as its cv and block tops
+[0, 1, 2, 7]. Call r=2..6 uses cv (top (5r+2), top (5r+3)) and block
+[lo(previous), tops 5r+4..5r+6]. Call 7 uses the state as its cv and block tops 8..11; call 8 the
+state as its cv and block [lo(previous), tops 39..41]. The public key is the low half of the last
+state.
 -/
 
 open OracleSpec OracleComp
@@ -62,7 +64,7 @@ structure Params where
   chainMd : Word
   /-- Metadata of the index query. -/
   idxMd : Word
-  /-- Metadata of root call `r < 7` (the last call carries the previous state word). -/
+  /-- Metadata of root call `r < 9`. -/
   rootMd : ℕ → Word
   /-- Chains whose top is the high half of the answer of their last step. -/
   hiTop : Fin numChains → Bool
@@ -93,42 +95,27 @@ def slice (k : Fin numChains) (j : ℕ) (y : BitVec hashBits) : Word :=
 def topAt (t : Fin numChains → Word) (i : ℕ) : Word :=
   if h : i < numChains then t ⟨i, h⟩ else 0
 
-/-- The first cv top of root call `r ≥ 2`: `39` for call 7, `5r+2` otherwise. -/
-def rootCvTop (r : ℕ) : ℕ := if r = 7 then 39 else 5 * r + 2
-
-/-- The root cv: the state (the tops `(38, 41)`) for call 0, `(top 37, lo st)` for call 1, tops
-`(c r, c r + 1)` otherwise. -/
+/-- The root cv: the state for calls 0, 1, 7 and 8 (for call 0 the tops `(38, 37)`), the tops
+`(5r+2, 5r+3)` for calls `r = 2 … 6`. -/
 def rootCv (t : Fin numChains → Word) (r : ℕ) (st : BitVec 256) : BitVec 256 :=
-  if r = 0 then st else if r = 1 then st.extractLsb' 0 128 ++ topAt t 37
-  else topAt t (rootCvTop r + 1) ++ topAt t (rootCvTop r)
+  if r = 0 ∨ r = 1 ∨ 7 ≤ r then st else topAt t (5 * r + 3) ++ topAt t (5 * r + 2)
 
-/-- Root blocks: tops 3..6, tops [0, 1, 2, 7], [lo st, tops 5r+4..5r+6], then tops 8..11. -/
+/-- Root blocks: tops 3..6, tops [0, 1, 2, 7], [lo st, tops 5r+4..5r+6], tops 8..11, then
+[lo st, tops 39..41]. -/
 def rootBlock (t : Fin numChains → Word) (r : ℕ) (st : BitVec 256) : BitVec 512 :=
   if r = 0 then topAt t 6 ++ topAt t 5 ++ topAt t 4 ++ topAt t 3
   else if r = 1 then topAt t 7 ++ topAt t 2 ++ topAt t 1 ++ topAt t 0
   else if r < 7 then
     topAt t (5 * r + 6) ++ topAt t (5 * r + 5) ++ topAt t (5 * r + 4) ++ st.extractLsb' 0 128
-  else topAt t 11 ++ topAt t 10 ++ topAt t 9 ++ topAt t 8
-
-/-- The metadata of root call `r`: the constant tag for `r < 7`, the low half of the state
-before the last call. -/
-def rootTag (r : ℕ) (st : BitVec 256) : Word :=
-  if r < 7 then P.rootMd r else st.extractLsb' 0 128
-
-variable {P} in
-theorem rootTag_lt {r : ℕ} (hr : r < 7) (st : BitVec 256) : P.rootTag r st = P.rootMd r := by
-  unfold rootTag; rw [if_pos hr]
-
-variable {P} in
-theorem rootTag_seven (st : BitVec 256) : P.rootTag 7 st = st.extractLsb' 0 128 := by
-  unfold rootTag; rw [if_neg (by norm_num)]
+  else if r = 7 then topAt t 11 ++ topAt t 10 ++ topAt t 9 ++ topAt t 8
+  else topAt t 41 ++ topAt t 40 ++ topAt t 39 ++ st.extractLsb' 0 128
 
 /-- Root call `r` under the state `st`. -/
 def rootInput (t : Fin numChains → Word) (r : ℕ) (st : BitVec 256) : BitVec 896 :=
-  LeanIsa.hashInput (rootCv t r st) (rootBlock t r st) (P.rootTag r st)
+  LeanIsa.hashInput (rootCv t r st) (rootBlock t r st) (P.rootMd r)
 
-/-- The initial root state: the tops `(38, 41)`, the cv of call 0. -/
-def rootInit (t : Fin numChains → Word) : BitVec 256 := topAt t 41 ++ topAt t 38
+/-- The initial root state: the tops `(38, 37)`, the cv of call 0. -/
+def rootInit (t : Fin numChains → Word) : BitVec 256 := topAt t 37 ++ topAt t 38
 
 /-! ## Oracle programs -/
 
@@ -162,9 +149,9 @@ def rootFrom (t : Fin numChains → Word) : ℕ → ℕ → BitVec 256 → Oracl
     let st' ← hash (P.rootInput t r st)
     rootFrom t (r + 1) n st'
 
-/-- The 8-call root; the public key is the low half of the last state. -/
+/-- The tagged 9-call root; the public key is the low half of the last state. -/
 def root (t : Fin numChains → Word) : OracleComp Spec PublicKey :=
-  (fun y => y.extractLsb' 0 128) <$> P.rootFrom t 0 8 (rootInit t)
+  (fun y => y.extractLsb' 0 128) <$> P.rootFrom t 0 9 (rootInit t)
 
 /-- Acceptance: the digits of the index sum to the layer. -/
 def Accepted (I : Index) : Prop := ∑ k : Fin numChains, P.digit I k = P.layer
@@ -173,6 +160,19 @@ instance (I : Index) : Decidable (P.Accepted I) := by unfold Accepted; infer_ins
 
 /-- The number of accepted indices. -/
 def numValid : ℕ := (Finset.univ.filter fun I : Index => P.Accepted I).card
+
+/-- The weight of an index: the number of accepted indices with its digits. -/
+def weight (I : Index) : ℕ :=
+  (Finset.univ.filter fun I' : Index => P.Accepted I' ∧ P.digit I' = P.digit I).card
+
+/-- The signer's rule: `I` replaces the best trial `β` when it is accepted and strictly lighter. -/
+def better (I : Index) : Option (Nonce × Index) → Bool
+  | none => decide (P.Accepted I)
+  | some b => decide (P.Accepted I) && decide (P.weight I < P.weight b.2)
+
+/-- The best trial after a trial at nonce `η` with index `I`. -/
+def upd (β : Option (Nonce × Index)) (η : Nonce) (I : Index) : Option (Nonce × Index) :=
+  if P.better I β then some (η, I) else β
 
 end Params
 
@@ -216,29 +216,31 @@ def keygen : OracleComp Spec (PublicKey × SecretKey) := do
   let pk ← P.root (fun k => (tables k).getD (P.len k - 1) 0)
   pure (pk, ⟨tables, pk⟩)
 
-/-- The signing loop: at most `k` fresh uniform nonces outside `tried`. -/
+/-- The signature of the best trial. -/
+def sigOf (sk : SecretKey) (β : Option (Nonce × Index)) : Option (List Bool) :=
+  β.map fun b => encode (P.revealed sk b.2) b.1
+
+/-- The signing loop: `k` further trials at fresh uniform nonces outside `tried`, keeping the
+lightest accepted trial `β`, the earliest among equals. -/
 def signLoop (sk : SecretKey) (m : Message) :
-    ℕ → Finset Nonce → OracleComp Spec (Option (List Bool))
-  | 0, _ => pure none
-  | k + 1, tried =>
+    ℕ → Finset Nonce → Option (Nonce × Index) → OracleComp Spec (Option (List Bool))
+  | 0, _, β => pure (P.sigOf sk β)
+  | k + 1, tried, β =>
     let fresh := Finset.univ \ tried
     if h : 0 < fresh.card then do
       let j ← (liftM ($[0..(fresh.card - 1)]) : OracleComp Spec (Fin (fresh.card - 1 + 1)))
       let η : Nonce := (fresh.equivFin.symm (Fin.cast (by omega) j)).1
       let I ← P.index m η sk.pk
-      if P.Accepted I then
-        return some (encode (P.revealed sk I) η)
-      else
-        signLoop sk m k (insert η tried)
+      signLoop sk m k (insert η tried) (P.upd β η I)
     else
-      pure none
+      pure (P.sigOf sk β)
 
-/-- Signing: at most `trials` fresh nonces. Irreducible, so that elaboration never unfolds the
-`2 ^ 19`-step loop; use `sign_eq`. -/
+/-- Signing: `trials` trials, the lightest accepted index. Irreducible, so that elaboration never
+unfolds the `2 ^ 19`-step loop; use `sign_eq`. -/
 @[irreducible] def sign (sk : SecretKey) (m : Message) : OracleComp Spec (Option (List Bool)) :=
-  P.signLoop sk m trials ∅
+  P.signLoop sk m trials ∅ none
 
-theorem sign_eq (sk : SecretKey) (m : Message) : P.sign sk m = P.signLoop sk m trials ∅ := by
+theorem sign_eq (sk : SecretKey) (m : Message) : P.sign sk m = P.signLoop sk m trials ∅ none := by
   unfold sign; rfl
 
 /-- Verification: length, index, layer, the chains from the revealed words, the root. -/

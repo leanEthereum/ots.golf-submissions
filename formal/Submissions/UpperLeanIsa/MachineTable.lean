@@ -81,13 +81,9 @@ theorem g3_cost_eq {u v : ℕ} (hu : u < 13) (hv : v < 2 ^ gb u) :
 theorem g3_band_eq {u v : ℕ} (hu : u < 13) (hvl : v < VF u) :
     Group3.cost u (rawCode u v) = band u v := by
   have hv : v < 2 ^ gb u := lt_of_lt_of_le hvl (VF_le u hu)
-  have hv' := rawCode_lt hu hv
-  obtain ⟨h1, h2⟩ := Group3.cost_spec hv'
-  have hcut : rawCode u v < Group3.AS (Group3.ushape u) 17 := (live_iff hu v hv).mpr hvl
-  have hc : Group3.cost u (rawCode u v) < 17 := by
-    by_contra hc
-    have := Group3.AS_mono (Group3.ushape_lt u) (show 17 ≤ Group3.cost u (rawCode u v) by omega)
-    omega
+  have hcut : rawCode u v < Group3.cut u := (live_iff hu v hv).mpr hvl
+  obtain ⟨h1, h2⟩ := Group3.cost_spec hcut
+  have hc : Group3.cost u (rawCode u v) < 17 := Group3.cost_lt hcut
   have ha := AS_eq u hu _ (show Group3.cost u (rawCode u v) ≤ 17 by omega)
   have hb := AS_eq u hu _ (show Group3.cost u (rawCode u v) + 1 ≤ 17 by omega)
   have h1' : A u (Group3.cost u (rawCode u v)) ≤ v := by

@@ -1,26 +1,27 @@
 import Submissions.UpperLeanIsa.StageB
-import Submissions.UpperLeanIsa.RowPotential
+import Submissions.UpperLeanIsa.TierPsi
 
 /-!
 # The first stage and signing
 
-The records with public data `v` before signing form the fiber `fiber₀ v`; the bound is over a
-set `T` of good records of the fiber. After the first attacker stage has ended with `(x, d)`, the
-quantity to bound is `FA v T x d`: for every record of `T`, `1` if `d` hit a hidden keygen point
-of the record, else the success probability of signing and the second stage. The potential
+The records with public data `v` before signing form the fiber `fiber₀ v`. After the first
+attacker stage has ended with `(x, d)`, the quantity to bound is `FA v x d`: for every record of
+the fiber, `1` if `d` hit a hidden keygen point of the record, else the success probability of
+signing and the second stage. For a tier schedule `S` the potential with remaining budget `b` is
 
 ```
-ΦA v T c = ∑ ξ ∈ T, w · (ind (hidden hit of ξ) + ind (second-preimage hit of ξ))
-           + sumW (fiber₀ v) · θ ψ(c)
+ΦA v c b = ∑ ξ ∈ fiber₀ v, w · (ind (hidden hit of ξ) + ind (second-preimage hit of ξ))
+             + sumW (fiber₀ v) · (Pre(c, b) + Ψ(c) / θ + K(b))
 ```
 
-(`ψ` the row potential of the index cache, ported from UpperRiscv) grows by at most
-`κ · sumW (fiber₀ v)` per compression, split by query shape (`ΦA_charge`): an index query only
-moves `θ ψ`, by at most `2 · 2 ^ -127` per query (`psi_charge`), and every other query only
-the hidden and second-preimage terms, by at most `(1 + 3) · 2 ^ -129` per compression. The
-continuation is bounded by signing as one disjoint case split (`signRho_bound`, with `θ ψ`
-bounding the loss of a pre-held signed index, `psi_dom`), then the second stage (`stageB_none`,
-`stageB_some`) (`stageA_cont`). The master lemma gives `stageA_master`.
+(`Pre` the pre-sign potential, `Ψ` the RowGood supermartingale, `K` the budget term). It does
+not grow in average at any fresh query (`ΦA_charge`, tier-proof.md A1): an index query moves
+`Pre` by at most `(1 + (b - 2)/I) H'`, paid by `K`, and leaves `Ψ` a martingale; a chain or root
+query moves the hidden and second-preimage terms by at most `2 · 2 ^ -129` per compression, paid
+by the slope `κ₁` of `K`. The continuation (`stageA_cont`, A2): a row that is not good pays
+through `Ψ / θ ≥ 1`; otherwise signing is one expectation over its outcomes, a lost signature
+(`IdxPreC` or `SelfCol`) pays its weight (`loss_le`), and the second stage runs at the rate of
+the signed class (`kappaB_le`). The budget master lemma gives `stageA_master` (A3).
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -35,9 +36,8 @@ set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 set_option linter.constructorNameAsVariable false
 
-attribute [local irreducible] hashBits msgBits pkBits trials Params.validSet Params.encQuery
-  Params.V Params.validInputs publicFiber finiteFiber hiddenCache exposedCache
-  queryLocation Record.query RowPot.idxBits RowPot.nonceBits
+attribute [local irreducible] hashBits msgBits pkBits trials Params.encQuery
+  publicFiber finiteFiber hiddenCache exposedCache queryLocation Record.query
 
 namespace Params
 
@@ -57,21 +57,19 @@ theorem revealed_record (hP : P.Hyp) (ξ : Record P) (I : Index) (k : Fin numCha
   have := hP.len_pos k
   exact P.table_getD ξ k _ (by omega)
 
-theorem sigOfIdx_record (hP : P.Hyp) (ξ : Record P) (η : Nonce) (i : P.Idx) :
-    P.sigOfIdx ξ.sk (some (η, i)) =
-      some (encode (fun k => ξ.word k (afterSigning P (idxWord i.val) k)) η) := by
-  unfold sigOfIdx
+theorem sigOf_record (hP : P.Hyp) (ξ : Record P) (η : Nonce) (I : Index) :
+    P.sigOf ξ.sk (some (η, I)) =
+      some (encode (fun k => ξ.word k (afterSigning P I k)) η) := by
+  unfold sigOf
   simp only [Option.map_some]
   congr 2
   funext k
   exact P.revealed_record hP ξ _ k
 
-theorem sigOfIdx_none (sk : SecretKey) : P.sigOfIdx sk none = none := rfl
-
-theorem rest₂_eq_signIdx (pk : PublicKey) (ξ : Record P) (hpk : ξ.pk = pk)
+theorem rest₂_eq_signTier (pk : PublicKey) (ξ : Record P) (hpk : ξ.pk = pk)
     (x : Message × A.State) :
     P.rest₂ A pk ξ.sk x =
-      P.signIdx (emsg x.1 pk) >>= fun r => P.stB A pk x.1 x.2 (P.sigOfIdx ξ.sk r) := by
+      P.signTier (emsg x.1 pk) >>= fun r => P.stB A pk x.1 x.2 (P.sigOf ξ.sk r) := by
   unfold rest₂
   rw [sign_eq_map, bind_map_left]
   rw [show ξ.sk.pk = pk from hpk]
@@ -80,11 +78,11 @@ theorem rest₂_eq_signIdx (pk : PublicKey) (ξ : Record P) (hpk : ξ.pk = pk)
 theorem E_rest₂_extend (hP : P.Hyp) (pk : PublicKey) (ξ : Record P) (hpk : ξ.pk = pk)
     (x : Message × A.State) (d : Cache) :
     E (run (P.rest₂ A pk ξ.sk x) (Cache.extend d (hiddenCache (beforeSigning P) ξ))) g =
-      E (run (P.signIdx (emsg x.1 pk)) d) (fun p =>
-        E (run (P.stB A pk x.1 x.2 (P.sigOfIdx ξ.sk p.1))
+      E (run (P.signTier (emsg x.1 pk)) d) (fun p =>
+        E (run (P.stB A pk x.1 x.2 (P.sigOf ξ.sk p.1))
           (Cache.extend p.2 (hiddenCache (beforeSigning P) ξ))) g) := by
-  rw [P.rest₂_eq_signIdx A pk ξ hpk, run_bind,
-    P.run_signIdx_extend _ d _ (fun u => P.hiddenCache_enc hP _ ξ u), bind_map_left, E_bind]
+  rw [P.rest₂_eq_signTier A pk ξ hpk, run_bind,
+    P.run_signTier_extend _ d _ (fun u => P.hiddenCache_enc hP _ ξ u), bind_map_left, E_bind]
 
 /-! ## Public data at nested cuts -/
 
@@ -111,30 +109,31 @@ theorem afterSigning_le (I : Index) (k : Fin numChains) :
 
 theorem stageB_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State)
     (v : PublicData P) (T : Finset (Record P)) (hT : T ⊆ publicFiber (beforeSigning P) v)
-    (hG : ∀ ξ ∈ T, ξ.Good)
-    (hpk : ∀ ξ ∈ T, ξ.pk = pk) (d d' : Cache) (η₁ : Nonce) (i₁ : P.Idx)
-    (hext : P.SignExt (emsg m₁ pk) d (some (η₁, i₁)) d')
-    (hpre : ¬ P.IdxPre d (emsg m₁ pk ++ η₁) i₁.val)
+    (hpk : ∀ ξ ∈ T, ξ.pk = pk) (d d' : Cache) (η₁ : Nonce) (I₁ : Index)
+    (hext : P.TierExt (emsg m₁ pk) d (some (η₁, I₁)) d')
+    (hpre : ¬ P.IdxPreC d (emsg m₁ pk ++ η₁) (P.digit I₁))
+    (hsc : ¬ P.SelfCol d (emsg m₁ pk) d' (η₁, I₁))
+    {ρ : ℝ≥0∞} (hρ₁ : 2 * rate ≤ ρ) (hρ₂ : (P.cweight (P.digit I₁) : ℝ≥0∞) / 2 ^ 127 ≤ ρ * 2)
     (hd : ∀ ξ ∈ T, Cache.Sub (exposedCache (beforeSigning P) ξ) d ∧
       ¬ Cache.Hits d (hiddenCache (beforeSigning P) ξ) ∧
       ¬ TargetHit (secondPreimageTargets P ξ) d)
     (b' : ℕ) (hb : ∀ ξ ∈ T, CostAtMost (P.stB A pk m₁ st
-      (some (encode (fun k => ξ.word k (afterSigning P (idxWord i₁.val) k)) η₁))) b') :
+      (some (encode (fun k => ξ.word k (afterSigning P I₁ k)) η₁))) b') :
     ∑ ξ ∈ T, recW P * E (run (P.stB A pk m₁ st
-        (some (encode (fun k => ξ.word k (afterSigning P (idxWord i₁.val) k)) η₁)))
+        (some (encode (fun k => ξ.word k (afterSigning P I₁ k)) η₁)))
         (Cache.extend d' (hiddenCache (beforeSigning P) ξ))) g ≤
-      κ * sumW P (publicFiber (beforeSigning P) v) * b' := by
-  set d₁ := afterSigning P (idxWord i₁.val) with hd₁
-  set S := T.image (publicData d₁) with hS
-  have hmaps : ∀ ξ ∈ T, publicData d₁ ξ ∈ S := fun ξ hξ => Finset.mem_image_of_mem _ hξ
+      ρ * sumW P (publicFiber (beforeSigning P) v) * b' := by
+  set d₁ := afterSigning P I₁ with hd₁
+  set D := T.image (publicData d₁) with hD
+  have hmaps : ∀ ξ ∈ T, publicData d₁ ξ ∈ D := fun ξ hξ => Finset.mem_image_of_mem _ hξ
   have hregroup : ∀ f : Record P → ℝ≥0∞, ∑ ξ ∈ T, f ξ =
-      ∑ v₁ ∈ S, ∑ ξ ∈ T with publicData d₁ ξ = v₁, f ξ :=
+      ∑ v₁ ∈ D, ∑ ξ ∈ T with publicData d₁ ξ = v₁, f ξ :=
     fun f => (Finset.sum_fiberwise_of_maps_to hmaps f).symm
-  have hfiber : ∀ v₁ ∈ S,
+  have hfiber : ∀ v₁ ∈ D,
       ∑ ξ ∈ T with publicData d₁ ξ = v₁, recW P * E (run (P.stB A pk m₁ st
         (some (encode (fun k => ξ.word k (d₁ k)) η₁)))
         (Cache.extend d' (hiddenCache (beforeSigning P) ξ))) g ≤
-      κ * sumW P (publicFiber d₁ v₁) * b' := by
+      ρ * sumW P (publicFiber d₁ v₁) * b' := by
     intro v₁ hv₁
     obtain ⟨ζ₁, hζ₁T, hζ₁⟩ := Finset.mem_image.1 hv₁
     have hζ₁F : ζ₁ ∈ publicFiber d₁ v₁ := (mem_publicFiber _ _ _).mpr hζ₁
@@ -143,12 +142,11 @@ theorem stageB_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
     have hsubT : T.filter (fun ξ => publicData d₁ ξ = v₁) ⊆ publicFiber d₁ v₁ := by
       intro ξ hξ
       exact (mem_publicFiber _ _ _).mpr (Finset.mem_filter.1 hξ).2
-    exact P.stageB_fiber A hP pk m₁ st d d' η₁ i₁ hext hpre v₁ ζ₁ hζ₁F _ hsubT
-      (fun ξ hξ => hG ξ (hmemT ξ hξ))
+    exact P.stageB_fiber A hP pk m₁ st d d' η₁ I₁ hext hpre hsc hρ₁ hρ₂ v₁ ζ₁ hζ₁F _ hsubT
       (fun ξ hξ => hpk ξ (hmemT ξ hξ)) (fun ξ hξ => hd ξ (hmemT ξ hξ)) b' (hb ζ₁ hζ₁T)
-  have hsumW : ∑ v₁ ∈ S, sumW P (publicFiber d₁ v₁) ≤ sumW P (publicFiber (beforeSigning P) v) := by
-    have hsub : ∀ v₁ ∈ S, publicFiber d₁ v₁ ⊆
-        ((publicFiber (beforeSigning P) v).filter fun ξ => publicData d₁ ξ ∈ S).filter
+  have hsumW : ∑ v₁ ∈ D, sumW P (publicFiber d₁ v₁) ≤ sumW P (publicFiber (beforeSigning P) v) := by
+    have hsub : ∀ v₁ ∈ D, publicFiber d₁ v₁ ⊆
+        ((publicFiber (beforeSigning P) v).filter fun ξ => publicData d₁ ξ ∈ D).filter
           fun ξ => publicData d₁ ξ = v₁ := by
       intro v₁ hv₁ ξ hξ
       obtain ⟨ζ₁, hζ₁T, hζ₁⟩ := Finset.mem_image.1 hv₁
@@ -158,11 +156,11 @@ theorem stageB_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
       apply (mem_publicFiber _ _ _).mpr
       rw [P.publicData_mono (fun k => P.afterSigning_le _ k) ξ ζ₁ (hξd.trans hζ₁.symm)]
       exact (mem_publicFiber _ _ _).mp (hT hζ₁T)
-    calc ∑ v₁ ∈ S, sumW P (publicFiber d₁ v₁)
-        ≤ ∑ v₁ ∈ S, ∑ ξ ∈ ((publicFiber (beforeSigning P) v).filter fun ξ =>
-            publicData d₁ ξ ∈ S) with publicData d₁ ξ = v₁, recW P :=
+    calc ∑ v₁ ∈ D, sumW P (publicFiber d₁ v₁)
+        ≤ ∑ v₁ ∈ D, ∑ ξ ∈ ((publicFiber (beforeSigning P) v).filter fun ξ =>
+            publicData d₁ ξ ∈ D) with publicData d₁ ξ = v₁, recW P :=
           Finset.sum_le_sum fun v₁ hv₁ => Finset.sum_le_sum_of_subset (hsub v₁ hv₁)
-      _ = ∑ ξ ∈ ((publicFiber (beforeSigning P) v).filter fun ξ => publicData d₁ ξ ∈ S),
+      _ = ∑ ξ ∈ ((publicFiber (beforeSigning P) v).filter fun ξ => publicData d₁ ξ ∈ D),
             recW P :=
           Finset.sum_fiberwise_of_maps_to (fun ξ hξ => (Finset.mem_filter.1 hξ).2) _
       _ ≤ sumW P (publicFiber (beforeSigning P) v) :=
@@ -170,13 +168,13 @@ theorem stageB_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
   calc ∑ ξ ∈ T, recW P * E (run (P.stB A pk m₁ st
           (some (encode (fun k => ξ.word k (d₁ k)) η₁)))
           (Cache.extend d' (hiddenCache (beforeSigning P) ξ))) g
-      = ∑ v₁ ∈ S, ∑ ξ ∈ T with publicData d₁ ξ = v₁, recW P * E (run (P.stB A pk m₁ st
+      = ∑ v₁ ∈ D, ∑ ξ ∈ T with publicData d₁ ξ = v₁, recW P * E (run (P.stB A pk m₁ st
           (some (encode (fun k => ξ.word k (d₁ k)) η₁)))
           (Cache.extend d' (hiddenCache (beforeSigning P) ξ))) g := hregroup _
-    _ ≤ ∑ v₁ ∈ S, κ * sumW P (publicFiber d₁ v₁) * b' := Finset.sum_le_sum hfiber
-    _ = κ * (∑ v₁ ∈ S, sumW P (publicFiber d₁ v₁)) * b' := by
+    _ ≤ ∑ v₁ ∈ D, ρ * sumW P (publicFiber d₁ v₁) * b' := Finset.sum_le_sum hfiber
+    _ = ρ * (∑ v₁ ∈ D, sumW P (publicFiber d₁ v₁)) * b' := by
         rw [← Finset.sum_mul, ← Finset.mul_sum]
-    _ ≤ κ * sumW P (publicFiber (beforeSigning P) v) * b' :=
+    _ ≤ ρ * sumW P (publicFiber (beforeSigning P) v) * b' :=
         mul_le_mul' (mul_le_mul' le_rfl hsumW) le_rfl
 
 /-! ## The first-stage potential -/
@@ -184,39 +182,36 @@ theorem stageB_some (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
 /-- The records with public data `v` before signing. -/
 def fiber₀ (v : PublicData P) : Finset (Record P) := publicFiber (beforeSigning P) v
 
-/-- The row-potential term, `θ ψ`. -/
-def encTerm (c : Cache) : ℝ≥0∞ :=
-  ENNReal.ofReal (RowPot.Row.θ * @RowPot.psi ⟨P⟩ c)
+variable (S : Tier.Sched)
 
-/-- The first-stage potential of the records `T`. -/
-def ΦA (v : PublicData P) (T : Finset (Record P)) (c : Cache) : ℝ≥0∞ :=
-  hiddenHitPotential (beforeSigning P) T c +
-    ∑ ξ ∈ T, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
-    sumW P (P.fiber₀ v) * P.encTerm c
+/-- The first-stage potential with remaining budget `b`: hidden and second-preimage hits of the
+fiber, and, weighted by the fiber, the pre-sign potential `Pre`, the RowGood potential and the
+budget term `K(b)`. -/
+def ΦA (v : PublicData P) (c : Cache) (b : ℕ) : ℝ≥0∞ :=
+  hiddenHitPotential (beforeSigning P) (P.fiber₀ v) c +
+    ∑ ξ ∈ P.fiber₀ v, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
+    sumW P (P.fiber₀ v) * (P.Pre S c b + P.PsiE S c + S.Kb b)
 
-/-- The budget invariant of the index potential. -/
+variable {S}
+
+/-- The budget invariant of the index potential: every index entry was paid by an index query of
+two compressions. -/
 def Inv (c : Cache) (b : ℕ) : Prop := 2 * P.encCount c + b ≤ 2 ^ 127
 
 /-- The first-stage invariant. -/
-def InvA (T : Finset (Record P)) (c : Cache) (b : ℕ) : Prop :=
-  (∀ ξ ∈ T, Cache.Sub (exposedCache (beforeSigning P) ξ) c) ∧ P.Inv c b
-
-theorem one_le_queryCost (q : Query) : 1 ≤ queryCost (.inr q) := by
-  unfold queryCost blockCost
-  exact le_max_left _ _
+def InvA (v : PublicData P) (c : Cache) (b : ℕ) : Prop :=
+  (∀ ξ ∈ P.fiber₀ v, Cache.Sub (exposedCache (beforeSigning P) ξ) c) ∧ P.Inv c b
 
 theorem Inv_fresh : ∀ c b q, P.Inv c b → c q = none → queryCost (.inr q) ≤ b →
     ∀ u, P.Inv (c.cacheQuery q u) (b - queryCost (.inr q)) := by
   intro c b q hI _ hcost u
   unfold Inv at hI ⊢
-  have h1 := P.encCount_cacheQuery_le c q u
-  by_cases he : ∃ v, q = P.encQuery v
-  · obtain ⟨v, rfl⟩ := he
-    have h2 : queryCost (.inr (P.encQuery v)) = 2 := by
-      norm_num [encQuery, queryCost, blockCost, blockBits]
+  by_cases henc : ∃ u₀, q = P.encQuery u₀
+  · obtain ⟨u₀, rfl⟩ := henc
+    have h1 := P.encCount_cacheQuery_le c (P.encQuery u₀) u
+    have h2 : queryCost (.inr (P.encQuery u₀)) = 2 := queryCost_896 (by unfold Params.encQuery; rfl)
     omega
-  · have hne : ∀ v, q ≠ P.encQuery v := fun v hv => he ⟨v, hv⟩
-    rw [P.encCount_cacheQuery_of_ne c hne u]
+  · have h1 := P.encCount_cacheQuery_of_ne c (fun u' h => henc ⟨u', h⟩) u
     omega
 
 theorem Inv_cached : ∀ c b q, P.Inv c b → (c q).isSome → queryCost (.inr q) ≤ b →
@@ -225,67 +220,20 @@ theorem Inv_cached : ∀ c b q, P.Inv c b → (c q).isSome → queryCost (.inr q
   unfold Inv at hI ⊢
   omega
 
-theorem InvA_fresh (T : Finset (Record P)) : ∀ c b q, P.InvA T c b → c q = none →
-    queryCost (.inr q) ≤ b → ∀ u, P.InvA T (c.cacheQuery q u) (b - queryCost (.inr q)) := by
+theorem InvA_fresh (v : PublicData P) : ∀ c b q, P.InvA v c b → c q = none →
+    queryCost (.inr q) ≤ b → ∀ u, P.InvA v (c.cacheQuery q u) (b - queryCost (.inr q)) := by
   intro c b q hI hq hcost u
   exact ⟨fun ξ hξ => (hI.1 ξ hξ).trans (Cache.sub_cacheQuery_of_none hq u),
     P.Inv_fresh c b q hI.2 hq hcost u⟩
 
-theorem InvA_cached (T : Finset (Record P)) : ∀ c b q, P.InvA T c b → (c q).isSome →
-    queryCost (.inr q) ≤ b → P.InvA T c (b - queryCost (.inr q)) := by
+theorem InvA_cached (v : PublicData P) : ∀ c b q, P.InvA v c b → (c q).isSome →
+    queryCost (.inr q) ≤ b → P.InvA v c (b - queryCost (.inr q)) := by
   intro c b q hI hq hcost
   exact ⟨hI.1, P.Inv_cached c b q hI.2 hq hcost⟩
 
-/-- The hypotheses of the row potential. -/
-theorem rowHyp (hP : P.Hyp) : @RowPot.RowHyp ⟨P⟩ := by
-  letI : RowPot.RowCtx := ⟨P⟩
-  refine ⟨by rw [RowPot.nonceBits_eq, RowPot.idxBits_eq],
-    by rw [RowPot.idxBits_eq]; unfold hashBits; omega, ?_, ?_, ?_⟩
-  · show 2 ≤ P.validSet.card
-    rw [P.card_validSet]
-    have := hP.numValid_ge
-    omega
-  · show 2 * P.validSet.card ≤ 2 ^ RowPot.idxBits
-    rw [P.card_validSet, RowPot.idxBits_eq]
-    exact hP.numValid_le
-  · show 24 * trials ≤ 2 ^ RowPot.idxBits
-    rw [RowPot.idxBits_eq]
-    unfold trials
-    norm_num
-
-theorem two_encCount_le {c : Cache} {b : ℕ} (h : P.Inv c b) :
-    2 * P.encCount c ≤ 2 ^ RowPot.idxBits := by
-  unfold Inv at h
-  rw [RowPot.idxBits_eq]
-  omega
-
-theorem encTerm_cacheQuery_of_ne (c : Cache) {q : Query} (hq : ∀ u, q ≠ P.encQuery u)
-    (w : BitVec hashBits) : P.encTerm (c.cacheQuery q w) = P.encTerm c := by
-  letI : RowPot.RowCtx := ⟨P⟩
-  unfold encTerm
-  rw [RowPot.psi_of_ne hq]
-
-theorem encTerm_charge (hP : P.Hyp) {c : Cache} {b : ℕ} (hI : P.Inv c b) (u₀ : EncInput)
-    (hq : c (P.encQuery u₀) = none) :
-    ∑ w, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * P.encTerm (c.cacheQuery (P.encQuery u₀) w) ≤
-      P.encTerm c + κ * 2 := by
-  letI : RowPot.RowCtx := ⟨P⟩
-  obtain ⟨m₀, η₀, rfl⟩ := exists_append u₀
-  have h := RowPot.psi_charge (P.rowHyp hP) (P.two_encCount_le hI) hq
-  unfold encTerm
-  refine h.trans (le_of_eq ?_)
-  congr 1
-  rw [RowPot.idxBits_eq, κ_eq, mul_comm]
-
-theorem psi_zero_of_noEnc (c : Cache) (hc : ∀ u, c (P.encQuery u) = none) :
-    P.encTerm c = 0 := by
-  letI : RowPot.RowCtx := ⟨P⟩
-  unfold encTerm
-  rw [RowPot.psi_noEnc hc, mul_zero, ENNReal.ofReal_zero]
-
-theorem avg_finset_sum {ι : Type} (S : Finset ι) (f : ι → BitVec hashBits → ℝ≥0∞) :
-    ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * ∑ ξ ∈ S, f ξ u =
-      ∑ ξ ∈ S, ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * f ξ u := by
+theorem avg_finset_sum {ι : Type} (T : Finset ι) (f : ι → BitVec hashBits → ℝ≥0∞) :
+    ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * ∑ ξ ∈ T, f ξ u =
+      ∑ ξ ∈ T, ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * f ξ u := by
   simp only [Finset.mul_sum]
   exact Finset.sum_comm
 
@@ -293,7 +241,7 @@ theorem spr_part_charge (c : Cache) (q : Query) (hq : c q = none) (T : Finset (R
     ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         ∑ ξ ∈ T, recW P * ind (TargetHit (secondPreimageTargets P ξ) (c.cacheQuery q u)) ≤
       ∑ ξ ∈ T, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
-        sumW P T * (3 * (rate * queryCost (.inr q))) := by
+        sumW P T * (rate * queryCost (.inr q)) := by
   rw [avg_finset_sum, sumW, Finset.sum_mul, ← Finset.sum_add_distrib]
   refine Finset.sum_le_sum fun ξ _ => ?_
   rw [avg_mul', ← mul_add]
@@ -313,70 +261,80 @@ theorem spr_part_enc (hP : P.Hyp) (c : Cache) (u₀ : EncInput) (T : Finset (Rec
   simp only [he]
   exact sum_inv_card_mul _
 
-theorem ΦA_charge (hP : P.Hyp) (v : PublicData P) (T : Finset (Record P))
-    (hT : T ⊆ P.fiber₀ v) : ∀ c b q, P.InvA T c b → c q = none →
-    queryCost (.inr q) ≤ b →
-    ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * P.ΦA v T (c.cacheQuery q u) ≤
-      P.ΦA v T c + κ * sumW P (P.fiber₀ v) * queryCost (.inr q) := by
-  intro c b q hI hq _
+theorem two_rate_le_k1 (hS : S.Valid) : 2 * rate ≤ S.k1E := by
+  rw [mul_comm, rate_two]
+  exact S.rate_le_k1 hS
+
+/-- The potential is charged nothing by a fresh query in average (A1). -/
+theorem ΦA_charge (hP : P.Hyp) (hS : S.Valid) (hT : P.TierHyp S) (v : PublicData P) :
+    ∀ c b q, P.InvA v c b → c q = none → queryCost (.inr q) ≤ b →
+    ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+        P.ΦA S v (c.cacheQuery q u) (b - queryCost (.inr q)) ≤ P.ΦA S v c b := by
+  intro c b q _ hq hcost
   unfold ΦA
-  rw [avg_add', avg_add', avg_mul']
+  rw [avg_add', avg_add', avg_mul', avg_add', avg_add', sum_inv_card_mul]
   by_cases henc : ∃ u₀, q = P.encQuery u₀
   · obtain ⟨u₀, rfl⟩ := henc
-    have h1 := P.hiddenHit_charge_enc hP (beforeSigning P) T c u₀
-    have h2 := P.spr_part_enc hP c u₀ T
-    have h3 := P.encTerm_charge hP hI.2 u₀ hq
-    have hcost : (2 : ℝ≥0∞) = queryCost (.inr (P.encQuery u₀)) :=
-      two_le_queryCost_896 (by unfold Params.encQuery; rfl)
-    calc _ ≤ hiddenHitPotential (beforeSigning P) T c +
-          ∑ ξ ∈ T, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
-          sumW P (P.fiber₀ v) * (P.encTerm c + κ * 2) :=
-          add_le_add (add_le_add h1 (le_of_eq h2)) (mul_le_mul' le_rfl h3)
-      _ = _ := by rw [← hcost]; ring
+    have hc2 : queryCost (.inr (P.encQuery u₀)) = 2 := P.queryCost_enc u₀
+    rw [hc2] at hcost ⊢
+    have h1 := P.hiddenHit_charge_enc hP (beforeSigning P) (P.fiber₀ v) c u₀
+    have h2 := P.spr_part_enc hP c u₀ (P.fiber₀ v)
+    have h3 := P.pre_charge_enc S hS hT hq hcost
+    have h4 := P.PsiE_enc hS hT hq
+    have h5 := S.Kb_step_enc hS hcost
+    refine add_le_add (add_le_add h1 (le_of_eq h2)) (mul_le_mul' le_rfl ?_)
+    rw [h4]
+    calc (∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+            P.Pre S (c.cacheQuery (P.encQuery u₀) u) (b - 2)) + P.PsiE S c + S.Kb (b - 2)
+        ≤ (P.Pre S c b + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE) + P.PsiE S c +
+            S.Kb (b - 2) := by gcongr
+      _ = P.Pre S c b + P.PsiE S c +
+            (S.Kb (b - 2) + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE) := by ring
+      _ ≤ P.Pre S c b + P.PsiE S c + S.Kb b := by gcongr
   · have hne : ∀ u, q ≠ P.encQuery u := fun u h => henc ⟨u, h⟩
-    have h1 := P.hiddenHit_charge hP beforeSigning_valid v T hT c q
-    have h2 := P.spr_part_charge c q hq T
-    have h3 : ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * P.encTerm (c.cacheQuery q u) =
-        P.encTerm c := by
-      simp only [P.encTerm_cacheQuery_of_ne c hne]
+    have h1 := P.hiddenHit_charge hP beforeSigning_valid v (P.fiber₀ v) (fun ξ h => h) c q
+    have h2 := P.spr_part_charge c q hq (P.fiber₀ v)
+    have h3 : ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+        P.Pre S (c.cacheQuery q u) (b - queryCost (.inr q)) =
+        P.Pre S c (b - queryCost (.inr q)) := by
+      simp only [P.pre_of_ne S hne]
       exact sum_inv_card_mul _
-    have hs : sumW P T ≤ sumW P (P.fiber₀ v) := sumW_mono hT
-    calc _ ≤ (hiddenHitPotential (beforeSigning P) T c +
-            rate * sumW P (publicFiber (beforeSigning P) v) * queryCost (.inr q)) +
-          (∑ ξ ∈ T, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
-            sumW P (P.fiber₀ v) * (3 * (rate * queryCost (.inr q)))) +
-          sumW P (P.fiber₀ v) * P.encTerm c :=
-          add_le_add (add_le_add h1 (h2.trans (add_le_add le_rfl (mul_le_mul' hs le_rfl))))
-            (mul_le_mul' le_rfl (le_of_eq h3))
-      _ = (hiddenHitPotential (beforeSigning P) T c +
-          ∑ ξ ∈ T, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
-          sumW P (P.fiber₀ v) * P.encTerm c) +
-          (rate * sumW P (P.fiber₀ v) * queryCost (.inr q) +
-            sumW P (P.fiber₀ v) * (3 * (rate * queryCost (.inr q)))) := by
+    have h4 : ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * P.PsiE S (c.cacheQuery q u) =
+        P.PsiE S c := by
+      simp only [P.PsiE_of_ne hne]
+      exact sum_inv_card_mul _
+    have h5 := S.Kb_step hcost
+    have h6 := P.pre_mono S c (Nat.sub_le b (queryCost (.inr q)))
+    have h7 := two_rate_le_k1 hS
+    rw [h3, h4]
+    set n : ℝ≥0∞ := (queryCost (.inr q) : ℝ≥0∞)
+    calc _ ≤ (hiddenHitPotential (beforeSigning P) (P.fiber₀ v) c +
+            rate * sumW P (publicFiber (beforeSigning P) v) * n) +
+          (∑ ξ ∈ P.fiber₀ v, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
+            sumW P (P.fiber₀ v) * (rate * n)) +
+          sumW P (P.fiber₀ v) * (P.Pre S c (b - queryCost (.inr q)) + P.PsiE S c +
+            S.Kb (b - queryCost (.inr q))) := add_le_add (add_le_add h1 h2) le_rfl
+      _ = hiddenHitPotential (beforeSigning P) (P.fiber₀ v) c +
+          ∑ ξ ∈ P.fiber₀ v, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
+          sumW P (P.fiber₀ v) * (P.Pre S c (b - queryCost (.inr q)) + P.PsiE S c +
+            (S.Kb (b - queryCost (.inr q)) + 2 * rate * n)) := by
           unfold fiber₀
           ring
-      _ ≤ _ := add_le_add le_rfl (rate_quad_le _ _)
+      _ ≤ hiddenHitPotential (beforeSigning P) (P.fiber₀ v) c +
+          ∑ ξ ∈ P.fiber₀ v, recW P * ind (TargetHit (secondPreimageTargets P ξ) c) +
+          sumW P (P.fiber₀ v) * (P.Pre S c b + P.PsiE S c +
+            (S.Kb (b - queryCost (.inr q)) + S.k1E * n)) := by
+          gcongr
+      _ ≤ _ := by
+          gcongr
 
-theorem ΦA_initial (hP : P.Hyp) (v : PublicData P) (T : Finset (Record P))
-    (hT : T ⊆ P.fiber₀ v) (hG : ∀ ξ ∈ T, ξ.Good) (ζ₀ : Record P) (hζ₀ : ζ₀ ∈ P.fiber₀ v) :
-    P.ΦA v T (exposedCache (beforeSigning P) ζ₀) = 0 := by
-  have hdata : ∀ ξ ∈ P.fiber₀ v,
-      publicData (beforeSigning P) ξ = publicData (beforeSigning P) ζ₀ :=
-    fun ξ hξ => ((mem_publicFiber _ _ _).mp hξ).trans ((mem_publicFiber _ _ _).mp hζ₀).symm
-  have hexp : ∀ ξ ∈ P.fiber₀ v,
-      exposedCache (beforeSigning P) ζ₀ = exposedCache (beforeSigning P) ξ :=
-    fun ξ hξ => (exposedCache_data_eq hP beforeSigning_valid ξ ζ₀ (hdata ξ hξ)).symm
+theorem ΦA_cached (v : PublicData P) : ∀ c b q, P.InvA v c b → (c q).isSome →
+    queryCost (.inr q) ≤ b → P.ΦA S v c (b - queryCost (.inr q)) ≤ P.ΦA S v c b := by
+  intro c b q _ _ _
   unfold ΦA
-  rw [hiddenHitPotential_zero _ _ _ fun ξ hξ => by
-      rw [hexp ξ (hT hξ)]; exact exposure_disjoint _ ξ,
-    P.psi_zero_of_noEnc _ fun u => P.exposedCache_enc hP _ ζ₀ u, mul_zero, zero_add, add_zero]
-  refine Finset.sum_eq_zero fun ξ hξ => ?_
-  rw [hexp ξ (hT hξ)]
-  have : ¬ TargetHit (secondPreimageTargets P ξ) (exposedCache (beforeSigning P) ξ) := by
-    rintro ⟨q, u, hq, hu⟩
-    obtain ⟨a, -, hv, rfl, rfl⟩ := (exposedCache_some_iff hP _ ξ q u).mp hq
-    exact not_mem_extraTargets_honest hP (hG ξ hξ) a (secondPreimageTargets_query hP ξ a hv hu)
-  rw [ind_not this, mul_zero]
+  gcongr
+  · exact P.pre_mono S c (Nat.sub_le _ _)
+  · exact S.Kb_mono (Nat.sub_le _ _)
 
 theorem encCount_noEnc (c : Cache) (hc : ∀ u, c (P.encQuery u) = none) : P.encCount c = 0 := by
   unfold encCount
@@ -385,57 +343,126 @@ theorem encCount_noEnc (c : Cache) (hc : ∀ u, c (P.encQuery u) = none) : P.enc
   rw [hc u]
   simp
 
+theorem ΦA_initial (hP : P.Hyp) (hS : S.Valid) (v : PublicData P) (ζ₀ : Record P)
+    (hζ₀ : ζ₀ ∈ P.fiber₀ v) (b : ℕ) :
+    P.ΦA S v (exposedCache (beforeSigning P) ζ₀) b ≤
+      sumW P (P.fiber₀ v) * ((2 ^ 500 : ℝ≥0∞)⁻¹ + S.Kb b) := by
+  have hdata : ∀ ξ ∈ P.fiber₀ v,
+      publicData (beforeSigning P) ξ = publicData (beforeSigning P) ζ₀ :=
+    fun ξ hξ => ((mem_publicFiber _ _ _).mp hξ).trans ((mem_publicFiber _ _ _).mp hζ₀).symm
+  have hexp : ∀ ξ ∈ P.fiber₀ v,
+      exposedCache (beforeSigning P) ζ₀ = exposedCache (beforeSigning P) ξ :=
+    fun ξ hξ => (exposedCache_data_eq hP beforeSigning_valid ξ ζ₀ (hdata ξ hξ)).symm
+  have hno : ∀ u, exposedCache (beforeSigning P) ζ₀ (P.encQuery u) = none :=
+    fun u => P.exposedCache_enc hP _ ζ₀ u
+  have hspr : ∑ ξ ∈ P.fiber₀ v, recW P *
+      ind (TargetHit (secondPreimageTargets P ξ) (exposedCache (beforeSigning P) ζ₀)) = 0 := by
+    refine Finset.sum_eq_zero fun ξ hξ => ?_
+    rw [hexp ξ hξ]
+    have : ¬ TargetHit (secondPreimageTargets P ξ) (exposedCache (beforeSigning P) ξ) := by
+      rintro ⟨q, u, hq, hu⟩
+      obtain ⟨a, -, rfl, -⟩ := (exposedCache_some_iff hP _ ξ q u).mp hq
+      rw [secondPreimageTargets_query hP] at hu
+      exact Finset.notMem_empty _ hu
+    rw [ind_not this, mul_zero]
+  unfold ΦA
+  rw [hiddenHitPotential_zero _ _ _ fun ξ hξ => by
+      rw [hexp ξ hξ]; exact exposure_disjoint _ ξ,
+    hspr, P.pre_noEnc S hno, zero_add, zero_add, zero_add]
+  exact mul_le_mul' le_rfl (add_le_add (P.PsiE_noEnc hS hno) le_rfl)
+
 /-! ## The continuation after the first stage -/
 
-/-- The quantity bounded after the first stage, over the records `T`. -/
-def FA (pk : PublicKey) (T : Finset (Record P)) (x : Message × A.State) (d : Cache) : ℝ≥0∞ :=
-  ∑ ξ ∈ T, recW P * (if Cache.Hits d (hiddenCache (beforeSigning P) ξ) then 1 else
+/-- The quantity bounded after the first stage. -/
+def FA (pk : PublicKey) (v : PublicData P) (x : Message × A.State) (d : Cache) : ℝ≥0∞ :=
+  ∑ ξ ∈ P.fiber₀ v, recW P * (if Cache.Hits d (hiddenCache (beforeSigning P) ξ) then 1 else
     E (run (P.rest₂ A pk ξ.sk x) (Cache.extend d (hiddenCache (beforeSigning P) ξ))) g)
 
-theorem E_le_one' {α : Type} (p : ProbComp α) {f : α → ℝ≥0∞} (hf : ∀ x, f x ≤ 1) : E p f ≤ 1 :=
-  E_le_one p hf
+theorem rowU_le_encCount (d : Cache) (M : EMessage) : P.rowU d M ≤ P.encCount d := by
+  unfold rowU encCount
+  refine Finset.card_le_card_of_injOn (fun η => M ++ η) ?_ ?_
+  · intro η hη
+    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_setOf_eq] at hη ⊢
+    exact hη
+  · intro η₁ _ η₂ _ h
+    exact append_nonce_inj M h
 
-theorem psi_dom' (hP : P.Hyp) {d : Cache} {b : ℕ} (hI : P.Inv d b) (m : EMessage) (c : ℕ)
-    (hc1 : (P.rowFresh d m).card ≤ c + trials) (hc2 : c ≤ (P.rowFresh d m).card) :
-    ((P.rowBad d m).card : ℝ≥0∞) + c * (((P.V d).card : ℝ≥0∞) / 2 ^ 127) ≤
-      P.encTerm d * ((P.rowAcc d m).card + c * ((P.numValid : ℝ≥0∞) / 2 ^ 127)) := by
-  letI : RowPot.RowCtx := ⟨P⟩
-  have h := RowPot.psi_dom (P.rowHyp hP) (P.two_encCount_le hI) m c hc1 hc2
-  rw [RowPot.idxBits_eq, RowPot.numValid_eq] at h
-  exact h
+/-- The rate after signing covers the index charge of its class. -/
+theorem cweight_le_kappaB (hT : P.TierHyp S) {η : Nonce} {I : Index} (hI : P.Accepted I) :
+    (P.cweight (P.digit I) : ℝ≥0∞) / 2 ^ 127 ≤ P.kappaB S (some (η, I)) * 2 := by
+  have hc : (P.cweight (P.digit I) : ℝ≥0∞) / 2 ^ 127 = S.pE (P.tierI S I) := by
+    rw [Tier.Sched.pE, hT.K_eq, ← (tierI_spec hT hI).2]
+    rfl
+  rw [hc]
+  simp only [kappaB, Tier.Sched.fE]
+  rw [add_mul, ENNReal.div_mul_cancel two_ne_zero ENNReal.ofNat_ne_top,
+    show (2 ^ 128 : ℝ≥0∞)⁻¹ * 2 = (2 ^ 127)⁻¹ by
+      rw [pow_succ, ENNReal.mul_inv (Or.inl (pow_ne_zero _ two_ne_zero))
+        (Or.inl (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)), mul_assoc,
+        ENNReal.inv_mul_cancel two_ne_zero ENNReal.ofNat_ne_top, mul_one]]
+  exact le_add_tsub
 
-theorem stageA_cont (hP : P.Hyp) (pk : PublicKey) (v : PublicData P) (T₀ : Finset (Record P))
-    (hT₀ : T₀ ⊆ P.fiber₀ v) (hG : ∀ ξ ∈ T₀, ξ.Good)
-    (hpk : ∀ ξ ∈ P.fiber₀ v, ξ.pk = pk) (x : Message × A.State) (d : Cache) (b' : ℕ)
-    (hI : P.InvA T₀ d b') (hB : ∀ ξ ∈ T₀, CostAtMost (P.rest₂ A pk ξ.sk x) b') :
-    P.FA A pk T₀ x d ≤ P.ΦA v T₀ d + κ * sumW P (P.fiber₀ v) * b' := by
-  rcases T₀.eq_empty_or_nonempty with hT0 | ⟨ξ₀, hξ₀⟩
+theorem two_rate_le_kappaB (r : Option (Nonce × Index)) : 2 * rate ≤ P.kappaB S r := by
+  have h : 2 * rate = (2 ^ 128 : ℝ≥0∞)⁻¹ := by rw [mul_comm, rate_two]
+  rw [h]
+  cases r with
+  | none => exact le_rfl
+  | some b => exact le_self_add
+
+/-- **The continuation after the first stage** (A2): signing as one expectation over its
+outcomes, then the second stage. -/
+theorem stageA_cont (hP : P.Hyp) (hS : S.Valid) (hT : P.TierHyp S) (pk : PublicKey)
+    (v : PublicData P) (hpk : ∀ ξ ∈ P.fiber₀ v, ξ.pk = pk) (x : Message × A.State) (d : Cache)
+    (b' : ℕ) (hI : P.InvA v d b') (hB : ∀ ξ ∈ P.fiber₀ v, CostAtMost (P.rest₂ A pk ξ.sk x) b') :
+    P.FA A pk v x d ≤ P.ΦA S v d b' := by
+  rcases (P.fiber₀ v).eq_empty_or_nonempty with hFe | ⟨ξ₀, hξ₀⟩
   · unfold FA
-    rw [hT0, Finset.sum_empty]
+    rw [hFe, Finset.sum_empty]
     exact bot_le
-  haveI hne : Nonempty {ξ // ξ ∈ T₀} := ⟨⟨ξ₀, hξ₀⟩⟩
   set M := emsg x.1 pk with hM
-  set T := T₀.filter (fun ξ => ¬ Cache.Hits d (hiddenCache (beforeSigning P) ξ) ∧
+  set F := P.fiber₀ v with hF
+  have hFA_le : P.FA A pk v x d ≤ sumW P F := by
+    unfold FA sumW
+    refine Finset.sum_le_sum fun ξ _ => ?_
+    refine le_trans (mul_le_mul' le_rfl ?_) (le_of_eq (mul_one _))
+    split_ifs
+    · exact le_rfl
+    · exact E_le_one _ g_le_one
+  -- a row that is not good pays everything through the RowGood potential
+  by_cases hRG : ¬ P.RowGood S d M
+  · have hu : P.rowU d M ≤ 2 ^ 126 := by
+      have := P.rowU_le_encCount d M
+      have h2 := hI.2
+      unfold Inv at h2
+      omega
+    have h1 := P.one_le_PsiE hS hT hu hRG
+    refine hFA_le.trans ?_
+    unfold ΦA
+    refine le_trans ?_ le_add_self
+    calc sumW P F = sumW P F * 1 := (mul_one _).symm
+      _ ≤ sumW P F * (P.Pre S d b' + P.PsiE S d + S.Kb b') := by
+          gcongr
+          exact h1.trans (le_add_self.trans le_self_add)
+  push_neg at hRG
+  set T := F.filter (fun ξ => ¬ Cache.Hits d (hiddenCache (beforeSigning P) ξ) ∧
     ¬ TargetHit (secondPreimageTargets P ξ) d) with hTdef
-  have hTT : T ⊆ T₀ := Finset.filter_subset _ _
-  have hT : T ⊆ P.fiber₀ v := hTT.trans hT₀
-  have hTG : ∀ ξ ∈ T, ξ.Good := fun ξ hξ => hG ξ (hTT hξ)
+  have hT' : T ⊆ F := Finset.filter_subset _ _
   have hTd : ∀ ξ ∈ T, Cache.Sub (exposedCache (beforeSigning P) ξ) d ∧
       ¬ Cache.Hits d (hiddenCache (beforeSigning P) ξ) ∧
       ¬ TargetHit (secondPreimageTargets P ξ) d := by
     intro ξ hξ
     have h := (Finset.mem_filter.1 hξ).2
-    exact ⟨hI.1 ξ (hTT hξ), h.1, h.2⟩
-  set Fn : Option (Nonce × P.Idx) → Cache → ℝ≥0∞ := fun r d' => ∑ ξ ∈ T, recW P *
-    E (run (P.stB A pk x.1 x.2 (P.sigOfIdx ξ.sk r))
+    exact ⟨hI.1 ξ (hT' hξ), h.1, h.2⟩
+  set Fn : Option (Nonce × Index) → Cache → ℝ≥0∞ := fun r d' => ∑ ξ ∈ T, recW P *
+    E (run (P.stB A pk x.1 x.2 (P.sigOf ξ.sk r))
       (Cache.extend d' (hiddenCache (beforeSigning P) ξ))) g with hFn
   -- Step 1: records hit in the first stage pay their indicator; the others sign.
-  have hsplit : P.FA A pk T₀ x d ≤ hiddenHitPotential (beforeSigning P) T₀ d +
-      ∑ ξ ∈ T₀, recW P * ind (TargetHit (secondPreimageTargets P ξ) d) +
-      E (run (P.signIdx M) d) (fun p => Fn p.1 p.2) := by
+  have hsplit : P.FA A pk v x d ≤ hiddenHitPotential (beforeSigning P) F d +
+      ∑ ξ ∈ F, recW P * ind (TargetHit (secondPreimageTargets P ξ) d) +
+      E (run (P.signTier M) d) (fun p => Fn p.1 p.2) := by
     rw [hFn, E_weighted_sum, hTdef, Finset.sum_filter]
     unfold FA hiddenHitPotential
-    rw [← Finset.sum_add_distrib, ← Finset.sum_add_distrib]
+    rw [← hF, ← Finset.sum_add_distrib, ← Finset.sum_add_distrib]
     refine Finset.sum_le_sum fun ξ hξ => ?_
     by_cases hh : Cache.Hits d (hiddenCache (beforeSigning P) ξ)
     · rw [if_pos hh, ind_of hh]
@@ -446,109 +473,142 @@ theorem stageA_cont (hP : P.Hyp) (pk : PublicKey) (v : PublicData P) (T₀ : Fin
         exact mul_le_mul' le_rfl (E_le_one _ g_le_one)
       · rw [if_neg hh, ind_not hh, ind_not ht, if_pos ⟨hh, ht⟩]
         simp only [mul_zero, zero_add]
-        rw [P.E_rest₂_extend A hP pk ξ (hpk ξ (hT₀ hξ)) x d]
-  -- Step 2: signing as one disjoint case split.
-  have hB' : ∀ j : {ξ // ξ ∈ T₀},
-      CostAtMost (P.signIdx M >>= fun r => P.stB A pk x.1 x.2 (P.sigOfIdx j.1.sk r)) b' := by
-    intro j
-    have h := hB j.1 j.2
-    rw [P.rest₂_eq_signIdx A pk j.1 (hpk j.1 (hT₀ j.2))] at h
-    exact h
-  have hΦ : P.EncInvariant (fun _ : Cache => (0 : ℝ≥0∞)) := fun _ _ _ => rfl
-  have hsig := P.signRho_bound P.numValid_le' (by unfold hashBits; omega) M d
-    (fun (j : {ξ // ξ ∈ T₀}) r => P.stB A pk x.1 x.2 (P.sigOfIdx j.1.sk r)) Fn
-    (fun _ => 0) hΦ (κ * sumW P (P.fiber₀ v)) (sumW P T) (P.encTerm d) P.Inv
-    P.Inv_fresh P.Inv_cached ?_ (fun c hc1 hc2 => P.psi_dom' hP hI.2 M c hc1 hc2) hI.2 hB'
-  · -- assemble
-    refine hsplit.trans ?_
-    unfold ΦA
-    have hsT : sumW P T ≤ sumW P (P.fiber₀ v) := sumW_mono hT
-    calc hiddenHitPotential (beforeSigning P) T₀ d +
-          ∑ ξ ∈ T₀, recW P * ind (TargetHit (secondPreimageTargets P ξ) d) +
-          E (run (P.signIdx M) d) (fun p => Fn p.1 p.2)
-        ≤ hiddenHitPotential (beforeSigning P) T₀ d +
-          ∑ ξ ∈ T₀, recW P * ind (TargetHit (secondPreimageTargets P ξ) d) +
-          (0 + sumW P T * P.encTerm d + κ * sumW P (P.fiber₀ v) * b') :=
-          add_le_add le_rfl hsig
-      _ ≤ hiddenHitPotential (beforeSigning P) T₀ d +
-          ∑ ξ ∈ T₀, recW P * ind (TargetHit (secondPreimageTargets P ξ) d) +
-          (0 + sumW P (P.fiber₀ v) * P.encTerm d + κ * sumW P (P.fiber₀ v) * b') := by
-          gcongr
-      _ = _ := by ring
-  · -- the second stage, for every outcome of signing
-    intro r d' b'' hext hI' hBr
-    rcases r with _ | ⟨η₁, i₁⟩
-    · have hb0 : CostAtMost (P.stB A pk x.1 x.2 none) b'' := hBr ⟨ξ₀, hξ₀⟩
-      have h := P.stageB_none A hP pk x.1 x.2 v T hT hTG (fun ξ hξ => hpk ξ (hT hξ)) d d'
-        (P.encExt_of_signExt hext) hTd b'' hb0
-      refine le_trans ?_ (le_trans h (le_add_self))
-      exact le_of_eq rfl
-    · by_cases hpre : P.IdxPre d (M ++ η₁) i₁.val
-      · have hone : Fn (some (η₁, i₁)) d' ≤ sumW P T := by
-          rw [hFn, sumW]
-          exact Finset.sum_le_sum fun ξ _ =>
-            le_trans (mul_le_mul' le_rfl (E_le_one _ g_le_one)) (le_of_eq (mul_one _))
-        refine hone.trans ?_
-        rw [if_pos ⟨η₁, i₁, rfl, hpre⟩, mul_one, zero_add]
-        exact le_self_add
-      · have hBξ : ∀ ξ ∈ T, CostAtMost (P.stB A pk x.1 x.2
-            (some (encode (fun k => ξ.word k (afterSigning P (idxWord i₁.val) k)) η₁))) b'' := by
+        rw [P.E_rest₂_extend A hP pk ξ (hpk ξ hξ) x d]
+  -- Step 2: the budget of the second stage after all trials.
+  have hcost : ∀ ξ ∈ F, 2 * trials ≤ b' ∧ ∀ p ∈ support (run (P.signTier M) d),
+      CostAtMost (P.stB A pk x.1 x.2 (P.sigOf ξ.sk p.1)) (b' - 2 * trials) := by
+    intro ξ hξ
+    have h := hB ξ hξ
+    rw [P.rest₂_eq_signTier A pk ξ (hpk ξ hξ), signTier] at h
+    have := P.signTierLoop_cost M _ trials ∅ none b' (by simp) h
+    exact ⟨this.1, fun p hp => this.2 d p hp⟩
+  have hL : 2 * trials ≤ b' := (hcost ξ₀ hξ₀).1
+  set b'' := b' - 2 * trials with hb''
+  -- Step 3: each outcome of signing.
+  have hout : ∀ p ∈ support (run (P.signTier M) d), Fn p.1 p.2 ≤
+      sumW P F * (if ∃ b, p.1 = some b ∧
+        (P.IdxPreC d (M ++ b.1) (P.digit b.2) ∨ P.SelfCol d M p.2 b) then 1 else 0) +
+      P.kappaB S p.1 * sumW P F * b'' := by
+    intro p hp
+    have hext := P.signTier_ext M d p hp
+    rcases hr : p.1 with _ | ⟨η₁, I₁⟩
+    · have hb0 : CostAtMost (P.stB A pk x.1 x.2 none) b'' := by
+        have := (hcost ξ₀ hξ₀).2 p hp
+        rwa [hr] at this
+      have h := P.stageB_none A hP pk x.1 x.2 v T hT' (fun ξ hξ => hpk ξ (hT' hξ)) d p.2
+        (P.encExt_of_tierExt hext) hTd b'' hb0
+      refine le_trans ?_ (le_trans (le_trans h ?_) le_add_self)
+      · exact le_of_eq rfl
+      · gcongr
+        exact P.two_rate_le_kappaB none
+        exact le_of_eq (by rw [hF]; rfl)
+    · rw [hr] at hext
+      by_cases hloss : P.IdxPreC d (M ++ η₁) (P.digit I₁) ∨ P.SelfCol d M p.2 (η₁, I₁)
+      · have hone : Fn (some (η₁, I₁)) p.2 ≤ sumW P F := by
+          rw [hFn]
+          refine le_trans (Finset.sum_le_sum fun ξ _ =>
+            le_trans (mul_le_mul' le_rfl (E_le_one _ g_le_one)) (le_of_eq (mul_one _)))
+            (sumW_mono hT')
+        refine hone.trans (le_trans ?_ le_self_add)
+        rw [if_pos ⟨(η₁, I₁), rfl, hloss⟩, mul_one]
+      · push_neg at hloss
+        have hacc := (hext.2.2 _ rfl).1
+        have hBξ : ∀ ξ ∈ T, CostAtMost (P.stB A pk x.1 x.2
+            (some (encode (fun k => ξ.word k (afterSigning P I₁ k)) η₁))) b'' := by
           intro ξ hξ
-          have h := hBr ⟨ξ, hTT hξ⟩
-          rwa [P.sigOfIdx_record hP] at h
-        have h := P.stageB_some A hP pk x.1 x.2 v T hT hTG (fun ξ hξ => hpk ξ (hT hξ)) d d' η₁ i₁
-          hext hpre hTd b'' hBξ
-        have hFn' : Fn (some (η₁, i₁)) d' = ∑ ξ ∈ T, recW P * E (run (P.stB A pk x.1 x.2
-            (some (encode (fun k => ξ.word k (afterSigning P (idxWord i₁.val) k)) η₁)))
-            (Cache.extend d' (hiddenCache (beforeSigning P) ξ))) g := by
+          have h := (hcost ξ (hT' hξ)).2 p hp
+          rwa [hr, P.sigOf_record hP] at h
+        have h := P.stageB_some A hP pk x.1 x.2 v T hT' (fun ξ hξ => hpk ξ (hT' hξ)) d p.2 η₁
+          I₁ hext hloss.1 hloss.2 (P.two_rate_le_kappaB (some (η₁, I₁)))
+          (P.cweight_le_kappaB hT hacc) hTd b'' hBξ
+        have hFn' : Fn (some (η₁, I₁)) p.2 = ∑ ξ ∈ T, recW P * E (run (P.stB A pk x.1 x.2
+            (some (encode (fun k => ξ.word k (afterSigning P I₁ k)) η₁)))
+            (Cache.extend p.2 (hiddenCache (beforeSigning P) ξ))) g := by
           rw [hFn]
           refine Finset.sum_congr rfl fun ξ _ => ?_
-          rw [P.sigOfIdx_record hP]
+          rw [P.sigOf_record hP]
         rw [hFn']
-        refine h.trans ?_
-        exact le_add_self
+        exact h.trans le_add_self
+  -- Step 4: the expectation over signing.
+  have hsig : E (run (P.signTier M) d) (fun p => Fn p.1 p.2) ≤
+      sumW P F * (P.Gp S d + P.Zp S d + P.Yp S d +
+        Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum) +
+      sumW P F * b'' * ((2 ^ 128 : ℝ≥0∞)⁻¹ + ENNReal.ofReal S.Pos / 2) := by
+    calc E (run (P.signTier M) d) (fun p => Fn p.1 p.2)
+        ≤ E (run (P.signTier M) d) (fun p => sumW P F * (if ∃ b, p.1 = some b ∧
+            (P.IdxPreC d (M ++ b.1) (P.digit b.2) ∨ P.SelfCol d M p.2 b) then 1 else 0) +
+            sumW P F * b'' * P.kappaB S p.1) := by
+          refine expectedValue_mono_of_support fun p hp => (hout p hp).trans (le_of_eq ?_)
+          ring
+      _ = sumW P F * E (run (P.signTier M) d) (fun p => if ∃ b, p.1 = some b ∧
+            (P.IdxPreC d (M ++ b.1) (P.digit b.2) ∨ P.SelfCol d M p.2 b) then 1 else 0) +
+          sumW P F * b'' * E (run (P.signTier M) d) (fun p => P.kappaB S p.1) := by
+          rw [E_add', E_const_mul, E_const_mul]
+      _ ≤ _ := by
+          gcongr
+          · exact P.loss_le hS hT hRG
+          · exact P.kappaB_le hS hT hRG
+  -- Step 5: assemble.
+  refine hsplit.trans ?_
+  unfold ΦA
+  rw [← hF]
+  refine add_le_add le_rfl (le_trans hsig ?_)
+  have hL' : ((2 * trials : ℕ) : ℝ≥0∞) + b'' = b' := by
+    rw [hb'', ← Nat.cast_add, Nat.add_sub_cancel' hL]
+  have hSC := S.SCf_le hS
+  have hkp := S.kpost_le hS
+  have hGZY : P.Gp S d + P.Zp S d + P.Yp S d ≤ P.Pre S d b' := by
+    unfold Pre
+    gcongr
+    exact le_mul_of_one_le_left bot_le le_self_add
+  have hk1 : S.k1E * b' ≤ S.Kb b' := by
+    unfold Tier.Sched.Kb
+    exact le_self_add
+  calc sumW P F * (P.Gp S d + P.Zp S d + P.Yp S d +
+          Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum) +
+        sumW P F * b'' * ((2 ^ 128 : ℝ≥0∞)⁻¹ + ENNReal.ofReal S.Pos / 2)
+      ≤ sumW P F * (P.Pre S d b' + 2 * 2 ^ 19 * S.k1E) + sumW P F * b'' * S.k1E := by
+        gcongr
+    _ = sumW P F * (P.Pre S d b' + S.k1E * (((2 * trials : ℕ) : ℝ≥0∞) + b'')) := by
+        unfold trials
+        push_cast
+        ring
+    _ ≤ sumW P F * (P.Pre S d b' + P.PsiE S d + S.Kb b') := by
+        rw [hL']
+        gcongr
+        · exact le_self_add
 
 /-! ## The first stage -/
 
-theorem stageA_master (hP : P.Hyp) (v : PublicData P) (T : Finset (Record P))
-    (hT : T ⊆ P.fiber₀ v) (hG : ∀ ξ ∈ T, ξ.Good) (ζ₀ : Record P) (hζ₀ : ζ₀ ∈ P.fiber₀ v)
-    (b : ℕ) (hb : b ≤ 2 ^ 127)
-    (hB : ∀ ξ ∈ T, CostAtMost (A.choose ζ₀.pk >>= P.rest₂ A ζ₀.pk ξ.sk) b) :
+theorem stageA_master (hP : P.Hyp) (hS : S.Valid) (hT : P.TierHyp S) (v : PublicData P)
+    (ζ₀ : Record P) (hζ₀ : ζ₀ ∈ P.fiber₀ v) (b : ℕ) (hb : b ≤ 2 ^ 127)
+    (hB : ∀ ξ ∈ P.fiber₀ v, CostAtMost (A.choose ζ₀.pk >>= P.rest₂ A ζ₀.pk ξ.sk) b) :
     E (run (A.choose ζ₀.pk) (exposedCache (beforeSigning P) ζ₀))
-        (fun p => P.FA A ζ₀.pk T p.1 p.2) ≤ κ * sumW P (P.fiber₀ v) * b := by
-  rcases T.eq_empty_or_nonempty with hT0 | ⟨ξ₁, hξ₁⟩
-  · have h0 : (fun p : (Message × A.State) × Cache => P.FA A ζ₀.pk T p.1 p.2) = fun _ => 0 := by
-      funext p
-      unfold FA
-      rw [hT0, Finset.sum_empty]
-    rw [h0]
-    refine le_trans (le_of_eq ?_) bot_le
-    exact expectedValue_const (by simp) 0 |>.trans rfl
-  haveI hne : Nonempty {ξ // ξ ∈ T} := ⟨⟨ξ₁, hξ₁⟩⟩
+        (fun p => P.FA A ζ₀.pk v p.1 p.2) ≤
+      sumW P (P.fiber₀ v) * ((2 ^ 500 : ℝ≥0∞)⁻¹ + S.Kb b) := by
+  haveI hne : Nonempty {ξ // ξ ∈ P.fiber₀ v} := ⟨⟨ζ₀, hζ₀⟩⟩
   have hdata : ∀ ξ ∈ P.fiber₀ v,
       publicData (beforeSigning P) ξ = publicData (beforeSigning P) ζ₀ :=
     fun ξ hξ => ((mem_publicFiber _ _ _).mp hξ).trans ((mem_publicFiber _ _ _).mp hζ₀).symm
   have hpk : ∀ ξ ∈ P.fiber₀ v, ξ.pk = ζ₀.pk :=
     fun ξ hξ => data_pk_eq _ ξ ζ₀ (hdata ξ hξ)
-  have hF : ∀ (x : Message × A.State) (d : Cache) (b' : ℕ), P.InvA T d b' →
-      (∀ j : {ξ // ξ ∈ T}, CostAtMost (P.rest₂ A ζ₀.pk j.1.sk x) b') →
-      P.FA A ζ₀.pk T x d ≤ P.ΦA v T d + κ * sumW P (P.fiber₀ v) * b' :=
-    fun x d b' hI hB' => P.stageA_cont A hP ζ₀.pk v T hT hG hpk x d b' hI
-      fun ξ hξ => hB' ⟨ξ, hξ⟩
-  have hI0 : P.InvA T (exposedCache (beforeSigning P) ζ₀) b := by
+  have hF : ∀ (x : Message × A.State) (d : Cache) (b' : ℕ), P.InvA v d b' →
+      (∀ j : {ξ // ξ ∈ P.fiber₀ v}, CostAtMost (P.rest₂ A ζ₀.pk j.1.sk x) b') →
+      P.FA A ζ₀.pk v x d ≤ P.ΦA S v d b' :=
+    fun x d b' hI hB' => P.stageA_cont A hP hS hT ζ₀.pk v hpk x d b' hI fun ξ hξ => hB' ⟨ξ, hξ⟩
+  have hI0 : P.InvA v (exposedCache (beforeSigning P) ζ₀) b := by
     refine ⟨fun ξ hξ => ?_, ?_⟩
-    · rw [exposedCache_data_eq hP beforeSigning_valid ζ₀ ξ (hdata ξ (hT hξ)).symm]
+    · rw [exposedCache_data_eq hP beforeSigning_valid ζ₀ ξ (hdata ξ hξ).symm]
       exact Cache.Sub.refl _
     · unfold Inv
       rw [P.encCount_noEnc _ fun u => P.exposedCache_enc hP _ ζ₀ u, mul_zero, zero_add]
       exact hb
-  have h := master_family (α := Message × A.State) (β := Bool) (J := {ξ // ξ ∈ T})
-    (κ * sumW P (P.fiber₀ v)) (P.ΦA v T) (P.InvA T) (P.InvA_fresh T) (P.InvA_cached T)
-    (P.ΦA_charge hP v T hT) (A.choose ζ₀.pk) (fun j => P.rest₂ A ζ₀.pk j.1.sk)
-    (fun x d => P.FA A ζ₀.pk T x d) hF (exposedCache (beforeSigning P) ζ₀) b hI0
+  have h := master_budget_family (α := Message × A.State) (β := Bool) (J := {ξ // ξ ∈ P.fiber₀ v})
+    (P.ΦA S v) (P.InvA v) (P.InvA_fresh v) (P.InvA_cached v)
+    (P.ΦA_charge hP hS hT v) (P.ΦA_cached v) (A.choose ζ₀.pk) (fun j => P.rest₂ A ζ₀.pk j.1.sk)
+    (fun x d => P.FA A ζ₀.pk v x d) hF (exposedCache (beforeSigning P) ζ₀) b hI0
     (fun j => hB j.1 j.2)
-  rw [P.ΦA_initial hP v T hT hG ζ₀ hζ₀, zero_add] at h
-  exact h
+  exact h.trans (P.ΦA_initial hP hS v ζ₀ hζ₀ b)
 
 end Params
 

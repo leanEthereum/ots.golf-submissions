@@ -1,13 +1,13 @@
-import Submissions.UpperLeanIsa.SchemeGroup3
+import Submissions.UpperLeanIsa.TierSchedule
 import Submissions.UpperLeanIsa.BasicProperties
 
 /-!
 # Concrete admissibility hypotheses
 
-The effective fields tile 127 bits and the tuples determine that index. Base-9 tags identify
-all 655 chain steps. Chain, index, and seven root metadata values are distinct field powers.
-The concrete budgets are 1326 key-generation compressions, at most 2^20 signing compressions,
-and 210 verification compressions.
+The classes follow the certified tier schedule `Tier.g1281Sched`. Base-9 tags identify all 625
+chain steps. Chain, index, and nine root metadata values are distinct field powers. The concrete
+budgets are 1268 key-generation compressions, at most 2^20 signing compressions, and 196
+verification compressions.
 -/
 
 open OracleSpec OracleComp
@@ -41,33 +41,31 @@ theorem tag_inj (k k' : Fin numChains) (j j' : ℕ) (hj : j + 1 < len k) (hj' : 
 theorem hyp : params.Hyp where
   len_pos := fun k => (Nat.zero_le _).trans_lt (digit_lt 0 k)
   digit_lt := digit_lt
-  digit_inj := digit_inj
   layer_pos := by decide
   tag_inj := tag_inj
   chain_idx := chainMd_ne
   chain_root := chainMd_ne_root
   root_idx := rootMd_ne
   root_inj := rootMd_inj
-  numValid_ge := numValid_ge
-  numValid_le := by rw [numValid_eq]; norm_num
+  tier := ⟨Tier.g1281Sched, Tier.g1281Sched_valid, tierHyp⟩
   keygen_le := by
-    change 2 * (∑ k : Fin 42, (lenN k - 1)) + 16 ≤ 2 ^ 20
+    change 2 * (∑ k : Fin 42, (lenN k - 1)) + 18 ≤ 2 ^ 20
     rw [steps_eq]; norm_num
-  verify_le := by change 18 + 2 * 96 ≤ 2 ^ 20; norm_num
+  verify_le := by change 20 + 2 * 88 ≤ 2 ^ 20; norm_num
   len_zero := by change 2 ≤ lenN 0; decide
 
 /-- **Admissibility of HL-GROUP-3.** -/
 theorem admissible : scheme.Admissible := params.admissible hyp
 
-/-- Key generation of HL-GROUP-3 costs 1326 compressions on every path. -/
-theorem keygen_cost : CostAtMost params.keygen 1326 := by
+/-- Key generation of HL-GROUP-3 costs 1268 compressions on every path. -/
+theorem keygen_cost : CostAtMost params.keygen 1268 := by
   have h := params.cost_keygen
-  have e : (∑ k : Fin numChains, (params.len k - 1)) = 655 := steps_eq
+  have e : (∑ k : Fin numChains, (params.len k - 1)) = 625 := steps_eq
   rwa [e] at h
 
-/-- Verification of HL-GROUP-3 costs at most 210 compressions on every path. -/
+/-- Verification of HL-GROUP-3 costs at most 196 compressions on every path. -/
 theorem verify_cost (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (params.verify pk m bits) 210 :=
+    CostAtMost (params.verify pk m bits) 196 :=
   params.cost_verify pk m bits
 
 end Group3

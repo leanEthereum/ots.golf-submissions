@@ -123,13 +123,7 @@ def Hidden (d : Cut) : Loc P → Prop
 theorem hidden_inl (d : Cut) (k : Fin numChains) (j : Fin (P.len k - 1)) :
     Hidden d (.inl ⟨k, j⟩) ↔ j.val < d k := Iff.rfl
 
-theorem not_hidden_inr (d : Cut) (r : Fin 8) : ¬ Hidden (P := P) d (.inr r) := fun h => h
-
-theorem Record.validAt_of_hidden (ξ : Record P) {d : Cut} {a : Loc P} (h : Hidden d a) :
-    ξ.ValidAt a := by
-  cases a with
-  | inl a => exact ξ.validAt_inl a
-  | inr r => exact absurd h (not_hidden_inr d r)
+theorem not_hidden_inr (d : Cut) (r : Fin 9) : ¬ Hidden (P := P) d (.inr r) := fun h => h
 
 variable (P) in
 /-- The data visible at a cut. -/
@@ -223,7 +217,7 @@ theorem data_chain_eq (d : Cut) (ξ ζ : Record P)
 
 attribute [local semireducible] publicData in
 theorem data_root_eq (d : Cut) (ξ ζ : Record P)
-    (h : publicData d ξ = publicData d ζ) (r : Fin 8) :
+    (h : publicData d ξ = publicData d ζ) (r : Fin 9) :
     ξ.2 (.inr r) = ζ.2 (.inr r) :=
   Option.some.inj (congrArg (fun v : PublicData P => v.2 (.inr r)) h)
 
@@ -247,7 +241,7 @@ theorem data_rootState_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
   cases r with
   | zero => rw [Record.rootState_zero, Record.rootState_zero, data_top_eq hd ξ ζ h]
   | succ r =>
-    by_cases hr : r < 8
+    by_cases hr : r < 9
     · rw [Record.rootState_succ_lt _ r hr, Record.rootState_succ_lt _ r hr,
         data_root_eq d ξ ζ h ⟨r, hr⟩]
     · rw [Record.rootState_succ_ge _ r hr, Record.rootState_succ_ge _ r hr]
@@ -255,18 +249,7 @@ theorem data_rootState_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
 theorem data_pk_eq (d : Cut) (ξ ζ : Record P) (h : publicData d ξ = publicData d ζ) :
     ξ.pk = ζ.pk := by
   unfold Record.pk
-  rw [data_root_eq d ξ ζ h 7]
-
-/-- Separation is public at every cut. -/
-theorem data_sep_iff (d : Cut) (ξ ζ : Record P) (h : publicData d ξ = publicData d ζ) :
-    ξ.Sep ↔ ζ.Sep := by
-  unfold Record.Sep Record.lastTag
-  rw [data_root_eq d ξ ζ h 6]
-
-theorem data_validAt_iff (d : Cut) (ξ ζ : Record P) (h : publicData d ξ = publicData d ζ)
-    (a : Loc P) : ξ.ValidAt a ↔ ζ.ValidAt a := by
-  unfold Record.ValidAt
-  rw [data_sep_iff d ξ ζ h]
+  rw [data_root_eq d ξ ζ h 8]
 
 theorem exposed_query_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
     (h : publicData d ξ = publicData d ζ) (a : Loc P) (ha : ¬ Hidden d a) :
@@ -335,17 +318,16 @@ theorem hiddenCache_some_iff (hP : P.Hyp) (d : Cut) (ξ : Record P) (q : Query)
     | some a =>
       by_cases ha : Hidden d a
       · simp only [hiddenCache, hl, if_pos ha] at h
-        obtain ⟨b, hv, hb, hu⟩ := (ξ.cache_some_iff hP q u).mp h
-        have he : b = a := Option.some.inj ((hb ▸ queryLocation_query hP ξ b hv).symm.trans hl)
+        obtain ⟨b, hb, hu⟩ := (ξ.cache_some_iff hP q u).mp h
+        have he : b = a := Option.some.inj ((hb ▸ queryLocation_query hP ξ b).symm.trans hl)
         exact ⟨b, he ▸ ha, hb, hu⟩
       · simp only [hiddenCache, hl, if_neg ha, reduceCtorEq] at h
   · rintro ⟨a, ha, rfl, rfl⟩
-    have hv := ξ.validAt_of_hidden ha
-    simp only [hiddenCache, queryLocation_query hP ξ a hv, if_pos ha, Record.cache_query hP ξ a hv]
+    simp only [hiddenCache, queryLocation_query hP, if_pos ha, Record.cache_query hP]
 
 theorem exposedCache_some_iff (hP : P.Hyp) (d : Cut) (ξ : Record P) (q : Query)
     (u : BitVec hashBits) :
-    exposedCache d ξ q = some u ↔ ∃ a, ¬ Hidden d a ∧ ξ.ValidAt a ∧ ξ.query a = q ∧ ξ.2 a = u := by
+    exposedCache d ξ q = some u ↔ ∃ a, ¬ Hidden d a ∧ ξ.query a = q ∧ ξ.2 a = u := by
   constructor
   · intro h
     cases hl : queryLocation P q with
@@ -354,11 +336,11 @@ theorem exposedCache_some_iff (hP : P.Hyp) (d : Cut) (ξ : Record P) (q : Query)
       by_cases ha : Hidden d a
       · simp only [exposedCache, hl, if_pos ha, reduceCtorEq] at h
       · simp only [exposedCache, hl, if_neg ha] at h
-        obtain ⟨b, hv, hb, hu⟩ := (ξ.cache_some_iff hP q u).mp h
-        have he : b = a := Option.some.inj ((hb ▸ queryLocation_query hP ξ b hv).symm.trans hl)
-        exact ⟨b, he ▸ ha, hv, hb, hu⟩
-  · rintro ⟨a, ha, hv, rfl, rfl⟩
-    simp only [exposedCache, queryLocation_query hP ξ a hv, if_neg ha, Record.cache_query hP ξ a hv]
+        obtain ⟨b, hb, hu⟩ := (ξ.cache_some_iff hP q u).mp h
+        have he : b = a := Option.some.inj ((hb ▸ queryLocation_query hP ξ b).symm.trans hl)
+        exact ⟨b, he ▸ ha, hb, hu⟩
+  · rintro ⟨a, ha, rfl, rfl⟩
+    simp only [exposedCache, queryLocation_query hP, if_neg ha, Record.cache_query hP]
 
 theorem hiddenCache_isSome_iff (hP : P.Hyp) (d : Cut) (ξ : Record P) (q : Query) :
     (hiddenCache d ξ q).isSome ↔ ∃ a, Hidden d a ∧ ξ.query a = q := by
@@ -377,11 +359,11 @@ theorem exposedCache_data_eq (hP : P.Hyp) {d : Cut} (hd : ValidCut P d) (ξ ζ :
   intro u
   rw [exposedCache_some_iff hP, exposedCache_some_iff hP]
   constructor
-  · rintro ⟨a, ha, hv, hq, hu⟩
-    exact ⟨a, ha, (data_validAt_iff d ξ ζ h a).mp hv, (exposed_query_eq hd ξ ζ h a ha).symm.trans hq,
+  · rintro ⟨a, ha, hq, hu⟩
+    exact ⟨a, ha, (exposed_query_eq hd ξ ζ h a ha).symm.trans hq,
       (exposed_answer_eq d ξ ζ h a ha).symm.trans hu⟩
-  · rintro ⟨a, ha, hv, hq, hu⟩
-    exact ⟨a, ha, (data_validAt_iff d ξ ζ h a).mpr hv, (exposed_query_eq hd ξ ζ h a ha).trans hq,
+  · rintro ⟨a, ha, hq, hu⟩
+    exact ⟨a, ha, (exposed_query_eq hd ξ ζ h a ha).trans hq,
       (exposed_answer_eq d ξ ζ h a ha).trans hu⟩
 
 /-- The exposed and hidden caches of a record are its programmed points: none at index
@@ -390,15 +372,15 @@ theorem hiddenCache_idx (hP : P.Hyp) (d : Cut) (ξ : Record P) (m : Message) (η
     (pk : PublicKey) : hiddenCache d ξ ⟨896, P.idxInput m η pk⟩ = none := by
   rcases h : hiddenCache d ξ ⟨896, P.idxInput m η pk⟩ with _ | u
   · rfl
-  · obtain ⟨a, hh, ha, -⟩ := (hiddenCache_some_iff hP d ξ _ u).mp h
-    exact absurd ha (ξ.query_ne_idx hP a (ξ.validAt_of_hidden hh) m η pk)
+  · obtain ⟨a, -, ha, -⟩ := (hiddenCache_some_iff hP d ξ _ u).mp h
+    exact absurd ha (ξ.query_ne_idx hP a m η pk)
 
 theorem exposedCache_idx (hP : P.Hyp) (d : Cut) (ξ : Record P) (m : Message) (η : Nonce)
     (pk : PublicKey) : exposedCache d ξ ⟨896, P.idxInput m η pk⟩ = none := by
   rcases h : exposedCache d ξ ⟨896, P.idxInput m η pk⟩ with _ | u
   · rfl
-  · obtain ⟨a, -, hv, ha, -⟩ := (exposedCache_some_iff hP d ξ _ u).mp h
-    exact absurd ha (ξ.query_ne_idx hP a hv m η pk)
+  · obtain ⟨a, -, ha, -⟩ := (exposedCache_some_iff hP d ξ _ u).mp h
+    exact absurd ha (ξ.query_ne_idx hP a m η pk)
 
 /-! ## Guessing a hidden word -/
 
@@ -553,8 +535,7 @@ theorem hidden_input_charge (hP : P.Hyp) (d : Cut) (hd : ValidCut P d) (v : Publ
         rw [hiddenCache_isSome_iff hP]
         constructor
         · rintro ⟨b, _, hb⟩
-          have hbe := location_eq_of_query_eq hP ξ ζ b (.inl ⟨k, j⟩)
-            (ξ.validAt_of_hidden (by assumption)) (ζ.validAt_inl _) hb
+          have hbe := location_eq_of_query_eq hP ξ ζ b (.inl ⟨k, j⟩) hb
           subst hbe
           exact (record_chain_query_eq_iff ξ ζ k j).mp hb
         · intro h
