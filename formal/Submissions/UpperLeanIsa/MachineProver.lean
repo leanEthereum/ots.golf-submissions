@@ -145,7 +145,7 @@ def hiC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 128 128)
 
 /-- The honest landing product before group `u`. -/
 def gpV (I : Word) (u : ℕ) : E :=
-  ofK (LeanIsaFieldRescale.initialProduct 88 (hxs T I 0) *
+  ofK (LeanIsaFieldRescale.initialProduct 87 (hxs T I 0) *
     LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, cost T w (hxs T I (w + 1))))
 
 /-- The home chain of `XH` pair `i`. -/

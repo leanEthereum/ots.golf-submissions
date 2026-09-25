@@ -4,8 +4,8 @@ import Submissions.UpperLeanIsa.MachineHonestPath
 # The HL-GROUP-3 machine submission and its machine clauses
 
 * `machineSubmission P T`: the layer scheme `P.scheme`, the HL bytecode `program T`, memory
-  `2 ^ 16`, the honest prover `prover P T` and the step count `206` (every completing run
-  executes exactly `206` instructions, `totalSteps_eq`).
+  `2 ^ 16`, the honest prover `prover P T` and the step count `205` (every completing run
+  executes exactly `205` instructions, `totalSteps_eq`).
 * `faithful`: under every fixed table, the honest run completes when the verifier accepts
   (`honest_run`) and only then (`fixed_sound`).
 * `machine_sound`, `machine_cycles`, `machine_valid`, `machine_seededRows`: the other machine
@@ -27,7 +27,7 @@ def machineSubmission (P : Params) (T : Tab) : LeanIsa.Submission where
   program := program T
   memLog := 16
   prover := prover P T
-  steps := fun _ _ _ => 206
+  steps := fun _ _ _ => 205
 
 variable {P : Params} {T : Tab}
 
@@ -54,27 +54,27 @@ theorem faithful (hT : T.Hyp) (hC : Compat P T) : (machineSubmission P T).Faithf
   intro f
   have hrun : simulateQ (unifFwdAnswerImpl f) ((machineSubmission P T).honestRun pk m bits) =
       (fun o : Option ℕ => o.isSome) <$> simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 206
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 205
           Regs.initial) := by
     show simulateQ _ (prover P T pk m bits >>= fun L => (fun o : Option ℕ => o.isSome) <$>
-      LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits L) 206 Regs.initial) = _
+      LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits L) 205 Regs.initial) = _
     rw [simulateQ_bind, fixed_prover, pure_bind, simulateQ_map]
   have hver : (machineSubmission P T).scheme.verify pk m bits = P.verify pk m bits := rfl
   have hs := fun c (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 206
+      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 205
         Regs.initial))) =>
     fixed_sound hT hC (le_refl 16) (by norm_num) f pk m bits _ h
   have hh : ∀ (h1 : bits.length = sigBits) (h2 : P.Accepted (idxValue f P m (decodeNonce bits) pk))
       (h3 : rootValue f P (topsOf f P (idxValue f P m (decodeNonce bits) pk) bits) = pk),
       simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 206
-          Regs.initial) = pure (some 1088) :=
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 205
+          Regs.initial) = pure (some 1078) :=
     fun h1 h2 h3 => honest_run hT hC h1
       (by simpa only [idxValue, indexSlice_effective, IF, idxOf, y0F] using h2)
       (by simpa only [idxValue, indexSlice_effective, IF, idxOf, y0F] using h3)
   rw [simulateQ_bind, hrun, hver]
   generalize simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost (program T)
-    (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 206 Regs.initial) = X at hs hh ⊢
+    (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 205 Regs.initial) = X at hs hh ⊢
   simp only [simulateQ_bind, simulateQ_pure, fixed_verify, pure_bind]
   intro hmem
   rw [mem_support_bind_iff] at hmem
@@ -100,12 +100,12 @@ theorem faithful (hT : T.Hyp) (hC : Compat P T) : (machineSubmission P T).Faithf
 theorem machine_sound (hT : T.Hyp) (hC : Compat P T) : (machineSubmission P T).Sound :=
   sound hT hC (machineSubmission P T) rfl rfl
 
-/-- **Cycles** for the machine submission: every completing run costs `1208`. -/
+/-- **Cycles** for the machine submission: every completing run costs `1198`. -/
 theorem machine_cycles (hT : T.Hyp) : (machineSubmission P T).CyclesAtMost claim :=
   cycles hT (machineSubmission P T) rfl
 
 /-- The claim constant. -/
-theorem claim_eq : claim = 1208 := rfl
+theorem claim_eq : claim = 1198 := rfl
 
 /-- **Valid** bytecode. -/
 theorem machine_valid : LeanIsa.BytecodeValid (machineSubmission P T).program := valid T

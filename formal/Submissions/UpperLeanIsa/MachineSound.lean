@@ -12,7 +12,7 @@ signature that the scheme `P` (any parameters with `Compat P T`) accepts under t
 2. The index `BLAKE2S` is the scheme's index query; its low half `I` is the index cell.
 3. The tie accumulates the field values into the index cell (`acc_eq`), so the group fields of
    `I` are `xs (u + 1)` and the digits are the table coordinates; the exponent identity
-   (`layer_of_facts`, hash-free) gives `xs 0 + Σ costs = 88`, so the free digit is `xs 0` and `I`
+   (`layer_of_facts`, hash-free) gives `xs 0 + Σ costs = 87`, so the free digit is `xs 0` and `I`
    is accepted.
 4. The inline `BLAKE2S` compute the verifier's chain tops (`top_eq`), the nine root calls in the
    home blocks compute its root (`root_state`), and the last copy compares it with the public key.

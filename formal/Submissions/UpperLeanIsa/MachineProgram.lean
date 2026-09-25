@@ -3,7 +3,7 @@ import Submissions.UpperLeanIsa.MachineLayout
 import Submissions.UpperLeanIsa.LengthGate
 
 /-!
-# The 1208-cycle bytecode
+# The 1198-cycle bytecode
 
 A 20-slot prologue checks the 5503-bit length and pins ONE with one DEREF, then pins g
 and fifteen additional cost constants
@@ -16,19 +16,19 @@ longer copies it. Group 0 has two block regions: frame 1 (`s > 0`, the top is re
 chain's output cell) and frame 14 (`s = 0`, the top is the signature cell). The free block of
 digit `s` dispatches the first group in frame `frG0 s`, so the variant is forced by `s`.
 
-The free block seeds g^sentinel / C_88 * C_s. Each group multiplies the landing product by its
-cost factor; the exit jumps to the last product GP_13 = g^(sentinel + Q (s + Σ costs - 88)).
-Only the layer s + Σ costs = 88 lands on the sentinel; every other reachable total lands on a
+The free block seeds g^sentinel / C_87 * C_s. Each group multiplies the landing product by its
+cost factor; the exit jumps to the last product GP_13 = g^(sentinel + Q (s + Σ costs - 87)).
+Only the layer s + Σ costs = 87 lands on the sentinel; every other reachable total lands on a
 pad (sentinel - 5 … sentinel - 1) or past the bytecode (`seed_table`, hash-free). Group 0 is the
 home of root call 1, groups 1 … 4 export the cv words of calls 0 and 2 … 6, groups 5 and 6 are
 the homes of calls 0 and 7, groups 7 … 11 those of calls 2 … 6, and group 12 that of call 8.
-The image is committed, so call 1 may run before call 0 writes its state. Designated high-half
+The image is committed, so call 1 may run before call 0 is checked. Designated high-half
 tops occupy adjacent cv cells without an extra copy.
 
 Every live field value has its own block (aliases of a tuple walk the same chains). The dummy
 entries have no blocks. Costs are at most 16, so no block multiplies by `C_17`.
-Every completing run executes 206 instructions: 108 non-hash and 98 BLAKE2S instructions.
-Its cost is 108+10*98+120=1208. Builders are irreducible; slots decode by cost-band arithmetic.
+Every completing run executes 205 instructions: 108 non-hash and 97 BLAKE2S instructions.
+Its cost is 108+10*97+120=1198. Builders are irreducible; slots decode by cost-band arithmetic.
 -/
 
 namespace OptimalOTS.HLG3
@@ -345,7 +345,7 @@ def chainOp (k d t dst : ℕ) : CInstr :=
 /-- The `d` steps of chain `k`. -/
 def chainOps (k d dst : ℕ) : List CInstr := (List.range d).map (fun t => chainOp k d t dst)
 
-/-- The straight part of the prologue (slots `0 … 19`). -/
+/-- The straight part of the prologue (slots `0 … 18`). -/
 def proList : List CInstr :=
   [.init, .setc gCell gV] ++
     ((List.range 15).map (fun c => .setc (cCell (c + 1)) (cV (c + 1)))) ++
@@ -366,7 +366,7 @@ def frG0 (s : ℕ) : ℕ := if s = 0 then 14 else 1
 /-- The straight part of the free chain's block of digit `s`: the seed, the `s` chain steps, and
 the first group's `MUL(H, g, H')`. -/
 def fbody (s : ℕ) : List CInstr :=
-  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 88 s))] ++
+  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 87 s))] ++
   (if s = 0 then [] else chainOps 0 s tfCell) ++ [.mul (hCell (frG0 s)) gCell (h1Cell (frG0 s))]
 
 /-- The tie of field value `v` of group `u`. -/

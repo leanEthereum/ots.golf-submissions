@@ -12,11 +12,12 @@ The first group homes root call 1; four exporter groups precede the homes of cal
 
 Tables with aliases: the table of a group lists, per cost `c`, `nT` tuples of digit sum `c`, each at
 `muT` adjacent field values (the first `nT` lex tuples with bounded digits). The first group, the
-(4,11) groups and the exporters have multiplicity 1; the (3,10) groups have multiplicities 2, 8, 2
-at costs 1, 2, 3. The values past the live bands are *dummies* (one per (3,10) table): an index
-with a dummy field gets free digit `[gsum = 88]`, so its digit sum is never 88. Otherwise chain 0
-supplies the free digit 88-gsum when it lies in [0,63]. Acceptance is exactly: no dummy field and
-25 ≤ gsum ≤ 88. A class is the digit vector of an accepted index; its accepted indices number the
+(4,11) groups and the exporters have multiplicity 1; the (3,10) groups have multiplicities 2 and 8
+at costs 1 and 3. The generic acceptance predicate handles values past the live bands as *dummies*.
+All four concrete tables are full, so there are no concrete dummy indices. An index
+with a dummy field gets free digit `[gsum = 87]`, so its digit sum is never 87. Otherwise chain 0
+supplies the free digit 87-gsum when it lies in [0,63]. Acceptance is exactly: no dummy field and
+24 ≤ gsum ≤ 87. A class is the digit vector of an accepted index; its accepted indices number the
 product of the field multiplicities (`weight_eq`). The concrete chains have 625 steps in total.
 
 With Q=2^60, tags are the three base-9 digits of each step position encoded as g^(Q*d).
@@ -60,22 +61,20 @@ def shLen (s i : ℕ) : ℕ := if s = 2 then 17 else if s = 1 ∧ i = 0 then 12 
 
 /-- Tuples of each cost. -/
 def shN (s : ℕ) : List ℕ :=
-  if s = 0 then [1, 3, 6, 9, 15, 21, 27, 35, 45, 55, 65, 78, 91, 59, 2]
-  else if s = 1 then [0, 4, 10, 20, 34, 55, 84, 120, 165, 219, 286, 363, 454, 229, 1, 0, 4]
-  else if s = 2 then [1, 3, 6, 10, 15, 21, 28, 36, 44, 55, 66, 78, 91, 105, 120, 136, 153]
+  if s = 0 then [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57]
+  else if s = 1 then [1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229]
+  else if s = 2 then [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 135]
   else [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57]
 
 /-- Field values per tuple of each cost (`1` for an empty band). -/
 def shMu (s : ℕ) : List ℕ :=
-  if s = 2 then [1, 2, 8, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] else []
+  if s = 2 then [1, 2, 1, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] else []
 
 /-- Cumulative band sizes: entry `c` counts the live values of cost `< c`. -/
 def shCum (s : ℕ) : List ℕ :=
-  if s = 0 then [0, 1, 4, 10, 19, 34, 55, 82, 117, 162, 217, 282, 360, 451, 510, 512]
-  else if s = 1 then
-    [0, 0, 4, 14, 34, 68, 123, 207, 327, 492, 711, 997, 1360, 1814, 2043, 2044, 2044, 2048]
-  else if s = 2 then
-    [0, 1, 7, 55, 75, 90, 111, 139, 175, 219, 274, 340, 418, 509, 614, 734, 870, 1023]
+  if s = 0 then [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512]
+  else if s = 1 then [0, 1, 5, 15, 35, 70, 126, 210, 330, 495, 715, 1001, 1365, 1819, 2048]
+  else if s = 2 then [0, 1, 7, 13, 93, 108, 129, 157, 193, 238, 293, 359, 437, 528, 633, 753, 889, 1024]
   else [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512]
 
 /-- Number of cost bands of shape `s`. -/
@@ -437,7 +436,7 @@ def field (u : ℕ) (I : Index) : ℕ := digitW ubits I.toNat u
 def gsum (I : Index) : ℕ := ∑ u ∈ Finset.range 13, cost u (field u I)
 
 /-- The free chain's digit: the layer minus the total cost, when that is in `[0, 63]`. -/
-def freeDigit (c : ℕ) : ℕ := if 25 ≤ c ∧ c ≤ 88 then 88 - c else 0
+def freeDigit (c : ℕ) : ℕ := if 24 ≤ c ∧ c ≤ 87 then 87 - c else 0
 
 /-- The live entries of unit `u`. -/
 def cut (u : ℕ) : ℕ := cutS (ushape u)
@@ -446,10 +445,10 @@ def cut (u : ℕ) : ℕ := cutS (ushape u)
 entries, and the free digit keeps dummy indices off the layer. -/
 def dummy (I : Index) : Prop := ∃ u < 13, cut u ≤ field u I
 
-/-- The free digit of an index: `[gsum = 88]` for a dummy (so its digit sum is never `88`),
+/-- The free digit of an index: `[gsum = 87]` for a dummy (so its digit sum is never `87`),
 else `freeDigit (gsum I)`. -/
 def freeD (I : Index) : ℕ :=
-  if dummy I then (if gsum I = 88 then 1 else 0) else freeDigit (gsum I)
+  if dummy I then (if gsum I = 87 then 1 else 0) else freeDigit (gsum I)
 
 /-- Digit of chain `k` (on naturals). -/
 def digitN (I : Index) (k : ℕ) : ℕ :=
@@ -521,7 +520,7 @@ def rootExp (r : ℕ) : ℕ := (r + 1) * 1152921504606846976
 def len (k : Fin numChains) : ℕ := lenN k
 
 /-- The accepted layer. -/
-def layer : ℕ := 88
+def layer : ℕ := 87
 
 /-- Digit of chain `k`. -/
 def digit (I : Index) (k : Fin numChains) : ℕ := digitN I k
@@ -646,8 +645,8 @@ theorem sum_digits (I : Index) :
 
 /-- **Acceptance** is a window on the total cost. -/
 theorem accepted_iff (I : Index) :
-    params.Accepted I ↔ ¬ dummy I ∧ 25 ≤ gsum I ∧ gsum I < 89 := by
-  change ∑ k : Fin numChains, digit I k = 88 ↔ _
+    params.Accepted I ↔ ¬ dummy I ∧ 24 ≤ gsum I ∧ gsum I < 88 := by
+  change ∑ k : Fin numChains, digit I k = 87 ↔ _
   rw [sum_digits]
   unfold freeD freeDigit
   by_cases hd : dummy I

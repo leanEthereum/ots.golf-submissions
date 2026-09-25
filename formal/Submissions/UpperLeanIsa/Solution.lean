@@ -3,7 +3,7 @@ import Submissions.UpperLeanIsa.MachineGroup3
 
 /-! The leanISA submission: the HL-GROUP-3 layer scheme (`SchemeGroup3.lean`: a free chain and 13
 groups of 3 or 4 chains whose digits are read from (cost, lex) tables with aliased entries of the
-index's group fields, on the layer `88`, rarest-cut signing), its uniform-cost hinted-landing bytecode
+index's group fields, on the layer `87`, rarest-cut signing), its uniform-cost hinted-landing bytecode
 (`MachineProgram.lean`) and the six certificate clauses. -/
 
 namespace OptimalOTS.Challenge.UpperLeanIsa
@@ -16,8 +16,8 @@ noncomputable def submission : LeanIsa.Submission := HLG3.g3machine
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1208` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1208 where
+`1198` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1198 where
   admissible := Group3.admissible
   secure := Group3.secure
   valid := HLG3.g3_valid

@@ -2,19 +2,18 @@ import Submissions.UpperLeanIsa.ConstraintMath
 import Submissions.UpperLeanIsa.FieldRescale
 
 /-!
-# Layout and interfaces for the 1209-cycle Group3 machine
+# Layout and interfaces for the 1198-cycle Group3 machine
 
 The raw 128-bit index has widths [10,9,9,9,9,11,11,10,10,10,10,10,10]. Two adjacent entries
 of its first field share a tuple; the tie still checks every raw bit. MachineTable proves
 that these raw fields implement the 127-bit effective scheme index.
 
-Cost-banded blocks follow the prologue slots 0 … 21 (slot 21 is a pad), one block per live field
-value (aliases of a tuple have separate blocks). The (3,10) groups have no block for their dummy
-entry: group `u` has `VF u` blocks. A second copy of the first
+Cost-banded blocks follow the prologue and padding slots 0 … 21, one block per live field
+value (aliases of a tuple have separate blocks). Every table fills its field: group `u` has `VF u` blocks. A second copy of the first
 group's region (frame 14, used when the free digit is 0) follows at `gEnd … zEnd`. Free entries
 are 255615+68*s for s<64.
 Frames reuse C_(f+1), where C_c=g^(2^60*c); C_16=g and C_0=ONE. Compat states the
-scheme's lengths, digits, selected output halves, tags, metadata, and 88-step layer.
+scheme's lengths, digits, selected output halves, tags, metadata, and 87-step layer.
 -/
 
 namespace OptimalOTS.HLG3
@@ -124,15 +123,15 @@ def hm (u : ℕ) : ℕ := if u = 0 ∨ 5 ≤ u then 1 else 0
 /-- Layer profile of the exporters' (3, 9) tables: field values of each cost. -/
 def P39 : List ℕ := [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57]
 
-/-- Layer profile of the (3, 10) tables (aliases counted; the last field value is a dummy). -/
-def P310 : List ℕ := [1, 6, 48, 20, 15, 21, 28, 36, 44, 55, 66, 78, 91, 105, 120, 136, 153]
+/-- Layer profile of the (3, 10) tables (aliases counted; all field values are live). -/
+def P310 : List ℕ := [1, 6, 6, 80, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 135]
 
 /-- Raw first-group profile: the doubled profile of its (3,9) table. -/
 def P310no : List ℕ :=
-  [2, 6, 12, 18, 30, 42, 54, 70, 90, 110, 130, 156, 182, 118, 4]
+  [2, 6, 12, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 114]
 
 /-- Layer profile of the (4, 11) tables. -/
-def P411 : List ℕ := [0, 4, 10, 20, 34, 55, 84, 120, 165, 219, 286, 363, 454, 229, 1, 0, 4]
+def P411 : List ℕ := [1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229]
 
 /-- The layer profile of group `u`'s table: `pn u c` field values of cost `c`. -/
 def prof (u : ℕ) : List ℕ :=
@@ -160,18 +159,17 @@ def RS (u : ℕ) : ℕ := OFF u (nb u)
 def BASE (u : ℕ) : ℕ := 22 + psum RS u
 
 /-- End of the group regions. -/
-def gEnd : ℕ := 234654
+def gEnd : ℕ := 233438
 
 /-- Shift of the first group's `s = 0` region (frame 14) from its `s > 0` region: it starts at
 `gEnd`. -/
-def zOff : ℕ := 234632
+def zOff : ℕ := 233416
 
 /-- End of the first group's `s = 0` region. -/
-def zEnd : ℕ := 250526
+def zEnd : ℕ := 249254
 
-/-- The number of blocks (live field values) of group `u`: the (3,10) groups `7 … 12` omit their
-dummy entry. -/
-def VF (u : ℕ) : ℕ := if 7 ≤ u then 1023 else 2 ^ gb u
+/-- The number of blocks (live field values) of group `u`: all field values are live. -/
+def VF (u : ℕ) : ℕ := if 7 ≤ u then 1024 else 2 ^ gb u
 
 /-- The cost band of field value `v` of group `u`. -/
 def band (u v : ℕ) : ℕ := bandIdx (A u) (nb u) v
@@ -202,7 +200,7 @@ theorem BASE_succ (u : ℕ) : BASE (u + 1) = BASE u + RS u := by
 
 theorem BASE_13 : BASE 13 = gEnd := by decide
 
-theorem BASE_one : BASE 1 = 15894 := by decide
+theorem BASE_one : BASE 1 = 15838 := by decide
 
 theorem A_full : ∀ u < 13, A u (nb u) = VF u := by decide
 
@@ -465,8 +463,8 @@ structure Tab.Hyp (T : Tab) : Prop where
   cost_eq : ∀ u < 13, ∀ v < VF u, cost T u v = band u v
   coord_lt : ∀ u < 13, ∀ v < 2 ^ gb u, ∀ i < gk u, T u v i < LEN (chainOf u i)
 
-/-- The free chain's digit: `88 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
-def freeDigit (c : ℕ) : ℕ := if c ≤ 88 ∧ 88 - c ≤ 63 then 88 - c else 0
+/-- The free chain's digit: `87 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
+def freeDigit (c : ℕ) : ℕ := if c ≤ 87 ∧ 87 - c ≤ 63 then 87 - c else 0
 
 /-- Group `u`'s field of the index. -/
 def field (u : ℕ) (I : Word) : ℕ := digitW gb I.toNat u
@@ -477,7 +475,7 @@ def gcost (T : Tab) (I : Word) : ℕ := ((List.range 13).map (fun u => cost T u 
 /-- The facts about the scheme parameters the machine relies on. -/
 structure Compat (P : Params) (T : Tab) : Prop where
   len : ∀ k : Fin numChains, P.len k = LEN k.val
-  layer : P.layer = 88
+  layer : P.layer = 87
   digit_grp : ∀ (I : Word) (u i : ℕ) (hu : u < 13) (hi : i < gk u),
     P.digit (effective I) ⟨chainOf u i, chainOf_lt u hu i hi⟩ = T u (field u I) i
   digit_free : ∀ I : Word, (∀ u < 13, field u I < VF u) →
