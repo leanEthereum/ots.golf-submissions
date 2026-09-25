@@ -4,8 +4,7 @@ import Submissions.UpperLeanIsa.FusionMachineRun
 # Forced paths and the landing exit
 
 Every completing walk follows the 25 straight prologue instructions, the free dispatch,
-then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `frU s j`: the first
-group's unit runs in frame 14 when the free digit `s` is `0`, in frame 1 otherwise. The block relations give
+then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `j`. The block relations give
 GP_u = initialProduct(86,s) * C_(sum of preceding group costs), so the exit target is
 GP_13 = g ^ seedExp t with t = s + Σ costs. The exit table (`seed_table`, a hash-free identity)
 shows that only t = 86 lands on the sentinel; every other total lands on a pad or past the
@@ -129,8 +128,7 @@ theorem pro_mem_h0 : CInstr.mul (hCell 0) gCell (h1Cell 0) ∈ proList := by unf
 
 /-! ## Units and frames -/
 
-/-- The frame of unit `j` (`j < 14`) on the path of free digit `s`: unit 1 (the first group) runs
-in frame 14 when `s = 0`. -/
+/-- Unit `j` uses frame `j`, independently of the free digit. -/
 def frU (_s j : ℕ) : ℕ := j
 
 theorem frU_zero (s : ℕ) : frU s 0 = 0 := rfl

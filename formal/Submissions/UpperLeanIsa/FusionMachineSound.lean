@@ -52,16 +52,24 @@ theorem rootMd_cell (hC : Compat P T) (r : Fin 3) : cellBits (v (rootMdCell r.va
   have hi : (Fusion.rootIndex r).val ≤ 22 := by fin_cases r <;> decide
   rw [he,v_c hP hi,hC.rootMd]
 
+theorem root_query_of (hone : v oneCell = oneV)
+    (hmd : ∀ r : Fin 3, cellBits (v (rootMdCell r.val)) = P.rootMd r) (r : Fin 3) :
+    blake2sQuery ![v (rootMsg T xs r.val 0),v (rootMsg T xs r.val 1),
+      v (rootMsg T xs r.val 2),v (rootMsg T xs r.val 3)]
+      (v (rootCv r.val)) (v (rootCv r.val+1)) (v (rootMdCell r.val)) =
+      P.rootInput (topsV T v xs) r (rootSeq v r.val) := by
+  rw [blake2sQuery_eq,hmd r]
+  fin_cases r <;>
+    simp [rootMsg,homeU,rt,rootCv,Fusion.Params.rootInput,rootSeq,topsV,rtopCell,
+      exported,dg,unitOf,coordOf,topCell,stVal_lo,stCell,hone,cellBits_oneV]
+
 include hP in
 theorem root_query (hC : Compat P T) (r : Fin 3) :
     blake2sQuery ![v (rootMsg T xs r.val 0),v (rootMsg T xs r.val 1),
       v (rootMsg T xs r.val 2),v (rootMsg T xs r.val 3)]
       (v (rootCv r.val)) (v (rootCv r.val+1)) (v (rootMdCell r.val)) =
-      P.rootInput (topsV T v xs) r (rootSeq v r.val) := by
-  rw [blake2sQuery_eq,rootMd_cell hP hC r]
-  fin_cases r <;>
-    simp [rootMsg,homeU,rt,rootCv,Fusion.Params.rootInput,rootSeq,topsV,rtopCell,
-      exported,dg,unitOf,coordOf,topCell,stVal_lo,stCell,v_one hP,cellBits_oneV]
+      P.rootInput (topsV T v xs) r (rootSeq v r.val) :=
+  root_query_of (v_one hP) (rootMd_cell hP hC) r
 
 include hP in
 theorem root_step (hC : Compat P T) (r : Fin 3) :

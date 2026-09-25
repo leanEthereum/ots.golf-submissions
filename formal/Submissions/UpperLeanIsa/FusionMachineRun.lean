@@ -2,7 +2,7 @@ import Submissions.UpperLeanIsa.FusionMachineDecode
 import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 /-!
-# Running the HL-GROUP-3 bytecode
+# Running the fused bytecode
 
 The execution framework for `HLG3.program T` (every result assumes the table facts `T.Hyp`):
 

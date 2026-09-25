@@ -2,8 +2,8 @@ import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.FusionMachineLayout
 import Submissions.UpperLeanIsa.LengthGate
 
-/-! The frozen 1149-cycle candidate bytecode. This module defines the exact program
-and local instruction algebra; the full machine certificate is separate work. -/
+/-! The 1149-cycle bytecode and its local instruction algebra. The complete machine
+certificate is assembled in `FusionMachine.lean`. -/
 
 namespace OptimalOTS.HLFusion
 
@@ -70,7 +70,7 @@ def tCell (u : ℕ) : ℕ := 100 + u
 /-- The tie accumulator after group `u`; the last one is the index cell. -/
 def accCell (u : ℕ) : ℕ := if u = 12 then idxCell else 120 + u
 
-/-- The landing hint of frame `f` (frame 14 uses a spare cell). -/
+/-- The landing hint of frame `f`. -/
 def hCell (f : ℕ) : ℕ := 160 + f
 
 /-- `H'_f = H_f · g`, the return address of the entry. -/
@@ -79,18 +79,16 @@ def h1Cell (f : ℕ) : ℕ := 180 + f
 /-- The running landing product before group `u` (`GP_0` is seeded in the free block); `GP_13` is the exit target. -/
 def gpCell (u : ℕ) : ℕ := 200 + u
 
-/-- The first cv word of root call 0 (the top of chain 38). -/
+/-- The first cv word of root call 0 (the top of chain 1). -/
 def cvCell : ℕ := 281
 
 /-- The free chain's last output pair. -/
 def tfCell : ℕ := 292
 
-/-- The selected top of exported chain k, arranged into adjacent root cv pairs: 38 and 37 for call
-0, then the pairs `(5r+2, 5r+3)` of calls `r = 2 … 6`. -/
+/-- The selected chain tops, arranged into adjacent cv pairs for fused and root hashes. -/
 def topCell (k : ℕ) : ℕ := ([292, 281, 282, 294, 296, 298, 300, 289, 302, 304, 306, 308, 257, 258, 269, 270, 310, 312, 314, 316, 318, 273, 261, 262, 274, 320, 285, 322, 324, 326, 328, 330, 332, 265, 334, 277, 278, 266, 336, 338, 340, 342]).getD k 0
 
-/-- The last output pair of an in-block home chain `k`. Chains 1, 2, 7 and 8 use the former cv
-cells: the high-half tops 1, 7 and 39 write `(xhCell k - 1, xhCell k)`. -/
+/-- The selected last output of a home chain; `topOff` determines its half of the pair. -/
 def xhCell (k : ℕ) : ℕ := topCell k
 
 /-- The root state pair after call `r`. -/
@@ -100,8 +98,7 @@ def stCell (r : ℕ) : ℕ := [286,290,344].getD r 0
 def xcCell (k t : ℕ) : ℕ := xcBase k + 2 * t
 /-- The cell the root reads chain `k`'s top from, when its digit is `d`. -/
 def rtopCell (k d : ℕ) : ℕ := if d = 0 ∧ ¬ exported k then wCell k else topCell k
-/-- The cv pair of root call `r`: the tops `(38, 37)` for call 0, the state after call `r - 1`
-for calls 1, 7 and 8, the exported top pairs `(5r+2, 5r+3)` for `r = 2 … 6`. -/
+/-- The cv pairs: tops `(1,2)`, then top 26 and root 0, then top 7 and root 1. -/
 def rootCv (r : ℕ) : ℕ := [281,285,289].getD r 0
 
 /-- Offset selecting the high half at the final step. -/
@@ -330,27 +327,24 @@ def chainOp (k d t dst : ℕ) : CInstr :=
 /-- The `d` steps of chain `k`. -/
 def chainOps (k d dst : ℕ) : List CInstr := (List.range d).map (fun t => chainOp k d t dst)
 
-/-- The straight part of the prologue (slots `0 … 18`). -/
+/-- The straight part of the prologue (slots `0 … 24`). -/
 def proList : List CInstr :=
   [.init,.setc gCell gV] ++
     ((List.range 15).map (fun c => .setc (cCell (c+1)) (cV (c+1)))) ++
     ([17,18,19,20,21,22].map (fun c => .setc (cCell c) (cV c))) ++
     [.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell,.mul (hCell 0) gCell (h1Cell 0)]
 
-/-- Slots `0 … 21`: the straight prologue, the free chain's dispatch (slot `19`), and pads
-(slots `20` and `21`, never reached). -/
+/-- Slots `0 … 26`: the straight prologue, the free dispatch at 25, and one pad. -/
 def prologue (s : ℕ) : CInstr :=
   if s < 25 then proList.getD s .pad else if s = 25 then .dispatch 0 else .pad
 
 /-- The control op after the block of group `f - 1`: the next dispatch, or the exit. -/
 def ctlF (f : ℕ) : CInstr := if f < 13 then .dispatch (f + 1) else .exit
 
-/-- The frame of the first group after the free block of digit `s`: frame 14 when `s = 0` (its
-root call reads the free top from the signature cell), frame 1 otherwise. -/
+/-- The first group always uses frame 1; the free top has a fixed materialized cell. -/
 def frG0 (_s : ℕ) : ℕ := 1
 
-/-- The straight part of the free chain's block of digit `s`: the seed, the `s` chain steps, and
-the first group's `MUL(H, g, H')`. -/
+/-- The free block: seed, `s` chain steps, top materialization, and the next hint product. -/
 def fbody (s : ℕ) : List CInstr :=
   [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 86 s))] ++
   chainOps 0 s tfCell ++ [copy (if s = 0 then wCell 0 else tfCell) tfCell,
@@ -376,17 +370,15 @@ def segs (T : Tab) (u v : ℕ) : List CInstr := (List.range (gk u)).flatMap (seg
 def zexp (T : Tab) (u v : ℕ) : ℕ :=
   ((List.range (gk u)).map (fun i => if copied u i ∧ T u v i = 0 then 1 else 0)).sum
 
-/-- The root call a home group executes: call 1 in group 0, calls 0 and 7 in groups 5 and 6, call
-`u − 5` in groups `7 … 11`, and call 8 in group 12. -/
+/-- Root calls 0, 1, and 2 execute in groups 5, 6, and 0, respectively. -/
 def hcall (u : ℕ) : ℕ := if u = 5 then 0 else if u = 6 then 1 else 2
 
-/-- The message cell `j < 4` of root call `hcall u` in the home block of `v`; the first group's
-variant `z` (free digit `0`) reads the free top from its signature cell. -/
+/-- The message cell `j < 4` of a home root call. The legacy variant argument is unused. -/
 def rt (T : Tab) (u v : ℕ) (_z : Bool) (j : ℕ) : ℕ :=
   if u = 0 then oneCell else if u = 5 then rtopCell (3+j) (T u v j)
   else rtopCell (8+j) (T u v j)
 
-/-- The root call of a home block; call `r` carries the frame constant `fCell r` as metadata. -/
+/-- The root call of a home block, using its fixed domain-separated metadata cell. -/
 def rootIns (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=
   if u = 0 ∨ u = 5 ∨ u = 6 then
     [.blake (rt T u v z 0) (rt T u v z 1) (rt T u v z 2) (rt T u v z 3)
@@ -408,7 +400,7 @@ def body (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=
   tie u v ++ [prodOp T u v] ++ segs T u v ++ rootIns T u v z ++ List.replicate (npad T u v) NOP ++
     [nextOp u]
 
-/-- Op `i` of the block of `v` in group `u`, variant `z` (entered in frame 14 when set). -/
+/-- Op `i` of the block of `v` in group `u`, entered in frame `u+1`. -/
 def blockInstr (T : Tab) (u v : ℕ) (z : Bool) (i : ℕ) : CInstr :=
   if i = 0 then .entry (u+1)
   else if i ≤ (body T u v z).length then (body T u v z).getD (i-1) .pad

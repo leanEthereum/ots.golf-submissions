@@ -6,7 +6,7 @@ import OptimalOTS.LeanIsa
 
 A completing walk exits on the sentinel, so the last landing product is g^sentinel
 (`exit_forced`, via the hash-free exit table). The free seed and all group products
-therefore imply C_(s+sum costs)=C_87. Raising to the sixteenth power proves equality of the
+therefore imply C_(s+sum costs)=C_86. Raising to the sixteenth power proves equality of the
 small integer totals, so every completing path has exactly 86 chain hashes.
 
 There are 104 non-hash block instructions and 25 non-hash prologue instructions, one index
