@@ -1,9 +1,9 @@
-import Submissions.UpperLeanIsa.SchemeFlat
 import Submissions.UpperLeanIsa.LayerWire
+import Submissions.UpperLeanIsa.LayerDigits
 import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 /-!
-# Constraint mathematics for the HL-FLAT-A machine
+# Constraint mathematics for the HL-GROUP-3 machine
 
 Pure facts the machine proofs share, none of them about the bytecode:
 
@@ -11,10 +11,10 @@ Pure facts the machine proofs share, none of them about the bytecode:
    the exact decision `fixed_verify` on arbitrary raw inputs, and `probTrue_zero_of_fixed`;
 2. cells and bits: `natV` cells, `cellOfBits` turning `XOR` into field addition, disjoint bit
    fields adding, the output pair of a `BLAKE2S`;
-3. the loader's cells for a signature of `5504` bits.
+3. the loader's cells for a signature of `5503` bits.
 -/
 
-namespace OptimalOTS.HLFlat
+namespace OptimalOTS.HLG3
 
 open OracleComp LeanerVM.Parameters
 open OptimalOTS.LeanIsaBaseline.Layer
@@ -91,19 +91,19 @@ theorem fixed_rootFrom (t : Fin numChains → Word) (r n : ℕ) (st : BitVec 256
 
 /-- The public key of the tops under the table. -/
 def rootValue (t : Fin numChains → Word) : PublicKey :=
-  (rootState f P t 0 9 (Params.rootInit t)).extractLsb' 0 128
+  (rootState f P t 0 8 (Params.rootInit t)).extractLsb' 0 128
 
 theorem fixed_root (t : Fin numChains → Word) :
     simulateQ (unifFwdAnswerImpl f) (P.root t) = pure (rootValue f P t) := by
   change simulateQ (unifFwdAnswerImpl f)
-      ((fun y : BitVec 256 => y.extractLsb' 0 128) <$> P.rootFrom t 0 9 (Params.rootInit t)) =
+      ((fun y : BitVec 256 => y.extractLsb' 0 128) <$> P.rootFrom t 0 8 (Params.rootInit t)) =
     (pure (rootValue f P t) : ProbComp (BitVec 128))
   rw [simulateQ_map, fixed_rootFrom, map_pure]
   rfl
 
-/-- The index under the table: bits `1, …, 127` of the index answer. -/
-def idxValue (m : Message) (η : Nonce) (pk : PublicKey) : IdxWord :=
-  idxAns (ans f (P.idxInput m η pk))
+/-- The index under the table. -/
+def idxValue (m : Message) (η : Nonce) (pk : PublicKey) : Index :=
+  indexSlice (ans f (P.idxInput m η pk))
 
 theorem fixed_index (m : Message) (η : Nonce) (pk : PublicKey) :
     simulateQ (unifFwdAnswerImpl f) (P.index m η pk) = pure (idxValue f P m η pk) := by
@@ -111,7 +111,7 @@ theorem fixed_index (m : Message) (η : Nonce) (pk : PublicKey) :
   rfl
 
 /-- The chain tops the verifier computes for index `I`. -/
-def topsOf (I : IdxWord) (bits : List Bool) (k : Fin numChains) : Word :=
+def topsOf (I : Index) (bits : List Bool) (k : Fin numChains) : Word :=
   chainValue f P k (P.len k - 1 - P.digit I k) (P.digit I k) (decodeWord bits k)
 
 open scoped Classical in
@@ -296,7 +296,7 @@ theorem inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool) :
 
 /-- For a signature of the admitted length, cell `4 + i` holds signature cell `i`. -/
 theorem inputWord_sig (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 5504) (i : ℕ) :
+    (hlen : σ.length = 5503) (i : ℕ) :
     inputWord pk msg σ (4 + i) = cellOfBits (ofBits 128 ((σ.drop (128 * i)).take 128)) := by
   have hpre : (toBits pk ++ toBits msg ++
       toBits (BitVec.ofNat 128 (min σ.length (maxSignatureBits + 1)))).length = 512 := by
@@ -309,17 +309,38 @@ theorem inputWord_sig (pk : PublicKey) (msg : Message) (σ : List Bool)
     htake]
 
 theorem inputWord_word (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 5504) (k : Fin numChains) :
+    (hlen : σ.length = 5503) (k : Fin numChains) :
     inputWord pk msg σ (4 + k.val) = cellOfBits (decodeWord σ k) :=
   inputWord_sig pk msg σ hlen k.val
 
-theorem inputWord_nonce (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 5504) : inputWord pk msg σ 46 = cellOfBits (decodeNonce σ) :=
-  inputWord_sig pk msg σ hlen 42
+theorem fold_bits_lt (xs : List Bool) :
+    xs.foldr (fun (b : Bool) (a : ℕ) => b.toNat + 2 * a) 0 < 2 ^ xs.length := by
+  induction xs with
+  | nil => simp
+  | cons b xs ih =>
+    simp only [List.foldr_cons, List.length_cons, Nat.pow_succ]
+    cases b <;> simp only [Bool.toNat_false, Bool.toNat_true] <;> omega
 
-/-- The length cell pins the admitted length: `5504 < 5505`, so the capped length is exact. -/
+theorem inputWord_nonce (pk : PublicKey) (msg : Message) (σ : List Bool)
+    (hlen : σ.length = 5503) : inputWord pk msg σ 46 = cellOfBits (nonceWord (decodeNonce σ)) := by
+  rw [show 46 = 4 + 42 from rfl, inputWord_sig pk msg σ hlen]
+  have hs : (σ.drop (128 * 42)).length = 127 := by simp [List.length_drop, hlen]
+  rw [List.take_of_length_le (by omega)]
+  unfold decodeNonce
+  rw [List.take_of_length_le (by simpa [numChains] using le_of_eq hs)]
+  apply congrArg cellOfBits
+  apply BitVec.eq_of_toNat_eq
+  have hb := fold_bits_lt (σ.drop (128 * 42))
+  rw [hs] at hb
+  simp only [ofBits, nonceWord, BitVec.toNat_append, BitVec.toNat_ofNat, BitVec.toNat_zero,
+    Nat.zero_mul, Nat.zero_add, Nat.shiftLeft_zero]
+  norm_num only [numChains] at *
+  rw [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt hb]
+  simp
+
+/-- The length cell pins the admitted length: `5503 < 5505`, so the capped length is exact. -/
 theorem length_of_inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (h : inputWord pk msg σ 3 = natV 5504) : σ.length = 5504 := by
+    (h : inputWord pk msg σ 3 = natV 5503) : σ.length = 5503 := by
   rw [inputWord_len] at h
   have hb := congrArg cellBits h
   rw [cellBits_natV, cellBits_natV] at hb
@@ -330,14 +351,14 @@ theorem length_of_inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool
     have : min σ.length (5504 + 1) ≤ 5505 := Nat.min_le_right _ _
     have h2 : (5505 : ℕ) < 2 ^ 128 := by norm_num
     omega
-  have h3 : (5504 : ℕ) < 2 ^ 128 := by norm_num
+  have h3 : (5503 : ℕ) < 2 ^ 128 := by norm_num
   rw [Nat.mod_eq_of_lt h1, Nat.mod_eq_of_lt h3] at hn
   omega
 
 theorem inputWord_len_of (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (h : σ.length = 5504) : inputWord pk msg σ 3 = natV 5504 := by
+    (h : σ.length = 5503) : inputWord pk msg σ 3 = natV 5503 := by
   rw [inputWord_len, h]; rfl
 
 end
 
-end OptimalOTS.HLFlat
+end OptimalOTS.HLG3

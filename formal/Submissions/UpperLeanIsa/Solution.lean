@@ -1,8 +1,9 @@
-import Submissions.UpperLeanIsa.FlatSecurity
-import Submissions.UpperLeanIsa.MachineFaithful
+import Submissions.UpperLeanIsa.Group3Security
+import Submissions.UpperLeanIsa.MachineGroup3
 
-/-! The leanISA submission: the FLAT-42 layer scheme (`SchemeFlat.lean`, 42 Winternitz chains
-on one hypercube layer, nonce-ground index), its grouped hinted-landing bytecode HL-TRI
+/-! The leanISA submission: the HL-GROUP-3 layer scheme (`SchemeGroup3.lean`: a free chain and 13
+groups of 3 or 4 chains whose digits are read from (cost, lex) tables of the index's group
+fields, on the layer `96`, nonce-ground index), its uniform-cost hinted-landing bytecode
 (`MachineProgram.lean`) and the six certificate clauses. -/
 
 namespace OptimalOTS.Challenge.UpperLeanIsa
@@ -11,22 +12,21 @@ open OptimalOTS OptimalOTS.LeanIsaBaseline.Layer
 
 /-- The OTS, the bytecode, the announced memory size, the prover's memory-filling strategy and
 the step count. -/
-noncomputable def submission : LeanIsa.Submission := HLFlat.machineSubmission
+noncomputable def submission : LeanIsa.Submission := HLG3.g3machine
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1390` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1390 where
-  admissible := Flat.admissible
-  secure := Flat.secure
-  valid := HLFlat.machine_valid
-  faithful := HLFlat.faithful
-  sound := HLFlat.machine_sound
-  cycles := HLFlat.claim_eq ▸ HLFlat.machine_cycles
+`1281` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1281 where
+  admissible := Group3.admissible
+  secure := Group3.secure
+  valid := HLG3.g3_valid
+  faithful := HLG3.g3_faithful
+  sound := HLG3.g3_sound
+  cycles := HLG3.g3_cycles
 
 /-- The bytecode slots and memory cells the prover must seed and finalize, together fewer than
 `LeanIsa.maxSeededRows`. -/
-theorem seeded_rows : submission.seededRows < LeanIsa.maxSeededRows :=
-  HLFlat.machine_seededRows
+theorem seeded_rows : submission.seededRows < LeanIsa.maxSeededRows := HLG3.g3_seededRows
 
 end OptimalOTS.Challenge.UpperLeanIsa

@@ -2,16 +2,16 @@ import Submissions.UpperLeanIsa.MachineProgram
 import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 /-!
-# Running the HL-TRI bytecode
+# Running the HL-GROUP-3 bytecode
 
-The execution framework for `HLFlat.program`:
+The execution framework for `HLG3.program T` (every result assumes the table facts `T.Hyp`):
 
 * the relation of a cell-level instruction on cell values, `CInstr.RelB B v`, parametric in the
   `BLAKE2S` relation `B`: `Rel f` (answers from a fixed table `f`) and `RelNH` (`BLAKE2S ↦ True`,
   all a run in the cache-free `support` semantics yields). A dispatch's relation records the
-  landing: `[H_k] ∈ K` is `g ^ e` for an entry `e` of group `k`, and `[H'_k] ∈ K`;
+  landing: `[H_f] ∈ K` is `g ^ e` for an entry `e` of frame `f`, and `[H'_f] ∈ K`;
 * frame-1 normal forms of every instruction (`exec_xor` … `exec_blake`), and the composite
-  dispatch step `runCost_dispatch`: the landing in frame `F_k` and the entry's return are
+  dispatch step `runCost_dispatch`: the landing in frame `F_f` and the entry's return are
   collapsed into one deterministic two-instruction step (`frame_fail` rules out every other
   landing);
 * the `Walk`: a slot sequence in frame `1` from `s` to the sentinel along which the relation holds,
@@ -21,12 +21,14 @@ The execution framework for `HLFlat.program`:
   completing run (`sim_of_walk`).
 -/
 
-namespace OptimalOTS.HLFlat
+namespace OptimalOTS.HLG3
 
 open LeanerVM.Parameters LeanerVM.Semantics OracleComp
 open OptimalOTS.LeanIsaBaseline.Layer
 
 noncomputable section
+
+variable {T : Tab}
 
 /-! ## Relations -/
 
@@ -50,7 +52,7 @@ def CInstr.RelB (B : BlakeRel) (v : ℕ → E) : CInstr → Prop
       B ![v m0, v m1, v m2, v m3] (v cv) (v (cv + 1)) (v out) (v (out + 1)) (v md)
   | .dispatch k => IsInK (v (hCell k)) ∧ IsInK (v (h1Cell k)) ∧
       ∃ e, IsEntry k e ∧ (v (hCell k)).limb 0 = gpow e
-  | .exit => IsInK (v k0Cell)
+  | .exit => IsInK (v (gpCell 13))
   | .entry _ => False
   | .pad => False
 
@@ -65,8 +67,8 @@ theorem CInstr.relNH_of_relB {B : BlakeRel} {v : ℕ → E} {ci : CInstr} (h : c
   cases ci
   all_goals first | exact h | trivial
 
-/-- The constants every jump relies on: `ONE` and the 14 group frames. -/
-def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 14, v (fCell k) = frameV k
+/-- The constants every jump relies on: `ONE` and the 15 frames. -/
+def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 15, v (fCell k) = frameV k
 
 /-! ## The successor slot -/
 
@@ -90,20 +92,21 @@ theorem slotOf_spec {pc : K} (h : slotOf pc < 2 ^ 18) : pc = gpow (slotOf pc) :=
 /-- The successor slot of an instruction at slot `s` on the cell values `v`. -/
 def CInstr.nextOf (v : ℕ → E) (s : ℕ) : CInstr → ℕ
   | .dispatch k => slotOf ((v (h1Cell k)).limb 0)
-  | .exit => slotOf ((v k0Cell).limb 0)
+  | .exit => slotOf ((v (gpCell 13)).limb 0)
   | _ => s + 1
 
 /-- The successor of slot `s`. -/
-def nextSlot (v : ℕ → E) (s : ℕ) : ℕ := (cinstrAt s).nextOf v s
+def nextSlot (T : Tab) (v : ℕ → E) (s : ℕ) : ℕ := (cinstrAt T s).nextOf v s
 
-/-- A walk: from slot `s`, `n` executed instructions of total cost `c`, every visited slot
-satisfying `R` and below the sentinel, each followed by its `nextSlot`, ending at the sentinel. -/
-inductive Walk (R : ℕ → Prop) (v : ℕ → E) : ℕ → ℕ → ℕ → Prop
-  | done : Walk R v 0 sentinel 0
-  | step {n s c : ℕ} : s < sentinel → R s → Walk R v n (nextSlot v s) c →
-      Walk R v (n + (cinstrAt s).steps) s ((cinstrAt s).cost + c)
+/-- A walk: from slot `s`, `n` executed instructions of total cost `c`, every visited slot's
+relation `RelB B` holding on `v` and below the sentinel, each followed by its `nextSlot`, ending
+at the sentinel. -/
+inductive Walk (T : Tab) (B : BlakeRel) (v : ℕ → E) : ℕ → ℕ → ℕ → Prop
+  | done : Walk T B v 0 sentinel 0
+  | step {n s c : ℕ} : s < sentinel → (cinstrAt T s).RelB B v → Walk T B v n (nextSlot T v s) c →
+      Walk T B v (n + (cinstrAt T s).steps) s ((cinstrAt T s).cost + c)
 
-theorem Walk.le_sentinel {R : ℕ → Prop} {v : ℕ → E} {n s c : ℕ} (h : Walk R v n s c) :
+theorem Walk.le_sentinel {T : Tab} {B : BlakeRel} {v : ℕ → E} {n s c : ℕ} (h : Walk T B v n s c) :
     s ≤ sentinel := by
   cases h with
   | done => exact le_refl _
@@ -142,12 +145,14 @@ theorem read_one_g {c : ℕ} (hc : c + 1 < 2 ^ 16) :
   rw [g_mul_gpow]; exact read_one h16 hκ L hc
 
 /-- In frame `F_k`, the shifted operand `sop k c` reads cell `c`. -/
-theorem read_frame_sop {k c : ℕ} (hk : k < 14) (hc : c < 2 ^ 16) :
+theorem read_frame_sop {k c : ℕ} (hk : k < 15) (hc : c < 2 ^ 16) :
     L.read (frame k * sop k c) = some (Lx L c) := by
   rw [frame, sop, gpow_mul_gpow]
   refine read_gpow_some hκ L ?_ (lt_of_lt_of_le hc (Nat.pow_le_pow_right (by norm_num) h16))
-  rw [mod_ord_of_ge (by unfold frameExp ordG; omega) (by unfold frameExp ordG; omega)]
-  unfold frameExp ordG; omega
+  have hb := frameExp_bounds hk
+  unfold eLen at hb
+  rw [mod_ord_of_ge (by unfold ordG; omega) (by unfold ordG; omega)]
+  unfold ordG; omega
 
 end Reads
 
@@ -211,7 +216,7 @@ theorem exec_blake {m0 m1 m2 m3 cv out md : ℕ} (hb : (CInstr.blake m0 m1 m2 m3
   rfl
 
 /-- The dispatch `JUMP(ONE, H_k, F_k)` in frame `1`. -/
-theorem exec_dispatch {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
+theorem exec_dispatch {k : ℕ} (hk : k < 15) (hpin : Pinned (Lx L)) :
     LeanIsa.execute L ⟨pc, 1⟩ (CInstr.dispatch k).toInstr =
       pure (if IsInK (Lx L (hCell k)) then some ⟨(Lx L (hCell k)).limb 0, frame k⟩ else none) := by
   show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
@@ -219,8 +224,8 @@ theorem exec_dispatch {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
   congr 1
   simp only [LeanerVM.Semantics.execute,
     read_one h16 hκ L (show oneCell < 2 ^ 16 by unfold oneCell; omega),
-    read_one h16 hκ L (show hCell k < 2 ^ 16 by unfold hCell; omega),
-    read_one h16 hκ L (show fCell k < 2 ^ 16 by unfold fCell; omega),
+    read_one h16 hκ L (show hCell k < 2 ^ 16 by unfold hCell; split_ifs <;> omega),
+    read_one h16 hκ L (show fCell k < 2 ^ 16 by unfold fCell cCell; split_ifs <;> omega),
     Option.bind_eq_bind, Option.bind_some, hpin.1, hpin.2 k hk]
   by_cases hH : IsInK (Lx L (hCell k))
   · have hin : IsInK oneV ∧ IsInK (Lx L (hCell k)) ∧ IsInK (frameV k) :=
@@ -233,30 +238,30 @@ theorem exec_dispatch {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
       none from if_neg (fun h => hH h.2.1), if_neg hH]
     rfl
 
-/-- The exit `JUMP(ONE, K0, ONE)` in frame `1`. -/
+/-- The exit `JUMP(ONE, GP_13, ONE)` in frame `1`. -/
 theorem exec_exit (hpin : Pinned (Lx L)) :
     LeanIsa.execute L ⟨pc, 1⟩ CInstr.exit.toInstr =
-      pure (if IsInK (Lx L k0Cell) then some ⟨(Lx L k0Cell).limb 0, 1⟩ else none) := by
+      pure (if IsInK (Lx L (gpCell 13)) then some ⟨(Lx L (gpCell 13)).limb 0, 1⟩ else none) := by
   show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
-    (.jump (gpow oneCell) (gpow k0Cell) (gpow oneCell))) = _
+    (.jump (gpow oneCell) (gpow (gpCell 13)) (gpow oneCell))) = _
   congr 1
   simp only [LeanerVM.Semantics.execute,
     read_one h16 hκ L (show oneCell < 2 ^ 16 by unfold oneCell; omega),
-    read_one h16 hκ L (show k0Cell < 2 ^ 16 by unfold k0Cell; omega),
+    read_one h16 hκ L (show gpCell 13 < 2 ^ 16 by decide),
     Option.bind_eq_bind, Option.bind_some, hpin.1]
-  by_cases hH : IsInK (Lx L k0Cell)
-  · have hin : IsInK oneV ∧ IsInK (Lx L k0Cell) ∧ IsInK oneV :=
+  by_cases hH : IsInK (Lx L (gpCell 13))
+  · have hin : IsInK oneV ∧ IsInK (Lx L (gpCell 13)) ∧ IsInK oneV :=
       ⟨isInK_ofK 1, hH, isInK_ofK 1⟩
-    rw [show (guard (IsInK oneV ∧ IsInK (Lx L k0Cell) ∧ IsInK oneV) : Option Unit) =
+    rw [show (guard (IsInK oneV ∧ IsInK (Lx L (gpCell 13)) ∧ IsInK oneV) : Option Unit) =
       some () from if_pos hin, if_pos hH]
     simp only [Option.bind_some, oneV, if_neg ofK_one_ne_zero, limb_ofK_zero]
     rfl
-  · rw [show (guard (IsInK oneV ∧ IsInK (Lx L k0Cell) ∧ IsInK oneV) : Option Unit) =
+  · rw [show (guard (IsInK oneV ∧ IsInK (Lx L (gpCell 13)) ∧ IsInK oneV) : Option Unit) =
       none from if_neg (fun h => hH h.2.1), if_neg hH]
     rfl
 
 /-- The entry `I0_k` in its own frame returns to frame `1` at `[H'_k]`. -/
-theorem exec_entry_own {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
+theorem exec_entry_own {k : ℕ} (hk : k < 15) (hpin : Pinned (Lx L)) :
     LeanIsa.execute L ⟨pc, frame k⟩ (CInstr.entry k).toInstr =
       pure (if IsInK (Lx L (h1Cell k)) then some ⟨(Lx L (h1Cell k)).limb 0, 1⟩ else none) := by
   show pure (LeanerVM.Semantics.execute L ⟨pc, frame k⟩
@@ -264,7 +269,7 @@ theorem exec_entry_own {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
   congr 1
   simp only [LeanerVM.Semantics.execute,
     read_frame_sop h16 hκ L hk (show oneCell < 2 ^ 16 by unfold oneCell; omega),
-    read_frame_sop h16 hκ L hk (show h1Cell k < 2 ^ 16 by unfold h1Cell; omega),
+    read_frame_sop h16 hκ L hk (show h1Cell k < 2 ^ 16 by unfold h1Cell; split_ifs <;> omega),
     Option.bind_eq_bind, Option.bind_some, hpin.1]
   by_cases hH : IsInK (Lx L (h1Cell k))
   · have hin : IsInK oneV ∧ IsInK (Lx L (h1Cell k)) ∧ IsInK oneV :=
@@ -301,35 +306,35 @@ theorem runCost_succ_of (prog : Program) (L : MemImage κ) (m : ℕ) (r : Regs K
   cases x <;> rfl
 
 theorem runCost_slot (L : MemImage κ) (m : ℕ) {s : ℕ} (hs : s < sentinel) (fp : K) :
-    LeanIsa.runCost program L (m + 1) ⟨gpow s, fp⟩ =
-      (LeanIsa.execute L ⟨gpow s, fp⟩ (cinstrAt s).toInstr >>= fun x =>
+    LeanIsa.runCost (program T) L (m + 1) ⟨gpow s, fp⟩ =
+      (LeanIsa.execute L ⟨gpow s, fp⟩ (cinstrAt T s).toInstr >>= fun x =>
         x.elim (pure none) fun next =>
-          Option.map (LeanIsa.weight (cinstrAt s).toInstr.opcode + ·) <$>
-            LeanIsa.runCost program L m next) :=
-  runCost_succ_of program L m ⟨gpow s, fp⟩ _ (gpow_ne_finalPc hs)
-    (fetch_eq (by unfold sentinel at hs; omega))
+          Option.map (LeanIsa.weight (cinstrAt T s).toInstr.opcode + ·) <$>
+            LeanIsa.runCost (program T) L m next) :=
+  runCost_succ_of (program T) L m ⟨gpow s, fp⟩ _ (gpow_ne_finalPc T hs)
+    (fetch_eq T (by unfold sentinel at hs; omega))
 
 theorem runCost_zero_eq (L : MemImage κ) (r : Regs K) :
-    LeanIsa.runCost program L 0 r =
-      pure (if r.pc = program.finalPc ∧ r.fp = 1 then some 0 else none) := by
+    LeanIsa.runCost (program T) L 0 r =
+      pure (if r.pc = (program T).finalPc ∧ r.fp = 1 then some 0 else none) := by
   rw [LeanIsa.runCost.eq_1]
 
 theorem runCost_zero_slot (L : MemImage κ) {s : ℕ} (hs : s < sentinel) :
-    LeanIsa.runCost program L 0 ⟨gpow s, 1⟩ = pure none := by
-  rw [runCost_zero_eq, if_neg (fun e => gpow_ne_finalPc hs e.1)]
+    LeanIsa.runCost (program T) L 0 ⟨gpow s, 1⟩ = pure none := by
+  rw [runCost_zero_eq, if_neg (fun e => gpow_ne_finalPc T hs e.1)]
 
 theorem runCost_zero_sentinel (L : MemImage κ) :
-    LeanIsa.runCost program L 0 ⟨gpow sentinel, 1⟩ = pure (some 0) := by
-  rw [runCost_zero_eq, if_pos ⟨finalPc_eq.symm, rfl⟩]
+    LeanIsa.runCost (program T) L 0 ⟨gpow sentinel, 1⟩ = pure (some 0) := by
+  rw [runCost_zero_eq, if_pos ⟨(finalPc_eq T).symm, rfl⟩]
 
 theorem runCost_succ_sentinel (L : MemImage κ) (n : ℕ) (fp : K) :
-    LeanIsa.runCost program L (n + 1) ⟨gpow sentinel, fp⟩ = pure none := by
-  rw [LeanIsa.runCost.eq_2]; exact if_pos finalPc_eq.symm
+    LeanIsa.runCost (program T) L (n + 1) ⟨gpow sentinel, fp⟩ = pure none := by
+  rw [LeanIsa.runCost.eq_2]; exact if_pos (finalPc_eq T).symm
 
-/-- A landed state `⟨h, F_k⟩` never completes unless `h` is an entry of group `k`. -/
-theorem runCost_frame_none (hκ : κ ≤ 32) (L : MemImage κ) {k : ℕ} (hk : k < 14) {h : K}
+/-- A landed state `⟨h, F_k⟩` never completes unless `h` is an entry of chain `k`. -/
+theorem runCost_frame_none (hT : T.Hyp) (hκ : κ ≤ 32) (L : MemImage κ) {k : ℕ} (hk : k < 15) {h : K}
     (hno : ∀ e, IsEntry k e → h ≠ gpow e) (n : ℕ) :
-    LeanIsa.runCost program L n ⟨h, frame k⟩ = pure none := by
+    LeanIsa.runCost (program T) L n ⟨h, frame k⟩ = pure none := by
   cases n with
   | zero =>
     rw [LeanIsa.runCost.eq_1]
@@ -341,10 +346,10 @@ theorem runCost_frame_none (hκ : κ ≤ 32) (L : MemImage κ) {k : ℕ} (hk : k
     · split
       · rfl
       · rename_i ins hins
-        obtain ⟨i, hi, rfl⟩ := program.fetch_eq_some_iff.mp hins
+        obtain ⟨i, hi, rfl⟩ := (program T).fetch_eq_some_iff.mp hins
         have hs : ¬ IsEntry k i := fun he => hno i he hi
-        rw [show LeanIsa.execute L ⟨h, frame k⟩ (program.code i) = pure none from
-          frame_fail hκ L h hk hs, pure_bind]
+        rw [show LeanIsa.execute L ⟨h, frame k⟩ ((program T).code i) = pure none from
+          frame_fail hT hκ L h hk hs, pure_bind]
 
 theorem map_map_add (a b : ℕ) (x : OracleComp Spec (Option ℕ)) :
     Option.map (a + ·) <$> (Option.map (b + ·) <$> x) = Option.map ((a + b) + ·) <$> x := by
@@ -353,26 +358,26 @@ theorem map_map_add (a b : ℕ) (x : OracleComp Spec (Option ℕ)) :
   funext o
   cases o <;> simp [Nat.add_assoc]
 
-variable (h16 : 16 ≤ κ) (hκ : κ ≤ 32) (L : MemImage κ)
-include h16 hκ
+variable (hT : T.Hyp) (h16 : 16 ≤ κ) (hκ : κ ≤ 32) (L : MemImage κ)
+include hT h16 hκ
 
 open scoped Classical in
 /-- **The composite dispatch step.** From a dispatch slot, two instructions later the run is in
 frame `1` at `[H'_k]` when the landing relation holds, and fails otherwise. -/
 theorem runCost_dispatch (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
-    (hci : cinstrAt s = .dispatch k) (n : ℕ) :
-    LeanIsa.runCost program L (n + 2) ⟨gpow s, 1⟩ =
+    (hci : cinstrAt T s = .dispatch k) (n : ℕ) :
+    LeanIsa.runCost (program T) L (n + 2) ⟨gpow s, 1⟩ =
       if (CInstr.dispatch k).RelNH (Lx L) then
-        Option.map (2 + ·) <$> LeanIsa.runCost program L n ⟨(Lx L (h1Cell k)).limb 0, 1⟩
+        Option.map (2 + ·) <$> LeanIsa.runCost (program T) L n ⟨(Lx L (h1Cell k)).limb 0, 1⟩
       else pure none := by
-  have hk : k < 14 := by have := cinstrAt_bounded s; rw [hci] at this; exact this
+  have hk : k < 15 := by have := cinstrAt_bounded hT s; rw [hci] at this; exact this
   rw [runCost_slot L (n + 1) hs, hci, exec_dispatch h16 hκ L _ hk hpin]
   by_cases hH : IsInK (Lx L (hCell k))
   · rw [if_pos hH, pure_bind, Option.elim_some]
     by_cases hex : ∃ e, IsEntry k e ∧ (Lx L (hCell k)).limb 0 = gpow e
     · obtain ⟨e, he, hx⟩ := hex
       have hlt := isEntry_lt he
-      rw [hx, runCost_slot L n (by unfold sentinel; omega), cinstrAt_of_entry he,
+      rw [hx, runCost_slot L n (by omega), cinstrAt_of_entry hT he,
         exec_entry_own h16 hκ L _ he.1 hpin]
       by_cases hH1 : IsInK (Lx L (h1Cell k))
       · rw [if_pos hH1, pure_bind, Option.elim_some, if_pos ⟨hH, hH1, e, he, hx⟩, map_map_add]
@@ -381,30 +386,31 @@ theorem runCost_dispatch (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
         rfl
     · have hno : ∀ e, IsEntry k e → (Lx L (hCell k)).limb 0 ≠ gpow e :=
         fun e he h => hex ⟨e, he, h⟩
-      rw [runCost_frame_none hκ L (by omega) hno, map_pure, if_neg (fun h => hex h.2.2)]
+      rw [runCost_frame_none hT hκ L (by omega) hno, map_pure, if_neg (fun h => hex h.2.2)]
       rfl
   · rw [if_neg hH, pure_bind, Option.elim_none, if_neg (fun h => hH h.1)]
 
 theorem runCost_dispatch_one (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
-    (hci : cinstrAt s = .dispatch k) :
-    LeanIsa.runCost program L 1 ⟨gpow s, 1⟩ = pure none := by
-  have hk : k < 14 := by have := cinstrAt_bounded s; rw [hci] at this; exact this
+    (hci : cinstrAt T s = .dispatch k) :
+    LeanIsa.runCost (program T) L 1 ⟨gpow s, 1⟩ = pure none := by
+  have hk : k < 15 := by have := cinstrAt_bounded hT s; rw [hci] at this; exact this
   rw [runCost_slot L 0 hs, hci, exec_dispatch h16 hκ L _ hk hpin]
   split_ifs
   · rw [pure_bind, Option.elim_some, LeanIsa.runCost.eq_1,
       if_neg (fun hc => frame_ne_one hk hc.2), map_pure]; rfl
   · rw [pure_bind, Option.elim_none]
 
+omit hT in
 open scoped Classical in
 /-- The exit step. -/
 theorem runCost_exit (hpin : Pinned (Lx L)) {s : ℕ} (hs : s < sentinel)
-    (hci : cinstrAt s = .exit) (n : ℕ) :
-    LeanIsa.runCost program L (n + 1) ⟨gpow s, 1⟩ =
+    (hci : cinstrAt T s = .exit) (n : ℕ) :
+    LeanIsa.runCost (program T) L (n + 1) ⟨gpow s, 1⟩ =
       if CInstr.exit.RelNH (Lx L) then
-        Option.map (1 + ·) <$> LeanIsa.runCost program L n ⟨(Lx L k0Cell).limb 0, 1⟩
+        Option.map (1 + ·) <$> LeanIsa.runCost (program T) L n ⟨(Lx L (gpCell 13)).limb 0, 1⟩
       else pure none := by
   rw [runCost_slot L n hs, hci, exec_exit h16 hκ L _ hpin]
-  by_cases hH : IsInK (Lx L k0Cell)
+  by_cases hH : IsInK (Lx L (gpCell 13))
   · rw [if_pos hH, pure_bind, Option.elim_some,
       if_pos (show CInstr.exit.RelNH (Lx L) from hH)]; rfl
   · rw [if_neg hH, pure_bind, Option.elim_none,
@@ -412,17 +418,17 @@ theorem runCost_exit (hpin : Pinned (Lx L)) {s : ℕ} (hs : s < sentinel)
 
 omit h16 in
 /-- Entries and pads fail in frame `1`. -/
-theorem runCost_dead {s : ℕ} (hs : s < sentinel) (hci : (cinstrAt s).RelNH (Lx L) = False ∧
-    (cinstrAt s).straight = false ∧ (∀ k, cinstrAt s ≠ .dispatch k) ∧ cinstrAt s ≠ .exit)
-    (n : ℕ) : LeanIsa.runCost program L (n + 1) ⟨gpow s, 1⟩ = pure none := by
+theorem runCost_dead {s : ℕ} (hs : s < sentinel) (hci : (cinstrAt T s).RelNH (Lx L) = False ∧
+    (cinstrAt T s).straight = false ∧ (∀ k, cinstrAt T s ≠ .dispatch k) ∧ cinstrAt T s ≠ .exit)
+    (n : ℕ) : LeanIsa.runCost (program T) L (n + 1) ⟨gpow s, 1⟩ = pure none := by
   obtain ⟨-, hst, hd, hx⟩ := hci
   rw [runCost_slot L n hs]
-  generalize hc : cinstrAt s = ci at hst hd hx
+  generalize hc : cinstrAt T s = ci at hst hd hx
   cases ci with
   | entry k =>
     have hk : IsEntry k s := cinstrAt_eq_entry hc
     rw [show LeanIsa.execute L ⟨gpow s, 1⟩ (CInstr.entry k).toInstr = pure none by
-      rw [← hc]; exact entry_fail_frame_one hκ L _ hk, pure_bind]; rfl
+      rw [← hc]; exact entry_fail_frame_one hT hκ L _ hk, pure_bind]; rfl
   | pad => rw [exec_pad, pure_bind]; rfl
   | dispatch k => exact absurd rfl (hd k)
   | exit => exact absurd rfl hx
@@ -476,21 +482,21 @@ theorem Sem.some_map_add (Sm : Sem) {a c : ℕ} {x : OracleComp Spec (Option ℕ
 
 section Bridges
 
-variable {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 32) {L : MemImage κ}
+variable {κ : ℕ} (hT : T.Hyp) (h16 : 16 ≤ κ) (hκ : κ ≤ 32) {L : MemImage κ}
 
 /-- A completing run starts at a slot of the program. -/
 theorem runCost_pc_valid (Sm : Sem) {n c : ℕ} {r : Regs K}
-    (h : some c ∈ Sm.S (LeanIsa.runCost program L n r)) : ∃ i, i < 2 ^ 18 ∧ r.pc = gpow i := by
+    (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n r)) : ∃ i, i < 2 ^ 18 ∧ r.pc = gpow i := by
   by_contra hno
-  have hne : r.pc ≠ program.finalPc := fun e =>
-    hno ⟨sentinel, by unfold sentinel; omega, e.trans finalPc_eq⟩
+  have hne : r.pc ≠ (program T).finalPc := fun e =>
+    hno ⟨sentinel, by unfold sentinel; omega, e.trans (finalPc_eq T)⟩
   cases n with
   | zero =>
     rw [runCost_zero_eq, if_neg (fun e => hne e.1)] at h
     exact Sm.some_not_pure_none h
   | succ n =>
-    have hf : program.fetch r.pc = none :=
-      (Program.fetch_eq_none_iff program).mpr fun i hi => hno ⟨(i : ℕ), i.isLt, hi⟩
+    have hf : (program T).fetch r.pc = none :=
+      (Program.fetch_eq_none_iff (program T)).mpr fun i hi => hno ⟨(i : ℕ), i.isLt, hi⟩
     rw [LeanIsa.runCost.eq_2, if_neg hne, hf] at h
     exact Sm.some_not_pure_none h
 
@@ -505,18 +511,18 @@ theorem nextOf_straight {ci : CInstr} (h : ci.straight = true) (v : ℕ → E) (
     ci.nextOf v s = s + 1 := by
   cases ci <;> simp_all [CInstr.straight, CInstr.nextOf]
 
-theorem nextSlot_straight (v : ℕ → E) {s : ℕ} (h : (cinstrAt s).straight = true) :
-    nextSlot v s = s + 1 := nextOf_straight h v s
+theorem nextSlot_straight (v : ℕ → E) {s : ℕ} (h : (cinstrAt T s).straight = true) :
+    nextSlot T v s = s + 1 := nextOf_straight h v s
 
-include h16 hκ in
+include hT h16 hκ in
 /-- **Walk of a run.** In any semantics whose straight-line steps yield the relation `RelB B`, a
 completing run from slot `s` is a walk of `RelB B`. -/
 theorem walk_of_sem (Sm : Sem) (B : BlakeRel) (hpin : Pinned (Lx L))
-    (hst : ∀ s pc x, (cinstrAt s).straight = true →
-      x ∈ Sm.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr) →
-        x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).RelB B (Lx L))) :
-    ∀ n s c, s < 2 ^ 18 → some c ∈ Sm.S (LeanIsa.runCost program L n ⟨gpow s, 1⟩) →
-      Walk (fun s => (cinstrAt s).RelB B (Lx L)) (Lx L) n s c := by
+    (hst : ∀ s pc x, (cinstrAt T s).straight = true →
+      x ∈ Sm.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr) →
+        x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelB B (Lx L))) :
+    ∀ n s c, s < 2 ^ 18 → some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow s, 1⟩) →
+      Walk T B (Lx L) n s c := by
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
@@ -535,7 +541,7 @@ theorem walk_of_sem (Sm : Sem) (B : BlakeRel) (hpin : Pinned (Lx L))
   cases n with
   | zero => rw [runCost_zero_slot L hlt] at h; exact absurd h Sm.some_not_pure_none
   | succ m =>
-  cases hstr : (cinstrAt s).straight with
+  cases hstr : (cinstrAt T s).straight with
   | true =>
     rw [runCost_slot L m hlt, Sm.bind_iff] at h
     obtain ⟨x, hx, hc⟩ := h
@@ -548,25 +554,25 @@ theorem walk_of_sem (Sm : Sem) (B : BlakeRel) (hpin : Pinned (Lx L))
       have := Walk.step hlt hrel hw
       rwa [straight_steps hstr] at this
   | false =>
-  generalize hci : cinstrAt s = ci at hstr
+  generalize hci : cinstrAt T s = ci at hstr
   cases ci with
   | dispatch k =>
     cases m with
-    | zero => rw [runCost_dispatch_one h16 hκ L hpin hlt hci] at h
+    | zero => rw [runCost_dispatch_one hT h16 hκ L hpin hlt hci] at h
               exact absurd h Sm.some_not_pure_none
     | succ m' =>
-      rw [runCost_dispatch h16 hκ L hpin hlt hci] at h
+      rw [runCost_dispatch hT h16 hκ L hpin hlt hci] at h
       split_ifs at h with hrel
       · obtain ⟨c', rfl, hc'⟩ := Sm.some_map_add h
         obtain ⟨i, hi, hpc⟩ := runCost_pc_valid Sm hc'
         change (Lx L (h1Cell k)).limb 0 = gpow i at hpc
         rw [hpc] at hc'
         have hw := ih m' (by omega) i c' hi hc'
-        have hn : nextSlot (Lx L) s = i := by
+        have hn : nextSlot T (Lx L) s = i := by
           unfold nextSlot; rw [hci]; show slotOf _ = i; rw [hpc, slotOf_gpow hi]
         rw [← hn] at hw
-        have := Walk.step (R := fun s => (cinstrAt s).RelB B (Lx L)) hlt
-          (show (cinstrAt s).RelB B (Lx L) by rw [hci]; exact hrel) hw
+        have := Walk.step (T := T) (B := B) hlt
+          (show (cinstrAt T s).RelB B (Lx L) by rw [hci]; exact hrel) hw
         rwa [hci] at this
       · exact absurd h Sm.some_not_pure_none
   | exit =>
@@ -574,35 +580,35 @@ theorem walk_of_sem (Sm : Sem) (B : BlakeRel) (hpin : Pinned (Lx L))
     split_ifs at h with hrel
     · obtain ⟨c', rfl, hc'⟩ := Sm.some_map_add h
       obtain ⟨i, hi, hpc⟩ := runCost_pc_valid Sm hc'
-      change (Lx L k0Cell).limb 0 = gpow i at hpc
+      change (Lx L (gpCell 13)).limb 0 = gpow i at hpc
       rw [hpc] at hc'
       have hw := ih m (by omega) i c' hi hc'
-      have hn : nextSlot (Lx L) s = i := by
+      have hn : nextSlot T (Lx L) s = i := by
         unfold nextSlot; rw [hci]; show slotOf _ = i; rw [hpc, slotOf_gpow hi]
       rw [← hn] at hw
-      have := Walk.step (R := fun s => (cinstrAt s).RelB B (Lx L)) hlt
-        (show (cinstrAt s).RelB B (Lx L) by rw [hci]; exact hrel) hw
+      have := Walk.step (T := T) (B := B) hlt
+        (show (cinstrAt T s).RelB B (Lx L) by rw [hci]; exact hrel) hw
       rwa [hci] at this
     · exact absurd h Sm.some_not_pure_none
   | entry k =>
-    rw [runCost_dead hκ L hlt (by rw [hci]; exact ⟨rfl, rfl, by simp, by simp⟩)] at h
+    rw [runCost_dead hT hκ L hlt (by rw [hci]; exact ⟨rfl, rfl, by simp, by simp⟩)] at h
     exact absurd h Sm.some_not_pure_none
   | pad =>
-    rw [runCost_dead hκ L hlt (by rw [hci]; exact ⟨rfl, rfl, by simp, by simp⟩)] at h
+    rw [runCost_dead hT hκ L hlt (by rw [hci]; exact ⟨rfl, rfl, by simp, by simp⟩)] at h
     exact absurd h Sm.some_not_pure_none
   | xor => simp [CInstr.straight] at hstr
   | mul => simp [CInstr.straight] at hstr
   | setc => simp [CInstr.straight] at hstr
   | blake => simp [CInstr.straight] at hstr
 
-include h16 hκ in
+include hT h16 hκ in
 /-- The fixed-table straight-line step. -/
 theorem sim_straight (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
-    (hs : (cinstrAt s).straight = true)
-    (hx : x ∈ (simSem f).S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr)) :
-    x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).Rel f (Lx L)) := by
-  have hb := cinstrAt_bounded s
-  generalize cinstrAt s = ci at hs hx hb
+    (hs : (cinstrAt T s).straight = true)
+    (hx : x ∈ (simSem f).S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr)) :
+    x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).Rel f (Lx L)) := by
+  have hb := cinstrAt_bounded hT s
+  generalize cinstrAt T s = ci at hs hx hb
   change x ∈ support (simulateQ (unifFwdAnswerImpl f) _) at hx
   cases ci with
   | xor a b c =>
@@ -628,14 +634,14 @@ theorem sim_straight (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
     · exact Or.inl hx
   | _ => simp [CInstr.straight] at hs
 
-include h16 hκ in
+include hT h16 hκ in
 /-- The cache-free straight-line step. -/
 theorem supp_straight (s : ℕ) (pc : K) (x : Option (Regs K))
-    (hs : (cinstrAt s).straight = true)
-    (hx : x ∈ suppSem.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt s).toInstr)) :
-    x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt s).RelNH (Lx L)) := by
-  have hb := cinstrAt_bounded s
-  generalize cinstrAt s = ci at hs hx hb
+    (hs : (cinstrAt T s).straight = true)
+    (hx : x ∈ suppSem.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr)) :
+    x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelNH (Lx L)) := by
+  have hb := cinstrAt_bounded hT s
+  generalize cinstrAt T s = ci at hs hx hb
   change x ∈ support _ at hx
   cases ci with
   | xor a b c =>
@@ -662,40 +668,40 @@ theorem supp_straight (s : ℕ) (pc : K) (x : Option (Regs K))
     · exact Or.inl hx
   | _ => simp [CInstr.straight] at hs
 
-include h16 hκ in
+include hT h16 hκ in
 /-- **Walk of a fixed-table run.** -/
 theorem walk_of_sim (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost program L n ⟨gpow s, 1⟩))) :
-    Walk (fun s => (cinstrAt s).Rel f (Lx L)) (Lx L) n s c :=
-  walk_of_sem h16 hκ (simSem f) (oracleRel f) hpin (sim_straight h16 hκ f) n s c hs h
+      (LeanIsa.runCost (program T) L n ⟨gpow s, 1⟩))) :
+    Walk T (oracleRel f) (Lx L) n s c :=
+  walk_of_sem hT h16 hκ (simSem f) (oracleRel f) hpin (sim_straight hT h16 hκ f) n s c hs h
 
-include h16 hκ in
+include hT h16 hκ in
 /-- **Walk of a `support` run.** -/
 theorem walk_of_supp (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
-    (h : some c ∈ support (LeanIsa.runCost program L n ⟨gpow s, 1⟩)) :
-    Walk (fun s => (cinstrAt s).RelNH (Lx L)) (Lx L) n s c :=
-  walk_of_sem h16 hκ suppSem trueRel hpin (supp_straight h16 hκ) n s c hs h
+    (h : some c ∈ support (LeanIsa.runCost (program T) L n ⟨gpow s, 1⟩)) :
+    Walk T trueRel (Lx L) n s c :=
+  walk_of_sem hT h16 hκ suppSem trueRel hpin (supp_straight hT h16 hκ) n s c hs h
 
-include h16 hκ in
+include hT h16 hκ in
 /-- **Run of a walk.** Under a fixed table, a walk whose relations hold is a completing run of
 exactly its steps and cost. -/
 theorem sim_of_walk (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ}
-    (hw : Walk (fun s => (cinstrAt s).Rel f (Lx L)) (Lx L) n s c) :
-    simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost program L n ⟨gpow s, 1⟩) =
+    (hw : Walk T (oracleRel f) (Lx L) n s c) :
+    simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost (program T) L n ⟨gpow s, 1⟩) =
       pure (some c) := by
   induction hw with
   | done => rw [runCost_zero_sentinel, simulateQ_pure]
   | @step n s c hs hR hw ih =>
-    have hb := cinstrAt_bounded s
-    cases hstr : (cinstrAt s).straight with
+    have hb := cinstrAt_bounded hT s
+    cases hstr : (cinstrAt T s).straight with
     | true =>
       rw [straight_steps hstr, runCost_slot L n hs, simulateQ_bind]
       have hex : simulateQ (unifFwdAnswerImpl f)
-          (LeanIsa.execute L ⟨gpow s, 1⟩ (cinstrAt s).toInstr) = pure (some ⟨gpow (s + 1), 1⟩) := by
+          (LeanIsa.execute L ⟨gpow s, 1⟩ (cinstrAt T s).toInstr) = pure (some ⟨gpow (s + 1), 1⟩) := by
         rw [← g_mul_gpow]
         revert hR hb
-        generalize cinstrAt s = ci at hstr
+        generalize cinstrAt T s = ci at hstr
         intro hR hb
         cases ci with
         | xor a b c =>
@@ -714,13 +720,13 @@ theorem sim_of_walk (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ}
       rw [hex, pure_bind, Option.elim_some, simulateQ_map, ← nextSlot_straight (Lx L) hstr, ih,
         map_pure, Option.map_some, straight_weight hstr]
     | false =>
-      generalize hci : cinstrAt s = ci at hstr hR hb
+      generalize hci : cinstrAt T s = ci at hstr hR hb
       cases ci with
       | dispatch k =>
-        rw [show (CInstr.dispatch k).steps = 2 from rfl, runCost_dispatch h16 hκ L hpin hs hci,
+        rw [show (CInstr.dispatch k).steps = 2 from rfl, runCost_dispatch hT h16 hκ L hpin hs hci,
           if_pos (CInstr.relNH_of_relB hR), simulateQ_map]
-        have hpc : (Lx L (h1Cell k)).limb 0 = gpow (nextSlot (Lx L) s) := by
-          have hn : nextSlot (Lx L) s = slotOf ((Lx L (h1Cell k)).limb 0) := by
+        have hpc : (Lx L (h1Cell k)).limb 0 = gpow (nextSlot T (Lx L) s) := by
+          have hn : nextSlot T (Lx L) s = slotOf ((Lx L (h1Cell k)).limb 0) := by
             unfold nextSlot; rw [hci]; rfl
           rw [hn]
           exact slotOf_spec (by rw [← hn]; have := hw.le_sentinel; unfold sentinel at this; omega)
@@ -729,8 +735,8 @@ theorem sim_of_walk (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ}
       | exit =>
         rw [show CInstr.exit.steps = 1 from rfl, runCost_exit h16 hκ L hpin hs hci,
           if_pos (CInstr.relNH_of_relB hR), simulateQ_map]
-        have hpc : (Lx L k0Cell).limb 0 = gpow (nextSlot (Lx L) s) := by
-          have hn : nextSlot (Lx L) s = slotOf ((Lx L k0Cell).limb 0) := by
+        have hpc : (Lx L (gpCell 13)).limb 0 = gpow (nextSlot T (Lx L) s) := by
+          have hn : nextSlot T (Lx L) s = slotOf ((Lx L (gpCell 13)).limb 0) := by
             unfold nextSlot; rw [hci]; rfl
           rw [hn]
           exact slotOf_spec (by rw [← hn]; have := hw.le_sentinel; unfold sentinel at this; omega)
@@ -744,4 +750,4 @@ end Bridges
 
 end
 
-end OptimalOTS.HLFlat
+end OptimalOTS.HLG3

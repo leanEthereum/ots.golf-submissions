@@ -5,12 +5,14 @@ import Submissions.UpperLeanIsa.IUB
 # Key generation is a uniform record
 
 Under the lazy random oracle started from the empty cache, key generation samples the 42 seeds
-and then queries every chain step and every root call exactly once, at pairwise distinct
-inputs (`location_eq_of_input_eq`). Its output and final cache are those of a uniformly random
-record:
+and then queries every chain step and every root call exactly once. The chain steps and the
+constant-tag root calls have pairwise distinct inputs (`location_eq_of_input_eq`); the last root
+call is fresh when the record is separated (`fresh_seven`). Its output and final cache are those
+of a uniformly random record, up to the records that are not separated, which are bounded by `1`
+(`E_run_keygen`) or dropped (`E_run_keygen_ge`):
 
 ```
-E[g' | run keygen ∅] = ∑ ξ : Record P, recW P · g' ((ξ.pk, ξ.sk), ξ.cache).
+∑ ξ, recW P · [ξ.Sep] g' (ξ…) ≤ E[g' | run keygen ∅] ≤ ∑ ξ, recW P · (if ξ.Sep then g' (ξ…) else 1).
 ```
 
 Adapted from the record's `KeygenBridge` (after the checked `upper-riscv-687` keygen bridge):
@@ -166,12 +168,12 @@ theorem word_update (sk : Fin numChains → Word) (y : Tbl P) (b : Loc P) (u : B
       simp only [Function.update_of_ne hne]
     · simp only [Record.word, dif_neg hj]
 
-theorem top_update_inr (sk : Fin numChains → Word) (y : Tbl P) (r : Fin 9) (u : BitVec hashBits) :
+theorem top_update_inr (sk : Fin numChains → Word) (y : Tbl P) (r : Fin 8) (u : BitVec hashBits) :
     Record.top (sk, Function.update y (.inr r) u) = Record.top (sk, y) := by
   funext k
   exact word_update sk y _ u k _ (fun _ h => absurd h Sum.inr_ne_inl)
 
-theorem table_update_inr (sk : Fin numChains → Word) (y : Tbl P) (r : Fin 9)
+theorem table_update_inr (sk : Fin numChains → Word) (y : Tbl P) (r : Fin 8)
     (u : BitVec hashBits) :
     Record.table (sk, Function.update y (.inr r) u) = Record.table (sk, y) := by
   funext k
@@ -186,15 +188,13 @@ theorem query_update_inl (sk : Fin numChains → Word) (y : Tbl P) (b : Loc P)
       Record.query (sk, y) (.inl ⟨k, j⟩) := by
   rw [Record.query_inl, Record.query_inl, word_update sk y b u k _ h]
 
-theorem rootState_update (sk : Fin numChains → Word) (y : Tbl P) (r' : Fin 9)
+theorem rootState_update (sk : Fin numChains → Word) (y : Tbl P) (r' : Fin 8)
     (u : BitVec hashBits) (r : ℕ) (h : r'.val + 1 ≠ r) :
     Record.rootState (sk, Function.update y (.inr r') u) r = Record.rootState (sk, y) r := by
   cases r with
-  | zero =>
-    show Params.rootInit (Record.top _) = Params.rootInit (Record.top _)
-    rw [top_update_inr]
+  | zero => rfl
   | succ r =>
-    by_cases hr : r < 9
+    by_cases hr : r < 8
     · rw [Record.rootState_succ_lt _ r hr, Record.rootState_succ_lt _ r hr]
       have hne : (Sum.inr ⟨r, hr⟩ : Loc P) ≠ .inr r' := by
         intro he
@@ -210,7 +210,7 @@ theorem rootState_update_inl (sk : Fin numChains → Word) (y : Tbl P) (a : Chai
   cases r with
   | zero => exact absurd rfl hr
   | succ r =>
-    by_cases hr : r < 9
+    by_cases hr : r < 8
     · rw [Record.rootState_succ_lt _ r hr, Record.rootState_succ_lt _ r hr]
       exact Function.update_of_ne
         (show (Sum.inr ⟨r, hr⟩ : Loc P) ≠ Sum.inl a from Sum.inr_ne_inl) u y
@@ -242,7 +242,7 @@ theorem progUpd_congr {ξ : Record P} {S S' : Loc P → Prop} {c : Cache}
   rw [hSS]
 
 theorem progUpd_cacheQuery (hP : P.Hyp) (ξ : Record P) (S : Loc P → Prop) (c : Cache)
-    (a : Loc P) :
+    (a : Loc P) (ha : ξ.ValidAt a) :
     progUpd ξ S (c.cacheQuery (ξ.query a) (ξ.2 a)) = progUpd ξ (fun b => S b ∨ b = a) c := by
   funext q
   rw [progUpd_apply, progUpd_apply]
@@ -253,7 +253,7 @@ theorem progUpd_cacheQuery (hP : P.Hyp) (ξ : Record P) (S : Loc P → Prop) (c 
     by_cases h : ∃ b, S b ∧ ξ.query b = ξ.query a
     · rw [if_pos h]
     · rw [if_neg h, QueryCache.cacheQuery_self]
-      exact (ξ.cache_query hP a).symm
+      exact (ξ.cache_query hP a ha).symm
   · by_cases h : ∃ b, S b ∧ ξ.query b = q
     · have h1 : ∃ b, (S b ∨ b = a) ∧ ξ.query b = q := by
         obtain ⟨b, hb, hbq⟩ := h
@@ -264,6 +264,26 @@ theorem progUpd_cacheQuery (hP : P.Hyp) (ξ : Record P) (S : Loc P → Prop) (c 
         · exact h ⟨b, hb, hbq⟩
         · exact hq hbq
       rw [if_neg h, if_neg h1, QueryCache.cacheQuery_of_ne _ _ (Ne.symm hq)]
+
+theorem cacheQuery_progUpd (hP : P.Hyp) (ξ : Record P) (S : Loc P → Prop) (c : Cache)
+    (a : Loc P) (ha : ξ.ValidAt a) :
+    (progUpd ξ S c).cacheQuery (ξ.query a) (ξ.2 a) = progUpd ξ (fun b => S b ∨ b = a) c := by
+  funext q
+  rw [progUpd_apply]
+  by_cases hq : ξ.query a = q
+  · subst hq
+    rw [QueryCache.cacheQuery_self, if_pos ⟨a, Or.inr rfl, rfl⟩, ξ.cache_query hP a ha]
+  · rw [QueryCache.cacheQuery_of_ne _ _ (Ne.symm hq), progUpd_apply]
+    have hiff : (∃ b, (S b ∨ b = a) ∧ ξ.query b = q) ↔ ∃ b, S b ∧ ξ.query b = q := by
+      constructor
+      · rintro ⟨b, hb | rfl, hbq⟩
+        · exact ⟨b, hb, hbq⟩
+        · exact absurd hbq hq
+      · rintro ⟨b, hb, hbq⟩
+        exact ⟨b, Or.inl hb, hbq⟩
+    by_cases h : ∃ b, S b ∧ ξ.query b = q
+    · rw [if_pos h, if_pos (hiff.mpr h)]
+    · rw [if_neg h, if_neg (fun h' => h (hiff.mp h'))]
 
 theorem progUpd_progUpd (ξ : Record P) (S T : Loc P → Prop) (c : Cache) :
     progUpd ξ S (progUpd ξ T c) = progUpd ξ (fun b => S b ∨ T b) c := by
@@ -295,13 +315,14 @@ theorem progUpd_true_empty (hP : P.Hyp) (ξ : Record P) :
     cases hc : ξ.cache q with
     | none => rfl
     | some v =>
-      obtain ⟨a, ha, -⟩ := (ξ.cache_some_iff hP q v).1 hc
+      obtain ⟨a, -, ha, -⟩ := (ξ.cache_some_iff hP q v).1 hc
       exact (h ⟨a, trivial, ha⟩).elim
 
 theorem progUpd_update (hP : P.Hyp) (sk : Fin numChains → Word) (y : Tbl P) (b : Loc P)
     (u : BitVec hashBits) (S : Loc P → Prop) (c : Cache)
     (hS : ∀ b', S b' → b' ≠ b ∧
-      Record.query (sk, Function.update y b u) b' = Record.query (sk, y) b') :
+      Record.query (sk, Function.update y b u) b' = Record.query (sk, y) b')
+    (h7 : ∀ b', S b' → b' ≠ .inr 7) :
     progUpd (sk, Function.update y b u) S c = progUpd (sk, y) S c := by
   funext q
   rw [progUpd_apply, progUpd_apply]
@@ -314,10 +335,10 @@ theorem progUpd_update (hP : P.Hyp) (sk : Fin numChains → Word) (y : Tbl P) (b
     obtain ⟨b', hb', rfl⟩ := h
     have h1 : Record.cache (sk, Function.update y b u) (Record.query (sk, y) b') =
         some (y b') := by
-      rw [← (hS b' hb').2, Record.cache_query hP]
+      rw [← (hS b' hb').2, Record.cache_query hP _ _ (Record.validAt_of_ne (h7 b' hb'))]
       exact congrArg some (Function.update_of_ne (hS b' hb').1 u y)
     have h2 : Record.cache (sk, y) (Record.query (sk, y) b') = some (y b') :=
-      Record.cache_query hP (sk, y) b'
+      Record.cache_query hP (sk, y) b' (Record.validAt_of_ne (h7 b' hb'))
     rw [h1, h2]
   · rw [if_neg (fun h' => h (hiff.1 h')), if_neg h]
 
@@ -331,8 +352,8 @@ def ChainSeg (k : Fin numChains) (j n : ℕ) (b : Loc P) : Prop :=
 def ChainsOf {n : ℕ} (φ : Fin n → Fin numChains) (b : Loc P) : Prop :=
   ∃ (t : Fin n) (j : Fin (P.len (φ t) - 1)), b = .inl ⟨φ t, j⟩
 
-/-- Root calls `r, …, 8`. -/
-def RootsFrom (r : ℕ) (b : Loc P) : Prop := ∃ s : Fin 9, b = .inr s ∧ r ≤ s.val
+/-- Root calls `r, …, 6` (the constant-tag calls). -/
+def RootsFrom (r : ℕ) (b : Loc P) : Prop := ∃ s : Fin 8, b = .inr s ∧ r ≤ s.val ∧ s.val < 7
 
 variable (P) in
 /-- The cache holds no chain-`k` query at positions `≥ j`. -/
@@ -340,9 +361,9 @@ def FreshChain (c : Cache) (k : Fin numChains) (j : ℕ) : Prop :=
   ∀ j' : ℕ, j' + 1 < P.len k → j ≤ j' → ∀ x : Word, c ⟨896, P.chainInput k j' x⟩ = none
 
 variable (P) in
-/-- The cache holds no root query at calls `≥ r`. -/
+/-- The cache holds no root query at the constant-tag calls `r, …, 6`. -/
 def FreshRoot (c : Cache) (r : ℕ) : Prop :=
-  ∀ s : ℕ, s < 9 → r ≤ s → ∀ (t : Fin numChains → Word) (st : BitVec 256),
+  ∀ s : ℕ, s < 7 → r ≤ s → ∀ (t : Fin numChains → Word) (st : BitVec 256),
     c ⟨896, P.rootInput t s st⟩ = none
 
 theorem inl_eq_fst {a b : ChainLoc P} (h : (Sum.inl a : Loc P) = .inl b) : a.1 = b.1 :=
@@ -374,16 +395,16 @@ theorem chainsOf_succ {n : ℕ} (φ : Fin (n + 1) → Fin numChains) (b : Loc P)
     · exact Or.inr ⟨j, rfl, Nat.zero_le _, by have := j.isLt; omega⟩
     · exact Or.inl ⟨t, j, rfl⟩
 
-theorem rootsFrom_succ (r : ℕ) (hr : r < 9) (b : Loc P) :
-    (RootsFrom (r + 1) b ∨ b = .inr ⟨r, hr⟩) ↔ RootsFrom r b := by
+theorem rootsFrom_succ (r : ℕ) (hr : r < 7) (b : Loc P) :
+    (RootsFrom (r + 1) b ∨ b = .inr ⟨r, by omega⟩) ↔ RootsFrom r b := by
   constructor
-  · rintro (⟨s, rfl, hs⟩ | rfl)
-    · exact ⟨s, rfl, by omega⟩
-    · exact ⟨⟨r, hr⟩, rfl, le_rfl⟩
-  · rintro ⟨s, rfl, hs⟩
+  · rintro (⟨s, rfl, hs, hs7⟩ | rfl)
+    · exact ⟨s, rfl, by omega, hs7⟩
+    · exact ⟨⟨r, by omega⟩, rfl, le_rfl, hr⟩
+  · rintro ⟨s, rfl, hs, hs7⟩
     by_cases hsr : s.val = r
     · exact Or.inr (congrArg Sum.inr (Fin.ext hsr))
-    · exact Or.inl ⟨s, rfl, by omega⟩
+    · exact Or.inl ⟨s, rfl, by omega, hs7⟩
 
 /-! ## One chain -/
 
@@ -517,7 +538,7 @@ theorem E_run_chainList_avg (hP : P.Hyp) (sk : Fin numChains → Word) (k : Fin 
             rw [hx y]
             rfl
           dsimp only
-          rw [wordList_succ, ← hx y, hq, progUpd_cacheQuery hP,
+          rw [wordList_succ, ← hx y, hq, progUpd_cacheQuery hP _ _ _ _ (Record.validAt_inl _ _),
             progUpd_congr (chainSeg_succ k j n hj)]
 
 /-! ## All chains -/
@@ -595,10 +616,12 @@ theorem E_run_tabulate_chains (hP : P.Hyp) (sk : Fin numChains → Word) :
       intro y t j u
       rw [hc y t.succ j u]
       apply progUpd_update hP
-      rintro b ⟨j', rfl, -, -⟩
-      refine ⟨fun h => h0 t (inl_eq_fst h).symm, ?_⟩
-      exact query_update_inl sk y _ u (φ 0) j'
-        (fun _ hb => (h0 t (inl_eq_fst hb)).elim)
+      · rintro b ⟨j', rfl, -, -⟩
+        refine ⟨fun h => h0 t (inl_eq_fst h).symm, ?_⟩
+        exact query_update_inl sk y _ u (φ 0) j'
+          (fun _ hb => (h0 t (inl_eq_fst hb)).elim)
+      · rintro b ⟨j', rfl, -, -⟩
+        exact Sum.inl_ne_inr
     have hG' : ∀ y (t : Fin n) (j : Fin (P.len (φ t.succ) - 1)) u,
         (fun p' : (Fin n → List Word) × Cache =>
           G (Function.update y (.inl ⟨φ t.succ, j⟩) u)
@@ -668,55 +691,144 @@ theorem E_run_tabulate_chains (hP : P.Hyp) (sk : Fin numChains → Word) :
 
 /-! ## The root -/
 
+/-- One query at location `a`, fresh whenever `S` holds; otherwise bounded by `1`. -/
+theorem avg_hash_le (a : Loc P) (x : Tbl P → BitVec 896) (c : Tbl P → Cache)
+    (S : Tbl P → Prop) (K : Tbl P → BitVec hashBits × Cache → ℝ≥0∞)
+    (hK1 : ∀ y p, K y p ≤ 1)
+    (hfresh : ∀ y, S y → c y ⟨896, x y⟩ = none)
+    (hS : ∀ y u, S (Function.update y a u) ↔ S y)
+    (hx : ∀ y u, x (Function.update y a u) = x y)
+    (hc : ∀ y u, c (Function.update y a u) = c y)
+    (hK : ∀ y u p, K (Function.update y a u) p = K y p) :
+    ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ * E (run (hash (x y)) (c y)) (K y) ≤
+      ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ *
+        (if S y then K y (y a, (c y).cacheQuery ⟨896, x y⟩ (y a)) else 1) := by
+  let K' : Tbl P → BitVec hashBits × Cache → ℝ≥0∞ := fun y p => if S y then K y p else 1
+  have key := sum_avg_update (R := fun _ : Loc P => BitVec hashBits) a
+    (fun u y => K' y (u, (c y).cacheQuery ⟨896, x y⟩ u))
+    (fun u u' y => by
+      simp only [K']
+      rw [hK, hc, hx y u']
+      by_cases h : S y
+      · rw [if_pos ((hS y u').mpr h), if_pos h]
+      · rw [if_neg (fun h' => h ((hS y u').mp h')), if_neg h])
+  have hpt : ∀ y : Tbl P, E (run (hash (x y)) (c y)) (K y) ≤
+      ∑ u : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+        K' y (u, (c y).cacheQuery ⟨896, x y⟩ u) := by
+    intro y
+    by_cases h : S y
+    · rw [run_hash_fresh _ _ (hfresh y h), E_bind, E_uniform]
+      simp only [E_pure, K', if_pos h]
+      exact le_rfl
+    · simp only [K', if_neg h]
+      rw [sum_inv_card_mul']
+      exact E_le_one _ (hK1 y)
+  calc ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ * E (run (hash (x y)) (c y)) (K y)
+      ≤ ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ *
+          ∑ u : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+            K' y (u, (c y).cacheQuery ⟨896, x y⟩ u) :=
+        Finset.sum_le_sum fun y _ => mul_le_mul' le_rfl (hpt y)
+    _ = ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ *
+          K' y (y a, (c y).cacheQuery ⟨896, x y⟩ (y a)) := by
+        refine Eq.trans ?_ key
+        simp only [Finset.mul_sum]
+        rw [Finset.sum_comm]
+        refine Finset.sum_congr rfl fun _ _ => Finset.sum_congr rfl fun _ _ => ?_
+        rw [mul_left_comm]
+    _ = _ := rfl
 
+/-- One query at location `a`, fresh whenever `S` holds: a lower bound. -/
+theorem avg_hash_ge (a : Loc P) (x : Tbl P → BitVec 896) (c : Tbl P → Cache)
+    (S : Tbl P → Prop) (K : Tbl P → BitVec hashBits × Cache → ℝ≥0∞)
+    (hfresh : ∀ y, S y → c y ⟨896, x y⟩ = none)
+    (hS : ∀ y u, S (Function.update y a u) ↔ S y)
+    (hx : ∀ y u, x (Function.update y a u) = x y)
+    (hc : ∀ y u, c (Function.update y a u) = c y)
+    (hK : ∀ y u p, K (Function.update y a u) p = K y p) :
+    ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ *
+        (if S y then K y (y a, (c y).cacheQuery ⟨896, x y⟩ (y a)) else 0) ≤
+      ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ * E (run (hash (x y)) (c y)) (K y) := by
+  let K' : Tbl P → BitVec hashBits × Cache → ℝ≥0∞ := fun y p => if S y then K y p else 0
+  have key := sum_avg_update (R := fun _ : Loc P => BitVec hashBits) a
+    (fun u y => K' y (u, (c y).cacheQuery ⟨896, x y⟩ u))
+    (fun u u' y => by
+      simp only [K']
+      rw [hK, hc, hx y u']
+      by_cases h : S y
+      · rw [if_pos ((hS y u').mpr h), if_pos h]
+      · rw [if_neg (fun h' => h ((hS y u').mp h')), if_neg h])
+  have hpt : ∀ y : Tbl P,
+      ∑ u : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+        K' y (u, (c y).cacheQuery ⟨896, x y⟩ u) ≤ E (run (hash (x y)) (c y)) (K y) := by
+    intro y
+    by_cases h : S y
+    · rw [run_hash_fresh _ _ (hfresh y h), E_bind, E_uniform]
+      simp only [E_pure, K', if_pos h]
+      exact le_rfl
+    · simp only [K', if_neg h, mul_zero, Finset.sum_const_zero]
+      exact bot_le
+  calc ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ *
+        (if S y then K y (y a, (c y).cacheQuery ⟨896, x y⟩ (y a)) else 0)
+      = ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ *
+          K' y (y a, (c y).cacheQuery ⟨896, x y⟩ (y a)) := rfl
+    _ = ∑ y : Tbl P, (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ *
+          ∑ u : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+            K' y (u, (c y).cacheQuery ⟨896, x y⟩ u) := by
+        refine Eq.trans key.symm ?_
+        simp only [Finset.mul_sum]
+        rw [Finset.sum_comm]
+        refine Finset.sum_congr rfl fun _ _ => Finset.sum_congr rfl fun _ _ => ?_
+        rw [mul_left_comm]
+    _ ≤ _ := Finset.sum_le_sum fun y _ => mul_le_mul' le_rfl (hpt y)
 
-/-- The root calls `r, …, 8` from the state before call `r` program root locations `r, …, 8` and
-end in the final state. -/
+/-- The constant-tag root calls `r, …, 6` from the state before call `r` program root locations
+`r, …, 6` and end in the state before the last call. -/
 theorem E_run_rootFrom_avg (hP : P.Hyp) (sk : Fin numChains → Word)
     (G : Tbl P → BitVec 256 × Cache → ℝ≥0∞) :
-    ∀ (m r : ℕ) (hrm : r + m = 9) (st : Tbl P → BitVec 256) (c : Tbl P → Cache),
+    ∀ (m r : ℕ) (hrm : r + m = 7) (st : Tbl P → BitVec 256) (c : Tbl P → Cache),
       (∀ y, st y = Record.rootState (sk, y) r) →
       (∀ y, FreshRoot P (c y) r) →
-      (∀ y (s : Fin 9) u, r ≤ s.val → c (Function.update y (.inr s) u) = c y) →
-      (∀ y (s : Fin 9) u, r ≤ s.val → G (Function.update y (.inr s) u) = G y) →
+      (∀ y (s : Fin 8) u, r ≤ s.val → c (Function.update y (.inr s) u) = c y) →
+      (∀ y (s : Fin 8) u, r ≤ s.val → G (Function.update y (.inr s) u) = G y) →
       ∑ y : Tbl P, Nt * E (run (P.rootFrom (Record.top (sk, y)) r m (st y)) (c y)) (G y) =
-        ∑ y : Tbl P, Nt * G y (Record.rootState (sk, y) 9,
+        ∑ y : Tbl P, Nt * G y (Record.rootState (sk, y) 7,
           progUpd (sk, y) (RootsFrom r) (c y)) := by
   intro m
   induction m with
   | zero =>
     intro r hrm st c hst _ _ _
-    obtain rfl : r = 9 := by omega
+    obtain rfl : r = 7 := by omega
     refine Finset.sum_congr rfl fun y _ => ?_
     rw [rootFrom_zero', run_pure, E_pure, hst y,
-      progUpd_of_false (sk, y) (RootsFrom 9) (c y)
-        (fun _ ⟨s, _, hs⟩ => by have := s.isLt; omega)]
+      progUpd_of_false (sk, y) (RootsFrom 7) (c y)
+        (fun _ ⟨s, _, hs, hs7⟩ => by omega)]
   | succ m ih =>
     intro r hrm st c hst hfr hc hG
-    have hr : r < 9 := by omega
+    have hr : r < 7 := by omega
+    have hr8 : r < 8 := by omega
     have hstep : ∀ y : Tbl P,
         E (run (P.rootFrom (Record.top (sk, y)) r (m + 1) (st y)) (c y)) (G y) =
           E (run (hash (P.rootInput (Record.top (sk, y)) r (st y))) (c y))
             (fun p => E (run (P.rootFrom (Record.top (sk, y)) (r + 1) m p.1) p.2) (G y)) := by
       intro y
       rw [rootFrom_succ', run_bind, E_bind]
-    have hXu : ∀ y (s : Fin 9) u, r ≤ s.val →
+    have hXu : ∀ y (s : Fin 8) u, r ≤ s.val →
         P.rootInput (Record.top (sk, Function.update y (.inr s) u)) r
             (st (Function.update y (.inr s) u)) =
           P.rootInput (Record.top (sk, y)) r (st y) := by
       intro y s u hs
       rw [hst, hst, rootState_update sk y s u r (by omega), top_update_inr]
     have hK : ∀ y u (p : BitVec hashBits × Cache),
-        E (run (P.rootFrom (Record.top (sk, Function.update y (.inr ⟨r, hr⟩) u)) (r + 1) m p.1)
-            p.2) (G (Function.update y (.inr ⟨r, hr⟩) u)) =
+        E (run (P.rootFrom (Record.top (sk, Function.update y (.inr ⟨r, hr8⟩) u)) (r + 1) m p.1)
+            p.2) (G (Function.update y (.inr ⟨r, hr8⟩) u)) =
           E (run (P.rootFrom (Record.top (sk, y)) (r + 1) m p.1) p.2) (G y) := by
       intro y u p
-      rw [top_update_inr, hG y ⟨r, hr⟩ u le_rfl]
+      rw [top_update_inr, hG y ⟨r, hr8⟩ u le_rfl]
     have hst' : ∀ y : Tbl P,
-        (y (.inr ⟨r, hr⟩) : BitVec 256) = Record.rootState (sk, y) (r + 1) :=
-      fun y => (Record.rootState_succ (sk, y) ⟨r, hr⟩).symm
+        (y (.inr ⟨r, hr8⟩) : BitVec 256) = Record.rootState (sk, y) (r + 1) :=
+      fun y => (Record.rootState_succ (sk, y) ⟨r, hr8⟩).symm
     have hfr' : ∀ y : Tbl P, FreshRoot P ((c y).cacheQuery
-        ⟨896, P.rootInput (Record.top (sk, y)) r (st y)⟩ (y (.inr ⟨r, hr⟩))) (r + 1) := by
+        ⟨896, P.rootInput (Record.top (sk, y)) r (st y)⟩ (y (.inr ⟨r, hr8⟩))) (r + 1) := by
       intro y s hs hrs t st'
       have hne : (⟨896, P.rootInput t s st'⟩ : Query) ≠
           ⟨896, P.rootInput (Record.top (sk, y)) r (st y)⟩ := by
@@ -725,15 +837,15 @@ theorem E_run_rootFrom_avg (hP : P.Hyp) (sk : Fin numChains → Word)
         omega
       rw [QueryCache.cacheQuery_of_ne _ _ hne]
       exact hfr y s hs (by omega) t st'
-    have hc' : ∀ y (s : Fin 9) u, r + 1 ≤ s.val →
+    have hc' : ∀ y (s : Fin 8) u, r + 1 ≤ s.val →
         (c (Function.update y (.inr s) u)).cacheQuery
             ⟨896, P.rootInput (Record.top (sk, Function.update y (.inr s) u)) r
               (st (Function.update y (.inr s) u))⟩
-            (Function.update y (.inr s) u (.inr ⟨r, hr⟩)) =
+            (Function.update y (.inr s) u (.inr ⟨r, hr8⟩)) =
           (c y).cacheQuery ⟨896, P.rootInput (Record.top (sk, y)) r (st y)⟩
-            (y (.inr ⟨r, hr⟩)) := by
+            (y (.inr ⟨r, hr8⟩)) := by
       intro y s u hs
-      have hne : (Sum.inr ⟨r, hr⟩ : Loc P) ≠ .inr s := by
+      have hne : (Sum.inr ⟨r, hr8⟩ : Loc P) ≠ .inr s := by
         intro h
         have h2 := congrArg Fin.val (Sum.inr.inj h)
         simp only at h2
@@ -744,29 +856,42 @@ theorem E_run_rootFrom_avg (hP : P.Hyp) (sk : Fin numChains → Word)
             (fun p => E (run (P.rootFrom (Record.top (sk, y)) (r + 1) m p.1) p.2) (G y)) :=
           Finset.sum_congr rfl fun y _ => by rw [hstep y]
       _ = ∑ y : Tbl P, Nt * E (run (P.rootFrom (Record.top (sk, y)) (r + 1) m
-              (y (.inr ⟨r, hr⟩)))
+              (y (.inr ⟨r, hr8⟩)))
             ((c y).cacheQuery ⟨896, P.rootInput (Record.top (sk, y)) r (st y)⟩
-              (y (.inr ⟨r, hr⟩)))) (G y) :=
-          avg_hash (.inr ⟨r, hr⟩) (fun y => P.rootInput (Record.top (sk, y)) r (st y)) c
+              (y (.inr ⟨r, hr8⟩)))) (G y) :=
+          avg_hash (.inr ⟨r, hr8⟩) (fun y => P.rootInput (Record.top (sk, y)) r (st y)) c
             (fun y p => E (run (P.rootFrom (Record.top (sk, y)) (r + 1) m p.1) p.2) (G y))
-            (fun y => hfr y r hr le_rfl _ _) (fun y u => hXu y ⟨r, hr⟩ u le_rfl)
-            (fun y u => hc y ⟨r, hr⟩ u le_rfl) hK
-      _ = ∑ y : Tbl P, Nt * G y (Record.rootState (sk, y) 9,
+            (fun y => hfr y r hr le_rfl _ _) (fun y u => hXu y ⟨r, hr8⟩ u le_rfl)
+            (fun y u => hc y ⟨r, hr8⟩ u le_rfl) hK
+      _ = ∑ y : Tbl P, Nt * G y (Record.rootState (sk, y) 7,
             progUpd (sk, y) (RootsFrom (r + 1))
               ((c y).cacheQuery ⟨896, P.rootInput (Record.top (sk, y)) r (st y)⟩
-                (y (.inr ⟨r, hr⟩)))) :=
-          ih (r + 1) (by omega) (fun y => (y (.inr ⟨r, hr⟩) : BitVec 256))
+                (y (.inr ⟨r, hr8⟩)))) :=
+          ih (r + 1) (by omega) (fun y => (y (.inr ⟨r, hr8⟩) : BitVec 256))
             (fun y => (c y).cacheQuery ⟨896, P.rootInput (Record.top (sk, y)) r (st y)⟩
-              (y (.inr ⟨r, hr⟩)))
+              (y (.inr ⟨r, hr8⟩)))
             hst' hfr' hc' (fun y s u hs => hG y s u (by omega))
-      _ = ∑ y : Tbl P, Nt * G y (Record.rootState (sk, y) 9,
+      _ = ∑ y : Tbl P, Nt * G y (Record.rootState (sk, y) 7,
             progUpd (sk, y) (RootsFrom r) (c y)) := by
           refine Finset.sum_congr rfl fun y _ => ?_
           have hq : (⟨896, P.rootInput (Record.top (sk, y)) r (st y)⟩ : Query) =
-              Record.query (sk, y) (.inr ⟨r, hr⟩) := by
+              Record.query (sk, y) (.inr ⟨r, hr8⟩) := by
             rw [hst y]
             rfl
-          rw [hq, progUpd_cacheQuery hP, progUpd_congr (rootsFrom_succ r hr)]
+          rw [hq, progUpd_cacheQuery hP _ _ _ _ (Record.validAt_inr_lt _ (show r < 7 from hr)),
+            progUpd_congr (rootsFrom_succ r hr)]
+
+theorem rootFrom_add (t : Fin numChains → Word) :
+    ∀ (a r b : ℕ) (st : BitVec 256),
+      P.rootFrom t r (a + b) st = P.rootFrom t r a st >>= fun st' => P.rootFrom t (r + a) b st' := by
+  intro a
+  induction a with
+  | zero => intro r b st; rw [Nat.zero_add, rootFrom_zero', pure_bind, Nat.add_zero]
+  | succ a ih =>
+    intro r b st
+    rw [show a + 1 + b = (a + b) + 1 by omega, rootFrom_succ', rootFrom_succ', bind_assoc]
+    refine bind_congr fun st' => ?_
+    rw [ih (r + 1) b st', show r + 1 + a = r + (a + 1) by omega]
 
 /-! ## Sampling the seeds -/
 
@@ -830,13 +955,41 @@ theorem table_getD_top (hP : P.Hyp) (ξ : Record P) (k : Fin numChains) :
   rw [List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_range (by omega)]
   rfl
 
-/-- For fixed seeds, the chains and the root are a uniform table. -/
+theorem root_split (t : Fin numChains → Word) (st : BitVec 256) :
+    P.rootFrom t 0 8 st = P.rootFrom t 0 7 st >>= fun st' => P.rootFrom t 7 1 st' :=
+  rootFrom_add t 7 0 1 st
+
+/-- The last root call is fresh in a separated record's cache of all earlier locations. -/
+theorem fresh_seven (hP : P.Hyp) (ξ : Record P) (hξ : ξ.Sep) (S : Loc P → Prop)
+    (hS : ∀ b, S b → b ≠ .inr 7) : progUpd ξ S ∅ (ξ.query (.inr 7)) = none := by
+  have hn : ¬ ∃ b, S b ∧ ξ.query b = ξ.query (.inr 7) := by
+    rintro ⟨b, hb, hq⟩
+    exact hS b hb (location_eq_of_query_eq hP ξ ξ b _ (Record.validAt_of_ne (hS b hb))
+      (Record.validAt_of_sep hξ _) hq)
+  rw [progUpd_apply_neg hn, QueryCache.empty_apply]
+
+/-- For fixed seeds, the chains and the root are a uniform table, up to the records that are not
+separated (their last root call may repeat an earlier query), which are bounded by `1`. -/
 theorem E_run_keygen_sk (hP : P.Hyp) (sk : Fin numChains → Word)
-    (g' : (PublicKey × SecretKey) × Cache → ℝ≥0∞) :
+    (g' : (PublicKey × SecretKey) × Cache → ℝ≥0∞) (hg : ∀ p, g' p ≤ 1) :
+    (∑ y : Tbl P, Nt * (if Record.Sep ((sk, y) : Record P) then
+        g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) else 0)) ≤
+      E (run (tabulate (fun k => P.chainList k 0 (P.len k - 1) (sk k)) >>= fun tables =>
+        P.root (fun k => (tables k).getD (P.len k - 1) 0) >>= fun pk =>
+          pure (pk, (⟨tables, pk⟩ : SecretKey))) ∅) g' ∧
     E (run (tabulate (fun k => P.chainList k 0 (P.len k - 1) (sk k)) >>= fun tables =>
         P.root (fun k => (tables k).getD (P.len k - 1) 0) >>= fun pk =>
-          pure (pk, (⟨tables, pk⟩ : SecretKey))) ∅) g' =
-      ∑ y : Tbl P, Nt * g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) := by
+          pure (pk, (⟨tables, pk⟩ : SecretKey))) ∅) g' ≤
+      ∑ y : Tbl P, Nt * (if Record.Sep ((sk, y) : Record P) then
+        g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) else 1) := by
+  set S7 : Loc P → Prop := fun b => RootsFrom 0 b ∨ ChainsOf (fun t : Fin numChains => t) b
+    with hS7
+  have hS7ne : ∀ b, S7 b → b ≠ .inr 7 := by
+    rintro b (⟨s, rfl, -, hs⟩ | ⟨t, j, rfl⟩)
+    · intro h
+      have h7 : s.val = 7 := congrArg Fin.val (Sum.inr.inj h)
+      omega
+    · exact Sum.inl_ne_inr
   have hfr0 : ∀ y : Tbl P, FreshRoot P (progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅)
       0 := by
     intro y s hs _ t st
@@ -846,71 +999,150 @@ theorem E_run_keygen_sk (hP : P.Hyp) (sk : Fin numChains → Word)
       rw [Record.query_inl] at hq
       exact Params.chainInput_ne_rootInput hP hs _ _ _ _ _ (query_inj hq)
     rw [progUpd_apply_neg hn, QueryCache.empty_apply]
-  have hc0 : ∀ (y : Tbl P) (s : Fin 9) u, 0 ≤ s.val →
+  have hc0 : ∀ (y : Tbl P) (s : Fin 8) u, 0 ≤ s.val →
       progUpd (sk, Function.update y (.inr s) u) (ChainsOf fun t : Fin numChains => t) ∅ =
         progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅ := by
     intro y s u _
     apply progUpd_update hP
-    rintro b ⟨t, j', rfl⟩
-    exact ⟨Sum.inl_ne_inr,
-      query_update_inl sk y _ u _ j' (fun _ h => absurd h Sum.inr_ne_inl)⟩
-  have hall : ∀ b : Loc P,
-      (RootsFrom 0 b ∨ ChainsOf (fun t : Fin numChains => t) b) ↔ True := by
+    · rintro b ⟨t, j', rfl⟩
+      exact ⟨Sum.inl_ne_inr,
+        query_update_inl sk y _ u _ j' (fun _ h => absurd h Sum.inr_ne_inl)⟩
+    · rintro b ⟨t, j', rfl⟩
+      exact Sum.inl_ne_inr
+  have hall : ∀ b : Loc P, (S7 b ∨ b = .inr 7) ↔ True := by
     intro b
     refine ⟨fun _ => trivial, fun _ => ?_⟩
     rcases b with ⟨k, j⟩ | s
-    · exact Or.inr ⟨k, j, rfl⟩
-    · exact Or.inl ⟨s, rfl, Nat.zero_le _⟩
+    · exact Or.inl (Or.inr ⟨k, j, rfl⟩)
+    · rcases fin8_cases s with hs | rfl
+      · exact Or.inl (Or.inl ⟨s, rfl, Nat.zero_le _, hs⟩)
+      · exact Or.inr rfl
   have htops : ∀ y : Tbl P, (fun k => (Record.table (sk, y) k).getD (P.len k - 1) 0) =
       Record.top (sk, y) := fun y => funext fun k => table_getD_top hP _ k
-  calc E (run (tabulate (fun k => P.chainList k 0 (P.len k - 1) (sk k)) >>= fun tables =>
+  set F : Tbl P → BitVec 256 × Cache → ℝ≥0∞ := fun y p =>
+    g' ((p.1.extractLsb' 0 128, (⟨Record.table (sk, y), p.1.extractLsb' 0 128⟩ : SecretKey)), p.2)
+    with hF
+  have hF1 : ∀ y p, F y p ≤ 1 := fun y p => hg _
+  have hFu : ∀ y (s : Fin 8) u p, F (Function.update y (.inr s) u) p = F y p := by
+    intro y s u p
+    simp only [hF, table_update_inr]
+  have hFu' : ∀ y (s : Fin 8) u, F (Function.update y (.inr s) u) = F y :=
+    fun y s u => funext fun p => hFu y s u p
+  have hc7 : ∀ (y : Tbl P) u,
+      progUpd (sk, Function.update y (.inr 7) u) S7 ∅ = progUpd (sk, y) S7 ∅ := by
+    intro y u
+    apply progUpd_update hP
+    · rintro b (⟨s, rfl, -, hs⟩ | ⟨t, j', rfl⟩)
+      · refine ⟨hS7ne _ (Or.inl ⟨s, rfl, Nat.zero_le _, hs⟩), ?_⟩
+        rw [Record.query_inr, Record.query_inr, top_update_inr,
+          rootState_update sk y 7 u s.val (show (7 : ℕ) + 1 ≠ s.val by omega)]
+      · exact ⟨Sum.inl_ne_inr,
+          query_update_inl sk y _ u _ j' (fun _ h => absurd h Sum.inr_ne_inl)⟩
+    · exact hS7ne
+  have hpre : E (run (tabulate (fun k => P.chainList k 0 (P.len k - 1) (sk k)) >>= fun tables =>
           P.root (fun k => (tables k).getD (P.len k - 1) 0) >>= fun pk =>
-            pure (pk, (⟨tables, pk⟩ : SecretKey))) ∅) g'
-      = ∑ y : Tbl P, Nt * E (run (tabulate (fun k => P.chainList k 0 (P.len k - 1) (sk k))) ∅)
-          (fun p => E (run (P.root (fun k => (p.1 k).getD (P.len k - 1) 0) >>= fun pk =>
-            pure (pk, (⟨p.1, pk⟩ : SecretKey))) p.2) g') := by
-        rw [run_bind, E_bind, sum_inv_card_mul']
-    _ = ∑ y : Tbl P, Nt * E (run (P.root (Record.top (sk, y)) >>= fun pk =>
-          pure (pk, (⟨Record.table (sk, y), pk⟩ : SecretKey)))
-          (progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅)) g' := by
-        have h := E_run_tabulate_chains hP sk numChains (fun t => t) (fun _ _ h => h)
-          (fun _ => ∅)
-          (fun _ p => E (run (P.root (fun k => (p.1 k).getD (P.len k - 1) 0) >>= fun pk =>
-            pure (pk, (⟨p.1, pk⟩ : SecretKey))) p.2) g')
-          (fun _ _ _ _ _ _ => rfl) (fun _ _ _ _ => rfl) (fun _ _ _ _ => rfl)
-        rw [h]
-        refine Finset.sum_congr rfl fun y _ => ?_
-        dsimp only
-        rw [htops y]
-    _ = ∑ y : Tbl P, Nt * E (run (P.rootFrom (Record.top (sk, y)) 0 9
-            (Params.rootInit (Record.top (sk, y))))
-          (progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅))
-          (fun p => g' ((p.1.extractLsb' 0 128, (⟨Record.table (sk, y),
-            p.1.extractLsb' 0 128⟩ : SecretKey)), p.2)) := by
-        refine Finset.sum_congr rfl fun y _ => ?_
-        rw [Params.root]
-        simp only [run_bind, E_bind, run_map, E_map, run_pure, E_pure]
-    _ = ∑ y : Tbl P, Nt * g' (((Record.rootState (sk, y) 9).extractLsb' 0 128,
-          (⟨Record.table (sk, y), (Record.rootState (sk, y) 9).extractLsb' 0 128⟩ : SecretKey)),
-          progUpd (sk, y) (RootsFrom 0)
-            (progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅)) :=
-        E_run_rootFrom_avg hP sk (fun y p => g' ((p.1.extractLsb' 0 128,
-            (⟨Record.table (sk, y), p.1.extractLsb' 0 128⟩ : SecretKey)), p.2)) 9 0
-          (by omega) (fun y => Params.rootInit (Record.top (sk, y)))
-          (fun y => progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅)
-          (fun y => rfl) hfr0 hc0 (fun y s u _ => by simp only [table_update_inr])
-    _ = ∑ y : Tbl P, Nt * g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) := by
-        refine Finset.sum_congr rfl fun y _ => ?_
-        have hpk : ((Record.rootState (sk, y) 9).extractLsb' 0 128 : PublicKey) =
-            Record.pk (sk, y) :=
-          congrArg (fun v : BitVec 256 => v.extractLsb' 0 128)
-            (Record.rootState_succ (sk, y) 8)
-        rw [progUpd_progUpd, progUpd_congr hall, progUpd_true_empty hP, hpk]
-        rfl
+            pure (pk, (⟨tables, pk⟩ : SecretKey))) ∅) g' =
+      ∑ y : Tbl P, Nt * E (run (hash (P.rootInput (Record.top (sk, y)) 7
+            (Record.rootState (sk, y) 7))) (progUpd (sk, y) S7 ∅)) (F y) := by
+    calc E (run (tabulate (fun k => P.chainList k 0 (P.len k - 1) (sk k)) >>= fun tables =>
+            P.root (fun k => (tables k).getD (P.len k - 1) 0) >>= fun pk =>
+              pure (pk, (⟨tables, pk⟩ : SecretKey))) ∅) g'
+        = ∑ y : Tbl P, Nt * E (run (tabulate (fun k => P.chainList k 0 (P.len k - 1) (sk k))) ∅)
+            (fun p => E (run (P.root (fun k => (p.1 k).getD (P.len k - 1) 0) >>= fun pk =>
+              pure (pk, (⟨p.1, pk⟩ : SecretKey))) p.2) g') := by
+          rw [run_bind, E_bind, sum_inv_card_mul']
+      _ = ∑ y : Tbl P, Nt * E (run (P.root (Record.top (sk, y)) >>= fun pk =>
+            pure (pk, (⟨Record.table (sk, y), pk⟩ : SecretKey)))
+            (progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅)) g' := by
+          have h := E_run_tabulate_chains hP sk numChains (fun t => t) (fun _ _ h => h)
+            (fun _ => ∅)
+            (fun _ p => E (run (P.root (fun k => (p.1 k).getD (P.len k - 1) 0) >>= fun pk =>
+              pure (pk, (⟨p.1, pk⟩ : SecretKey))) p.2) g')
+            (fun _ _ _ _ _ _ => rfl) (fun _ _ _ _ => rfl) (fun _ _ _ _ => rfl)
+          rw [h]
+          refine Finset.sum_congr rfl fun y _ => ?_
+          dsimp only
+          rw [htops y]
+      _ = ∑ y : Tbl P, Nt * E (run (P.rootFrom (Record.top (sk, y)) 0 7
+              (Params.rootInit (Record.top (sk, y))))
+            (progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅))
+            (fun p => E (run (P.rootFrom (Record.top (sk, y)) 7 1 p.1) p.2) (F y)) := by
+          refine Finset.sum_congr rfl fun y _ => ?_
+          rw [Params.root, root_split]
+          simp only [run_bind, E_bind, run_map, E_map, run_pure, E_pure]
+          rfl
+      _ = ∑ y : Tbl P, Nt * E (run (P.rootFrom (Record.top (sk, y)) 7 1
+              (Record.rootState (sk, y) 7)) (progUpd (sk, y) S7 ∅)) (F y) := by
+          have h := E_run_rootFrom_avg hP sk
+            (fun y p => E (run (P.rootFrom (Record.top (sk, y)) 7 1 p.1) p.2) (F y)) 7 0
+            (by omega) (fun y => Params.rootInit (Record.top (sk, y)))
+            (fun y => progUpd (sk, y) (ChainsOf fun t : Fin numChains => t) ∅)
+            (fun y => rfl) hfr0 hc0 (fun y s u _ => by
+              funext p
+              simp only [top_update_inr, hFu'])
+          rw [h]
+          refine Finset.sum_congr rfl fun y _ => ?_
+          rw [progUpd_progUpd]
+      _ = ∑ y : Tbl P, Nt * E (run (hash (P.rootInput (Record.top (sk, y)) 7
+              (Record.rootState (sk, y) 7))) (progUpd (sk, y) S7 ∅)) (F y) := by
+          refine Finset.sum_congr rfl fun y _ => ?_
+          rw [rootFrom_succ', run_bind, E_bind]
+          simp only [rootFrom_zero', run_pure, E_pure]
+          rfl
+  have hSu : ∀ (y : Tbl P) u, Record.Sep ((sk, Function.update y (.inr 7) u) : Record P) ↔
+      Record.Sep ((sk, y) : Record P) := by
+    intro y u
+    unfold Record.Sep Record.lastTag
+    dsimp only
+    rw [Function.update_of_ne (show (Sum.inr 6 : Loc P) ≠ .inr 7 from
+      fun h => absurd (Sum.inr.inj h) (by decide))]
+  have hxu : ∀ (y : Tbl P) u, P.rootInput (Record.top (sk, Function.update y (.inr 7) u)) 7
+      (Record.rootState (sk, Function.update y (.inr 7) u) 7) =
+      P.rootInput (Record.top (sk, y)) 7 (Record.rootState (sk, y) 7) := by
+    intro y u
+    rw [top_update_inr, rootState_update sk y 7 u 7 (show (7 : ℕ) + 1 ≠ 7 by omega)]
+  have hfin : ∀ y : Tbl P, Record.Sep ((sk, y) : Record P) →
+      F y (y (.inr 7), (progUpd (sk, y) S7 ∅).cacheQuery
+        ⟨896, P.rootInput (Record.top (sk, y)) 7 (Record.rootState (sk, y) 7)⟩ (y (.inr 7))) =
+      g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) := by
+    intro y hy
+    have hq : (⟨896, P.rootInput (Record.top (sk, y)) 7 (Record.rootState (sk, y) 7)⟩ :
+        Query) = Record.query (sk, y) (.inr 7) := rfl
+    have hc : (progUpd (sk, y) S7 ∅).cacheQuery (Record.query (sk, y) (.inr 7))
+        (y (.inr 7)) = Record.cache (sk, y) := by
+      have h1 := cacheQuery_progUpd hP ((sk, y) : Record P) S7 ∅ (.inr 7)
+        (Record.validAt_of_sep hy _)
+      rw [progUpd_congr hall, progUpd_true_empty hP] at h1
+      exact h1
+    rw [hq, hc]
+    rfl
+  refine ⟨?_, ?_⟩
+  · rw [hpre]
+    refine le_trans (le_of_eq ?_) (avg_hash_ge (.inr 7)
+      (fun y => P.rootInput (Record.top (sk, y)) 7 (Record.rootState (sk, y) 7))
+      (fun y => progUpd (sk, y) S7 ∅) (fun y => Record.Sep ((sk, y) : Record P)) F
+      (fun y hy => fresh_seven hP (sk, y) hy S7 hS7ne) hSu hxu
+      (fun y u => hc7 y u) (fun y u p => hFu y 7 u p))
+    refine Finset.sum_congr rfl fun y _ => ?_
+    by_cases hy : Record.Sep ((sk, y) : Record P)
+    · rw [if_pos hy, if_pos hy, hfin y hy]
+    · rw [if_neg hy, if_neg hy]
+  · rw [hpre]
+    refine (avg_hash_le (.inr 7)
+      (fun y => P.rootInput (Record.top (sk, y)) 7 (Record.rootState (sk, y) 7))
+      (fun y => progUpd (sk, y) S7 ∅) (fun y => Record.Sep ((sk, y) : Record P)) F hF1
+      (fun y hy => fresh_seven hP (sk, y) hy S7 hS7ne) hSu hxu
+      (fun y u => hc7 y u) (fun y u p => hFu y 7 u p)).trans (le_of_eq ?_)
+    refine Finset.sum_congr rfl fun y _ => ?_
+    by_cases hy : Record.Sep ((sk, y) : Record P)
+    · rw [if_pos hy, if_pos hy, hfin y hy]
+    · rw [if_neg hy, if_neg hy]
 
-/-- **Key generation is a uniform record.** -/
-theorem E_run_keygen (hP : P.Hyp) (g' : (PublicKey × SecretKey) × Cache → ℝ≥0∞) :
-    E (run P.keygen ∅) g' = ∑ ξ : Record P, recW P * g' ((ξ.pk, ξ.sk), ξ.cache) := by
+/-- **Key generation is a uniform record**, up to the records that are not separated. -/
+theorem E_run_keygen (hP : P.Hyp) (g' : (PublicKey × SecretKey) × Cache → ℝ≥0∞)
+    (hg : ∀ p, g' p ≤ 1) :
+    E (run P.keygen ∅) g' ≤
+      ∑ ξ : Record P, recW P * (if ξ.Sep then g' ((ξ.pk, ξ.sk), ξ.cache) else 1) := by
   have h0 : (Fintype.card (Fin numChains → Word) : ℝ≥0∞) ≠ 0 := by
     exact_mod_cast Fintype.card_ne_zero
   have ht : (Fintype.card (Fin numChains → Word) : ℝ≥0∞) ≠ ⊤ := ENNReal.natCast_ne_top _
@@ -923,17 +1155,51 @@ theorem E_run_keygen (hP : P.Hyp) (g' : (PublicKey × SecretKey) × Cache → �
             P.root (fun k => (tables k).getD (P.len k - 1) 0) >>= fun pk =>
               pure (pk, (⟨tables, pk⟩ : SecretKey))) ∅) g' := by
         rw [Params.keygen, run_bind, E_bind, E_run_tabulate_sample]
-    _ = ∑ sk : Fin numChains → Word, (Fintype.card (Fin numChains → Word) : ℝ≥0∞)⁻¹ *
-          ∑ y : Tbl P, Nt * g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) :=
-        Finset.sum_congr rfl fun sk _ => by rw [E_run_keygen_sk hP]
+    _ ≤ ∑ sk : Fin numChains → Word, (Fintype.card (Fin numChains → Word) : ℝ≥0∞)⁻¹ *
+          ∑ y : Tbl P, Nt * (if Record.Sep ((sk, y) : Record P) then
+            g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) else 1) :=
+        Finset.sum_le_sum fun sk _ => mul_le_mul' le_rfl (E_run_keygen_sk hP sk g' hg).2
     _ = ∑ sk : Fin numChains → Word, ∑ y : Tbl P, recW P *
-          g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) := by
+          (if Record.Sep ((sk, y) : Record P) then
+            g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) else 1) := by
         refine Finset.sum_congr rfl fun sk _ => ?_
         rw [Finset.mul_sum]
         refine Finset.sum_congr rfl fun y _ => ?_
         rw [hcard, mul_assoc]
-    _ = ∑ ξ : Record P, recW P * g' ((ξ.pk, ξ.sk), ξ.cache) :=
+    _ = ∑ ξ : Record P, recW P * (if ξ.Sep then g' ((ξ.pk, ξ.sk), ξ.cache) else 1) :=
         (Fintype.sum_prod_type (fun ξ : Record P =>
-          recW P * g' ((ξ.pk, ξ.sk), ξ.cache))).symm
+          recW P * (if ξ.Sep then g' ((ξ.pk, ξ.sk), ξ.cache) else 1))).symm
+
+/-- Key generation reaches every separated record with its uniform weight (a lower bound). -/
+theorem E_run_keygen_ge (hP : P.Hyp) (g' : (PublicKey × SecretKey) × Cache → ℝ≥0∞)
+    (hg : ∀ p, g' p ≤ 1) :
+    ∑ ξ : Record P, recW P * (if ξ.Sep then g' ((ξ.pk, ξ.sk), ξ.cache) else 0) ≤
+      E (run P.keygen ∅) g' := by
+  have h0 : (Fintype.card (Fin numChains → Word) : ℝ≥0∞) ≠ 0 := by
+    exact_mod_cast Fintype.card_ne_zero
+  have ht : (Fintype.card (Fin numChains → Word) : ℝ≥0∞) ≠ ⊤ := ENNReal.natCast_ne_top _
+  have hcard : recW P = (Fintype.card (Fin numChains → Word) : ℝ≥0∞)⁻¹ *
+      (Fintype.card (Tbl P) : ℝ≥0∞)⁻¹ := by
+    rw [recW, Fintype.card_prod, Nat.cast_mul, ENNReal.mul_inv (Or.inl h0) (Or.inl ht)]
+  calc ∑ ξ : Record P, recW P * (if ξ.Sep then g' ((ξ.pk, ξ.sk), ξ.cache) else 0)
+      = ∑ sk : Fin numChains → Word, ∑ y : Tbl P, recW P *
+          (if Record.Sep ((sk, y) : Record P) then
+            g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) else 0) :=
+        Fintype.sum_prod_type (fun ξ : Record P =>
+          recW P * (if ξ.Sep then g' ((ξ.pk, ξ.sk), ξ.cache) else 0))
+    _ = ∑ sk : Fin numChains → Word, (Fintype.card (Fin numChains → Word) : ℝ≥0∞)⁻¹ *
+          ∑ y : Tbl P, Nt * (if Record.Sep ((sk, y) : Record P) then
+            g' ((Record.pk (sk, y), Record.sk (sk, y)), Record.cache (sk, y)) else 0) := by
+        refine Finset.sum_congr rfl fun sk _ => ?_
+        rw [Finset.mul_sum]
+        refine Finset.sum_congr rfl fun y _ => ?_
+        rw [hcard, mul_assoc]
+    _ ≤ ∑ sk : Fin numChains → Word, (Fintype.card (Fin numChains → Word) : ℝ≥0∞)⁻¹ *
+          E (run (tabulate (fun k => P.chainList k 0 (P.len k - 1) (sk k)) >>= fun tables =>
+            P.root (fun k => (tables k).getD (P.len k - 1) 0) >>= fun pk =>
+              pure (pk, (⟨tables, pk⟩ : SecretKey))) ∅) g' :=
+        Finset.sum_le_sum fun sk _ => mul_le_mul' le_rfl (E_run_keygen_sk hP sk g' hg).1
+    _ = E (run P.keygen ∅) g' := by
+        rw [Params.keygen, run_bind, E_bind, E_run_tabulate_sample]
 
 end OptimalOTS.LeanIsaBaseline.Layer
