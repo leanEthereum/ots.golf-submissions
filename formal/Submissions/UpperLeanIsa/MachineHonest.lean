@@ -547,9 +547,9 @@ theorem honest_pro : ∀ y ∈ proList, y.Rel f (hv P T f pk m bits) := by
   unfold proList at hy
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hy
-  rcases hy with ((h | h | h) | ⟨c, hc, rfl⟩) | h | h
-  · subst h; exact hv_one
-  · subst h; show hv P T f pk m bits 3 = natV 5503
+  rcases hy with ((h | h) | ⟨c, hc, rfl⟩) | h | h
+  · subst h; refine ⟨hv_one, ?_⟩
+    show hv P T f pk m bits 3 = natV 5503
     rw [hv_lt P T f pk m bits (by omega)]; exact inputWord_len_of pk m bits hlen
   · subst h; exact hv_g
   · exact hv_cc (by omega)

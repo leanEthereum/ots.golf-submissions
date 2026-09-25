@@ -3,7 +3,7 @@ import Submissions.UpperLeanIsa.MachineRun
 /-!
 # Forced paths and the landing exit
 
-Every completing walk follows the 20 straight prologue instructions, the free dispatch,
+Every completing walk follows the 19 straight prologue instructions, the free dispatch,
 then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `frU s j`: the first
 group's unit runs in frame 14 when the free digit `s` is `0`, in frame 1 otherwise. The block relations give
 GP_u = initialProduct(88,s) * C_(sum of preceding group costs), so the exit target is
@@ -101,7 +101,7 @@ end Walks
 
 /-! ## The prologue -/
 
-theorem proList_lcost : lcost proList = 29 := by unfold proList; rfl
+theorem proList_lcost : lcost proList = 28 := by unfold proList; rfl
 
 theorem cinstrAt_proList (T : Tab) {t : ℕ} (ht : t < proList.length) :
     cinstrAt T (0 + t) = proList[t] := by
@@ -109,11 +109,10 @@ theorem cinstrAt_proList (T : Tab) {t : ℕ} (ht : t < proList.length) :
   unfold prologue
   rw [if_pos (by rw [proList_length] at ht; exact ht), List.getD_eq_getElem _ _ ht]
 
-theorem cinstrAt_20 (T : Tab) : cinstrAt T 20 = .dispatch 0 := by
+theorem cinstrAt_19 (T : Tab) : cinstrAt T 19 = .dispatch 0 := by
   rw [cinstrAt_pro T (by omega)]; unfold prologue; rw [if_neg (by omega), if_pos rfl]
 
-theorem pro_mem_one : CInstr.setc oneCell oneV ∈ proList := by unfold proList; simp
-theorem pro_mem_len : CInstr.setc lenCell (natV 5503) ∈ proList := by unfold proList; simp
+theorem pro_mem_init : CInstr.init ∈ proList := by unfold proList; simp
 theorem pro_mem_g : CInstr.setc gCell gV ∈ proList := by unfold proList; simp
 theorem pro_mem_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 16) (h16 : c ≠ 16) :
     CInstr.setc (cCell c) (cV c) ∈ proList := by
@@ -219,7 +218,7 @@ structure PathFacts (T : Tab) (B : BlakeRel) (v : ℕ → E) (xs : ℕ → ℕ) 
 
 /-- The dispatch slot of unit `f` on the path of `xs` (for `f = 14`, the exit). -/
 def ctlSlot (T : Tab) (xs : ℕ → ℕ) (f : ℕ) : ℕ :=
-  if f = 0 then 20 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
+  if f = 0 then 19 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
     (bodyF T (frU (xs 0) (f - 1)) (xs (f - 1))).length
 
 theorem ctlSlot_succ (T : Tab) (xs : ℕ → ℕ) (f : ℕ) :
@@ -231,7 +230,7 @@ theorem cinstrAt_ctlSlot (hT : T.Hyp) {xs : ℕ → ℕ} {f : ℕ} (hf : f ≤ 1
     cinstrAt T (ctlSlot T xs f) = ctlF' (xs 0) f ∧ ctlSlot T xs f < sentinel := by
   rcases Nat.eq_zero_or_pos f with rfl | hf0
   · refine ⟨?_, by unfold ctlSlot sentinel; simp⟩
-    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_20 T
+    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_19 T
   · obtain ⟨j, rfl⟩ : ∃ j, f = j + 1 := ⟨f - 1, by omega⟩
     rw [ctlSlot_succ]
     have hx : xs j < Wf (frU (xs 0) j) := by rw [Wf_frU _ (by omega)]; exact hV j (by omega)
@@ -306,11 +305,11 @@ end Units
 
 /-- Steps of the whole path. -/
 def totalSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  21 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
+  20 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
 
 /-- Cycles of the whole path. -/
 def totalCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  30 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
+  29 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
 
 /-! ### The landing product -/
 
@@ -321,7 +320,7 @@ theorem prodOp_mem (T : Tab) (s : ℕ) {u : ℕ} (hu : u < 13) (x : ℕ) :
 theorem cCell_val {B : BlakeRel} {v : ℕ → E} (hpro : ∀ y ∈ proList, y.RelB B v) {c : ℕ}
     (hc : c ≤ 16) : v (cCell c) = cV c := by
   rcases Nat.eq_zero_or_pos c with rfl | h0
-  · rw [cV_zero]; exact hpro _ pro_mem_one
+  · rw [cV_zero]; exact (hpro _ pro_mem_init).1
   · by_cases h16 : c = 16
     · subst c; rw [cV_sixteen]; exact hpro _ pro_mem_g
     · exact hpro _ (pro_mem_c h0 hc h16)
@@ -600,7 +599,7 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
         x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelB B (Lx L)))
     {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow 0, 1⟩)) :
     Pinned (Lx L) := by
-  have hp := rel_prefix Sm B hst 20 0 n c
+  have hp := rel_prefix Sm B hst 19 0 n c
     (fun i hi => by
       rw [cinstrAt_proList T (by rw [proList_length]; exact hi)]
       exact proList_straight _ (List.getElem_mem _))
@@ -610,7 +609,7 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
     obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hy
     have := hp i (by rw [proList_length] at hi; exact hi)
     rwa [cinstrAt_proList T hi] at this
-  refine ⟨hall _ pro_mem_one, fun f hf => ?_⟩
+  refine ⟨(hall _ pro_mem_init).1, fun f hf => ?_⟩
   exact hall _ (pro_mem_frame hf)
 
 end Prefix

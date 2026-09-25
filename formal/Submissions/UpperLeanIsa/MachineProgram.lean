@@ -1,12 +1,14 @@
 import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.MachineLayout
+import Submissions.UpperLeanIsa.LengthGate
 
 /-!
-# The 1209-cycle bytecode
+# The 1208-cycle bytecode
 
-A 21-slot prologue pins ONE, the 5503-bit length, g, and fifteen additional cost constants
-(`C_1 … C_15`; `C_16 = g`), then hashes the index and dispatches the free block (slot 20; slot
-21 is a pad). The fifteen landing frames reuse cost constants C_1..C_15. Their isolation holds
+A 20-slot prologue checks the 5503-bit length and pins ONE with one DEREF, then pins g
+and fifteen additional cost constants
+(`C_1 … C_15`; `C_16 = g`), then hashes the index and dispatches the free block (slot 19; slots
+20 and 21 are pads). The fifteen landing frames reuse cost constants C_1..C_15. Their isolation holds
 through memory log-size 32.
 
 FREE-Z: the free top is a message word of root call 1 (home: group 0), so the free block no
@@ -25,8 +27,8 @@ tops occupy adjacent cv cells without an extra copy.
 
 Every live field value has its own block (aliases of a tuple walk the same chains). The dummy
 entries have no blocks. Costs are at most 16, so no block multiplies by `C_17`.
-Every completing run executes 207 instructions: 109 non-hash and 98 BLAKE2S instructions.
-Its cost is 109+10*98+120=1209. Builders are irreducible; slots decode by cost-band arithmetic.
+Every completing run executes 206 instructions: 108 non-hash and 98 BLAKE2S instructions.
+Its cost is 108+10*98+120=1208. Builders are irreducible; slots decode by cost-band arithmetic.
 -/
 
 namespace OptimalOTS.HLG3
@@ -147,6 +149,7 @@ instance (u i : ℕ) : Decidable (copied u i) := by unfold copied; infer_instanc
 /-- An instruction over cell indices. `dispatch f` is `JUMP(ONE, H_f, F_f)`, `exit` is
 `JUMP(ONE, GP_13, ONE)`, and `entry f` is the frame-shifted `I0_f`. -/
 inductive CInstr
+  | init
   | xor (a b c : ℕ)
   | mul (a b c : ℕ)
   | setc (a : ℕ) (v : E)
@@ -160,6 +163,7 @@ namespace CInstr
 
 /-- The ISA instruction; all but `entry` address frame-1 cells `gpow c`. -/
 def toInstr : CInstr → Instr
+  | .init => .deref (gpow lenCell) LengthGate.scale (gpow lenCell) .fp
   | .xor a b c => .xor (gpow a) (gpow b) (gpow c)
   | .mul a b c => .mulNative (gpow a) (gpow b) (gpow c)
   | .setc a v => .setConstant (gpow a) v
@@ -183,6 +187,7 @@ def steps : CInstr → ℕ
 
 /-- Straight-line instructions: they fall through to the next slot. -/
 def straight : CInstr → Bool
+  | .init => true
   | .xor .. => true
   | .mul .. => true
   | .setc .. => true
@@ -191,6 +196,7 @@ def straight : CInstr → Bool
 
 /-- The first cell an instruction reads, for the frame-range argument. -/
 def cell0 : CInstr → ℕ
+  | .init => lenCell
   | .xor a _ _ => a
   | .mul a _ _ => a
   | .setc a _ => a
@@ -202,6 +208,7 @@ def cell0 : CInstr → ℕ
 
 /-- The shape invariant of every slot: all frame-1 cells below `2 ^ 16`, frames `< 15`. -/
 def Bounded : CInstr → Prop
+  | .init => True
   | .xor a b c => a < 2 ^ 16 ∧ b < 2 ^ 16 ∧ c < 2 ^ 16
   | .mul a b c => a < 2 ^ 16 ∧ b < 2 ^ 16 ∧ c < 2 ^ 16
   | .setc a _ => a < 2 ^ 16
@@ -216,6 +223,7 @@ def Bounded : CInstr → Prop
 theorem cell0_lt {ci : CInstr} (hb : ci.Bounded) (hpad : ci ≠ .pad) (hent : ∀ j, ci ≠ .entry j) :
     ci.cell0 < 2 ^ 16 := by
   cases ci with
+  | init => show 3 < 2 ^ 16; norm_num
   | xor a b c => exact hb.1
   | mul a b c => exact hb.1
   | setc a v => exact hb
@@ -299,6 +307,7 @@ theorem exec_frame_fail {κ : ℕ} (hκ : κ ≤ 32) (L : MemImage κ) (pc : K) 
       rw [mod_ord_of_lt (by unfold ordG oneCell; omega)]
       unfold ordG oneCell; omega
   | xor a b c => exact first (by simp) (by simp)
+  | init => exact first (by simp) (by simp)
   | mul a b c => exact first (by simp) (by simp)
   | setc a v => exact first (by simp) (by simp)
   | blake m0 m1 m2 m3 cv out md => exact first (by simp) (by simp)
@@ -338,14 +347,14 @@ def chainOps (k d dst : ℕ) : List CInstr := (List.range d).map (fun t => chain
 
 /-- The straight part of the prologue (slots `0 … 19`). -/
 def proList : List CInstr :=
-  [.setc oneCell oneV, .setc lenCell (natV 5503), .setc gCell gV] ++
+  [.init, .setc gCell gV] ++
     ((List.range 15).map (fun c => .setc (cCell (c + 1)) (cV (c + 1)))) ++
     [.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell, .mul (hCell 0) gCell (h1Cell 0)]
 
-/-- Slots `0 … 21`: the straight prologue, the free chain's dispatch (slot `20`), and a pad
-(slot `21`, never reached). -/
+/-- Slots `0 … 21`: the straight prologue, the free chain's dispatch (slot `19`), and pads
+(slots `20` and `21`, never reached). -/
 def prologue (s : ℕ) : CInstr :=
-  if s < 20 then proList.getD s .pad else if s = 20 then .dispatch 0 else .pad
+  if s < 19 then proList.getD s .pad else if s = 19 then .dispatch 0 else .pad
 
 /-- The control op after the block of group `f - 1`: the next dispatch, or the exit. -/
 def ctlF (f : ℕ) : CInstr := if f < 13 then .dispatch (f + 1) else .exit
@@ -887,21 +896,21 @@ theorem fbody_bounded (s : ℕ) (hs : s < 64) : ∀ x ∈ fbody s, x.Bounded := 
       exact chainOp_bounded (by omega) ht (by omega) (by unfold tfCell; omega)
   · simp only [CInstr.Bounded, hCell, gCell, h1Cell, frG0]; split_ifs <;> omega
 
-theorem proList_length : proList.length = 20 := by unfold proList; rfl
+theorem proList_length : proList.length = 19 := by unfold proList; rfl
 
 theorem proList_straight : ∀ x ∈ proList, x.straight = true := by
   intro x hx
   unfold proList at hx
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hx
-  rcases hx with ((rfl | rfl | rfl) | ⟨c, -, rfl⟩) | rfl | rfl <;> rfl
+  rcases hx with ((rfl | rfl) | ⟨c, -, rfl⟩) | rfl | rfl <;> rfl
 
 theorem proList_bounded : ∀ x ∈ proList, x.Bounded := by
   intro x hx
   unfold proList at hx
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hx
-  rcases hx with ((rfl | rfl | rfl) | ⟨c, hc, rfl⟩) | rfl | rfl <;>
+  rcases hx with ((rfl | rfl) | ⟨c, hc, rfl⟩) | rfl | rfl <;>
     simp only [CInstr.Bounded, cCell, oneCell, lenCell, gCell, msgLo, msgHi,
       nonceCell, pkCell, idxCell, hCell, h1Cell] <;> (try split_ifs) <;> omega
 

@@ -16,8 +16,8 @@ noncomputable def submission : LeanIsa.Submission := HLG3.g3machine
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1209` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1209 where
+`1208` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1208 where
   admissible := Group3.admissible
   secure := Group3.secure
   valid := HLG3.g3_valid

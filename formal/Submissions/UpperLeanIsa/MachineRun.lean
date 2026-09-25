@@ -45,6 +45,7 @@ def trueRel : BlakeRel := fun _ _ _ _ _ _ => True
 /-- The relation an instruction asserts on the cell values `v` in frame `1`. A dispatch's is its
 landing; entries (only executable in their frame) and the trap never hold. -/
 def CInstr.RelB (B : BlakeRel) (v : ℕ → E) : CInstr → Prop
+  | .init => v oneCell = oneV ∧ v lenCell = natV 5503
   | .xor a b c => v c = v a + v b
   | .mul a b c => v c = v a * v b
   | .setc a k => v a = k
@@ -69,6 +70,17 @@ theorem CInstr.relNH_of_relB {B : BlakeRel} {v : ℕ → E} {ci : CInstr} (h : c
 
 /-- The constants every jump relies on: `ONE` and the 15 frames. -/
 def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 15, v (fCell k) = frameV k
+
+/-- The loader's capped length, including every oversized raw signature. -/
+def LengthDomain (v : ℕ → E) : Prop := ∃ n ≤ 5505, v lenCell = natV n
+
+theorem lengthDomain_load {κ : ℕ} (h16 : 16 ≤ κ) (pk : PublicKey) (m : Message)
+    (σ : List Bool) (L : MemImage κ) : LengthDomain (Lx (LeanIsa.loadInput pk m σ L)) := by
+  refine ⟨min σ.length (OptimalOTS.maxSignatureBits + 1), Nat.min_le_right _ _, ?_⟩
+  have hc : lenCell < 2^κ := lt_of_lt_of_le (by decide : lenCell < 2^16)
+    (Nat.pow_le_pow_right (by norm_num) h16)
+  rw [Lx, dif_pos hc, LeanIsa.loadInput, if_pos (by change lenCell < LeanIsa.inputCells; decide)]
+  exact inputWord_len pk m σ
 
 /-! ## The successor slot -/
 
@@ -199,6 +211,41 @@ theorem exec_setc {a : ℕ} {k : E} (hb : (CInstr.setc a k).Bounded) :
   simp only [LeanerVM.Semantics.execute, read_one h16 hκ L hb, Option.bind_eq_bind,
     Option.bind_some]
   exact guard_some _
+
+/-- One indirect read checks the capped length and asserts ONE = fp = 1. -/
+theorem exec_init (hd : LengthDomain (Lx L)) :
+    LeanIsa.execute L ⟨pc, 1⟩ CInstr.init.toInstr =
+      pure (if Lx L oneCell = oneV ∧ Lx L lenCell = natV 5503
+        then some ⟨g * pc, 1⟩ else none) := by
+  obtain ⟨n, hn, hv⟩ := hd
+  have hnat : natV n = ofK (BitVec.ofNat 64 n) := LengthGate.natV_ofK hn
+  have hk : IsInK (natV n) := by rw [hnat]; exact isInK_ofK _
+  have hl : (natV n).limb 0 = BitVec.ofNat 64 n := by rw [hnat]; exact limb_ofK_zero _
+  have heq : natV n = natV 5503 ↔ n = 5503 := by
+    constructor
+    · intro h
+      have h' := congrArg (fun x => (LeanIsa.cellBits x).toNat) h
+      simp only [cellBits_natV, BitVec.toNat_ofNat] at h'
+      rw [Nat.mod_eq_of_lt (by omega)] at h'
+      norm_num at h'
+      exact h'
+    · rintro rfl; rfl
+  show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
+    (.deref (gpow lenCell) LengthGate.scale (gpow lenCell) .fp)) = _
+  simp only [LeanerVM.Semantics.execute, read_one h16 hκ L (by decide : lenCell < 2^16),
+    Option.bind_eq_bind, Option.bind_some, hv]
+  rw [show (guard (IsInK (natV n)) : Option Unit) = some () from if_pos hk]
+  simp only [Option.bind_some, hl]
+  by_cases he : n = 5503
+  · subst n
+    rw [LengthGate.target_address,
+      show L.read (gpow 48) = some (Lx L oneCell) from by
+        change L.read (gpow oneCell) = some (Lx L oneCell)
+        simpa only [one_mul] using read_one h16 hκ L (by decide : oneCell < 2^16)]
+    simp only [Option.bind_some, LeanerVM.Semantics.derefSource, heq, and_true]
+    exact congrArg pure (guard_some _)
+  · rw [LengthGate.wrong_length_read hκ hn he L]
+    simp [heq, he]
 
 theorem exec_blake {m0 m1 m2 m3 cv out md : ℕ} (hb : (CInstr.blake m0 m1 m2 m3 cv out md).Bounded) :
     LeanIsa.execute L ⟨pc, 1⟩ (CInstr.blake m0 m1 m2 m3 cv out md).toInstr =
@@ -434,6 +481,7 @@ theorem runCost_dead {s : ℕ} (hs : s < sentinel) (hci : (cinstrAt T s).RelNH (
   | exit => exact absurd rfl hx
   | xor => simp [CInstr.straight] at hst
   | mul => simp [CInstr.straight] at hst
+  | init => simp [CInstr.straight] at hst
   | setc => simp [CInstr.straight] at hst
   | blake => simp [CInstr.straight] at hst
 
@@ -598,12 +646,13 @@ theorem walk_of_sem (Sm : Sem) (B : BlakeRel) (hpin : Pinned (Lx L))
     exact absurd h Sm.some_not_pure_none
   | xor => simp [CInstr.straight] at hstr
   | mul => simp [CInstr.straight] at hstr
+  | init => simp [CInstr.straight] at hstr
   | setc => simp [CInstr.straight] at hstr
   | blake => simp [CInstr.straight] at hstr
 
 include hT h16 hκ in
 /-- The fixed-table straight-line step. -/
-theorem sim_straight (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
+theorem sim_straight (hd : LengthDomain (Lx L)) (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
     (hs : (cinstrAt T s).straight = true)
     (hx : x ∈ (simSem f).S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr)) :
     x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).Rel f (Lx L)) := by
@@ -611,6 +660,11 @@ theorem sim_straight (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
   generalize cinstrAt T s = ci at hs hx hb
   change x ∈ support (simulateQ (unifFwdAnswerImpl f) _) at hx
   cases ci with
+  | init =>
+    rw [exec_init h16 hκ L pc hd, simulateQ_pure, mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
   | xor a b c =>
     rw [exec_xor h16 hκ L pc hb, simulateQ_pure, mem_support_pure_iff] at hx
     split_ifs at hx with hr
@@ -636,7 +690,7 @@ theorem sim_straight (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
 
 include hT h16 hκ in
 /-- The cache-free straight-line step. -/
-theorem supp_straight (s : ℕ) (pc : K) (x : Option (Regs K))
+theorem supp_straight (hd : LengthDomain (Lx L)) (s : ℕ) (pc : K) (x : Option (Regs K))
     (hs : (cinstrAt T s).straight = true)
     (hx : x ∈ suppSem.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr)) :
     x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelNH (Lx L)) := by
@@ -644,6 +698,11 @@ theorem supp_straight (s : ℕ) (pc : K) (x : Option (Regs K))
   generalize cinstrAt T s = ci at hs hx hb
   change x ∈ support _ at hx
   cases ci with
+  | init =>
+    rw [exec_init h16 hκ L pc hd, mem_support_pure_iff] at hx
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx
   | xor a b c =>
     rw [exec_xor h16 hκ L pc hb, mem_support_pure_iff] at hx
     split_ifs at hx with hr
@@ -670,18 +729,18 @@ theorem supp_straight (s : ℕ) (pc : K) (x : Option (Regs K))
 
 include hT h16 hκ in
 /-- **Walk of a fixed-table run.** -/
-theorem walk_of_sim (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
+theorem walk_of_sim (hd : LengthDomain (Lx L)) (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
       (LeanIsa.runCost (program T) L n ⟨gpow s, 1⟩))) :
     Walk T (oracleRel f) (Lx L) n s c :=
-  walk_of_sem hT h16 hκ (simSem f) (oracleRel f) hpin (sim_straight hT h16 hκ f) n s c hs h
+  walk_of_sem hT h16 hκ (simSem f) (oracleRel f) hpin (sim_straight hT h16 hκ hd f) n s c hs h
 
 include hT h16 hκ in
 /-- **Walk of a `support` run.** -/
-theorem walk_of_supp (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
+theorem walk_of_supp (hd : LengthDomain (Lx L)) (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
     (h : some c ∈ support (LeanIsa.runCost (program T) L n ⟨gpow s, 1⟩)) :
     Walk T trueRel (Lx L) n s c :=
-  walk_of_sem hT h16 hκ suppSem trueRel hpin (supp_straight hT h16 hκ) n s c hs h
+  walk_of_sem hT h16 hκ suppSem trueRel hpin (supp_straight hT h16 hκ hd) n s c hs h
 
 include hT h16 hκ in
 /-- **Run of a walk.** Under a fixed table, a walk whose relations hold is a completing run of
@@ -704,6 +763,10 @@ theorem sim_of_walk (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ}
         generalize cinstrAt T s = ci at hstr
         intro hR hb
         cases ci with
+        | init =>
+          have hd : LengthDomain (Lx L) := ⟨5503, by omega, hR.2⟩
+          have hR' : Lx L oneCell = oneV ∧ Lx L lenCell = natV 5503 := hR
+          rw [exec_init h16 hκ L _ hd, if_pos hR', simulateQ_pure]
         | xor a b c =>
           have hR' : Lx L c = Lx L a + Lx L b := hR
           rw [exec_xor h16 hκ L _ hb, if_pos hR', simulateQ_pure]

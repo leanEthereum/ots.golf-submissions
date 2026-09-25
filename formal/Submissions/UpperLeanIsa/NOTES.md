@@ -1,3 +1,10 @@
+# Local 1208-cycle continuation
+
+The full local Lean certificate compiles for 1208 cycles and 206 instructions.
+A single checked-length DEREF replaces the separate ONE and signature-length SETs.
+The rarest-cut scheme and tables of the verified 1209 source are unchanged.
+This local continuation has not been submitted. Original 1209 notes follow.
+
 # Field-rescaled Group3 with rarest-cut signing, aliased tables and a landing exit
 
 Claim **1209** cycles: `109` non-hash instructions `+ 98 × 10 + 120`, `steps = 207`.

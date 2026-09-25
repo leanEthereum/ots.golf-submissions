@@ -5,7 +5,7 @@ import Submissions.UpperLeanIsa.MachineHonest
 
 Every op of every block on the honest path holds on the loaded honest image (`honest_blk`), so
 the relations along the path of `hxs T I` hold (`honest_path`), and the machine completes in
-`207` instructions at cost `1089` (`honest_run`).
+`206` instructions at cost `1088` (`honest_run`).
 -/
 
 namespace OptimalOTS.HLG3
@@ -268,11 +268,11 @@ theorem honest_path : PathFacts T (oracleRel f) (hv P T f pk m bits) (XF P T f p
 
 include hT hC hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`207` instructions. -/
+`206` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 207
-          Regs.initial) = pure (some 1089) := by
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 206
+          Regs.initial) = pure (some 1088) := by
   obtain ⟨n, c, hw⟩ := walk_mk hT (hxs_valid T _ (hlive hC hacc)) (honest_path hT hC hlen hacc hroot)
     (fun r hr => by rw [hv_h1 (frU_lt _ hr), XFr_frU hr])
   have hpin : Pinned (hv P T f pk m bits) := by
