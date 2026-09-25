@@ -16,8 +16,8 @@ After the first stage ended with cache `d` and signing added the index entries `
   *earlier* entry other than the signed one held `I₁` (`IdxPre`, charged to signing). The three
   events are charged in one potential `ΦB` by query shape: a chain step can only pay the hidden
   and target charges (`2 · 2 ^ -129` per compression), a root call only the target charge, and an
-  index query only the `IdxPost` charge (`2 ^ -127` per query of two compressions), so the potential
-  grows by at most `κ = (19/20) · 2 ^ -127` per compression.
+  index query only the `IdxPost` charge (`2 ^ -128` per query), so the potential grows by at most
+  `κ = 2 ^ -128` per compression.
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -68,38 +68,26 @@ theorem g_le_one (p : Bool × Cache) : g p ≤ 1 := by
   unfold g
   split_ifs <;> simp
 
-/-- The charge per compression, `(19/20) · 2 ^ -127`. Every query costs two compressions, and the
-largest charge per query is the index charge `θ · (11/6) · 2 ^ -127 ≤ (19/10) · 2 ^ -127`
-(`RowPot.psi_charge`); the chain and root charges are `2 · 2 ^ -129 = 2 ^ -128` per compression. -/
-def κ : ℝ≥0∞ := 19 / 10 * ((2 : ℝ≥0∞) ^ 128)⁻¹
+/-- The Tier B charge per compression. -/
+def κ : ℝ≥0∞ := ((2 : ℝ≥0∞) ^ 127)⁻¹
 
-theorem κ_mul_two : κ * 2 = 19 / 10 * ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
-  unfold κ
-  rw [show (2 : ℝ≥0∞) ^ 128 = 2 ^ 127 * 2 by rw [← pow_succ],
-    ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), mul_assoc, mul_assoc,
-    ENNReal.inv_mul_cancel (by simp) (by simp), mul_one]
+theorem κ_eq : κ = ((2 : ℝ≥0∞) ^ 127)⁻¹ := rfl
 
 theorem two_rate_le_κ : 2 * rate ≤ κ := by
-  rw [mul_comm, rate_two, κ]
-  exact le_mul_of_one_le_left bot_le
-    (by rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (by norm_num))]; norm_num)
+  rw [mul_comm, rate_two, κ_eq]
+  exact ENNReal.inv_le_inv.mpr (by norm_num)
 
-/-- `κ = (19/20) · 2 ^ -127 < 2 ^ -127`. -/
-theorem κ_lt : κ < ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
-  rw [κ, show ((2 : ℝ≥0∞) ^ 127)⁻¹ = 2 * ((2 : ℝ≥0∞) ^ 128)⁻¹ by
-    rw [show (2 : ℝ≥0∞) ^ 128 = 2 * 2 ^ 127 by rw [← pow_succ'],
-      ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), ← mul_assoc,
-      ENNReal.mul_inv_cancel (by simp) (by simp), one_mul]]
-  refine ENNReal.mul_lt_mul_left ?_ ?_ ?_
-  · simp
-  · simp
-  · rw [ENNReal.div_lt_iff (Or.inl (by norm_num)) (Or.inl (by norm_num))]
-    norm_num
+theorem rate_four : rate * 4 = κ := by
+  rw [show (4 : ℝ≥0∞) = 2 * 2 by norm_num, ← mul_assoc, rate_two, κ_eq,
+    show (2 : ℝ≥0∞) ^ 128 = 2 ^ 127 * 2 by rw [← pow_succ],
+    ENNReal.mul_inv (Or.inl (by simp)) (Or.inl (by simp)), mul_assoc,
+    ENNReal.inv_mul_cancel (by simp) (by simp), mul_one]
 
-theorem inv_two_pow_127_le : ((2 : ℝ≥0∞) ^ 127)⁻¹ ≤ κ * 2 := by
-  rw [κ_mul_two]
-  exact le_mul_of_one_le_left bot_le
-    (by rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (by norm_num))]; norm_num)
+/-- One hidden charge and three target charges fill the Tier B rate. -/
+theorem rate_quad_le (a b : ℝ≥0∞) : rate * a * b + a * (3 * (rate * b)) ≤ κ * a * b := by
+  calc _ = (rate * 4) * a * b := by ring
+    _ = κ * a * b := by rw [rate_four]
+    _ ≤ κ * a * b := le_rfl
 
 /-- A potential charged at every fresh query bounds every adaptive computation. -/
 theorem potential_bound {α : Type} (Φ : Cache → ℝ≥0∞) (κ' : ℝ≥0∞)
@@ -121,26 +109,33 @@ variable (P : Params) (A : OracleAlgorithm.Adversary)
 
 /-! ## Index entries and record caches -/
 
-theorem not_loc_enc (hP : P.Hyp) (u : EncInput) :
-    ∀ (ζ : Record P) (a : Loc P), ζ.query a ≠ P.encQuery u :=
-  fun ζ a => P.record_query_ne_encQuery hP ζ a u
-
 theorem hiddenCache_enc (hP : P.Hyp) (d : Cut) (ξ : Record P) (u : EncInput) :
-    hiddenCache d ξ (P.encQuery u) = none :=
-  hiddenCache_of_not_loc hP d ξ _ (P.not_loc_enc hP u)
+    hiddenCache d ξ (P.encQuery u) = none := by
+  rcases h : hiddenCache d ξ (P.encQuery u) with _ | w
+  · rfl
+  · obtain ⟨a, hh, ha, -⟩ := (hiddenCache_some_iff hP d ξ _ w).mp h
+    exact absurd ha (P.record_query_ne_encQuery hP ξ a (ξ.validAt_of_hidden hh) u)
 
 theorem exposedCache_enc (hP : P.Hyp) (d : Cut) (ξ : Record P) (u : EncInput) :
     exposedCache d ξ (P.encQuery u) = none := by
   rcases h : exposedCache d ξ (P.encQuery u) with _ | w
   · rfl
-  · obtain ⟨a, -, ha, -⟩ := (exposedCache_some_iff hP d ξ _ w).mp h
-    exact absurd ha (P.record_query_ne_encQuery hP ξ a u)
+  · obtain ⟨a, -, hv, ha, -⟩ := (exposedCache_some_iff hP d ξ _ w).mp h
+    exact absurd ha (P.record_query_ne_encQuery hP ξ a hv u)
 
-/-- A query that is a record location is not an index query. -/
-theorem not_enc_of_loc (hP : P.Hyp) {q : Query} {ζ : Record P} {a : Loc P}
+/-- A query that is a valid record location is not an index query. -/
+theorem not_enc_of_loc (hP : P.Hyp) {q : Query} {ζ : Record P} {a : Loc P} (hv : ζ.ValidAt a)
     (h : ζ.query a = q) : ∀ u : EncInput, q ≠ P.encQuery u := by
   intro u he
-  exact P.record_query_ne_encQuery hP ζ a u (h.trans he)
+  exact P.record_query_ne_encQuery hP ζ a hv u (h.trans he)
+
+/-- A query carrying a target is not an index query. -/
+theorem not_enc_of_mem_cutTargets (hP : P.Hyp) {d : Cut} {ζ : Record P} {q : Query}
+    {w : BitVec hashBits} (hw : w ∈ cutTargets P d ζ q) : ∀ u : EncInput, q ≠ P.encQuery u := by
+  intro u he
+  subst he
+  rw [(targets_of_idx hP (P.isIdxQuery_encQuery u) d ζ).1] at hw
+  exact Finset.notMem_empty _ hw
 
 /-! ## Caches after signing -/
 
@@ -185,11 +180,11 @@ theorem EncExt.targetHit {d d' : Cache} (h : P.EncExt d d')
     exact ⟨q, u, hd, hu⟩
 
 theorem cutTargets_enc (hP : P.Hyp) (d : Cut) (ζ : Record P) (u : EncInput) :
-    cutTargets P d ζ (P.encQuery u) = ∅ := (targets_of_not_loc (P.not_loc_enc hP u) d ζ).1
+    cutTargets P d ζ (P.encQuery u) = ∅ := (targets_of_idx hP (P.isIdxQuery_encQuery u) d ζ).1
 
 theorem spr_enc (hP : P.Hyp) (ζ : Record P) (u : EncInput) :
     secondPreimageTargets P ζ (P.encQuery u) = ∅ :=
-  (targets_of_not_loc (P.not_loc_enc hP u) (beforeSigning P) ζ).2
+  (targets_of_idx hP (P.isIdxQuery_encQuery u) (beforeSigning P) ζ).2
 
 /-! ## Adaptive bounds -/
 
@@ -207,7 +202,10 @@ theorem hiddenHit_charge_enc (hP : P.Hyp) (d : Cut) (T : Finset (Record P)) (c :
         hiddenHitPotential d T (c.cacheQuery (P.encQuery u₀) u) ≤ hiddenHitPotential d T c :=
   avg_le_of_le _ _ fun u => by
     have h := hiddenHitPotential_cacheQuery d T c (P.encQuery u₀) u
-    rw [hiddenHit_increment_zero hP d T _ (P.not_loc_enc hP u₀), add_zero] at h
+    have h0 : ∑ ξ ∈ T, recW P * ind ((hiddenCache d ξ (P.encQuery u₀)).isSome) = 0 :=
+      Finset.sum_eq_zero fun ξ _ => by
+        rw [P.hiddenCache_enc hP d ξ u₀, ind_not (by simp), mul_zero]
+    rw [h0, add_zero] at h
     exact h
 
 theorem hidden_hit_bound_subset {α : Type} (hP : P.Hyp) {d : Cut} (hd : ValidCut P d)
@@ -221,10 +219,10 @@ theorem hidden_hit_bound_subset {α : Type} (hP : P.Hyp) {d : Cut} (hd : ValidCu
 
 theorem cutTargets_hit_bound {α : Type} (d : Cut) (ζ : Record P) (oa : OracleComp Spec α)
     (c : Cache) (B : ℕ) (hB : CostAtMost oa B) (hc : ¬ TargetHit (cutTargets P d ζ) c) :
-    E (run oa c) (fun p => ind (TargetHit (cutTargets P d ζ) p.2)) ≤ rate * B := by
-  have h := potential_bound (fun c => ind (TargetHit (cutTargets P d ζ) c)) rate
+    E (run oa c) (fun p => ind (TargetHit (cutTargets P d ζ) p.2)) ≤ 3 * rate * B := by
+  have h := potential_bound (fun c => ind (TargetHit (cutTargets P d ζ) c)) (3 * rate)
     (fun c q hq => (ind_target_charge _ c q hq).trans
-      (add_le_add le_rfl (cutTargets_charge d ζ q))) oa c B hB
+      (add_le_add le_rfl ((cutTargets_charge d ζ q).trans (le_of_eq (by ring))))) oa c B hB
   rwa [ind_not hc, zero_add] at h
 
 /-! ## Cache algebra -/
@@ -242,17 +240,17 @@ theorem extend_hidden_shift (hP : P.Hyp) (c : Cache) (ξ : Record P) (d₁ : Cut
   · have hh : hiddenCache (beforeSigning P) ξ q = none := by
       rcases hh' : hiddenCache (beforeSigning P) ξ q with _ | u
       · rfl
-      · obtain ⟨a, -, haq, -⟩ := (hiddenCache_some_iff hP _ ξ q u).mp hh'
-        rw [← haq, Record.cache_query hP] at hq
+      · obtain ⟨a, hH, haq, -⟩ := (hiddenCache_some_iff hP _ ξ q u).mp hh'
+        rw [← haq, Record.cache_query hP _ _ (ξ.validAt_of_hidden hH)] at hq
         exact absurd hq (Option.some_ne_none _)
     rw [hh]
-  · obtain ⟨a, haq, hau⟩ := (ξ.cache_some_iff hP q u).mp hq
+  · obtain ⟨a, hv, haq, hau⟩ := (ξ.cache_some_iff hP q u).mp hq
     cases a with
     | inl x =>
       rw [(hiddenCache_some_iff hP _ ξ q u).mpr ⟨.inl x, hiddenBefore_inl x, haq, hau⟩]
     | inr r =>
       have hdq : c q = some u :=
-        hc q u ((exposedCache_some_iff hP _ ξ q u).mpr ⟨.inr r, not_hidden_inr _ r, haq, hau⟩)
+        hc q u ((exposedCache_some_iff hP _ ξ q u).mpr ⟨.inr r, not_hidden_inr _ r, hv, haq, hau⟩)
       simp only [hdq, Option.some_or]
 
 /-- A cache holding the exposed points of `ξ` before signing, extending a first-stage cache
@@ -262,16 +260,16 @@ theorem sub_exposed_after (hP : P.Hyp) (d d' : Cache) (ξ : Record P) (d₁ : Cu
     (hh : ¬ Cache.Hits d (hiddenCache (beforeSigning P) ξ)) :
     Cache.Sub (exposedCache d₁ ξ) (Cache.extend d' (exposedCache d₁ ξ)) := by
   intro q u hq
-  obtain ⟨a, -, haq, hau⟩ := (exposedCache_some_iff hP _ ξ q u).mp hq
+  obtain ⟨a, -, hv, haq, hau⟩ := (exposedCache_some_iff hP _ ξ q u).mp hq
   cases a with
   | inl x =>
     have hdq : d q = none :=
       none_of_not_hits_hidden hP d ξ hh (.inl x) (hiddenBefore_inl x) haq
-    rw [Cache.extend_apply_of_none (EncExt.none_of P hext (P.not_enc_of_loc hP haq) hdq)]
+    rw [Cache.extend_apply_of_none (EncExt.none_of P hext (P.not_enc_of_loc hP hv haq) hdq)]
     exact hq
   | inr r =>
     exact Cache.extend_apply_of_some (hext.1 q u (hd q u
-      ((exposedCache_some_iff hP _ ξ q u).mpr ⟨.inr r, not_hidden_inr _ r, haq, hau⟩)))
+      ((exposedCache_some_iff hP _ ξ q u).mpr ⟨.inr r, not_hidden_inr _ r, hv, haq, hau⟩)))
 
 theorem disjoint_after (hP : P.Hyp) (d d' : Cache) (ξ : Record P) (d₁ : Cut)
     (hext : P.EncExt d d') (hh : ¬ Cache.Hits d (hiddenCache (beforeSigning P) ξ)) :
@@ -279,7 +277,8 @@ theorem disjoint_after (hP : P.Hyp) (d d' : Cache) (ξ : Record P) (d₁ : Cut)
   intro q hq
   obtain ⟨a, ha, haq⟩ := (hiddenCache_isSome_iff hP d₁ ξ q).mp hq
   have hdq : d q = none := none_of_not_hits_hidden hP d ξ hh a (hiddenBefore_of_hidden ha) haq
-  rw [Cache.extend_apply, EncExt.none_of P hext (P.not_enc_of_loc hP haq) hdq,
+  rw [Cache.extend_apply, EncExt.none_of P hext
+      (P.not_enc_of_loc hP (ξ.validAt_of_hidden ha) haq) hdq,
     exposure_disjoint d₁ ξ q hq, Option.none_or]
 
 theorem disjoint_before (hP : P.Hyp) (d d' : Cache) (ξ : Record P)
@@ -287,7 +286,7 @@ theorem disjoint_before (hP : P.Hyp) (d d' : Cache) (ξ : Record P)
     Cache.Disjoint d' (hiddenCache (beforeSigning P) ξ) := by
   intro q hq
   obtain ⟨a, ha, haq⟩ := (hiddenCache_isSome_iff hP _ ξ q).mp hq
-  exact EncExt.none_of P hext (P.not_enc_of_loc hP haq)
+  exact EncExt.none_of P hext (P.not_enc_of_loc hP (ξ.validAt_of_hidden ha) haq)
     (none_of_not_hits_hidden hP d ξ hh a ha haq)
 
 theorem extend_of_sub {c f : Cache} (h : Cache.Sub f c) : Cache.extend c f = c := by
@@ -314,6 +313,7 @@ theorem avg_mul' (s : ℝ≥0∞) (f : BitVec hashBits → ℝ≥0∞) :
 
 theorem stageB_none (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State)
     (v : PublicData P) (T : Finset (Record P)) (hT : T ⊆ publicFiber (beforeSigning P) v)
+    (hG : ∀ ξ ∈ T, ξ.Good)
     (hpk : ∀ ξ ∈ T, ξ.pk = pk) (d d' : Cache) (hext : P.EncExt d d')
     (hd : ∀ ξ ∈ T, Cache.Sub (exposedCache (beforeSigning P) ξ) d ∧
       ¬ Cache.Hits d (hiddenCache (beforeSigning P) ξ) ∧
@@ -338,8 +338,8 @@ theorem stageB_none (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
     have h1 := EncExt.targetHit P hext (P.cutTargets_enc hP _ ξ₀) h
     have heq : Cache.extend d (exposedCache (beforeSigning P) ξ₀) = d :=
       extend_of_sub (hd ξ₀ hξ₀).1
-    exact no_cutTargets_initial hP (beforeSigning P) ξ₀ d (hd ξ₀ hξ₀).2.1 (hd ξ₀ hξ₀).2.2
-      (heq.symm ▸ h1)
+    exact no_cutTargets_initial hP (beforeSigning P) ξ₀ (hG ξ₀ hξ₀) d (hd ξ₀ hξ₀).2.1
+      (hd ξ₀ hξ₀).2.2 (heq.symm ▸ h1)
   have hstep : ∀ ξ ∈ T,
       E (run (P.stB A pk m₁ st none) (Cache.extend d' (hiddenCache (beforeSigning P) ξ))) g ≤
         E (run (P.stB A pk m₁ st none) d') (fun p =>
@@ -357,7 +357,8 @@ theorem stageB_none (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
           show (if p.1 = true then (1 : ℝ≥0∞) else 0) = 1
           rw [if_pos hok]
         rw [hg]
-        rcases events_none A hP pk m₁ st ξ d' (hsub ξ hξ) (hpk ξ hξ) p hp hok with h | h
+        rcases events_none A hP pk m₁ st ξ (hG ξ hξ).1 d' (hsub ξ hξ) (hpk ξ hξ) p hp hok with
+          h | h
         · exact absurd h hh
         · rw [hcut ξ hξ] at h
           exact (ind_of h).ge
@@ -379,16 +380,14 @@ theorem stageB_none (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.State
         rw [E_weighted_sum, sumW, Finset.sum_mul, ← Finset.sum_add_distrib]
         refine Finset.sum_congr rfl fun ξ _ => ?_
         rw [← mul_add, E_add']
-    _ ≤ rate * sumW P (publicFiber (beforeSigning P) v) * b' + sumW P T * (rate * b') :=
+    _ ≤ rate * sumW P (publicFiber (beforeSigning P) v) * b' + sumW P T * (3 * rate * b') :=
         add_le_add (P.hidden_hit_bound_subset hP beforeSigning_valid v T hT _ d' b' hb hdisj)
           (mul_le_mul' le_rfl (P.cutTargets_hit_bound _ ξ₀ _ d' b' hb hct))
     _ ≤ rate * sumW P (publicFiber (beforeSigning P) v) * b' +
-          sumW P (publicFiber (beforeSigning P) v) * (rate * b') :=
-        add_le_add le_rfl (mul_le_mul' (sumW_mono hT) le_rfl)
-    _ = 2 * rate * sumW P (publicFiber (beforeSigning P) v) * b' := by ring
-    _ ≤ κ * sumW P (publicFiber (beforeSigning P) v) * b' := by
-        gcongr
-        exact two_rate_le_κ
+          sumW P (publicFiber (beforeSigning P) v) * (3 * (rate * b')) := by
+        rw [← mul_assoc 3 rate b']
+        exact add_le_add le_rfl (mul_le_mul' (sumW_mono hT) le_rfl)
+    _ ≤ κ * sumW P (publicFiber (beforeSigning P) v) * b' := rate_quad_le _ _
 
 /-! ## Stage B after signing index `I₁` -/
 
@@ -433,11 +432,11 @@ theorem ΦB_charge (hP : P.Hyp) {d₁ : Cut} (hd₁ : ValidCut P d₁) (v₁ : P
           ring
       _ ≤ _ := by
           refine add_le_add le_rfl ?_
-          rw [← hcost]
-          calc sumW P T * ((2 : ℝ≥0∞) ^ 127)⁻¹
-              ≤ sumW P (publicFiber d₁ v₁) * (κ * 2) :=
-                mul_le_mul' hs inv_two_pow_127_le
-            _ = κ * sumW P (publicFiber d₁ v₁) * 2 := by ring
+          rw [← hcost, ← κ_eq]
+          calc sumW P T * κ ≤ sumW P (publicFiber d₁ v₁) * κ := mul_le_mul' hs le_rfl
+            _ ≤ κ * sumW P (publicFiber d₁ v₁) * 2 := by
+                rw [mul_comm (sumW P _)]
+                exact le_mul_of_one_le_right bot_le (by norm_num)
   · have hne : ∀ u, q ≠ P.encQuery u := fun u h => henc ⟨u, h⟩
     have h1 := P.hiddenHit_charge hP hd₁ v₁ T hT c q
     have h2 := (ind_target_charge (cutTargets P d₁ ζ) c q hq).trans
@@ -450,27 +449,24 @@ theorem ΦB_charge (hP : P.Hyp) {d₁ : Cut} (hd₁ : ValidCut P d₁) (v₁ : P
       exact sum_inv_card_mul _
     have hs := sumW_mono (P := P) hT
     calc _ ≤ (hiddenHitPotential d₁ T c + rate * sumW P (publicFiber d₁ v₁) * queryCost (.inr q)) +
-          sumW P T * ((ind (TargetHit (cutTargets P d₁ ζ) c) + rate * queryCost (.inr q)) +
+          sumW P T * ((ind (TargetHit (cutTargets P d₁ ζ) c) + 3 * (rate * queryCost (.inr q))) +
             ind (P.IdxPost d' c i)) :=
           add_le_add h1 (mul_le_mul' le_rfl (add_le_add h2 (le_of_eq h3)))
       _ = (hiddenHitPotential d₁ T c + sumW P T *
             (ind (TargetHit (cutTargets P d₁ ζ) c) + ind (P.IdxPost d' c i))) +
           (rate * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) +
-            sumW P T * (rate * queryCost (.inr q))) := by ring
+            sumW P T * (3 * (rate * queryCost (.inr q)))) := by ring
       _ ≤ _ := by
           refine add_le_add le_rfl ?_
           calc rate * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) +
-                sumW P T * (rate * queryCost (.inr q))
+                sumW P T * (3 * (rate * queryCost (.inr q)))
               ≤ rate * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) +
-                  sumW P (publicFiber d₁ v₁) * (rate * queryCost (.inr q)) :=
+                  sumW P (publicFiber d₁ v₁) * (3 * (rate * queryCost (.inr q))) :=
                 add_le_add le_rfl (mul_le_mul' hs le_rfl)
-            _ = 2 * rate * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) := by ring
-            _ ≤ κ * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) := by
-                gcongr
-                exact two_rate_le_κ
+            _ ≤ κ * sumW P (publicFiber d₁ v₁) * queryCost (.inr q) := rate_quad_le _ _
 
 theorem idxOf_eq_of_low {w : BitVec hashBits} {i : P.Idx}
-    (h : idxAns w = idxWord i.val) : idxOf w = i.val := by
+    (h : indexSlice w = idxWord i.val) : idxOf w = i.val := by
   unfold idxOf
   rw [h, idxWord, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (P.mem_validSet_lt i.2)]
 
@@ -481,7 +477,7 @@ theorem idxPost_of_event (pk : PublicKey) (m₁ : Message) (d d' c : Cache) (η�
     (hpre : ¬ P.IdxPre d (emsg m₁ pk ++ η₁) i₁.val) (hsub : Cache.Sub d' c)
     (m₂ : Message) (η₂ : Nonce) (hne : (m₂, η₂) ≠ (m₁, η₁)) (w : BitVec hashBits)
     (hw : c ⟨896, P.idxInput m₂ η₂ pk⟩ = some w)
-    (hlow : idxAns w = idxWord i₁.val) : P.IdxPost d' c i₁.val := by
+    (hlow : indexSlice w = idxWord i₁.val) : P.IdxPost d' c i₁.val := by
   set u := emsg m₂ pk ++ η₂ with hu
   have hwq : c (P.encQuery u) = some w := by rw [hu, P.encQuery_emsg]; exact hw
   have hidx : idxOf w = i₁.val := P.idxOf_eq_of_low hlow
@@ -514,7 +510,7 @@ theorem stageB_fiber (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.Stat
     (v₁ : PublicData P) (ζ₁ : Record P)
     (hζ₁ : ζ₁ ∈ publicFiber (afterSigning P (idxWord i₁.val)) v₁)
     (T : Finset (Record P)) (hT : T ⊆ publicFiber (afterSigning P (idxWord i₁.val)) v₁)
-    (hpk : ∀ ξ ∈ T, ξ.pk = pk)
+    (hG : ∀ ξ ∈ T, ξ.Good) (hpk : ∀ ξ ∈ T, ξ.pk = pk)
     (hd : ∀ ξ ∈ T, Cache.Sub (exposedCache (beforeSigning P) ξ) d ∧
       ¬ Cache.Hits d (hiddenCache (beforeSigning P) ξ) ∧
       ¬ TargetHit (secondPreimageTargets P ξ) d)
@@ -578,7 +574,8 @@ theorem stageB_fiber (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.Stat
             (some (encode (fun k => ξ.word k (afterSigning P I₁ k)) η₁))) c') := by
           rw [hsig ξ hξ]
           exact hp
-        rcases events_some A hP pk m₁ st ξ c' I₁ hI₁ η₁ (hsubexp ξ hξ) (hpk ξ hξ) p hp' hok with
+        rcases events_some A hP pk m₁ st ξ (hG ξ hξ).1 c' I₁ hI₁ η₁ (hsubexp ξ hξ) (hpk ξ hξ) p
+          hp' hok with
           h | h | ⟨m₂, η₂, hne, w, hw, hlow⟩
         · exact absurd h hh
         · rw [hcut ξ hξ] at h
@@ -599,9 +596,7 @@ theorem stageB_fiber (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.Stat
     rw [← hcut ξ₀ hξ₀, ← hc0] at h
     have h' : TargetHit (cutTargets P d₁ ξ₀) (Cache.extend d (exposedCache d₁ ξ₀)) := by
       obtain ⟨q, u, hq, hu⟩ := h
-      obtain ⟨a, hl, -, -⟩ := mem_cutTargets hu
-      obtain ⟨ζ, hζ⟩ := queryLocation_some hl
-      have hne := P.not_enc_of_loc hP hζ
+      have hne := P.not_enc_of_mem_cutTargets hP hu
       refine ⟨q, u, ?_, hu⟩
       rw [Cache.extend_apply] at hq ⊢
       rcases hdq : d q with _ | v
@@ -609,7 +604,7 @@ theorem stageB_fiber (hP : P.Hyp) (pk : PublicKey) (m₁ : Message) (st : A.Stat
         exact hq
       · rw [henc.1 q v hdq] at hq
         exact hq
-    exact no_cutTargets_initial hP d₁ ξ₀ d (hd ξ₀ hξ₀).2.1 (hd ξ₀ hξ₀).2.2 h'
+    exact no_cutTargets_initial hP d₁ ξ₀ (hG ξ₀ hξ₀) d (hd ξ₀ hξ₀).2.1 (hd ξ₀ hξ₀).2.2 h'
   have hpost0 : ¬ P.IdxPost d' c' i₁.val :=
     P.not_idxPost_extend_of_enc_none d' _ (fun u => P.exposedCache_enc hP d₁ ζ₁ u) i₁.val
   have hΦ0 : P.ΦB d₁ T ζ₁ d' i₁.val c' = 0 := by

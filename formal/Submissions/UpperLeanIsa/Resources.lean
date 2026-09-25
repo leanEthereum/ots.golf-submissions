@@ -6,9 +6,9 @@ import Submissions.UpperLeanIsa.Correctness
 Every oracle query is one 896-bit leanISA `BLAKE2S` input, i.e. two compressions. On every
 oracle path:
 
-* key generation costs at most `2 · Σ (len k - 1) + 18` (the chain steps and the 9 root calls);
+* key generation costs at most `2 · Σ (len k - 1) + 16` (the chain steps and the 8 root calls);
 * signing costs at most `2 · trials = 2 ^ 20` (one index query per trial);
-* verification costs at most `20 + 2 · layer` (the index query, the remaining steps of an
+* verification costs at most `18 + 2 · layer` (the index query, the remaining steps of an
   accepted index, which sum to the layer, and the root).
 
 These are algorithm bounds, not leanISA cycle scores.
@@ -123,11 +123,11 @@ theorem cost_rootFrom (t : Fin numChains → Word) : ∀ (r n : ℕ) (st : BitVe
     have h := cost_bind (cost_hash (P.rootInput t r st)) (fun st' => ih (r + 1) st')
     simpa only [rootFrom, Nat.mul_succ, Nat.add_comm] using h
 
-theorem cost_root (t : Fin numChains → Word) : CostAtMost (P.root t) 18 :=
-  cost_map (P.cost_rootFrom t 0 9 _) _
+theorem cost_root (t : Fin numChains → Word) : CostAtMost (P.root t) 16 :=
+  cost_map (P.cost_rootFrom t 0 8 _) _
 
-/-- Key generation costs `2 · Σ (len k - 1) + 18` on every path. -/
-theorem cost_keygen : CostAtMost P.keygen (2 * (∑ k, (P.len k - 1)) + 18) := by
+/-- Key generation costs `2 · Σ (len k - 1) + 16` on every path. -/
+theorem cost_keygen : CostAtMost P.keygen (2 * (∑ k, (P.len k - 1)) + 16) := by
   unfold keygen
   have h1 := cost_tabulate (fun _ => 0) (fun _ : Fin numChains => sampleBits 128)
     (fun _ => cost_sample 128)
@@ -162,13 +162,13 @@ theorem cost_sign (sk : SecretKey) (m : Message) : CostAtMost (P.sign sk m) (2 ^
   have ht : 2 * trials = 2 ^ 20 := by unfold trials; norm_num
   rwa [ht] at h
 
-/-- Verification costs at most `20 + 2 · layer` on every path, including rejects. -/
+/-- Verification costs at most `18 + 2 · layer` on every path, including rejects. -/
 theorem cost_verify (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (P.verify pk m bits) (20 + 2 * P.layer) := by
+    CostAtMost (P.verify pk m bits) (18 + 2 * P.layer) := by
   unfold verify
   split
   · exact cost_pure _ _
-  · refine CostAtMost.mono (b := 2 + (2 * P.layer + 18)) ?_ (by omega)
+  · refine CostAtMost.mono (b := 2 + (2 * P.layer + 16)) ?_ (by omega)
     refine cost_bind (P.cost_index m (decodeNonce bits) pk) (fun I => ?_)
     refine cost_ite _ (fun _ => cost_pure _ _) (fun hI' => ?_)
     · have hI : P.Accepted I := not_not.mp hI'

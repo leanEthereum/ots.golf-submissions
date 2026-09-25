@@ -3,9 +3,9 @@ import Submissions.UpperLeanIsa.Resources
 /-!
 # The wire format and the admissibility of a layer scheme
 
-* `encode_decode`: a 5504-bit string is the encoding of its decoded words and nonce, so two
+* `encode_decode`: a 5503-bit string is the encoding of its decoded words and nonce, so two
   signatures of the right length with the same words and nonce are equal;
-* signatures have exactly `sigBits = 5504` bits, verification is deterministic;
+* signatures have exactly `sigBits = 5503` bits, verification is deterministic;
 * `admissible`: all eight fields of `Admissible` under `Params.Hyp`.
 -/
 
@@ -47,10 +47,10 @@ theorem flatMap_chunks {w : ℕ} :
     rw [hrest, ih (l.drop w) (by rw [List.length_drop, hl, Nat.mul_succ]; omega),
       List.take_append_drop]
 
-/-- A 5504-bit string is the encoding of its decoded words and nonce. -/
+/-- A 5503-bit string is the encoding of its decoded words and nonce. -/
 theorem encode_decode (bits : List Bool) (h : bits.length = sigBits) :
     encode (decodeWord bits) (decodeNonce bits) = bits := by
-  have hs : sigBits = 5504 := rfl
+  have hs : sigBits = 5503 := rfl
   rw [hs] at h
   unfold encode decodeWord decodeNonce
   have h1 := flatMap_chunks (w := 128) 42 (bits.take 5376) (by rw [List.length_take, h]; rfl)
@@ -108,7 +108,7 @@ theorem signatureSize : P.scheme.SignatureSizeAtMost maxSignatureBits := by
   have hs' : some s ∈ support (P.sign sk m) := hs
   rw [P.sign_eq sk m] at hs'
   rw [P.signLoop_support_length sk m trials ∅ s hs']
-  exact le_rfl
+  norm_num [sigBits, maxSignatureBits]
 
 theorem deterministic_pure {α : Type} (x : α) :
     Deterministic (pure x : OracleComp Spec α) := by trivial

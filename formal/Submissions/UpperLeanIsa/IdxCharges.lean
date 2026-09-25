@@ -45,20 +45,20 @@ def IdxPost (d' c : Cache) (i : ℕ) : Prop :=
 theorem encCount_empty : P.encCount ∅ = 0 := by
   simp [Params.encCount]
 
-/-- A query that is not an index query leaves the index entries unchanged. -/
-theorem encCount_cacheQuery_of_ne (d : Cache) {q : Query} (hq : ∀ u : EncInput, q ≠ P.encQuery u)
-    (w : BitVec hashBits) : P.encCount (d.cacheQuery q w) = P.encCount d := by
-  unfold Params.encCount
+theorem encCount_cacheQuery_of_ne (d : Cache) {q : Query}
+    (hq : ∀ u : EncInput, q ≠ P.encQuery u) (w : BitVec hashBits) :
+    P.encCount (d.cacheQuery q w) = P.encCount d := by
+  unfold encCount
   congr 1
   apply Finset.filter_congr
   intro u _
-  rw [QueryCache.cacheQuery_of_ne _ _ (Ne.symm (hq u))]
+  rw [QueryCache.cacheQuery_of_ne _ _ (hq u).symm]
 
 theorem encCount_cacheQuery_le (d : Cache) (q : Query) (w : BitVec hashBits) :
     P.encCount (d.cacheQuery q w) ≤ P.encCount d + 1 := by
+  unfold Params.encCount
   by_cases hq : ∃ u₀ : EncInput, q = P.encQuery u₀
   · obtain ⟨u₀, rfl⟩ := hq
-    unfold Params.encCount
     calc (Finset.univ.filter fun u : EncInput =>
           ((d.cacheQuery (P.encQuery u₀) w) (P.encQuery u)).isSome).card
         ≤ (insert u₀ (Finset.univ.filter fun u : EncInput =>
@@ -74,7 +74,13 @@ theorem encCount_cacheQuery_le (d : Cache) (q : Query) (w : BitVec hashBits) :
             rwa [QueryCache.cacheQuery_of_ne _ _ (fun e => h (P.encQuery_inj e))] at hu
       _ ≤ _ := Finset.card_insert_le _ _
   · simp only [not_exists] at hq
-    rw [P.encCount_cacheQuery_of_ne d hq w]
+    have h : (Finset.univ.filter fun u : EncInput =>
+        ((d.cacheQuery q w) (P.encQuery u)).isSome) =
+        Finset.univ.filter fun u : EncInput => (d (P.encQuery u)).isSome := by
+      apply Finset.filter_congr
+      intro u _
+      rw [QueryCache.cacheQuery_of_ne _ _ (Ne.symm (hq u))]
+    rw [h]
     exact Nat.le_succ _
 
 theorem idxPost_cacheQuery_of_ne_enc (d' d : Cache) {q : Query}

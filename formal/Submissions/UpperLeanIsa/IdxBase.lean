@@ -12,9 +12,9 @@ The vocabulary of the index-grinding analysis, ported from UpperRiscv (`SignIdx`
   RISC-V layout, every leanISA query has 896 bits, so encoding queries are told apart from chain
   and root queries by their metadata (`chainInput_ne_encQuery`, `rootInput_ne_encQuery`), not by
   their length;
-* the index of an answer `idxOf w` (bits `1, …, 127`, as a natural number), the accepted
+* the index of an answer `idxOf w` (the low 127 bits, as a natural number), the accepted
   indices `validSet`, with `validSet.card = numValid` (`card_validSet`);
-* `card_idxOf_mem`: each index value is the index of exactly `2 ^ 129` answers.
+* `card_idxOf_mem`: each index value is the index of exactly `2 ^ 127` answers.
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -34,7 +34,7 @@ abbrev emsgBits : ℕ := msgBits + pkBits
 abbrev EMessage := BitVec emsgBits
 
 /-- An encoding input: an extended message above a nonce. -/
-abbrev EncInput := BitVec (emsgBits + 128)
+abbrev EncInput := BitVec (emsgBits + 127)
 
 /-- The extended message of `m` under the public key `pk`. -/
 def emsg (m : Message) (pk : PublicKey) : EMessage := m ++ pk
@@ -46,15 +46,15 @@ theorem append_nonce_inj (m : EMessage) {η η' : Nonce} (h : m ++ η = m ++ η'
   (append_inj h).2
 
 theorem exists_append (u : EncInput) : ∃ (m : EMessage) (η : Nonce), u = m ++ η := by
-  refine ⟨u.extractLsb' 128 emsgBits, u.extractLsb' 0 128, ?_⟩
+  refine ⟨u.extractLsb' 127 emsgBits, u.extractLsb' 0 127, ?_⟩
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
   rw [BitVec.getLsbD_append]
   split_ifs with h
   · simp [BitVec.getLsbD_extractLsb', h]
   · rw [BitVec.getLsbD_extractLsb']
-    have : i - 128 < emsgBits := by omega
-    simp [this, show 128 + (i - 128) = i by omega]
+    have : i - 127 < emsgBits := by omega
+    simp [this, show 127 + (i - 127) = i by omega]
 
 theorem emsg_inj {m m' : Message} {pk pk' : PublicKey} (h : emsg m pk = emsg m' pk') :
     m = m' ∧ pk = pk' := append_inj h
@@ -77,8 +77,8 @@ variable (P : Params)
 
 /-- The index query of an encoding input `emsg m pk ++ η`. -/
 def encQuery (u : EncInput) : Query :=
-  ⟨896, P.idxInput ((u.extractLsb' 128 emsgBits).extractLsb' pkBits msgBits)
-    (u.extractLsb' 0 128) ((u.extractLsb' 128 emsgBits).extractLsb' 0 pkBits)⟩
+  ⟨896, P.idxInput ((u.extractLsb' 127 emsgBits).extractLsb' pkBits msgBits)
+    (u.extractLsb' 0 127) ((u.extractLsb' 127 emsgBits).extractLsb' 0 pkBits)⟩
 
 theorem encQuery_emsg (m : Message) (pk : PublicKey) (η : Nonce) :
     P.encQuery (emsg m pk ++ η) = ⟨896, P.idxInput m η pk⟩ := by
@@ -91,7 +91,7 @@ theorem idxInput_inj {m m' : Message} {η η' : Nonce} {pk pk' : PublicKey}
   have hb := ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.1
   obtain ⟨h1, hm⟩ := append_inj hb
   obtain ⟨hpk, hη⟩ := append_inj h1
-  exact ⟨hm, hη, hpk⟩
+  exact ⟨hm, nonceWord_injective hη, hpk⟩
 
 theorem encQuery_inj {u u' : EncInput} (h : P.encQuery u = P.encQuery u') : u = u' := by
   obtain ⟨M, η, rfl⟩ := exists_append u
@@ -111,24 +111,38 @@ theorem chainInput_ne_encQuery (hP : P.Hyp) (k : Fin numChains) (j : ℕ) (x : W
   intro h
   exact P.chainInput_ne_idxInput hP k j x _ _ _ (query_inj h)
 
-theorem rootInput_ne_encQuery (hP : P.Hyp) {r : ℕ} (hr : r < 9) (t : Fin numChains → Word)
+theorem rootInput_ne_encQuery (hP : P.Hyp) {r : ℕ} (hr : r < 7) (t : Fin numChains → Word)
     (st : BitVec 256) (u : EncInput) : (⟨896, P.rootInput t r st⟩ : Query) ≠ P.encQuery u := by
   intro h
   exact P.rootInput_ne_idxInput hP hr t st _ _ _ (query_inj h)
 
-theorem record_query_ne_encQuery (hP : P.Hyp) (ξ : Record P) (a : Loc P) (u : EncInput) :
-    ξ.query a ≠ P.encQuery u := by
+theorem record_query_ne_encQuery (hP : P.Hyp) (ξ : Record P) (a : Loc P) (ha : ξ.ValidAt a)
+    (u : EncInput) : ξ.query a ≠ P.encQuery u := by
   obtain ⟨M, η, rfl⟩ := exists_append u
   obtain ⟨m, pk, rfl⟩ := exists_emsg M
   rw [encQuery_emsg]
-  exact ξ.query_ne_idx hP a m η pk
+  exact ξ.query_ne_idx hP a ha m η pk
+
+/-- Every encoding query is an index query. -/
+theorem isIdxQuery_encQuery (u : EncInput) : IsIdxQuery P (P.encQuery u) := by
+  obtain ⟨M, η, rfl⟩ := exists_append u
+  obtain ⟨m, pk, rfl⟩ := exists_emsg M
+  exact ⟨m, η, pk, P.encQuery_emsg m pk η⟩
+
+/-- A decoded query is not an encoding query. -/
+theorem not_enc_of_queryLocation (hP : P.Hyp) {q : Query} {a : Loc P}
+    (hl : queryLocation P q = some a) (u : EncInput) : q ≠ P.encQuery u := by
+  obtain ⟨M, η, rfl⟩ := exists_append u
+  obtain ⟨m, pk, rfl⟩ := exists_emsg M
+  rw [encQuery_emsg]
+  exact not_idx_of_queryLocation hP hl m η pk
 
 /-! ## Indices -/
 
-/-- The index of an answer: its index word as a number. -/
-def idxOf (w : BitVec hashBits) : ℕ := (idxAns w).toNat
+/-- The index of an answer: its low 127 bits as a number. -/
+def idxOf (w : BitVec hashBits) : ℕ := (indexSlice w).toNat
 
-theorem idxOf_lt (w : BitVec hashBits) : idxOf w < 2 ^ 127 := (idxAns w).isLt
+theorem idxOf_lt (w : BitVec hashBits) : idxOf w < 2 ^ 127 := (indexSlice w).isLt
 
 /-- The accepted indices. -/
 def validSet : Finset ℕ := (Finset.range (2 ^ 127)).filter fun n => P.Accepted (BitVec.ofNat 127 n)
@@ -137,9 +151,9 @@ def validSet : Finset ℕ := (Finset.range (2 ^ 127)).filter fun n => P.Accepted
 abbrev Idx : Type := {i : ℕ // i ∈ P.validSet}
 
 /-- The word of an index. -/
-def idxWord (i : ℕ) : IdxWord := BitVec.ofNat 127 i
+def idxWord (i : ℕ) : Index := BitVec.ofNat 127 i
 
-theorem idxWord_idxOf (w : BitVec hashBits) : idxWord (idxOf w) = idxAns w := by
+theorem idxWord_idxOf (w : BitVec hashBits) : idxWord (idxOf w) = indexSlice w := by
   unfold idxWord idxOf
   rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
@@ -148,7 +162,7 @@ theorem mem_validSet_lt {i : ℕ} (h : i ∈ P.validSet) : i < 2 ^ 127 := by
   exact Finset.mem_range.mp (Finset.mem_filter.mp h).1
 
 theorem mem_validSet_iff (w : BitVec hashBits) :
-    idxOf w ∈ P.validSet ↔ P.Accepted (idxAns w) := by
+    idxOf w ∈ P.validSet ↔ P.Accepted (indexSlice w) := by
   unfold validSet
   rw [Finset.mem_filter, ← idxWord, idxWord_idxOf]
   exact ⟨fun h => h.2, fun h => ⟨Finset.mem_range.mpr (idxOf_lt w), h⟩⟩
@@ -180,24 +194,29 @@ theorem numValid_le' : P.numValid ≤ 2 ^ 127 := by
 
 end Params
 
-/-- Number of oracle answers whose index lies in a set of index values. -/
+/-- Every effective 127-bit index has exactly 2^129 full-answer preimages. -/
 theorem card_idxOf_mem (A : Finset ℕ) (hA : ∀ n ∈ A, n < 2 ^ 127) :
     (Finset.univ.filter fun y : BitVec hashBits => Params.idxOf y ∈ A).card =
       A.card * 2 ^ (hashBits - 127) := by
-  have hI : (Finset.univ.filter fun I : IdxWord => I.toNat ∈ A).card = A.card := by
-    refine Finset.card_bij' (fun I _ => I.toNat) (fun n _ => BitVec.ofNat 127 n) ?_ ?_ ?_ ?_
-    · intro I hI
-      exact (Finset.mem_filter.1 hI).2
+  have hc : (Finset.univ.filter fun i : Index => i.toNat ∈ A).card = A.card := by
+    refine Finset.card_nbij' (fun i : Index => i.toNat)
+      (fun n => BitVec.ofNat 127 n) ?_ ?_ ?_ ?_
+    · intro i hi
+      simpa only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq,
+        Finset.mem_coe] using hi
     · intro n hn
-      simp only [Finset.mem_filter, Finset.mem_univ, true_and]
-      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (hA n hn)]
+      simp only [Finset.mem_coe] at hn
+      simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq,
+        BitVec.toNat_ofNat, Nat.mod_eq_of_lt (hA n hn)]
       exact hn
-    · intro I _
+    · intro i _
+      change BitVec.ofNat 127 i.toNat = i
       rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
     · intro n hn
-      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (hA n hn)]
-  rw [← hI]
-  exact card_filter_idxAns (fun I : IdxWord => I.toNat ∈ A)
+      exact Nat.mod_eq_of_lt (hA n hn)
+  change (Finset.univ.filter fun y : BitVec 256 => (indexSlice y).toNat ∈ A).card = _
+  rw [card_indexSlice (fun i : Index => i.toNat ∈ A), hc]
+  rfl
 
 theorem sum_fin_equivFin {α : Type*} {s : Finset α} {n : ℕ} (h : n = s.card) (G : α → ℝ≥0∞) :
     ∑ j : Fin n, G (s.equivFin.symm (Fin.cast h j)).1 = ∑ η ∈ s, G η := by

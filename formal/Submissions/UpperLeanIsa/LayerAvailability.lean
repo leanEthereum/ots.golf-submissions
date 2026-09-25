@@ -6,14 +6,14 @@ import Submissions.UpperLeanIsa.LayerBits
 
 Ported from UpperRiscv `Availability.lean` / `SignIdx.lean`.
 
-Key generation makes no index query: its chain steps carry `chainMd` and its root calls
-`rootMd r`, both different from `idxMd`, so the keygen cache has no index entry
-(`keygen_noIdx`). The signer then tries fresh, distinct nonces, each index answer is a fresh
-uniform 256-bit string, and each trial fails with probability exactly
-`miss = 1 - numValid / 2 ^ 127` (`loop_failure`). With `numValid ≥ 90 · 2 ^ 108` the
-`2 ^ 19` trials fail with probability at most `2 ^ -128` (`miss_trials_le`), for every message
-chosen from the public key (`signingFailure`). No bad-record term is needed: the query shapes are
-separated syntactically.
+Key generation leaves at most one index entry: its chain steps carry `chainMd` and its root calls
+`r < 7` carry `rootMd r`, all different from `idxMd`; only the last root call, whose metadata is
+a state word, can have the index shape (`keepsNoIdxBut_keygen`). The signer then tries fresh,
+distinct nonces; every index answer but at most one is a fresh uniform 256-bit string, and each
+fresh trial fails with probability exactly `miss = 1 - numValid / 2 ^ 128` (`loop_failure`,
+`loop_failure_one`). With `numValid ≥ 188 · 2 ^ 107` the `2 ^ 19` trials fail with probability
+at most `miss ^ (2 ^ 19 - 1) ≤ 2 ^ -128` (`miss_trials_pred_le`), for every message chosen from
+the public key (`signingFailure`).
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -25,55 +25,6 @@ open scoped Classical
 set_option linter.constructorNameAsVariable false
 
 namespace OptimalOTS.LeanIsaBaseline.Layer
-
-/-- The index word of an answer, as a number. -/
-theorem toNat_idxAns {n : ℕ} (w : BitVec n) : (idxAns w).toNat = w.toNat / 2 % 2 ^ 127 := by
-  rw [idxAns, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow, pow_one]
-
-/-- Each index word is the index word of `2 ^ 129` answers. -/
-theorem card_filter_idxAns (p : IdxWord → Prop) [DecidablePred p] :
-    (Finset.univ.filter fun w : BitVec 256 => p (idxAns w)).card =
-      (Finset.univ.filter p).card * 2 ^ 129 := by
-  have hu : (Finset.univ : Finset (BitVec 129)).card = 2 ^ 129 := by
-    rw [Finset.card_univ, Fintype.card_bitVec]
-  rw [← hu, ← Finset.card_product]
-  refine Finset.card_nbij' (fun w => (idxAns w,
-      BitVec.ofNat 129 (w.toNat % 2 + 2 * (w.toNat / 2 ^ 128))))
-    (fun x => BitVec.ofNat 256 (x.2.toNat % 2 + 2 * x.1.toNat + 2 ^ 128 * (x.2.toNat / 2)))
-    ?_ ?_ ?_ ?_
-  · intro w hw
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq] at hw
-    simp only [Finset.coe_product, Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_prod,
-      Set.mem_ofPred_eq, Finset.coe_univ, Set.mem_univ, and_true]
-    exact hw
-  · intro x hx
-    simp only [Finset.coe_product, Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_prod,
-      Set.mem_ofPred_eq, Finset.coe_univ, Set.mem_univ, and_true] at hx
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq]
-    have e : idxAns (BitVec.ofNat 256
-        (x.2.toNat % 2 + 2 * x.1.toNat + 2 ^ 128 * (x.2.toNat / 2))) = x.1 := by
-      apply BitVec.eq_of_toNat_eq
-      have h1 := x.1.isLt
-      have h2 := x.2.isLt
-      rw [toNat_idxAns, BitVec.toNat_ofNat]
-      omega
-    rw [e]
-    exact hx
-  · intro w _
-    apply BitVec.eq_of_toNat_eq
-    have h := w.isLt
-    simp only [BitVec.toNat_ofNat, toNat_idxAns]
-    omega
-  · intro x _
-    have h1 := x.1.isLt
-    have h2 := x.2.isLt
-    refine Prod.ext ?_ ?_
-    · apply BitVec.eq_of_toNat_eq
-      rw [toNat_idxAns, BitVec.toNat_ofNat]
-      omega
-    · apply BitVec.eq_of_toNat_eq
-      simp only [BitVec.toNat_ofNat]
-      omega
 
 namespace Params
 
@@ -148,14 +99,14 @@ theorem keepsNoIdx_chainList (hc : P.chainMd ≠ P.idxMd) (k : Fin numChains) :
     exact P.keepsNoIdx_bind (P.keepsNoIdx_map _ (P.keepsNoIdx_hash hc))
       fun y => P.keepsNoIdx_bind (ih (j + 1) y) fun _ => P.keepsNoIdx_pure _
 
-theorem keepsNoIdx_rootFrom (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd) (t : Fin numChains → Word) :
-    ∀ n r st, r + n ≤ 9 → P.KeepsNoIdx (P.rootFrom t r n st) := by
+theorem keepsNoIdx_rootFrom (hr : ∀ r < 7, P.rootMd r ≠ P.idxMd) (t : Fin numChains → Word) :
+    ∀ n r st, r + n ≤ 7 → P.KeepsNoIdx (P.rootFrom t r n st) := by
   intro n
   induction n with
   | zero => intro r st _; exact P.keepsNoIdx_pure _
   | succ n ih =>
     intro r st h
-    exact P.keepsNoIdx_bind (P.keepsNoIdx_hash (hr r (by omega)))
+    exact P.keepsNoIdx_bind (P.keepsNoIdx_hash (by rw [rootTag_lt (by omega)]; exact hr r (by omega)))
       fun st' => ih (r + 1) st' (by omega)
 
 theorem keepsNoIdx_tabulate {α : Type} :
@@ -167,14 +118,90 @@ theorem keepsNoIdx_tabulate {α : Type} :
       P.keepsNoIdx_bind (keepsNoIdx_tabulate (fun i : Fin n => f i.succ) fun i => h i.succ)
         fun _ => P.keepsNoIdx_pure _
 
-theorem keepsNoIdx_keygen (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd) :
-    P.KeepsNoIdx P.keygen := by
+/-- A cache with at most one index entry, at the query `q₀`. -/
+def NoIdxBut (c : Cache) : Prop :=
+  ∃ q₀ : Query, ∀ m η pk, (⟨896, P.idxInput m η pk⟩ : Query) ≠ q₀ →
+    c ⟨896, P.idxInput m η pk⟩ = none
+
+/-- Running `oa` from a cache without index entries reaches caches with at most one. -/
+def KeepsNoIdxBut {α : Type} (oa : OracleComp Spec α) : Prop :=
+  ∀ c, P.NoIdx c → ∀ p ∈ support (run oa c), P.NoIdxBut p.2
+
+theorem keepsNoIdxBut_bind {α β : Type} {oa : OracleComp Spec α} {ob : α → OracleComp Spec β}
+    (ha : P.KeepsNoIdx oa) (hb : ∀ x, P.KeepsNoIdxBut (ob x)) :
+    P.KeepsNoIdxBut (oa >>= ob) := by
+  intro c hc p hp
+  rw [run_bind, support_bind] at hp
+  simp only [Set.mem_iUnion] at hp
+  obtain ⟨q, hq, hp⟩ := hp
+  exact hb q.1 q.2 (ha c hc q hq) p hp
+
+theorem keepsNoIdxBut_bind_pure {α β : Type} {oa : OracleComp Spec α} (f : α → β)
+    (ha : P.KeepsNoIdxBut oa) : P.KeepsNoIdxBut (oa >>= fun x => pure (f x)) := by
+  intro c hc p hp
+  rw [run_bind, support_bind] at hp
+  simp only [Set.mem_iUnion] at hp
+  obtain ⟨q, hq, hp⟩ := hp
+  rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
+  subst hp
+  exact ha c hc q hq
+
+theorem keepsNoIdxBut_map {α β : Type} {oa : OracleComp Spec α} (f : α → β)
+    (ha : P.KeepsNoIdxBut oa) : P.KeepsNoIdxBut (f <$> oa) := by
+  rw [map_eq_bind_pure_comp]
+  exact P.keepsNoIdxBut_bind_pure f ha
+
+/-- Any single hash adds at most one index entry. -/
+theorem keepsNoIdxBut_hash (x : BitVec 896) : P.KeepsNoIdxBut (hash x) := by
+  intro c hc p hp
+  refine ⟨⟨896, x⟩, fun m η pk hne => ?_⟩
+  have e : hash x = (liftM (Spec.query (.inr ⟨896, x⟩)) :
+      OracleComp Spec (BitVec hashBits)) >>= pure := by
+    rw [bind_pure]; rfl
+  rw [e, run_query_bind] at hp
+  rcases hq : c ⟨896, x⟩ with _ | v
+  · rw [oracleImpl_run_inr_none hq, bind_assoc, support_bind] at hp
+    simp only [Set.mem_iUnion, pure_bind, run_pure, support_pure, Set.mem_singleton_iff] at hp
+    obtain ⟨w, -, rfl⟩ := hp
+    dsimp only
+    rw [QueryCache.cacheQuery_of_ne _ _ hne]
+    exact hc m η pk
+  · rw [oracleImpl_run_inr_some hq, pure_bind, run_pure, support_pure,
+      Set.mem_singleton_iff] at hp
+    subst hp
+    exact hc m η pk
+
+theorem rootFrom_split' (t : Fin numChains → Word) (st : BitVec 256) :
+    P.rootFrom t 0 8 st = P.rootFrom t 0 7 st >>= fun st' =>
+      hash (P.rootInput t 7 st') >>= fun y => pure y := by
+  have h : ∀ (a r : ℕ) (st : BitVec 256), P.rootFrom t r (a + 1) st =
+      P.rootFrom t r a st >>= fun st' => hash (P.rootInput t (r + a) st') >>= fun y => pure y := by
+    intro a
+    induction a with
+    | zero => intro r st; rfl
+    | succ a ih =>
+      intro r st
+      rw [show a + 1 + 1 = (a + 1) + 1 from rfl]
+      simp only [rootFrom] at ih ⊢
+      simp only [bind_assoc]
+      refine bind_congr fun st' => ?_
+      rw [ih (r + 1) st', show r + 1 + a = r + (a + 1) by omega]
+  exact h 7 0 st
+
+/-- Key generation leaves at most one index entry (its last root call). -/
+theorem keepsNoIdxBut_keygen (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 7, P.rootMd r ≠ P.idxMd) :
+    P.KeepsNoIdxBut P.keygen := by
   unfold keygen
-  refine P.keepsNoIdx_bind (P.keepsNoIdx_tabulate _ fun _ => P.keepsNoIdx_liftM _) fun seeds => ?_
-  refine P.keepsNoIdx_bind (P.keepsNoIdx_tabulate _ fun k => P.keepsNoIdx_chainList hc k _ _ _)
+  refine P.keepsNoIdxBut_bind (P.keepsNoIdx_tabulate _ fun _ => P.keepsNoIdx_liftM _)
+    fun seeds => ?_
+  refine P.keepsNoIdxBut_bind (P.keepsNoIdx_tabulate _ fun k => P.keepsNoIdx_chainList hc k _ _ _)
     fun tables => ?_
-  exact P.keepsNoIdx_bind (P.keepsNoIdx_map _ (P.keepsNoIdx_rootFrom hr _ 9 0 _ le_rfl))
-    fun _ => P.keepsNoIdx_pure _
+  unfold root
+  refine P.keepsNoIdxBut_bind_pure _ ?_
+  refine P.keepsNoIdxBut_map _ ?_
+  rw [rootFrom_split']
+  exact P.keepsNoIdxBut_bind (P.keepsNoIdx_rootFrom hr _ 7 0 _ le_rfl)
+    fun st' => P.keepsNoIdxBut_bind_pure id (P.keepsNoIdxBut_hash _)
 
 theorem noIdx_empty : P.NoIdx ∅ := fun _ _ _ => rfl
 
@@ -193,8 +220,11 @@ theorem idxQuery_ne {m : Message} {pk : PublicKey} {η η' : Nonce} (h : η ≠ 
     (⟨896, P.idxInput m η pk⟩ : Query) ≠ ⟨896, P.idxInput m η' pk⟩ := by
   intro hq
   have hb := ((hashInput_eq_iff _ _ _ _ _ _).mp (eq_of_heq (Sigma.mk.inj hq).2)).2.1
-  have hb' : (pk ++ η) ++ m = (pk ++ η') ++ m := hb
-  exact h (append_injective (append_injective hb').1).2
+  have hb' : (pk ++ nonceWord η) ++ m = (pk ++ nonceWord η') ++ m := hb
+  exact h (nonceWord_injective (append_injective (append_injective hb').1).2)
+
+/-- The low half of an answer. -/
+abbrev lo (w : BitVec hashBits) : Index := indexSlice w
 
 /-- Failure probability of one fresh index query. -/
 def miss : ℝ≥0∞ := ((2 ^ 256 - P.numValid * 2 ^ 129 : ℕ) : ℝ≥0∞) * (((2 ^ 256 : ℕ) : ℝ≥0∞))⁻¹
@@ -203,11 +233,16 @@ theorem numValid_le : P.numValid ≤ 2 ^ 127 := by
   unfold numValid
   exact (Finset.card_filter_le _ _).trans (by rw [Finset.card_univ, Fintype.card_bitVec])
 
-/-- The answers whose index word is accepted. -/
+theorem append_extract (w : BitVec 256) :
+    (w.extractLsb' 128 128 ++ w.extractLsb' 0 128 : BitVec (128 + 128)) = w := by
+  rw [BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (x := w) (start₁ := 0) (len₁ := 128)
+    (start₂ := 128) (len₂ := 128) rfl]
+  exact BitVec.extractLsb'_eq_self
+
+/-- The accepted effective indices each have 2^129 full-answer preimages. -/
 theorem card_acceptedOut :
-    (Finset.univ.filter fun w : BitVec 256 => P.Accepted (idxAns w)).card =
-      P.numValid * 2 ^ 129 :=
-  card_filter_idxAns _
+    (Finset.univ.filter fun w : BitVec 256 => P.Accepted (indexSlice w)).card =
+      P.numValid * 2 ^ 129 := card_indexSlice P.Accepted
 
 attribute [local irreducible] hashBits
 
@@ -222,11 +257,12 @@ attribute [local semireducible] hashBits
 
 /-- One fresh uniform answer fails with probability `miss`. -/
 theorem uniform_miss (a : ℝ≥0∞) :
-    E ($ᵗ BitVec hashBits) (fun w => if P.Accepted (idxAns w) then 0 else a) = P.miss * a := by
-  have hn : (Finset.univ.filter fun w : BitVec 256 => ¬ P.Accepted (idxAns w)).card =
+    E ($ᵗ BitVec hashBits) (fun w => if P.Accepted (lo w) then 0 else a) = P.miss * a := by
+  have hn : (Finset.univ.filter fun w : BitVec 256 => ¬ P.Accepted (indexSlice w)).card =
       2 ^ 256 - P.numValid * 2 ^ 129 :=
-    card_filter_not_bitVec (fun w : BitVec 256 => P.Accepted (idxAns w)) P.card_acceptedOut
-  change E ($ᵗ BitVec 256) (fun w => if P.Accepted (idxAns w) then 0 else a) = _
+    card_filter_not_bitVec (fun w : BitVec 256 => P.Accepted (indexSlice w))
+      P.card_acceptedOut
+  change E ($ᵗ BitVec 256) (fun w => if P.Accepted (indexSlice w) then 0 else a) = _
   rw [E_uniform]
   simp only [mul_ite, mul_zero]
   rw [Finset.sum_ite, Finset.sum_const_zero, zero_add, Finset.sum_const, nsmul_eq_mul, hn,
@@ -247,7 +283,7 @@ theorem nonceOf_mem (tried : Finset Nonce) (hc : 0 < (Finset.univ \ tried).card)
 /-- The continuation after the index answer `w` at nonce `η`. -/
 def afterHash (sk : SecretKey) (m : Message) (k : ℕ) (tried : Finset Nonce) (η : Nonce)
     (w : BitVec hashBits) : OracleComp Spec (Option (List Bool)) :=
-  if P.Accepted (idxAns w) then pure (some (encode (P.revealed sk (idxAns w)) η))
+  if P.Accepted (lo w) then pure (some (encode (P.revealed sk (lo w)) η))
   else P.signLoop sk m k (insert η tried)
 
 /-- One trial at nonce `η`: the index query, then stop or recurse. -/
@@ -277,7 +313,7 @@ theorem signLoop_succ (sk : SecretKey) (m : Message) (k : ℕ) (tried : Finset N
 /-- Exact failure probability while enough untried nonces remain and their queries are fresh. -/
 theorem loop_failure (sk : SecretKey) (m : Message) :
     ∀ (k : ℕ) (tried : Finset Nonce) (c : Cache),
-      tried.card + k ≤ 2 ^ 128 →
+      tried.card + k ≤ 2 ^ 127 →
       (∀ η ∉ tried, c ⟨896, P.idxInput m η sk.pk⟩ = none) →
       E (run (P.signLoop sk m k tried) c)
         (fun p => if p.1.isNone then 1 else 0) = P.miss ^ k := by
@@ -305,10 +341,10 @@ theorem loop_failure (sk : SecretKey) (m : Message) :
           E (run (P.afterHash sk m k tried η w)
             (c.cacheQuery ⟨896, P.idxInput m η sk.pk⟩ w))
             (fun p => if p.1.isNone then 1 else 0) =
-          if P.Accepted (idxAns w) then 0 else P.miss ^ k := by
+          if P.Accepted (lo w) then 0 else P.miss ^ k := by
         intro w
         unfold afterHash
-        by_cases hw : P.Accepted (idxAns w)
+        by_cases hw : P.Accepted (lo w)
         · rw [if_pos hw, if_pos hw, run_pure, E_pure]
           rfl
         · rw [if_neg hw, if_neg hw]
@@ -326,23 +362,121 @@ theorem loop_failure (sk : SecretKey) (m : Message) :
     exact expectedValue_const (by simp) _
 
 
+theorem miss_le_one : P.miss ≤ 1 := by
+  have h := P.uniform_miss 1
+  rw [mul_one] at h
+  rw [← h]
+  refine E_le_one _ fun w => ?_
+  split_ifs <;> simp
+
+/-- Failure probability while enough untried nonces remain and all their queries but one are
+fresh: at most `miss ^ (k - 1)`. -/
+theorem loop_failure_one (sk : SecretKey) (m : Message) (η₀ : Nonce) :
+    ∀ (k : ℕ) (tried : Finset Nonce) (c : Cache),
+      tried.card + k ≤ 2 ^ 127 →
+      (∀ η ∉ tried, η ≠ η₀ → c ⟨896, P.idxInput m η sk.pk⟩ = none) →
+      E (run (P.signLoop sk m k tried) c)
+        (fun p => if p.1.isNone then 1 else 0) ≤ P.miss ^ (k - 1) := by
+  intro k
+  induction k with
+  | zero =>
+    intro tried c _ _
+    simp [signLoop, run_pure]
+  | succ k ih =>
+    intro tried c hbudget hfresh
+    have hc : 0 < (Finset.univ \ tried).card := by
+      rw [Finset.card_univ_sdiff, Fintype.card_bitVec]
+      omega
+    rw [P.signLoop_succ sk m k tried hc, run_query_bind, oracleImpl_run_inl]
+    simp only [bind_assoc, pure_bind, E_bind]
+    have hbody : ∀ j,
+        E (run (P.loopBody sk m k tried (nonceOf tried hc j)) c)
+          (fun p => if p.1.isNone then 1 else 0) ≤ P.miss ^ (k + 1 - 1) := by
+      intro j
+      set η := nonceOf tried hc j with hηdef
+      have hη : η ∉ tried := (Finset.mem_sdiff.mp (nonceOf_mem tried hc j)).2
+      have hbud' : (insert η tried).card + k ≤ 2 ^ 127 := by
+        rw [Finset.card_insert_of_notMem hη]
+        omega
+      have hfresh' : ∀ w : BitVec hashBits, ∀ η' ∉ insert η tried, η' ≠ η₀ →
+          (c.cacheQuery ⟨896, P.idxInput m η sk.pk⟩ w) ⟨896, P.idxInput m η' sk.pk⟩ = none := by
+        intro w η' hη' hη'0
+        have hne : (⟨896, P.idxInput m η' sk.pk⟩ : Query) ≠ ⟨896, P.idxInput m η sk.pk⟩ :=
+          P.idxQuery_ne fun he => hη' (he ▸ Finset.mem_insert_self η tried)
+        rw [QueryCache.cacheQuery_of_ne _ _ hne]
+        exact hfresh η' (fun h => hη' (Finset.mem_insert_of_mem h)) hη'0
+      rw [Nat.add_sub_cancel]
+      by_cases he : η = η₀
+      · -- the one possibly cached nonce: the rest of the loop is fresh
+        have hall : ∀ c' : Cache, (∀ η' ∉ insert η tried, η' ≠ η₀ →
+            c' ⟨896, P.idxInput m η' sk.pk⟩ = none) →
+            ∀ η' ∉ insert η tried, c' ⟨896, P.idxInput m η' sk.pk⟩ = none := by
+          intro c' h' η' hη'
+          exact h' η' hη' (fun h => hη' (h ▸ he ▸ Finset.mem_insert_self η tried))
+        rw [loopBody, run_query_bind]
+        rcases hq : c ⟨896, P.idxInput m η sk.pk⟩ with _ | w
+        · rw [oracleImpl_run_inr_none hq]
+          simp only [bind_assoc, pure_bind, E_bind]
+          have hk : ∀ w : BitVec hashBits,
+              E (run (P.afterHash sk m k tried η w) (c.cacheQuery ⟨896, P.idxInput m η sk.pk⟩ w))
+                (fun p => if p.1.isNone then 1 else 0) = if P.Accepted (lo w) then 0 else P.miss ^ k := by
+            intro w
+            unfold afterHash
+            by_cases hw : P.Accepted (lo w)
+            · rw [if_pos hw, if_pos hw, run_pure, E_pure]; rfl
+            · rw [if_neg hw, if_neg hw]
+              exact P.loop_failure sk m k _ _ hbud' (hall _ (hfresh' w))
+          simp only [hk]
+          rw [P.uniform_miss]
+          calc P.miss * P.miss ^ k ≤ 1 * P.miss ^ k := mul_le_mul' P.miss_le_one le_rfl
+            _ = P.miss ^ k := one_mul _
+        · rw [oracleImpl_run_inr_some hq]
+          simp only [pure_bind]
+          unfold afterHash
+          by_cases hw : P.Accepted (lo w)
+          · rw [if_pos hw, run_pure, E_pure]; simp
+          · rw [if_neg hw]
+            refine le_of_eq (P.loop_failure sk m k _ _ hbud' (hall c ?_))
+            intro η' hη' hη'0
+            exact hfresh η' (fun h => hη' (Finset.mem_insert_of_mem h)) hη'0
+      · -- a fresh nonce: the one possibly cached nonce remains
+        rw [loopBody, run_query_bind, oracleImpl_run_inr_none (hfresh η hη he)]
+        simp only [bind_assoc, pure_bind, E_bind]
+        have hk : ∀ w : BitVec hashBits,
+            E (run (P.afterHash sk m k tried η w) (c.cacheQuery ⟨896, P.idxInput m η sk.pk⟩ w))
+              (fun p => if p.1.isNone then 1 else 0) ≤
+                if P.Accepted (lo w) then 0 else P.miss ^ (k - 1) := by
+          intro w
+          unfold afterHash
+          by_cases hw : P.Accepted (lo w)
+          · rw [if_pos hw, if_pos hw, run_pure, E_pure]; simp
+          · rw [if_neg hw, if_neg hw]
+            exact ih _ _ hbud' (hfresh' w)
+        refine (expectedValue_mono_of_support fun w _ => hk w).trans
+          ((P.uniform_miss (P.miss ^ (k - 1))).le.trans ?_)
+        rcases Nat.eq_zero_or_pos k with rfl | hk0
+        · simpa using P.miss_le_one
+        · rw [← pow_succ', Nat.sub_add_cancel hk0]
+    refine (expectedValue_mono_of_support fun j _ => hbody j).trans (le_of_eq ?_)
+    exact expectedValue_const (by simp) _
+
 /-! ## The numeric bound -/
 
-/-- At least `90 · 2 ^ 108` accepted indices: one trial fails with probability at most
-`1 - 90 / 2 ^ 19`. -/
-theorem miss_le (hN : 90 * 2 ^ 108 ≤ P.numValid) : P.miss ≤ 524198 / 524288 := by
-  have hN' : 90 * 2 ^ 237 ≤ P.numValid * 2 ^ 129 :=
-    calc 90 * 2 ^ 237 = (90 * 2 ^ 108) * 2 ^ 129 := by norm_num
+/-- At least `188 · 2 ^ 107` accepted indices: one trial fails with probability at most
+`1 - 188 / 2 ^ 20`. -/
+theorem miss_le (hN : 188 * 2 ^ 107 ≤ P.numValid) : P.miss ≤ 1048388 / 1048576 := by
+  have hN' : 188 * 2 ^ 236 ≤ P.numValid * 2 ^ 129 :=
+    calc 188 * 2 ^ 236 = (188 * 2 ^ 107) * 2 ^ 129 := by norm_num
       _ ≤ _ := Nat.mul_le_mul_right _ hN
-  have ha : 2 ^ 256 - P.numValid * 2 ^ 129 ≤ 524198 * 2 ^ 237 := by
+  have ha : 2 ^ 256 - P.numValid * 2 ^ 129 ≤ 1048388 * 2 ^ 236 := by
     have h := Nat.sub_le_sub_left hN' (2 ^ 256)
-    have e : 2 ^ 256 - 90 * 2 ^ 237 = 524198 * 2 ^ 237 := by norm_num
+    have e : 2 ^ 256 - 188 * 2 ^ 236 = 1048388 * 2 ^ 236 := by norm_num
     omega
   calc P.miss = ((2 ^ 256 - P.numValid * 2 ^ 129 : ℕ) : ℝ≥0∞) / 2 ^ 256 := by
         rw [miss, div_eq_mul_inv, Nat.cast_pow, Nat.cast_ofNat]
-    _ ≤ ((524198 * 2 ^ 237 : ℕ) : ℝ≥0∞) / 2 ^ 256 :=
+    _ ≤ ((1048388 * 2 ^ 236 : ℕ) : ℝ≥0∞) / 2 ^ 256 :=
         ENNReal.div_le_div_right (Nat.cast_le.mpr ha) _
-    _ = 524198 / 524288 := by
+    _ = 1048388 / 1048576 := by
       rw [ENNReal.div_eq_div_iff (by norm_num) (by finiteness) (by norm_num) (by finiteness)]
       norm_num
 
@@ -370,31 +504,78 @@ private theorem ofReal_frac (a b : ℕ) (hb : 0 < b) :
   rw [ENNReal.ofReal_div_of_pos (by exact_mod_cast hb), ENNReal.ofReal_natCast,
     ENNReal.ofReal_natCast]
 
-/-- `2 ^ 19` trials fail with probability at most `2 ^ -128`: blocks of 128 trials by the
-reciprocal bound, `(2 ^ 19 / 535808) ^ 64 ≤ 1 / 4`, and `(1 / 4) ^ 64 = 2 ^ -128`. -/
-theorem miss_trials_le (hN : 90 * 2 ^ 108 ≤ P.numValid) :
+/-- `2 ^ 19` trials fail with probability at most `2 ^ -128`: blocks of 512 trials by the
+reciprocal bound `(1 - 188 / 2 ^ 20) ^ 512 ≤ 1 / (1 + 512 · 188 / 2 ^ 20) = 512 / 559`, then
+`(512 / 559) ^ 32 ≤ 0.061` and `0.061 ^ 32 ≤ 2 ^ -128`. -/
+theorem miss_trials_le (hN : 188 * 2 ^ 107 ≤ P.numValid) :
     P.miss ^ trials ≤ 1 / 2 ^ 128 := by
-  have hreal : ((524198 : ℝ) / 524288) ^ trials ≤ 1 / 2 ^ 128 := by
-    have h128 := bernoulli_reciprocal (p := (90 : ℝ) / 524288) (by norm_num) (by norm_num) 128
-    have hbase : (1 : ℝ) - 90 / 524288 = 524198 / 524288 := by norm_num
-    have hden : 1 + ((128 : ℕ) : ℝ) * (90 / 524288) = 535808 / 524288 := by norm_num
-    rw [hbase, hden, one_div_div] at h128
-    have hnn : (0 : ℝ) ≤ ((524198 : ℝ) / 524288) ^ 128 := by positivity
-    have h64 : ((524288 : ℝ) / 535808) ^ 64 ≤ 1 / 4 := by
+  have hreal : ((1048388 : ℝ) / 1048576) ^ trials ≤ 1 / 2 ^ 128 := by
+    have h512 := bernoulli_reciprocal (p := (188 : ℝ) / 1048576) (by norm_num) (by norm_num) 512
+    have hbase : (1 : ℝ) - 188 / 1048576 = 1048388 / 1048576 := by norm_num
+    have hden : 1 + ((512 : ℕ) : ℝ) * (188 / 1048576) = 1144832 / 1048576 := by norm_num
+    rw [hbase, hden, one_div_div] at h512
+    have hnn : (0 : ℝ) ≤ ((1048388 : ℝ) / 1048576) ^ 512 := by positivity
+    have h32 : ((1048576 : ℝ) / 1144832) ^ 32 ≤ 61 / 1000 := by
       rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
       norm_num
-    calc ((524198 : ℝ) / 524288) ^ trials
-        = ((((524198 : ℝ) / 524288) ^ 128) ^ 64) ^ 64 := by
+    have h61 : ((61 : ℝ) / 1000) ^ 32 ≤ 1 / 2 ^ 128 := by
+      rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
+      norm_num
+    calc ((1048388 : ℝ) / 1048576) ^ trials
+        = ((((1048388 : ℝ) / 1048576) ^ 512) ^ 32) ^ 32 := by
           rw [← pow_mul, ← pow_mul]; rfl
-      _ ≤ (((524288 : ℝ) / 535808) ^ 64) ^ 64 := by
+      _ ≤ (((1048576 : ℝ) / 1144832) ^ 32) ^ 32 := by
           gcongr
-      _ ≤ ((1 : ℝ) / 4) ^ 64 := by gcongr
-      _ = 1 / 2 ^ 128 := by norm_num
+      _ ≤ ((61 : ℝ) / 1000) ^ 32 := by gcongr
+      _ ≤ 1 / 2 ^ 128 := h61
   refine (pow_le_pow_left' (P.miss_le hN) trials).trans ?_
   have h' := ENNReal.ofReal_le_ofReal hreal
   rw [ENNReal.ofReal_pow (by norm_num)] at h'
-  have hb : ENNReal.ofReal ((524198 : ℝ) / 524288) = (524198 / 524288 : ℝ≥0∞) := by
-    have := ofReal_frac 524198 524288 (by norm_num)
+  have hb : ENNReal.ofReal ((1048388 : ℝ) / 1048576) = (1048388 / 1048576 : ℝ≥0∞) := by
+    have := ofReal_frac 1048388 1048576 (by norm_num)
+    simpa using this
+  have hh : ENNReal.ofReal ((1 : ℝ) / 2 ^ 128) = (1 / 2 ^ 128 : ℝ≥0∞) := by
+    rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_one,
+      ENNReal.ofReal_pow (by norm_num), ENNReal.ofReal_ofNat]
+  rwa [hb, hh] at h'
+
+/-- The same bound with one trial wasted: `miss ^ (trials - 1) ≤ 2 ^ -128`, since
+`(512 / 559) ^ 1023 ≤ 0.061 ^ 32 · 559 / 512`. -/
+theorem miss_trials_pred_le (hN : 188 * 2 ^ 107 ≤ P.numValid) :
+    P.miss ^ (trials - 1) ≤ 1 / 2 ^ 128 := by
+  have hreal : ((1048388 : ℝ) / 1048576) ^ (trials - 1) ≤ 1 / 2 ^ 128 := by
+    have h512 := bernoulli_reciprocal (p := (188 : ℝ) / 1048576) (by norm_num) (by norm_num) 512
+    have hbase : (1 : ℝ) - 188 / 1048576 = 1048388 / 1048576 := by norm_num
+    have hden : 1 + ((512 : ℕ) : ℝ) * (188 / 1048576) = 1144832 / 1048576 := by norm_num
+    rw [hbase, hden, one_div_div] at h512
+    have h32 : ((1048576 : ℝ) / 1144832) ^ 32 ≤ 61 / 1000 := by
+      rw [div_pow, div_le_div_iff₀ (by positivity) (by positivity)]
+      norm_num
+    have h61 : ((61 : ℝ) / 1000) ^ 32 * (1144832 / 1048576) ≤ 1 / 2 ^ 128 := by
+      rw [div_pow, div_mul_div_comm, div_le_div_iff₀ (by positivity) (by positivity)]
+      norm_num
+    have hx0 : (0 : ℝ) ≤ 1048388 / 1048576 := by positivity
+    have hx1 : (1048388 : ℝ) / 1048576 ≤ 1 := by norm_num
+    have hy0 : (0 : ℝ) ≤ (1048576 : ℝ) / 1144832 := by positivity
+    have htr : trials - 1 = 512 * 1023 + 511 := by unfold trials; norm_num
+    calc ((1048388 : ℝ) / 1048576) ^ (trials - 1)
+        ≤ ((1048388 : ℝ) / 1048576) ^ (512 * 1023) := by
+          rw [htr]
+          exact pow_le_pow_of_le_one hx0 hx1 (by omega)
+      _ = (((1048388 : ℝ) / 1048576) ^ 512) ^ 1023 := by rw [← pow_mul]
+      _ ≤ ((1048576 : ℝ) / 1144832) ^ 1023 := by gcongr
+      _ = (((1048576 : ℝ) / 1144832) ^ 32) ^ 32 * (1144832 / 1048576) := by
+          have hy : (1048576 : ℝ) / 1144832 ≠ 0 := by norm_num
+          rw [← pow_mul, show (1144832 : ℝ) / 1048576 = ((1048576 : ℝ) / 1144832)⁻¹ by norm_num,
+            show 32 * 32 = 1023 + 1 from rfl, pow_succ ((1048576 : ℝ) / 1144832) 1023, mul_assoc,
+            mul_inv_cancel₀ hy, mul_one]
+      _ ≤ ((61 : ℝ) / 1000) ^ 32 * (1144832 / 1048576) := by gcongr
+      _ ≤ 1 / 2 ^ 128 := h61
+  refine (pow_le_pow_left' (P.miss_le hN) (trials - 1)).trans ?_
+  have h' := ENNReal.ofReal_le_ofReal hreal
+  rw [ENNReal.ofReal_pow (by norm_num)] at h'
+  have hb : ENNReal.ofReal ((1048388 : ℝ) / 1048576) = (1048388 / 1048576 : ℝ≥0∞) := by
+    have := ofReal_frac 1048388 1048576 (by norm_num)
     simpa using this
   have hh : ENNReal.ofReal ((1 : ℝ) / 2 ^ 128) = (1 / 2 ^ 128 : ℝ≥0∞) := by
     rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_one,
@@ -411,12 +592,43 @@ theorem probTrue_eq_E_run (oa : OracleComp Spec Bool) :
   rcases x with ⟨b, c⟩
   cases b <;> simp
 
+/-- Signing from a cache with at most one index entry fails with probability at most
+`miss ^ (trials - 1)`. -/
+theorem sign_failure_le (sk : SecretKey) (m : Message) (c : Cache) (hc : P.NoIdxBut c) :
+    E (run (P.sign sk m) c) (fun p => if p.1.isNone then 1 else 0) ≤ P.miss ^ (trials - 1) := by
+  obtain ⟨q₀, hq₀⟩ := hc
+  classical
+  let η₀ : Nonce := if h : ∃ η : Nonce, (⟨896, P.idxInput m η sk.pk⟩ : Query) = q₀ then h.choose
+    else 0
+  have hfresh : ∀ η ∉ (∅ : Finset Nonce), η ≠ η₀ → c ⟨896, P.idxInput m η sk.pk⟩ = none := by
+    intro η _ hη
+    apply hq₀
+    intro he
+    have hex : ∃ η : Nonce, (⟨896, P.idxInput m η sk.pk⟩ : Query) = q₀ := ⟨η, he⟩
+    have h0 : η₀ = hex.choose := dif_pos hex
+    have hspec := hex.choose_spec
+    by_contra hne
+    have : η = hex.choose := by
+      by_contra hne'
+      exact P.idxQuery_ne hne' (he.trans hspec.symm)
+    exact hη (this.trans h0.symm)
+  rw [P.sign_eq sk m]
+  exact P.loop_failure_one sk m η₀ trials ∅ c (by norm_num [trials]) hfresh
+
+theorem sign_isNone_le' (hN : 188 * 2 ^ 107 ≤ P.numValid) (sk : SecretKey) (m : Message)
+    (c : Cache) (hc : P.NoIdxBut c) :
+    E (run (P.sign sk m >>= fun σ => pure σ.isNone) c) (fun p => if p.1 = true then 1 else 0) ≤
+      1 / 2 ^ signingFailureBits := by
+  rw [run_bind, E_bind]
+  simp only [run_pure, E_pure]
+  exact (P.sign_failure_le sk m c hc).trans (P.miss_trials_pred_le hN)
+
 /-- Signing from a cache without index entries fails with probability `miss ^ trials`. -/
 theorem sign_failure (sk : SecretKey) (m : Message) (c : Cache) (hc : P.NoIdx c) :
     E (run (P.sign sk m) c) (fun p => if p.1.isNone then 1 else 0) = P.miss ^ trials :=
   P.sign_eq sk m ▸ P.loop_failure sk m trials ∅ c (by norm_num [trials]) (fun η _ => hc m η sk.pk)
 
-theorem sign_isNone_le (hN : 90 * 2 ^ 108 ≤ P.numValid) (sk : SecretKey) (m : Message)
+theorem sign_isNone_le (hN : 188 * 2 ^ 107 ≤ P.numValid) (sk : SecretKey) (m : Message)
     (c : Cache) (hc : P.NoIdx c) :
     E (run (P.sign sk m >>= fun σ => pure σ.isNone) c) (fun p => if p.1 = true then 1 else 0) ≤
       1 / 2 ^ signingFailureBits := by
@@ -426,18 +638,17 @@ theorem sign_isNone_le (hN : 90 * 2 ^ 108 ≤ P.numValid) (sk : SecretKey) (m : 
   exact P.miss_trials_le hN
 
 /-- **Signing availability.** For every message chosen from the public key, signing fails with
-probability at most `2 ^ -128`, given the metadata separation and `90 · 2 ^ 108` accepted
+probability at most `2 ^ -128`, given the metadata separation and `188 · 2 ^ 107` accepted
 indices. -/
-theorem signingFailure (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd)
-    (hN : 90 * 2 ^ 108 ≤ P.numValid) :
+theorem signingFailure (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 7, P.rootMd r ≠ P.idxMd)
+    (hN : 188 * 2 ^ 107 ≤ P.numValid) :
     P.scheme.SigningFailureAtMost (1 / 2 ^ signingFailureBits) := by
   intro message
   rw [probTrue_eq_E_run, run_bind, E_bind]
   refine E_le_of_support _ fun q hq => ?_
-  have hno := P.keepsNoIdx_keygen hc hr ∅ P.noIdx_empty q hq
+  have hno := P.keepsNoIdxBut_keygen hc hr ∅ P.noIdx_empty q hq
   rcases q with ⟨⟨pk, sk⟩, c⟩
-  have h := P.sign_failure sk (message pk) c hno
-  exact P.sign_isNone_le hN sk (message pk) c hno
+  exact P.sign_isNone_le' hN sk (message pk) c hno
 
 end Params
 

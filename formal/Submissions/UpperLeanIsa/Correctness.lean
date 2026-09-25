@@ -47,8 +47,8 @@ def chainListValue (f : HashTable) (k : Fin numChains) : ℕ → ℕ → Word �
   | j, n + 1, x => x :: chainListValue f k (j + 1) n (P.stepValue f k j x)
 
 /-- The index under a fixed table. -/
-def idxValue (f : HashTable) (m : Message) (η : Nonce) (pk : PublicKey) : IdxWord :=
-  idxAns (f ⟨896, P.idxInput m η pk⟩)
+def idxValue (f : HashTable) (m : Message) (η : Nonce) (pk : PublicKey) : Index :=
+  indexSlice (f ⟨896, P.idxInput m η pk⟩)
 
 /-- Root calls `r, …, r + n - 1` under a fixed table. -/
 def rootFromValue (f : HashTable) (t : Fin numChains → Word) :
@@ -58,10 +58,10 @@ def rootFromValue (f : HashTable) (t : Fin numChains → Word) :
 
 /-- The public key of the tops `t` under a fixed table. -/
 def rootValue (f : HashTable) (t : Fin numChains → Word) : PublicKey :=
-  (P.rootFromValue f t 0 9 (rootInit t)).extractLsb' 0 128
+  (P.rootFromValue f t 0 8 (rootInit t)).extractLsb' 0 128
 
 /-- The tops reconstructed by the verifier from the words of `bits` at index `I`. -/
-def reconWords (f : HashTable) (I : IdxWord) (bits : List Bool) : Fin numChains → Word :=
+def reconWords (f : HashTable) (I : Index) (bits : List Bool) : Fin numChains → Word :=
   fun k => P.chainValue f k (P.len k - 1 - P.digit I k) (P.digit I k) (decodeWord bits k)
 
 /-- The verifier's decision under a fixed table. -/
@@ -248,7 +248,7 @@ theorem fixed_signLoop_support (f : HashTable) (sk : SecretKey) (m : Message) :
         rfl
       rw [hq, simulateQ_bind, fixed_hash, pure_bind] at hσ
       unfold afterHash at hσ
-      by_cases ha : P.Accepted (idxAns (f ⟨896, P.idxInput m (nonceOf tried hc j) sk.pk⟩))
+      by_cases ha : P.Accepted (lo (f ⟨896, P.idxInput m (nonceOf tried hc j) sk.pk⟩))
       · rw [if_pos ha, simulateQ_pure, support_pure, Set.mem_singleton_iff] at hσ
         rw [hσ] at hs
         exact ⟨nonceOf tried hc j, ha, (Option.some.inj hs).symm⟩

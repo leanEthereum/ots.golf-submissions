@@ -96,10 +96,10 @@ theorem signLoop_eq_map (sk : SecretKey) (m : Message) :
       refine bind_congr fun w => ?_
       unfold afterHash idxAfterHash
       by_cases hi : idxOf w ∈ P.validSet
-      · have ha : P.Accepted (idxAns w) := (P.mem_validSet_iff w).mp hi
+      · have ha : P.Accepted (lo w) := (P.mem_validSet_iff w).mp hi
         rw [if_pos ha, dif_pos hi, map_pure]
         simp only [sigOfIdx, Option.map_some, idxWord_idxOf]
-      · have ha : ¬ P.Accepted (idxAns w) := fun h => hi ((P.mem_validSet_iff w).mpr h)
+      · have ha : ¬ P.Accepted (lo w) := fun h => hi ((P.mem_validSet_iff w).mpr h)
         rw [if_neg ha, dif_neg hi]
         exact ih _
     · rw [signLoop, signIdxLoop, dif_neg hc, dif_neg hc, map_pure]
@@ -326,7 +326,7 @@ theorem signIdx_support (m : EMessage) (d : Cache) :
 def IdxPre (d : Cache) (u₁ : EncInput) (i : ℕ) : Prop :=
   ∃ u, u ≠ u₁ ∧ ∃ w, d (P.encQuery u) = some w ∧ idxOf w = i
 
-/-- `Φ` does not see encoding entries: the entries at queries of length `emsgBits + 128`. -/
+/-- `Φ` does not see encoding entries: the entries at queries of length `emsgBits + 127`. -/
 def EncInvariant (Φ : Cache → ℝ≥0∞) : Prop :=
   ∀ (c : Cache) (u : EncInput) (w : BitVec hashBits),
     Φ (c.cacheQuery (P.encQuery u) w) = Φ c

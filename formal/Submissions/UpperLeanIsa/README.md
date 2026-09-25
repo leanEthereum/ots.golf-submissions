@@ -1,34 +1,24 @@
-# leanISA — 1390 cycles (HL-TRI-1390)
+# leanISA — 1281 cycles
 
-This root keeps HL-FLAT-A's security proof structure (42 Winternitz chains, nonce-ground index)
-with a 127-bit index: bits `1 … 127` of the low half of the index answer, 41 three-bit digits
-and one four-bit digit, on layer 103. Every leanISA query costs two compressions, so the
-security constant is `κ' = (19/20)·2^-127` per compression and `κ'·B < B/2^127` still holds
-(`NOTES.md` section 0). The 9-call tagged root is unchanged: call 0 hashes tops 0..5, calls
-1..7 take the cv pair `(top (5r+1), top (5r+2))` and absorb the low half of the previous state
-and three tops, and call 8 takes the full state and top 41. The chains `0, 6, 11, …, 36` keep
-the high half of their last step's answer (`Params.hiTop`), so that each cv pair sits in two
-adjacent cells. The bytecode lets three chains share one landing:
-- 14 groups, one frame and one dispatch per group;
-- one tie word per group into the index accumulator; bit 0 of the index cell (the junk bit) is
-  a radix-2 digit of group 0, which has 1024 blocks and sets the accumulator to its word;
-- one layer factor `g^σ` per group, with `g^2..g^7` precomputed.
+Field-rescaled Group3 with a 127-bit effective index, an eight-call root whose last call is
+tagged by the chaining state, and a landing exit (the exit jumps to the last landing product; a
+hash-free exit table forces the layer). The cost-17 entries of the six (3,10) tables are dummy
+indices that are never accepted, so the prologue drops the `C_17` constant. The free chain's top
+is a message word of root call 1, read by a second, frame-isolated copy of the first group's
+blocks when the free digit is 0, so the free block needs no copy.
+Every completing execution takes **1281 cycles**:
+`111 + 105 × 10 + 120`, with exactly **216 instructions**.
 
-Every completing run executes 253 instructions (113 `BLAKE2S`):
-`140 + 10·113 + 120 = 1390` cycles. Key generation costs 622 compressions, verification 226.
-The tag symbols, the index metadata and the root metadata reuse existing constant cells.
+- 42 chains; 96 continuation hashes per accepted signature.
+- 127-bit nonce; 5503-bit signature.
+- 1326 key-generation compressions; at most 2^20 signing compressions; 210 verification compressions.
+- Strict 127-bit strong security, including the adaptive index-grinding proof.
+- Program log-size 18; honest memory log-size 16; 327680 seeded rows.
+- Soundness and cycle bounds cover every admitted prover-selected memory size, image, and step count.
 
-- `MachineProgram`: `logSize = 18`, `memLog = 16`. Entries `BASE g + SP g · rank`. Frame-entry
-  `I0` jumps pin every landing, and bodies run in frame 1.
-- `MachineRun`, `MachinePath`: every completing run is the forced walk of one layer vector.
-- `MachineCycles`: the tie gives `acc_13 = Σ T_g = idx` (group 0's word carries the junk bit),
-  and the layer product gives `Σ s = 103`, all hash-free. The run is exactly 253 steps and 1270
-  cycles.
-- `MachineSound`, `MachineProver`, `MachineHonest`, `MachineFaithful`: as HL-FLAT-A, per group;
-  the honest junk digit is bit 0 of the index cell.
+`Solution.lean` exports `submission`, `certificate : submission.Certificate 1281`, and `seeded_rows`.
+Build with `lake build Submissions.UpperLeanIsa.Solution` in the pinned contract project.
 
-Design, the rejected entry-assertion variant, the model and next steps are in `NOTES.md`. The
-scheme, security, layer-count and index-grinding proofs are HL-FLAT-A's (credits in `NOTES.md`
-section 7). The grouped bytecode and machine proofs were prepared with Claude Opus 5.5.
-
-Build with `lake build Submissions.UpperLeanIsa.Solution`.
+Local Lean compilation succeeds. The official verifier requires a Linux host with Landlock
+and its documented resource-isolation setup; it cannot run on the current development host.
+See `NOTES.md` for the construction, proof changes, and credits.
