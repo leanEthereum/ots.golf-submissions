@@ -22,12 +22,12 @@ def reconFromValue (f : HashTable) (I : Index) (bits : List Bool) : List (Fin 42
       (P.chainValue f t k (P.codec.len k - 1 - P.codec.digit I k)
         (P.codec.digit I k) (decodeWord bits k)))
 
-def rootFromValue (f : HashTable) (t : Tops) : List (Fin 3) → BitVec 256 → BitVec 256
+def rootFromValue (f : HashTable) (t : Tops) : List (Fin 2) → BitVec 256 → BitVec 256
   | [],st => st
   | r::l,st => rootFromValue f t l (f ⟨896,P.rootInput t r st⟩)
 
 def rootValue (f : HashTable) (t : Tops) : PublicKey :=
-  (P.rootFromValue f t [0,1,2] 0).extractLsb' 0 128
+  (P.rootFromValue f t [0,1] 0).extractLsb' 0 128
 
 def verifyValue (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) : Bool :=
   if bits.length ≠ sigBits then false
@@ -61,7 +61,7 @@ theorem fixed_reconFrom (f : HashTable) (I : Index) (bits : List Bool)
     simp only [reconFrom,simulateQ_bind,fixed_chain,pure_bind,ih]
     rfl
 
-theorem fixed_rootFrom (f : HashTable) (t : Tops) (l : List (Fin 3)) (st : BitVec 256) :
+theorem fixed_rootFrom (f : HashTable) (t : Tops) (l : List (Fin 2)) (st : BitVec 256) :
     simulateQ (unifFwdAnswerImpl f) (P.rootFrom t l st) = pure (P.rootFromValue f t l st) := by
   induction l generalizing st with
   | nil => rfl
@@ -115,7 +115,7 @@ theorem keygenRecord_coherent (hl : P.locationOrder.Pairwise Earlier)
 
 theorem chainValue_coherent (f : HashTable) (ξ : Record P) (hc : P.Coherent f ξ)
     (t : Tops) (k : Fin 42)
-    (ht : ∀ u : Fin 6, owner k = some u → ∀ d ∈ children u, t d = ξ.tops d)
+    (ht : ∀ u : Fin 7, owner k = some u → ∀ d ∈ children u, t d = ξ.tops d)
     (j n : ℕ) (hn : j+n < P.codec.len k) :
     P.chainValue f t k j n (ξ.word k j) = ξ.word k (j+n) := by
   induction n generalizing j with
@@ -142,7 +142,7 @@ theorem reconFromValue_honest (hP : P.codec.Hyp) (f : HashTable) (ξ : Record P)
   | nil => exact funext fun d => ht d (by simp)
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
-    have hdep : ∀ u : Fin 6, owner k = some u → ∀ d ∈ children u, t d = ξ.tops d := by
+    have hdep : ∀ u : Fin 7, owner k = some u → ∀ d ∈ children u, t d = ξ.tops d := by
       intro u hu d hd
       apply ht d
       intro hmem
@@ -180,9 +180,8 @@ theorem rootValue_coherent (f : HashTable) (ξ : Record P) (hc : P.Coherent f ξ
     P.rootValue f ξ.tops = ξ.pk := by
   have h0 : f ⟨896,P.rootInput ξ.tops 0 0⟩ = ξ.2 (.inr 0) := (hc (.inr 0)).symm
   have h1 : f ⟨896,P.rootInput ξ.tops 1 (ξ.2 (.inr 0))⟩ = ξ.2 (.inr 1) := (hc (.inr 1)).symm
-  have h2 : f ⟨896,P.rootInput ξ.tops 2 (ξ.2 (.inr 1))⟩ = ξ.2 (.inr 2) := (hc (.inr 2)).symm
   dsimp only [rootValue,rootFromValue]
-  rw [h0,h1,h2]
+  rw [h0,h1]
   rfl
 
 theorem chainOrder_ranked : chainOrder.Pairwise

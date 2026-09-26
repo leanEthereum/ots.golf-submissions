@@ -37,7 +37,7 @@ variable (T : Tab) (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → Bit
 theorem hc_one : hcell T bits y0 A RA oneCell = oneV := by unfold hcell oneCell; hsimp
 theorem hc_g : hcell T bits y0 A RA gCell = gV := by unfold hcell gCell; hsimp
 
-theorem hc_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 22) : hcell T bits y0 A RA (cCell c) = cV c := by
+theorem hc_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 21) : hcell T bits y0 A RA (cCell c) = cV c := by
   by_cases h16 : c = 16
   · subst c; rw [cV_sixteen]; exact hc_g ..
   · have hc : cCell c = 50 + c := by unfold cCell; rw [if_neg (by omega), if_neg h16]
@@ -85,7 +85,7 @@ theorem hc_xh {k : ℕ} (hk : k<42) (_hk0 : k≠0) (_he : ¬ exported k) :
     hcell T bits y0 A RA (xhCell k) = cellOfBits (topOf T bits y0 A k) ∧
       hcell T bits y0 A RA (junkCell k (xhCell k)) = hiOf T y0 A k := hc_top T bits y0 A RA hk trivial
 
-theorem hc_st {r : ℕ} (hr : r<3) :
+theorem hc_st {r : ℕ} (hr : r<2) :
     hcell T bits y0 A RA (stCell r) = loC (RA r) ∧
       hcell T bits y0 A RA (stCell r+1) = hiC (RA r) := by
   interval_cases r <;> simp [hcell,stCell]

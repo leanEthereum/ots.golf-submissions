@@ -4,7 +4,7 @@ import Submissions.UpperLeanIsa.LayerProfile
 import Submissions.UpperLeanIsa.TierCodec
 
 /-! Layer-86 codec for the fixed-tag fusion candidate. Each unit has its own table.
-The six binding units omit the zero tuple. Their live bands start at field zero;
+The seven binding units omit the zero tuple. Their live bands start at field zero;
 unused field values occur only after the live bands. The base `params` stores the
 index and signing codec; the fusion construction supplies different chain/root queries. -/
 
@@ -56,7 +56,7 @@ def shN (s : ℕ) : List ℕ :=
     [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153],
     [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153],
     [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 83, 0, 0],
-    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153]]).getD s []
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153]]).getD s []
 
 /-- Field values per tuple of each cost (`1` for an empty band). -/
 def shMu (s : ℕ) : List ℕ :=
@@ -88,7 +88,7 @@ def shCum (s : ℕ) : List ℕ :=
     [0, 0, 3, 15, 25, 40, 61, 89, 125, 170, 225, 291, 369, 460, 565, 685, 821, 974],
     [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 560, 680, 816, 969],
     [0, 1, 385, 391, 401, 416, 437, 465, 501, 546, 601, 667, 745, 836, 941, 1024, 1024, 1024],
-    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 560, 680, 816, 969]]).getD s []
+    [0, 0, 3, 9, 19, 34, 55, 83, 119, 164, 219, 285, 363, 454, 559, 679, 815, 968]]).getD s []
 
 /-- Number of cost bands of shape `s`. -/
 def nb (s : ℕ) : ℕ := (shN s).length

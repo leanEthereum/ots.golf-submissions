@@ -22,6 +22,10 @@ theorem tag_inj (k k' : Fin numChains) (j j' : ℕ) (hj : j + 1 < len k) (hj' : 
   obtain ⟨hk, hjj⟩ := Prod.mk.inj hl
   exact ⟨Fin.ext hk.symm, hjj.symm⟩
 
+/-- The final steps of the light parents 39, 40, 41 have middle tags `B = 2, 4, 6`. -/
+theorem light_final_pos : ∀ k : Fin 42, k.val ∈ Fusion.parents 6 →
+    (off k + (len k - 2)) / 9 % 9 = 2 * (k.val - 38) := by decide
+
 theorem hyp : params.Hyp where
   len_pos := fun k => (Nat.zero_le _).trans_lt (digit_lt 0 k)
   digit_lt := digit_lt
@@ -55,7 +59,7 @@ theorem tagWord_injective : Function.Injective tagWord := by
 def tagIndex (k : Fin 42) : Fin 47 :=
   ![23,11,12,14,15,45,46,13,17,18,19,20,24,25,2,3,4,26,27,5,6,7,28,29,8,9,10,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44] k
 
-def rootIndex (r : Fin 3) : Fin 47 := ![1,21,22] r
+def rootIndex (r : Fin 2) : Fin 47 := ![1,21] r
 
 theorem tagIndex_injective : Function.Injective tagIndex := by decide +kernel
 theorem rootIndex_injective : Function.Injective rootIndex := by decide +kernel
@@ -65,10 +69,12 @@ theorem tagIndex_reserved : ∀ k, tagIndex k ≠ 0 ∧ tagIndex k ≠ 16 ∧ �
 
 theorem rootIndex_reserved : ∀ r, rootIndex r ≠ 0 ∧ rootIndex r ≠ 16 := by decide +kernel
 
+/-- The light cv `(C_1, C_2)` is the machine's adjacent constant cells 51 and 52. -/
 noncomputable def params : Params where
   codec := FusionCodec.params
   fusedMd k := tagWord (tagIndex k)
   rootMd r := tagWord (rootIndex r)
+  lightCv := tagWord 2 ++ tagWord 1
 
 attribute [local irreducible] tagWord LeanIsaFieldRescale.costFactor
 
@@ -112,6 +118,27 @@ theorem params_hyp : params.Hyp where
     intro r h
     rw [codec_index_tag] at h
     exact (rootIndex_reserved r).2 (tagWord_injective h)
+  light_cv := by
+    intro h
+    have hc : tagWord 2 ++ tagWord 1 = FusionCodec.gword 1 ++ FusionCodec.gword 0 := h
+    have h1 := (append_inj hc).2
+    rw [show FusionCodec.gword 0 = tagWord 0 from codec_chain_tag] at h1
+    exact absurd (tagWord_injective h1) (by decide)
+  light_tag := by
+    intro k k' hk hk' h1 _
+    have p := FusionCodec.light_final_pos k ((owner_mem k 6).mp hk)
+    have p' := FusionCodec.light_final_pos k' ((owner_mem k' 6).mp hk')
+    have hm := (owner_mem k 6).mp hk
+    have hm' := (owner_mem k' 6).mp hk'
+    simp only [parents] at hm hm'
+    change FusionCodec.tag k (FusionCodec.len k - 2) 1 =
+      FusionCodec.tag k' (FusionCodec.len k' - 2) 1 at h1
+    simp only [FusionCodec.tag, Matrix.cons_val_one] at h1
+    have e := FusionCodec.sym_inj (Nat.mod_lt _ (by norm_num)) (Nat.mod_lt _ (by norm_num)) h1
+    rw [p, p'] at e
+    apply Fin.ext
+    simp at hm hm'
+    omega
 
 end Fusion
 end OptimalOTS.LeanIsaBaseline.Layer
