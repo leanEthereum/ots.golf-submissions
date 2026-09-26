@@ -61,7 +61,7 @@ theorem spends_keygen : Spends P.keygen P.keygenCost := by
   simpa only [Nat.zero_add,Nat.add_zero] using h
 
 theorem keygenCost_pos : 0 < P.keygenCost := by
-  have h : 3 ≤ P.locationOrder.length := by
+  have h : 2 ≤ P.locationOrder.length := by
     simp only [locationOrder,List.length_append,List.length_map,List.length_finRange]
     omega
   unfold keygenCost

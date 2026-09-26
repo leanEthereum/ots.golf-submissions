@@ -34,26 +34,26 @@ theorem cellBits_oneV : cellBits oneV = (1 : Word) := by
   simp [oneV, ofK_eq_ofLimbs, cellBits]
 
 def rootSeq (v : ℕ → E) (i : ℕ) : BitVec 256 := if i=0 then 0 else stVal v (i-1)
-def homeU (r : ℕ) : ℕ := if r=0 then 5 else if r=1 then 6 else 0
+def homeU (r : ℕ) : ℕ := if r=0 then 5 else 6
 
-theorem homeU_home {r : ℕ} (_hr : r<3) : homeU r=0 ∨ homeU r=5 ∨ homeU r=6 := by
+theorem homeU_home (r : ℕ) : homeU r=5 ∨ homeU r=6 := by
   unfold homeU; split_ifs <;> omega
 
-theorem homeU_lt {r : ℕ} (_hr : r<3) : homeU r<13 := by unfold homeU; split_ifs <;> omega
+theorem homeU_lt (r : ℕ) : homeU r<13 := by unfold homeU; split_ifs <;> omega
 
-theorem hcall_homeU {r : ℕ} (hr : r<3) : hcall (homeU r)=r := by interval_cases r <;> rfl
+theorem hcall_homeU {r : ℕ} (hr : r<2) : hcall (homeU r)=r := by interval_cases r <;> rfl
 
 def rootMsg (T : Tab) (xs : ℕ → ℕ) (r j : ℕ) : ℕ :=
   rt T (homeU r) (xs (homeU r+1)) false j
 
 include hP in
-theorem rootMd_cell (hC : Compat P T) (r : Fin 3) : cellBits (v (rootMdCell r.val)) = P.rootMd r := by
+theorem rootMd_cell (hC : Compat P T) (r : Fin 2) : cellBits (v (rootMdCell r.val)) = P.rootMd r := by
   have he : rootMdCell r.val = cCell (Fusion.rootIndex r).val := by fin_cases r <;> rfl
-  have hi : (Fusion.rootIndex r).val ≤ 22 := by fin_cases r <;> decide
+  have hi : (Fusion.rootIndex r).val ≤ 21 := by fin_cases r <;> decide
   rw [he,v_c hP hi,hC.rootMd]
 
 theorem root_query_of (hone : v oneCell = oneV)
-    (hmd : ∀ r : Fin 3, cellBits (v (rootMdCell r.val)) = P.rootMd r) (r : Fin 3) :
+    (hmd : ∀ r : Fin 2, cellBits (v (rootMdCell r.val)) = P.rootMd r) (r : Fin 2) :
     blake2sQuery ![v (rootMsg T xs r.val 0),v (rootMsg T xs r.val 1),
       v (rootMsg T xs r.val 2),v (rootMsg T xs r.val 3)]
       (v (rootCv r.val)) (v (rootCv r.val+1)) (v (rootMdCell r.val)) =
@@ -64,7 +64,7 @@ theorem root_query_of (hone : v oneCell = oneV)
       exported,dg,unitOf,coordOf,topCell,stVal_lo,stCell,hone,cellBits_oneV]
 
 include hP in
-theorem root_query (hC : Compat P T) (r : Fin 3) :
+theorem root_query (hC : Compat P T) (r : Fin 2) :
     blake2sQuery ![v (rootMsg T xs r.val 0),v (rootMsg T xs r.val 1),
       v (rootMsg T xs r.val 2),v (rootMsg T xs r.val 3)]
       (v (rootCv r.val)) (v (rootCv r.val+1)) (v (rootMdCell r.val)) =
@@ -72,19 +72,19 @@ theorem root_query (hC : Compat P T) (r : Fin 3) :
   root_query_of (v_one hP) (rootMd_cell hP hC) r
 
 include hP in
-theorem root_step (hC : Compat P T) (r : Fin 3) :
+theorem root_step (hC : Compat P T) (r : Fin 2) :
     rootSeq v (r.val+1) = f ⟨896,P.rootInput (topsV T v xs) r (rootSeq v r.val)⟩ := by
   have hmem : CInstr.blake (rootMsg T xs r.val 0) (rootMsg T xs r.val 1)
       (rootMsg T xs r.val 2) (rootMsg T xs r.val 3) (rootCv r.val) (stCell r.val) (rootMdCell r.val) ∈
       bodyF T (frU (xs 0) (homeU r.val+1)) (xs (homeU r.val+1)) := by
-    rw [bodyF_frU_succ T _ (homeU_lt r.isLt)]
+    rw [bodyF_frU_succ T _ (homeU_lt r.val)]
     unfold body
     simp only [List.mem_append]
     left; left; right
     unfold rootIns
-    rw [if_pos (homeU_home r.isLt),hcall_homeU r.isLt]
+    rw [if_pos (homeU_home r.val),hcall_homeU r.isLt]
     exact List.mem_singleton_self _
-  have hrel := hP.blk (homeU r.val+1) (by have := homeU_lt r.isLt; omega) _ hmem
+  have hrel := hP.blk (homeU r.val+1) (by have := homeU_lt r.val; omega) _ hmem
   have hp := oracle_pair hrel
   rw [root_query hP hC r] at hp
   unfold rootSeq
@@ -92,13 +92,12 @@ theorem root_step (hC : Compat P T) (r : Fin 3) :
   exact hp
 
 include hP in
-theorem rootValue_topsV (hC : Compat P T) : rootValue f P (topsV T v xs) = cellBits (v (stCell 2)) := by
+theorem rootValue_topsV (hC : Compat P T) : rootValue f P (topsV T v xs) = cellBits (v (stCell 1)) := by
   have h0 : stVal v 0 = f ⟨896,P.rootInput (topsV T v xs) 0 0⟩ := root_step hP hC 0
   have h1 : stVal v 1 = f ⟨896,P.rootInput (topsV T v xs) 1 (stVal v 0)⟩ := root_step hP hC 1
-  have h2 : stVal v 2 = f ⟨896,P.rootInput (topsV T v xs) 2 (stVal v 1)⟩ := root_step hP hC 2
   unfold rootValue Fusion.Params.rootValue
   simp only [Fusion.Params.rootFromValue]
-  rw [← h0,← h1,← h2,stVal_lo]
+  rw [← h0,← h1,stVal_lo]
 
 end Path
 
@@ -112,7 +111,7 @@ theorem reconFromValue_of_tops (f : HashTable) (I : Index) (bits : List Bool) (c
   | nil => exact funext fun d => ht d (by simp)
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
-    have hdep : ∀ u : Fin 6, owner k = some u → ∀ d ∈ children u, t d = ctx d := by
+    have hdep : ∀ u : Fin 7, owner k = some u → ∀ d ∈ children u, t d = ctx d := by
       intro u hu d hd
       apply ht d
       intro hmem
@@ -242,7 +241,7 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
     -- the public key
     have hb := hP.blk 13 (by omega)
     rw [show (13 : ℕ) = 12 + 1 from rfl, bodyF_frU_succ T _ (by omega)] at hb
-    have h : v pkCell = v (stCell 2) * v oneCell := hb (copy (stCell 2) pkCell) (by
+    have h : v pkCell = v (stCell 1) * v oneCell := hb (copy (stCell 1) pkCell) (by
       unfold body nextOp copy; simp)
     rw [v_one hP, mul_oneV] at h
     rw [← h, show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]

@@ -1,41 +1,54 @@
-# Fused chain binding at 1149 cycles
+# Fused chain binding at 1138 cycles
 
-Claim **1149 cycles**: **129 ordinary instructions + 90 BLAKE2S × 10 + 120 boundary cycles**.
-Every completing path executes 219 instructions. The 90 hashes are 86 chain steps, one index,
-and three root calls. This improves the 1209 reference by 60 cycles (4.96%).
+Claim **1138 cycles**: **128 ordinary instructions + 89 BLAKE2S × 10 + 120 boundary cycles**.
+Every completing path executes 217 instructions. The 89 hashes are 86 chain steps, one index,
+and two root calls. This improves the 1209 reference by 71 cycles (5.87%) and the 1149 fused
+record, from which this root descends, by 11 cycles.
 
 The reference is the verified submission by lucemans at
 `6363c32ead978b927a23860bfb863dff4ba9987e`:
 https://ots.golf/submissions/ae54a7a1c4f0d7c6f00e42030c96e468.
 The local 1198 continuation is preserved separately. This construction retains its rarest-cut
 signer and much of the machine framework, and proves a new fused dependency DAG and security
-reduction. `Fusion*.lean` contains the active construction; older modules provide shared lemmas
+reduction. `Fusion*.lean` contains the active construction. Older modules provide shared lemmas
 and preserve the earlier proof development.
 
 ## Fusing chain and root work
 
 A binding chain's final hash includes five other chain tops in the packet: two as cv words
 and three alongside the current chain word as message words. The metadata identifies the
-parent chain. Thus a chain hash already required for reconstruction also authenticates five
-dependency tops. The six groups are:
+parent chain. A chain hash that reconstruction needs anyway thus authenticates five
+dependency tops. Six groups work this way:
 
-| Binding chains | Dependency tops |
-| --- | --- |
-| 1, 2, 7 | 14, 15, 16, 19, 20 |
-| 3, 4, 5, 6 | 21, 24, 25, 31, 34 |
-| 8, 9, 10, 11 | 35, 36, 39, 40, 41 |
-| 14, 15, 16 | 12, 13, 0, 17, 18 |
-| 19, 20, 21 | 22, 23, 27, 28, 32 |
-| 24, 25, 26 | 33, 37, 38, 29, 30 |
+| Group | Binding chains | Dependency tops |
+| --- | --- | --- |
+| 0 | 1, 2, 7 | 14, 15, 16, 19, 20 |
+| 1 | 3, 4, 5, 6 | 21, 24, 25, 31, 34 |
+| 2 | 8, 9, 10, 11 | 35, 36, 39, 40, 41 |
+| 3 | 14, 15, 16 | 12, 13, 0, 17, 18 |
+| 4 | 19, 20, 21 | 22, 23, 27, 28, 32 |
+| 5 | 24, 25, 26 | 33, 37, 38, 29, 30 |
+| 6 (light) | 39, 40, 41 | 7 |
+
+The light group 6 binds top 7, which the 1149 root hashed in a third root call. The final
+step of each chain 39, 40, 41 keeps its ordinary shape except for two words. Message word 1
+carries top 7 in place of the low tag digit, and the cv pair is `(C_1, C_2)` (cells 51, 52)
+in place of `(ONE, g)`. The message is `[x, t7, B, C]` with the metadata `ONE`. The cv word
+`C_1 ≠ ONE` separates these steps from ordinary chain steps. The tag digits `(B, C)` at the
+final positions 592, 608, 624 are `(2,7)`, `(4,7)` and `(6,7)`, which separates the three
+light parents from each other. Top 7 is always materialized at cell 289, because group 0
+copies the revealed word there when its digit is zero. The light step replaces a hash that
+the chain executes anyway, so it adds no instruction.
 
 Each binding group's all-zero tuple is excluded, so every accepted signature reconstructs
-at least one final binding hash in that group. The acyclic dependency order ensures coherent
-key generation and reconstruction. Domain-separation proofs cover ordinary chain steps,
-fused endpoints, index queries, and root queries with their exact bit strings.
+at least one final binding hash in that group. For the light group this is unit 12, whose
+table lost its single cost-0 tuple. The acyclic dependency order makes key generation and
+reconstruction coherent: it evaluates top 7 before chains 39..41, and those before 8..11.
+Domain-separation proofs cover ordinary chain steps, fused endpoints, light endpoints, index
+queries, and root queries with their exact bit strings.
 
-The final root uses three hashes. Root 0 takes tops 1 and 2 as cv, and tops 3–6 as message.
+The final root uses two hashes. Root 0 takes tops 1 and 2 as cv, and tops 3–6 as message.
 Root 1 takes top 26 and the low half of root 0 as cv, and tops 8–11 as message.
-Root 2 takes top 7 and the low half of root 1 as cv, with four ONE message words.
 Its low half is the public key. Binding propagates through the DAG to all 42 tops.
 
 ## Tables, signing, and exact probability bounds
@@ -47,21 +60,23 @@ trial. A class's weight counts its effective 127-bit indices. Thirteen group tab
 `[23,86]`, so the free digit lies in `[0,63]`.
 
 Alias multiplicities vary by group and cost band. Live raw field prefixes have lengths
-`[1022,512,512,512,512,2047,2047,1023,995,974,969,1024,969]`.
-Unused field values reject. `FusionCodec` specifies the exact tuples and aliases;
+`[1022,512,512,512,512,2047,2047,1023,995,974,969,1024,968]`.
+Unused field values reject. The tables are the 1149 tables except that unit 12 drops its
+cost-0 tuple. `FusionCodec` specifies the exact tuples and aliases;
 `FusionTier` and `FusionNumeric` prove their counts and numerical bounds.
 
 There are 18 dyadic class weights `1,2,...,2^17`. The schedule uses
-`hp = 1393370080481 / 2^40 / 2^127`, `k1 = hp/2`, and `b0 = 1`.
-Independent numerical estimates give about 135.139 bits of signing availability and a
-normalized security slope of 0.950447. The Lean proof uses exact integer counts and
+`hp = 1415907530965 / 2^40 / 2^127`, `k1 = hp/2`, and `b0 = 1`.
+Independent numerical estimates give about 133.145 bits of signing availability and a
+normalized security slope of 0.9658203. The Lean proof uses exact integer counts and
 outward-rounded rational certificates, proving signing failure at most `2^-128` and
 127-bit strong unforgeability for the actual adaptive cached-oracle experiment.
-Key generation uses at most 1256 abstract compressions; verification uses at most 180.
+Key generation uses at most 1254 abstract compressions; verification uses at most 178.
 
-The new security proof normalizes each chain query to the reconstruction's final dependency
-context, proves hidden-input and matching-output bounds for the fused packets, and extracts
-a forgery event through the dependency DAG. It covers both successful and failed signing.
+The security proof normalizes each chain query to the reconstruction's final dependency
+context, proves hidden-input and matching-output bounds for the fused and light packets, and
+extracts a forgery event through the dependency DAG. It covers both successful and failed
+signing.
 
 ## Addresses, constants, and execution
 
@@ -70,11 +85,16 @@ position tags use the existing cost constants. Fused endpoint tags additionally 
 checked signature-length cell (5503) and the forced terminal landing product. Their exact
 bits are proved distinct and are matched to the abstract scheme's metadata.
 
-The prologue has 25 straight instructions and dispatches at slot 25; slot 26 is a pad.
-The free block always materializes its top, removing the former zero-digit frame variant.
-Group regions run from slot 27 through 235318. Free blocks begin at 255615 with stride 68;
-the sentinel is 262143. The code and memory tables have `2^18` and `2^16` rows, respectively,
-for **327680 seeded rows**.
+The prologue has 24 straight instructions and dispatches at slot 24; slots 25 and 26 are
+never-executed pads. The 1149 prologue also set `C_22` for root 2; that constant is gone.
+The free block always materializes its top. Group 0 blocks have `7 + c` slots, since the
+group no longer hosts a root call. Group regions run from slot 27 through 234288. Free blocks
+begin at 255615 with stride 68; the sentinel is 262143. The code and memory tables have
+`2^18` and `2^16` rows, respectively, for **327680 seeded rows**.
+
+The cycle accounting is 24 prologue and 104 block non-hash instructions (128), one index hash,
+86 chain hashes and two root hashes (89), and the 120-cycle boundary charge:
+`128 + 89 × 10 + 120 = 1138`.
 
 The landing seed is `initialProduct(86,s)`. The final exponent is
 `(11529215046068731897 + 2^60 * (s + sum(group costs))) mod (2^64 - 1)`.
@@ -82,68 +102,52 @@ Only total 86 reaches the sentinel; every other total in the conservative range 
 lands on a pad or beyond the program. Frame guards also reject entry into a block's middle.
 The universal cycle theorem quantifies over every admitted memory size, image, and step count.
 
-The machine checks root 2 before roots 0 and 1: committed memory lets an instruction assert
-a relation involving values checked later. Soundness therefore reconstructs those relations
-in mathematical dependency order. The honest prover first reconstructs all tops, then collects
-the complete output pairs and root states; repeated oracle queries share cached answers.
+The machine executes group 0 before the light steps of group 12 that read top 7, but order
+does not matter to the proof: committed memory lets an instruction assert a relation involving
+values checked later. Soundness reconstructs those relations in mathematical dependency order.
+The honest prover first reconstructs all tops, then collects the complete output pairs and
+root states; repeated oracle queries share cached answers.
 
 ## Validation status
 
-The original 1149-cycle certificate at `d8e29b3` was submitted as
+The 1149 parent was submitted as
 [PR #47](https://github.com/leanEthereum/ots.golf-submissions/pull/47).
 [Its hosted check](https://ots.golf/submissions/f9ecc2114da4705241500bb9b239941d)
 timed out after 1232 seconds; every submission module had compiled successfully.
+Its revision then cut proof-checking work, and this root keeps those changes:
 
-This revision reduces proof-checking work while keeping the bytecode, address layout,
-signature scheme, exported certificate statement, and **1149-cycle** claim unchanged:
+- The 88 chained length-certificate fragments are consolidated into `LengthPowers`,
+  `LengthLogValues`, and `LengthBounds`, with sequential elaboration.
+- `Earlier` is proved transitive and `locationOrder` checks only adjacent pairs.
+  `List.isChain_iff_pairwise` then gives the pairwise ordering theorem, replacing the direct
+  check of 196878 pairs.
 
-- Consolidate the 88 chained length-certificate fragments into `LengthPowers`,
-  `LengthLogValues`, and `LengthBounds`, with sequential elaboration. The arithmetic
-  declarations and proofs are byte-for-byte identical to the original fragments.
-- Prove transitivity of `Earlier` and check the 627 adjacent pairs in `locationOrder`.
-  `List.isChain_iff_pairwise` then gives the same pairwise ordering theorem, replacing
-  the direct check of 196878 pairs. The old ordering certificate alone took 31.386
-  seconds during local kernel replay; the revised module builds in about 3 seconds.
+The 1149 revision measured a clean submission build of 250.279 seconds and a fresh kernel
+replay of the exported proof of 278.563 seconds. The 1138 root has the same certificate sizes
+and one root call and one adjacent-order pair fewer. Its local check is
+`lake build Submissions.UpperLeanIsa.Solution` with `#print axioms` on `certificate`,
+`seeded_rows` and `submission`, which report only `propext`, `Classical.choice` and
+`Quot.sound`. Clean-build timing and exported-proof replay for 1138 still have to be measured,
+and a hosted run has to confirm the wall-clock limit.
 
-Final local validation:
-
-- Clean submission build with pinned dependencies prebuilt: **250.279 seconds**,
-  versus 451.757 seconds for the original submission; **24707 bytes** of output.
-- Full exports include the certificate, seeded-row theorem, submission definition, all
-  permitted axioms and the comparator's exact primitive list. The pinned comparator's
-  statement/primitive comparison and axiom checks pass.
-- Fresh Lean kernel replay of the exported proof passes in **278.563 seconds**.
-  Parsing, comparison, axiom checking and replay together take **319.189 seconds**.
-- The sampled peak process-tree proportional memory is **10.33 GiB**
-  for compilation and **4.66 GiB** for the exported-proof checks.
-  These are sampled local measurements, not enforced production resource bounds.
-- The root has 103 files. The leanISA contract modules, challenge template, toolchain,
-  Lake manifest and Lake configuration match hosted contract `ca67ddc3`.
-
-The measured build, two exports and exported-proof checks sum to **584.298 seconds**;
-this is a sum of separately timed development checks, not an official verifier runtime.
-Evidence and profiling scripts are in the sibling `leanisa-1149-timeout-evidence` directory.
-The mandatory official Linux preflight still requires Landlock, unavailable on this host.
-The standalone development checks do not bypass that verifier or certify its sandbox.
-A new hosted run is required to confirm the revised submission fits its wall-clock limit.
-
-Executable research checks exercised accepted indices with both free-digit extremes, three
-complete signing runs, middle-block landings, incorrect layer totals, and modified memory
-cells. Six negative controls demonstrate why allowing an all-zero binding tuple would leave
-a dependency unauthenticated. Those tests used a deterministic test oracle; the Lean proof
-is the security and universal-correctness evidence.
+Executable research checks on the 1149 parent exercised accepted indices with both free-digit
+extremes, three complete signing runs, middle-block landings, incorrect layer totals, and
+modified memory cells. Six negative controls showed why allowing an all-zero binding tuple
+would leave a dependency unauthenticated. Those tests used a deterministic test oracle; the
+Lean proof is the security and universal-correctness evidence.
 
 ## Failed directions and remaining obstacles
 
 Allowing zero-cost binding tuples improves the table distribution but breaks binding: a group
 can disclose all its parent tops without executing any hash that authenticates its children.
-The negative controls reproduce this problem. The current tables exclude all six origins.
+The negative controls reproduce this problem. The current tables exclude all seven origins.
 
-Reducing root hashes requires a new dependency-aware security proof; replacing only the root
-code does not establish unforgeability. Dynamic metadata derived from mutable root outputs
-also complicates domain separation. Fixed tags with proved cell values avoid that obligation.
+A single light parent does not work. One chain with its own metadata forces that coordinate
+to be nonzero, and the exact gate then gives a slope of at least 1.289 at layer 86. Unit 10 is
+an equivalent choice of light parents at layer 86. Layer 85 fails for every table searched,
+with a best slope of 1.2988. That is search evidence, not an impossibility proof.
 
-The current score still spends 129 cycles on initialization, index ties, copies, hints, frame
+The current score still spends 128 cycles on initialization, index ties, copies, hints, frame
 transitions, and landing products. Some uniform padding is part of the constant path bound.
 Further work can optimize those operations jointly with table shapes, or search below layer 86
 while maintaining the exact availability and strong-security inequalities. The search and this
@@ -179,3 +183,6 @@ certificate establish an upper bound, not an optimality lower bound near 1010 or
 
 - The six-group fused construction, exact layer-86 search, dependency-aware security proof,
   new address layout, and complete 1149-cycle machine certificate were prepared with Codex.
+
+- The light seventh binding group on chains 39, 40, 41, the two-call root, the (C_1, C_2) light
+  cv, and the 1138-cycle machine certificate were prepared with Claude Opus 5.5.

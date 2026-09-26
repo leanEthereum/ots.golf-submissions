@@ -165,6 +165,13 @@ theorem fusion_compat : Compat Fusion.params fusionTab where
     change Fusion.tagWord (Fusion.rootIndex r) = _
     rw [Fusion.tagWord_small _ (by fin_cases r <;> decide)]
     rfl
+  lightCv := by
+    have h (i : Fin 47) (hi : i.val < 45) : Fusion.tagWord i = cellBits (cV i.val) := by
+      rw [Fusion.tagWord_small i hi]
+      rfl
+    change Fusion.tagWord 2 ++ Fusion.tagWord 1 = cellBits (cV 2) ++ cellBits (cV 1)
+    rw [h 2 (by decide), h 1 (by decide)]
+    rfl
 
 end
 end OptimalOTS.HLFusion
