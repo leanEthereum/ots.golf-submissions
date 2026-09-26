@@ -1,8 +1,8 @@
-import Submissions.UpperLeanIsa.MachineProgram
+import Submissions.UpperLeanIsa.FusionMachineDecode
 import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 /-!
-# Running the HL-GROUP-3 bytecode
+# Running the fused bytecode
 
 The execution framework for `HLG3.program T` (every result assumes the table facts `T.Hyp`):
 
@@ -21,10 +21,11 @@ The execution framework for `HLG3.program T` (every result assumes the table fac
   completing run (`sim_of_walk`).
 -/
 
-namespace OptimalOTS.HLG3
+namespace OptimalOTS.HLFusion
 
 open LeanerVM.Parameters LeanerVM.Semantics OracleComp
 open OptimalOTS.LeanIsaBaseline.Layer
+open OptimalOTS.HLG3 (natV HashTable inputWord_len cellBits_natV fixed_hash)
 
 noncomputable section
 
@@ -218,7 +219,7 @@ theorem exec_init (hd : LengthDomain (Lx L)) :
       pure (if Lx L oneCell = oneV ∧ Lx L lenCell = natV 5503
         then some ⟨g * pc, 1⟩ else none) := by
   obtain ⟨n, hn, hv⟩ := hd
-  have hnat : natV n = ofK (BitVec.ofNat 64 n) := LengthGate.natV_ofK hn
+  have hnat : natV n = ofK (BitVec.ofNat 64 n) := OptimalOTS.HLG3.LengthGate.natV_ofK hn
   have hk : IsInK (natV n) := by rw [hnat]; exact isInK_ofK _
   have hl : (natV n).limb 0 = BitVec.ofNat 64 n := by rw [hnat]; exact limb_ofK_zero _
   have heq : natV n = natV 5503 ↔ n = 5503 := by
@@ -231,20 +232,20 @@ theorem exec_init (hd : LengthDomain (Lx L)) :
       exact h'
     · rintro rfl; rfl
   show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
-    (.deref (gpow lenCell) LengthGate.scale (gpow lenCell) .fp)) = _
+    (.deref (gpow lenCell) OptimalOTS.HLG3.LengthGate.scale (gpow lenCell) .fp)) = _
   simp only [LeanerVM.Semantics.execute, read_one h16 hκ L (by decide : lenCell < 2^16),
     Option.bind_eq_bind, Option.bind_some, hv]
   rw [show (guard (IsInK (natV n)) : Option Unit) = some () from if_pos hk]
   simp only [Option.bind_some, hl]
   by_cases he : n = 5503
   · subst n
-    rw [LengthGate.target_address,
+    rw [OptimalOTS.HLG3.LengthGate.target_address,
       show L.read (gpow 48) = some (Lx L oneCell) from by
         change L.read (gpow oneCell) = some (Lx L oneCell)
         simpa only [one_mul] using read_one h16 hκ L (by decide : oneCell < 2^16)]
     simp only [Option.bind_some, LeanerVM.Semantics.derefSource, heq, and_true]
     exact congrArg pure (guard_some _)
-  · rw [LengthGate.wrong_length_read hκ hn he L]
+  · rw [OptimalOTS.HLG3.LengthGate.wrong_length_read hκ hn he L]
     simp [heq, he]
 
 theorem exec_blake {m0 m1 m2 m3 cv out md : ℕ} (hb : (CInstr.blake m0 m1 m2 m3 cv out md).Bounded) :
@@ -271,7 +272,7 @@ theorem exec_dispatch {k : ℕ} (hk : k < 15) (hpin : Pinned (Lx L)) :
   congr 1
   simp only [LeanerVM.Semantics.execute,
     read_one h16 hκ L (show oneCell < 2 ^ 16 by unfold oneCell; omega),
-    read_one h16 hκ L (show hCell k < 2 ^ 16 by unfold hCell; split_ifs <;> omega),
+    read_one h16 hκ L (show hCell k < 2 ^ 16 by unfold hCell; omega),
     read_one h16 hκ L (show fCell k < 2 ^ 16 by unfold fCell cCell; split_ifs <;> omega),
     Option.bind_eq_bind, Option.bind_some, hpin.1, hpin.2 k hk]
   by_cases hH : IsInK (Lx L (hCell k))
@@ -316,7 +317,7 @@ theorem exec_entry_own {k : ℕ} (hk : k < 15) (hpin : Pinned (Lx L)) :
   congr 1
   simp only [LeanerVM.Semantics.execute,
     read_frame_sop h16 hκ L hk (show oneCell < 2 ^ 16 by unfold oneCell; omega),
-    read_frame_sop h16 hκ L hk (show h1Cell k < 2 ^ 16 by unfold h1Cell; split_ifs <;> omega),
+    read_frame_sop h16 hκ L hk (show h1Cell k < 2 ^ 16 by unfold h1Cell; omega),
     Option.bind_eq_bind, Option.bind_some, hpin.1]
   by_cases hH : IsInK (Lx L (h1Cell k))
   · have hin : IsInK oneV ∧ IsInK (Lx L (h1Cell k)) ∧ IsInK oneV :=
@@ -425,7 +426,7 @@ theorem runCost_dispatch (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
     · obtain ⟨e, he, hx⟩ := hex
       have hlt := isEntry_lt he
       rw [hx, runCost_slot L n (by omega), cinstrAt_of_entry hT he,
-        exec_entry_own h16 hκ L _ he.1 hpin]
+        exec_entry_own h16 hκ L _ (by have := he.1; omega) hpin]
       by_cases hH1 : IsInK (Lx L (h1Cell k))
       · rw [if_pos hH1, pure_bind, Option.elim_some, if_pos ⟨hH, hH1, e, he, hx⟩, map_map_add]
         rfl
@@ -813,4 +814,4 @@ end Bridges
 
 end
 
-end OptimalOTS.HLG3
+end OptimalOTS.HLFusion

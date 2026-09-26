@@ -12,7 +12,7 @@ signature that the scheme `P` (any parameters with `Compat P T`) accepts under t
 2. The index `BLAKE2S` is the scheme's index query; its low half `I` is the index cell.
 3. The tie accumulates the field values into the index cell (`acc_eq`), so the group fields of
    `I` are `xs (u + 1)` and the digits are the table coordinates; the exponent identity
-   (`layer_of_facts`, hash-free) gives `xs 0 + Σ costs = 88`, so the free digit is `xs 0` and `I`
+   (`layer_of_facts`, hash-free) gives `xs 0 + Σ costs = 87`, so the free digit is `xs 0` and `I`
    is accepted.
 4. The inline `BLAKE2S` compute the verifier's chain tops (`top_eq`), the nine root calls in the
    home blocks compute its root (`root_state`), and the last copy compares it with the public key.
@@ -151,8 +151,8 @@ section Consts
 
 include hP
 
-theorem v_one : v oneCell = oneV := hP.pro _ pro_mem_one
-theorem v_len : v lenCell = natV 5503 := hP.pro _ pro_mem_len
+theorem v_one : v oneCell = oneV := (hP.pro _ pro_mem_init).1
+theorem v_len : v lenCell = natV 5503 := (hP.pro _ pro_mem_init).2
 theorem v_g : v gCell = gV := hP.pro _ pro_mem_g
 theorem v_c {c : ℕ} (hc : c ≤ 16) : v (cCell c) = cV c := cCell_val hP.pro hc
 theorem v_frame {r : ℕ} (hr : r < 13) : v (fCell r) = frameV r := hP.pro _ (pro_mem_frame (by omega))
@@ -605,8 +605,8 @@ theorem fixed_sound (hT : T.Hyp) (hC : Compat P T) {κ : ℕ} (h16 : 16 ≤ κ) 
     bits.length = sigBits ∧ P.Accepted (idxValue f P m (decodeNonce bits) pk) ∧
       rootValue f P (topsOf f P (idxValue f P m (decodeNonce bits) pk) bits) = pk := by
   rw [initial_eq] at h
-  have hpin := pinned_of_sem (simSem f) (oracleRel f) (sim_straight hT h16 hκ f) h
-  have hw := walk_of_sim hT h16 hκ f hpin (by norm_num) h
+  have hpin := pinned_of_sem (simSem f) (oracleRel f) (sim_straight hT h16 hκ (lengthDomain_load h16 pk m bits L) f) h
+  have hw := walk_of_sim hT h16 hκ (lengthDomain_load h16 pk m bits L) f hpin (by norm_num) h
   obtain ⟨hV, hP, hL, -, -⟩ := walk_full hT hw
   exact accept_of_path hT hC (fun c hc => Lx_loadInput_pin h16 pk m bits L hc) hV hP hL
 

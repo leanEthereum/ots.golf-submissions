@@ -1,26 +1,17 @@
 import Submissions.UpperLeanIsa.ConstraintMath
 import Submissions.UpperLeanIsa.FieldRescale
+import Submissions.UpperLeanIsa.FusionConcrete
 
-/-!
-# Layout and interfaces for the 1198-cycle Group3 machine
+/-! Layout of the fixed-tag fused machine. All live field bands begin at raw field zero;
+the excluded zero-cost binding tuples have no holes or aliases. The 26-slot prologue is
+followed by 13 group regions. Free-chain blocks remain at 255615 + 68*s. -/
 
-The raw 128-bit index has widths [10,9,9,9,9,11,11,10,10,10,10,10,10]. Two adjacent entries
-of its first field share a tuple; the tie still checks every raw bit. MachineTable proves
-that these raw fields implement the 127-bit effective scheme index.
-
-Cost-banded blocks follow the prologue and padding slots 0 … 21, one block per live field
-value (aliases of a tuple have separate blocks). Every table fills its field: group `u` has `VF u` blocks. A second copy of the first
-group's region (frame 14, used when the free digit is 0) follows at `gEnd … zEnd`. Free entries
-are 255615+68*s for s<64.
-Frames reuse C_(f+1), where C_c=g^(2^60*c); C_16=g and C_0=ONE. Compat states the
-scheme's lengths, digits, selected output halves, tags, metadata, and 87-step layer.
--/
-
-namespace OptimalOTS.HLG3
+namespace OptimalOTS.HLFusion
 
 open LeanerVM.Parameters LeanerVM.Semantics
 open OptimalOTS.LeanIsaBaseline.Layer
 open OptimalOTS.LeanIsa (cellBits cellOfBits)
+open OptimalOTS.HLG3 (natV)
 
 /-! ## Exponent arithmetic -/
 
@@ -107,35 +98,22 @@ def gb (u : ℕ) : ℕ := [10, 9, 9, 9, 9, 11, 11, 10, 10, 10, 10, 10, 10].getD 
 /-- The bit position of group `u`'s field. -/
 def POS (u : ℕ) : ℕ := posW gb u
 
-/-- The exporter groups `1 … 4`. -/
-def isExp (u : ℕ) : Prop := 1 ≤ u ∧ u < 5
+/-- Groups that materialize each top, including zero-digit disclosures. -/
+def isExp (u : ℕ) : Prop := u ≠ 5 ∧ u ≠ 6
 
 instance (u : ℕ) : Decidable (isExp u) := by unfold isExp; infer_instance
 
 /-- The uniform non-hash instruction count of a block of group `u` (entry and exit included). -/
-def gcu (u : ℕ) : ℕ := if u = 0 then 5 else if isExp u then 8 else 6
+def gcu (u : ℕ) : ℕ := if u = 0 then 7 else if isExp u then 8 else 6
 
 /-- Root calls in a block: none for the exporters `1 … 4`, one for every home. Group `0` is the
 home of call 1, groups `5, 6` the homes of calls `0, 7`, groups `7 … 11` those of `2 … 6` and
 group `12` that of call `8`. -/
-def hm (u : ℕ) : ℕ := if u = 0 ∨ 5 ≤ u then 1 else 0
+def hm (u : ℕ) : ℕ := if u = 0 ∨ u = 5 ∨ u = 6 then 1 else 0
 
-/-- Layer profile of the exporters' (3, 9) tables: field values of each cost. -/
-def P39 : List ℕ := [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57]
-
-/-- Layer profile of the (3, 10) tables (aliases counted; all field values are live). -/
-def P310 : List ℕ := [1, 6, 6, 80, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 135]
-
-/-- Raw first-group profile: the doubled profile of its (3,9) table. -/
-def P310no : List ℕ :=
-  [2, 6, 12, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 114]
-
-/-- Layer profile of the (4, 11) tables. -/
-def P411 : List ℕ := [1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229]
-
-/-- The layer profile of group `u`'s table: `pn u c` field values of cost `c`. -/
+/-- Raw field-value counts in each live cost band. -/
 def prof (u : ℕ) : List ℕ :=
-  if u = 0 then P310no else if u = 5 ∨ u = 6 then P411 else if u < 5 then P39 else P310
+  ([[0, 6, 24, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 102], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 6, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 54], [1, 3, 6, 20, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229], [0, 3, 96, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 118], [0, 12, 24, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153], [0, 3, 12, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153], [1, 384, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 83], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153]]).getD u []
 
 /-- Number of cost bands of group `u` (maximal cost plus one). -/
 def nb (u : ℕ) : ℕ := (prof u).length
@@ -155,21 +133,14 @@ def OFF (u c : ℕ) : ℕ := psum (fun c => pn u c * L u c) c
 /-- Size of group `u`'s region. -/
 def RS (u : ℕ) : ℕ := OFF u (nb u)
 
-/-- First slot of group `u`'s region (the prologue is slots `0 … 21`). -/
-def BASE (u : ℕ) : ℕ := 22 + psum RS u
+/-- First slot of group `u`'s region (the prologue is slots `0 … 25`). -/
+def BASE (u : ℕ) : ℕ := 27 + psum RS u
 
 /-- End of the group regions. -/
-def gEnd : ℕ := 233438
+def gEnd : ℕ := 235319
 
-/-- Shift of the first group's `s = 0` region (frame 14) from its `s > 0` region: it starts at
-`gEnd`. -/
-def zOff : ℕ := 233416
-
-/-- End of the first group's `s = 0` region. -/
-def zEnd : ℕ := 249254
-
-/-- The number of blocks (live field values) of group `u`: all field values are live. -/
-def VF (u : ℕ) : ℕ := if 7 ≤ u then 1024 else 2 ^ gb u
+/-- The number of blocks (live field values) of group `u`: the live values are a contiguous prefix. -/
+def VF (u : ℕ) : ℕ := ([1022, 512, 512, 512, 512, 2047, 2047, 1023, 995, 974, 969, 1024, 969]).getD u 0
 
 /-- The cost band of field value `v` of group `u`. -/
 def band (u v : ℕ) : ℕ := bandIdx (A u) (nb u) v
@@ -191,16 +162,16 @@ theorem baseF_add : baseF + 68 * 96 = sentinel := rfl
 
 theorem A_mono (u : ℕ) : Monotone (A u) := psum_mono _
 theorem OFF_mono (u : ℕ) : Monotone (OFF u) := psum_mono _
-theorem BASE_mono : Monotone BASE := fun _ _ h => Nat.add_le_add_left (psum_mono RS h) 22
+theorem BASE_mono : Monotone BASE := fun _ _ h => Nat.add_le_add_left (psum_mono RS h) 27
 
-theorem BASE_zero : BASE 0 = 22 := rfl
+theorem BASE_zero : BASE 0 = 27 := rfl
 
 theorem BASE_succ (u : ℕ) : BASE (u + 1) = BASE u + RS u := by
   unfold BASE; rw [psum_succ]; ring
 
 theorem BASE_13 : BASE 13 = gEnd := by decide
 
-theorem BASE_one : BASE 1 = 15838 := by decide
+theorem BASE_one : BASE 1 = 17743 := by decide
 
 theorem A_full : ∀ u < 13, A u (nb u) = VF u := by decide
 
@@ -210,7 +181,10 @@ theorem nb_le : ∀ u < 13, nb u ≤ 17 := by decide
 
 theorem nb_pos : ∀ u < 13, 1 ≤ nb u := by decide
 
-theorem L_pos (u c : ℕ) : 6 ≤ L u c := by unfold L gcu hm; split_ifs <;> omega
+theorem L_pos (u c : ℕ) : 6 ≤ L u c := by
+  have hg : 6 ≤ gcu u := by unfold gcu; split_ifs <;> omega
+  unfold L
+  omega
 
 theorem OFF_succ (u c : ℕ) : OFF u (c + 1) = OFF u c + pn u c * L u c := psum_succ _ c
 
@@ -293,7 +267,7 @@ theorem dec_entry {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < L u (ban
   omega
 
 /-- Every group slot is a slot of a block of a field value in range. -/
-theorem dec_spec {s : ℕ} (h1 : 22 ≤ s) (h2 : s < gEnd) :
+theorem dec_spec {s : ℕ} (h1 : 27 ≤ s) (h2 : s < gEnd) :
     (dec s).1 < 13 ∧ (dec s).2.1 < VF (dec s).1 ∧
       (dec s).2.2 < L (dec s).1 (band (dec s).1 (dec s).2.1) ∧
       s = entryOf (dec s).1 (dec s).2.1 + (dec s).2.2 := by
@@ -338,7 +312,7 @@ theorem entryOf_inj {u v v' : ℕ} (hu : u < 13) (hv : v < VF u) (hv' : v' < VF 
   rw [h1] at h2
   exact (Prod.mk.inj (Prod.mk.inj h2).2).1
 
-theorem entryOf_ge {u v : ℕ} (hu : u < 13) (hv : v < VF u) : 22 ≤ entryOf u v := by
+theorem entryOf_ge {u v : ℕ} (hu : u < 13) (hv : v < VF u) : 27 ≤ entryOf u v := by
   have := (entry_region hu hv (i := 0) (by have := L_pos u (band u v); omega)).1
   have := BASE_mono (Nat.zero_le u); rw [BASE_zero] at this; omega
 
@@ -388,7 +362,7 @@ def unitOf (k : ℕ) : ℕ := [0, 0, 0, 5, 5, 5, 5, 0, 6, 6, 6, 6, 1, 1, 7, 7, 7
 def coordOf (k : ℕ) : ℕ := [0, 0, 1, 0, 1, 2, 3, 2, 0, 1, 2, 3, 0, 1, 0, 1, 2, 2, 0, 0, 1, 2, 1, 2, 0, 1, 2, 0, 1, 0, 1, 2, 2, 0, 0, 1, 2, 1, 2, 0, 1, 2].getD k 0
 
 /-- Tops placed at fixed cells: the cv words of root calls `0` and `2 … 6`. -/
-def exported (k : ℕ) : Prop := k ∈ [12, 13, 17, 18, 22, 23, 27, 28, 32, 33, 37, 38]
+def exported (k : ℕ) : Prop := k ∉ [3,4,5,6,8,9,10,11]
 
 instance (k : ℕ) : Decidable (exported k) := by unfold exported; infer_instance
 
@@ -463,8 +437,8 @@ structure Tab.Hyp (T : Tab) : Prop where
   cost_eq : ∀ u < 13, ∀ v < VF u, cost T u v = band u v
   coord_lt : ∀ u < 13, ∀ v < 2 ^ gb u, ∀ i < gk u, T u v i < LEN (chainOf u i)
 
-/-- The free chain's digit: `87 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
-def freeDigit (c : ℕ) : ℕ := if c ≤ 87 ∧ 87 - c ≤ 63 then 87 - c else 0
+/-- The free chain's digit: `86 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
+def freeDigit (c : ℕ) : ℕ := if c ≤ 86 ∧ 86 - c ≤ 63 then 86 - c else 0
 
 /-- Group `u`'s field of the index. -/
 def field (u : ℕ) (I : Word) : ℕ := digitW gb I.toNat u
@@ -473,23 +447,24 @@ def field (u : ℕ) (I : Word) : ℕ := digitW gb I.toNat u
 def gcost (T : Tab) (I : Word) : ℕ := ((List.range 13).map (fun u => cost T u (field u I))).sum
 
 /-- The facts about the scheme parameters the machine relies on. -/
-structure Compat (P : Params) (T : Tab) : Prop where
-  len : ∀ k : Fin numChains, P.len k = LEN k.val
-  layer : P.layer = 87
+structure Compat (P : Fusion.Params) (T : Tab) : Prop where
+  len : ∀ k : Fin numChains, P.codec.len k = LEN k.val
+  layer : P.codec.layer = 86
   digit_grp : ∀ (I : Word) (u i : ℕ) (hu : u < 13) (hi : i < gk u),
-    P.digit (effective I) ⟨chainOf u i, chainOf_lt u hu i hi⟩ = T u (field u I) i
+    P.codec.digit (effective I) ⟨chainOf u i, chainOf_lt u hu i hi⟩ = T u (field u I) i
   digit_free : ∀ I : Word, (∀ u < 13, field u I < VF u) →
-    P.digit (effective I) 0 = freeDigit (gcost T I)
+    P.codec.digit (effective I) 0 = freeDigit (gcost T I)
   /-- Accepted indices have no dummy field. -/
-  live : ∀ I : Word, P.Accepted (effective I) → ∀ u < 13, field u I < VF u
+  live : ∀ I : Word, P.codec.Accepted (effective I) → ∀ u < 13, field u I < VF u
   tag : ∀ (k : Fin numChains) (j : ℕ), j + 1 < LEN k.val →
-    P.tag k j 0 = cellBits (cV ((OFFT k.val + j) % 9)) ∧
-      P.tag k j 1 = cellBits (cV ((OFFT k.val + j) / 9 % 9)) ∧
-      P.tag k j 2 = cellBits (cV ((OFFT k.val + j) / 81))
-  hiTop : ∀ k : Fin numChains, P.hiTop k = decide (k.val ∈ [1, 7, 12, 17, 22, 27, 32, 38, 39])
-  cv : P.cv = cellBits gV ++ cellBits oneV
-  chainMd : P.chainMd = cellBits oneV
-  idxMd : P.idxMd = cellBits gV
-  rootMd : ∀ r < 9, P.rootMd r = cellBits (frameV r)
+    P.codec.tag k j 0 = cellBits (cV ((OFFT k.val + j) % 9)) ∧
+      P.codec.tag k j 1 = cellBits (cV ((OFFT k.val + j) / 9 % 9)) ∧
+      P.codec.tag k j 2 = cellBits (cV ((OFFT k.val + j) / 81))
+  hiTop : ∀ k : Fin numChains, P.codec.hiTop k = decide (k.val ∈ [1,7,12,14,21,22,26,33,35])
+  cv : P.codec.cv = cellBits gV ++ cellBits oneV
+  chainMd : P.codec.chainMd = cellBits oneV
+  idxMd : P.codec.idxMd = cellBits gV
+  fusedMd : ∀ k : Fin 42, P.fusedMd k = Fusion.tagWord (Fusion.tagIndex k)
+  rootMd : ∀ r : Fin 3, P.rootMd r = cellBits (cV (Fusion.rootIndex r).val)
 
-end OptimalOTS.HLG3
+end OptimalOTS.HLFusion

@@ -6,7 +6,7 @@ import Submissions.UpperLeanIsa.BasicProperties
 
 The classes follow the certified tier schedule `Tier.g1281Sched`. Base-9 tags identify all 625
 chain steps. Chain, index, and nine root metadata values are distinct field powers. The concrete
-budgets are 1268 key-generation compressions, at most 2^20 signing compressions, and 196
+budgets are 1268 key-generation compressions, at most 2^20 signing compressions, and 194
 verification compressions.
 -/
 
@@ -51,7 +51,7 @@ theorem hyp : params.Hyp where
   keygen_le := by
     change 2 * (∑ k : Fin 42, (lenN k - 1)) + 18 ≤ 2 ^ 20
     rw [steps_eq]; norm_num
-  verify_le := by change 20 + 2 * 88 ≤ 2 ^ 20; norm_num
+  verify_le := by change 20 + 2 * 87 ≤ 2 ^ 20; norm_num
   len_zero := by change 2 ≤ lenN 0; decide
 
 /-- **Admissibility of HL-GROUP-3.** -/
@@ -63,9 +63,9 @@ theorem keygen_cost : CostAtMost params.keygen 1268 := by
   have e : (∑ k : Fin numChains, (params.len k - 1)) = 625 := steps_eq
   rwa [e] at h
 
-/-- Verification of HL-GROUP-3 costs at most 196 compressions on every path. -/
+/-- Verification of HL-GROUP-3 costs at most 194 compressions on every path. -/
 theorem verify_cost (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (params.verify pk m bits) 196 :=
+    CostAtMost (params.verify pk m bits) 194 :=
   params.cost_verify pk m bits
 
 end Group3

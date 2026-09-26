@@ -3,27 +3,10 @@ import Submissions.UpperLeanIsa.LayerDigits
 import Submissions.UpperLeanIsa.LayerProfile
 import Submissions.UpperLeanIsa.TierCodec
 
-/-!
-# The concrete field-rescaled Group3 scheme
-
-The 127-bit effective index has field widths [9,9,9,9,9,11,11,10,10,10,10,10,10].
-The first group homes root call 1; four exporter groups precede the homes of calls 0 and 7
-(the two quads), the homes of calls 2..6, and the home of call 8 (the last group).
-
-Tables with aliases: the table of a group lists, per cost `c`, `nT` tuples of digit sum `c`, each at
-`muT` adjacent field values (the first `nT` lex tuples with bounded digits). The first group, the
-(4,11) groups and the exporters have multiplicity 1; the (3,10) groups have multiplicities 2 and 8
-at costs 1 and 3. The generic acceptance predicate handles values past the live bands as *dummies*.
-All four concrete tables are full, so there are no concrete dummy indices. An index
-with a dummy field gets free digit `[gsum = 87]`, so its digit sum is never 87. Otherwise chain 0
-supplies the free digit 87-gsum when it lies in [0,63]. Acceptance is exactly: no dummy field and
-24 ≤ gsum ≤ 87. A class is the digit vector of an accepted index; its accepted indices number the
-product of the field multiplicities (`weight_eq`). The concrete chains have 625 steps in total.
-
-With Q=2^60, tags are the three base-9 digits of each step position encoded as g^(Q*d).
-Chain/index metadata are ONE/g; root metadata of calls r < 9 are g^((r+1)*Q). The high-top set
-is [1,7,12,17,22,27,32,38,39].
--/
+/-! Layer-86 codec for the fixed-tag fusion candidate. Each unit has its own table.
+The six binding units omit the zero tuple. Their live bands start at field zero;
+unused field values occur only after the live bands. The base `params` stores the
+index and signing codec; the fusion construction supplies different chain/root queries. -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
 
@@ -35,7 +18,7 @@ set_option linter.constructorNameAsVariable false
 
 namespace OptimalOTS.LeanIsaBaseline.Layer
 
-namespace Group3
+namespace FusionCodec
 
 open LeanerVM.Parameters
 
@@ -48,34 +31,64 @@ values from `cutS s` on are *dummies*. The tuples of cost `c` are the first `nT 
 digit sum `c` in lex order whose digits are all below `gB s`. -/
 
 /-- Digits per tuple of shape `s`: 4 for shape 1, else 3. -/
-def shK (s : ℕ) : ℕ := if s = 1 then 4 else 3
+def shK (s : ℕ) : ℕ := if s = 5 ∨ s = 6 then 4 else 3
 
 /-- Field width of shape `s`. -/
-def shB (s : ℕ) : ℕ := if s = 1 then 11 else if s = 2 then 10 else 9
+def shB (s : ℕ) : ℕ := if s = 5 ∨ s = 6 then 11 else if 7 ≤ s then 10 else 9
 
 /-- The digit bound of the tuple enumeration of shape `s`. -/
-def gB (s : ℕ) : ℕ := if s = 2 then 17 else 13
+def gB (s : ℕ) : ℕ := if 7 ≤ s then 17 else 13
 
 /-- Digit bound of coordinate `i` of shape `s`: one more than its maximum over the table. -/
-def shLen (s i : ℕ) : ℕ := if s = 2 then 17 else if s = 1 ∧ i = 0 then 12 else 13
+def shLen (s i : ℕ) : ℕ := if 7 ≤ s then 17 else if (s = 5 ∨ s = 6) ∧ i = 0 then 12 else 13
 
 /-- Tuples of each cost. -/
 def shN (s : ℕ) : List ℕ :=
-  if s = 0 then [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57]
-  else if s = 1 then [1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229]
-  else if s = 2 then [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 135]
-  else [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57]
+  ([[0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 51, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 54, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0],
+    [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229, 0, 0, 0],
+    [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229, 0, 0, 0],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 118],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 83, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153]]).getD s []
 
 /-- Field values per tuple of each cost (`1` for an empty band). -/
 def shMu (s : ℕ) : List ℕ :=
-  if s = 2 then [1, 2, 1, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] else []
+  ([[1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 128, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).getD s []
 
 /-- Cumulative band sizes: entry `c` counts the live values of cost `< c`. -/
 def shCum (s : ℕ) : List ℕ :=
-  if s = 0 then [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512]
-  else if s = 1 then [0, 1, 5, 15, 35, 70, 126, 210, 330, 495, 715, 1001, 1365, 1819, 2048]
-  else if s = 2 then [0, 1, 7, 13, 93, 108, 129, 157, 193, 238, 293, 359, 437, 528, 633, 753, 889, 1024]
-  else [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512]
+  ([[0, 0, 3, 15, 25, 40, 61, 89, 125, 170, 225, 291, 369, 460, 511, 511, 511, 511],
+    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512],
+    [0, 1, 7, 13, 23, 38, 59, 87, 123, 168, 223, 289, 367, 458, 512, 512, 512, 512],
+    [0, 1, 4, 10, 30, 45, 66, 94, 130, 175, 230, 296, 374, 465, 512, 512, 512, 512],
+    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512],
+    [0, 0, 4, 14, 34, 69, 125, 209, 329, 494, 714, 1000, 1364, 1818, 2047, 2047, 2047, 2047],
+    [0, 0, 4, 14, 34, 69, 125, 209, 329, 494, 714, 1000, 1364, 1818, 2047, 2047, 2047, 2047],
+    [0, 0, 3, 99, 109, 124, 145, 173, 209, 254, 309, 375, 453, 544, 649, 769, 905, 1023],
+    [0, 0, 12, 36, 46, 61, 82, 110, 146, 191, 246, 312, 390, 481, 586, 706, 842, 995],
+    [0, 0, 3, 15, 25, 40, 61, 89, 125, 170, 225, 291, 369, 460, 565, 685, 821, 974],
+    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 560, 680, 816, 969],
+    [0, 1, 385, 391, 401, 416, 437, 465, 501, 546, 601, 667, 745, 836, 941, 1024, 1024, 1024],
+    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 560, 680, 816, 969]]).getD s []
 
 /-- Number of cost bands of shape `s`. -/
 def nb (s : ℕ) : ℕ := (shN s).length
@@ -145,13 +158,31 @@ theorem shape0_ok : shapeOK 0 = true := by decide +kernel
 theorem shape1_ok : shapeOK 1 = true := by decide +kernel
 theorem shape2_ok : shapeOK 2 = true := by decide +kernel
 theorem shape3_ok : shapeOK 3 = true := by decide +kernel
+theorem shape4_ok : shapeOK 4 = true := by decide +kernel
+theorem shape5_ok : shapeOK 5 = true := by decide +kernel
+theorem shape6_ok : shapeOK 6 = true := by decide +kernel
+theorem shape7_ok : shapeOK 7 = true := by decide +kernel
+theorem shape8_ok : shapeOK 8 = true := by decide +kernel
+theorem shape9_ok : shapeOK 9 = true := by decide +kernel
+theorem shape10_ok : shapeOK 10 = true := by decide +kernel
+theorem shape11_ok : shapeOK 11 = true := by decide +kernel
+theorem shape12_ok : shapeOK 12 = true := by decide +kernel
 
-theorem shape_ok {s : ℕ} (hs : s < 4) : shapeOK s = true := by
+theorem shape_ok {s : ℕ} (hs : s < 13) : shapeOK s = true := by
   interval_cases s
   · exact shape0_ok
   · exact shape1_ok
   · exact shape2_ok
   · exact shape3_ok
+  · exact shape4_ok
+  · exact shape5_ok
+  · exact shape6_ok
+  · exact shape7_ok
+  · exact shape8_ok
+  · exact shape9_ok
+  · exact shape10_ok
+  · exact shape11_ok
+  · exact shape12_ok
 
 theorem shapeOK_iff (s : ℕ) : shapeOK s = true ↔
     (∀ c < nb s, bandOK s c = true ∧ AS s (c + 1) = AS s c + nT s c * muT s c ∧ 1 ≤ muT s c) ∧
@@ -185,36 +216,36 @@ theorem keysUp_lt : ∀ (l : List (List ℕ)), keysUp l = true → ∀ i j, i < 
     · rw [List.getD_cons_succ]
       exact ih i j (by omega) hj'
 
-theorem AS_zero {s : ℕ} (hs : s < 4) : AS s 0 = 0 := ((shapeOK_iff s).mp (shape_ok hs)).2.1
+theorem AS_zero {s : ℕ} (hs : s < 13) : AS s 0 = 0 := ((shapeOK_iff s).mp (shape_ok hs)).2.1
 
 theorem AS_ge {s c : ℕ} (hc : nb s ≤ c) : AS s c = cutS s := by
   simp only [AS, cutS, min_eq_right hc, min_self]
 
-theorem AS_succ {s c : ℕ} (hs : s < 4) (hc : c < nb s) :
+theorem AS_succ {s c : ℕ} (hs : s < 13) (hc : c < nb s) :
     AS s (c + 1) = AS s c + nT s c * muT s c := (((shapeOK_iff s).mp (shape_ok hs)).1 c hc).2.1
 
-theorem muT_pos {s c : ℕ} (hs : s < 4) (hc : c < nb s) : 1 ≤ muT s c :=
+theorem muT_pos {s c : ℕ} (hs : s < 13) (hc : c < nb s) : 1 ≤ muT s c :=
   (((shapeOK_iff s).mp (shape_ok hs)).1 c hc).2.2
 
-theorem cutS_le {s : ℕ} (hs : s < 4) : cutS s ≤ 2 ^ shB s :=
+theorem cutS_le {s : ℕ} (hs : s < 13) : cutS s ≤ 2 ^ shB s :=
   ((shapeOK_iff s).mp (shape_ok hs)).2.2.1
 
-theorem nb_le {s : ℕ} (hs : s < 4) : nb s ≤ 17 := ((shapeOK_iff s).mp (shape_ok hs)).2.2.2.1
+theorem nb_le {s : ℕ} (hs : s < 13) : nb s ≤ 17 := ((shapeOK_iff s).mp (shape_ok hs)).2.2.2.1
 
-theorem nb_pos {s : ℕ} (hs : s < 4) : 1 ≤ nb s := ((shapeOK_iff s).mp (shape_ok hs)).2.2.2.2
+theorem nb_pos {s : ℕ} (hs : s < 13) : 1 ≤ nb s := ((shapeOK_iff s).mp (shape_ok hs)).2.2.2.2
 
-theorem AS_mono {s : ℕ} (hs : s < 4) : Monotone (AS s) := by
+theorem AS_mono {s : ℕ} (hs : s < 13) : Monotone (AS s) := by
   refine monotone_nat_of_le_succ fun c => ?_
   rcases Nat.lt_or_ge c (nb s) with h | h
   · rw [AS_succ hs h]; omega
   · rw [AS_ge h, AS_ge (by omega)]
 
-theorem AS_le_cut {s : ℕ} (hs : s < 4) (c : ℕ) : AS s c ≤ cutS s := by
+theorem AS_le_cut {s : ℕ} (hs : s < 13) (c : ℕ) : AS s c ≤ cutS s := by
   rcases Nat.lt_or_ge c (nb s) with h | h
   · rw [← AS_ge (le_refl (nb s))]; exact AS_mono hs h.le
   · rw [AS_ge h]
 
-theorem bandAux_spec {s v : ℕ} (hs : s < 4) : ∀ fuel c, AS s c ≤ v → v < AS s (c + fuel) →
+theorem bandAux_spec {s v : ℕ} (hs : s < 13) : ∀ fuel c, AS s c ≤ v → v < AS s (c + fuel) →
     AS s (bandAux s v fuel c) ≤ v ∧ v < AS s (bandAux s v fuel c + 1) ∧
       bandAux s v fuel c < c + fuel
   | 0, c, h1, h2 => by simp at h2; omega
@@ -227,7 +258,7 @@ theorem bandAux_spec {s v : ℕ} (hs : s < 4) : ∀ fuel c, AS s c ≤ v → v <
       omega
 
 /-- A live value lies in its band. -/
-theorem band_spec {s v : ℕ} (hs : s < 4) (hv : v < cutS s) :
+theorem band_spec {s v : ℕ} (hs : s < 13) (hv : v < cutS s) :
     AS s (band s v) ≤ v ∧ v < AS s (band s v + 1) ∧ band s v < nb s := by
   have := bandAux_spec hs (v := v) (nb s) 0 (by rw [AS_zero hs]; omega)
     (by rw [Nat.zero_add]; exact hv)
@@ -235,7 +266,7 @@ theorem band_spec {s v : ℕ} (hs : s < 4) (hv : v < cutS s) :
   omega
 
 /-- The band of a value is determined by the band's bounds. -/
-theorem band_unique {s v c : ℕ} (hs : s < 4) (hv : v < cutS s) (h1 : AS s c ≤ v)
+theorem band_unique {s v c : ℕ} (hs : s < 13) (hv : v < cutS s) (h1 : AS s c ≤ v)
     (h2 : v < AS s (c + 1)) : band s v = c := by
   obtain ⟨b1, b2, -⟩ := band_spec hs hv
   by_contra hne
@@ -243,7 +274,7 @@ theorem band_unique {s v c : ℕ} (hs : s < 4) (hv : v < cutS s) (h1 : AS s c �
   · have := AS_mono hs (show band s v + 1 ≤ c by omega); omega
   · have := AS_mono hs (show c + 1 ≤ band s v by omega); omega
 
-theorem rank_lt {s v : ℕ} (hs : s < 4) (hv : v < cutS s) : rank s v < nT s (band s v) := by
+theorem rank_lt {s v : ℕ} (hs : s < 13) (hv : v < cutS s) : rank s v < nT s (band s v) := by
   obtain ⟨h1, h2, h3⟩ := band_spec hs hv
   rw [AS_succ hs h3] at h2
   have hm := muT_pos hs h3
@@ -251,12 +282,12 @@ theorem rank_lt {s v : ℕ} (hs : s < 4) (hv : v < cutS s) : rank s v < nT s (ba
   rw [Nat.div_lt_iff_lt_mul (by omega)]
   omega
 
-theorem tabR_facts {s c : ℕ} (hs : s < 4) (hc : c < nb s) :
+theorem tabR_facts {s c : ℕ} (hs : s < 13) (hc : c < nb s) :
     (tabR s c).length = nT s c ∧ keysUp (tabR s c) = true ∧ ∀ t ∈ tabR s c,
       t.length = shK s ∧ t.sum = c ∧ ∀ i < shK s, t.getD i 0 < shLen s i :=
   (bandOK_iff s c).mp (((shapeOK_iff s).mp (shape_ok hs)).1 c hc).1
 
-theorem tupR_facts {s c r : ℕ} (hs : s < 4) (hc : c < nb s) (hr : r < nT s c) :
+theorem tupR_facts {s c r : ℕ} (hs : s < 13) (hc : c < nb s) (hr : r < nT s c) :
     (tupR s c r).length = shK s ∧ (tupR s c r).sum = c ∧
       ∀ i < shK s, (tupR s c r).getD i 0 < shLen s i := by
   obtain ⟨hl, -, ht⟩ := tabR_facts hs hc
@@ -266,7 +297,7 @@ theorem tupR_facts {s c r : ℕ} (hs : s < 4) (hc : c < nb s) (hr : r < nT s c) 
   exact List.getElem_mem _
 
 /-- The tuples of a band are distinct. -/
-theorem tupR_inj {s c : ℕ} (hs : s < 4) (hc : c < nb s) {a b : ℕ} (ha : a < nT s c)
+theorem tupR_inj {s c : ℕ} (hs : s < 13) (hc : c < nb s) {a b : ℕ} (ha : a < nT s c)
     (hb : b < nT s c) (h : tupR s c a = tupR s c b) : a = b := by
   obtain ⟨hl, hk, -⟩ := tabR_facts hs hc
   unfold tupR at h
@@ -275,19 +306,19 @@ theorem tupR_inj {s c : ℕ} (hs : s < 4) (hc : c < nb s) {a b : ℕ} (ha : a < 
   · exact absurd (h ▸ keysUp_lt _ hk _ _ hlt (by omega)) (lt_irrefl _)
   · exact absurd (h ▸ keysUp_lt _ hk _ _ hlt (by omega)) (lt_irrefl _)
 
-theorem tupS_length {s v : ℕ} (hs : s < 4) (hv : v < 2 ^ shB s) : (tupS s v).length = shK s := by
+theorem tupS_length {s v : ℕ} (hs : s < 13) (hv : v < 2 ^ shB s) : (tupS s v).length = shK s := by
   unfold tupS
   split_ifs with h
   · exact (tupR_facts hs (band_spec hs h).2.2 (rank_lt hs h)).1
   · exact List.length_replicate
 
-theorem tupS_sum {s v : ℕ} (hs : s < 4) (hv : v < 2 ^ shB s) : (tupS s v).sum = costS s v := by
+theorem tupS_sum {s v : ℕ} (hs : s < 13) (hv : v < 2 ^ shB s) : (tupS s v).sum = costS s v := by
   unfold tupS costS
   split_ifs with h
   · exact (tupR_facts hs (band_spec hs h).2.2 (rank_lt hs h)).2.1
   · simp
 
-theorem tupS_lt {s v : ℕ} (hs : s < 4) (hv : v < 2 ^ shB s) {i : ℕ} (hi : i < shK s) :
+theorem tupS_lt {s v : ℕ} (hs : s < 13) (hv : v < 2 ^ shB s) {i : ℕ} (hi : i < shK s) :
     (tupS s v).getD i 0 < shLen s i := by
   unfold tupS
   split_ifs with h
@@ -301,7 +332,7 @@ def lead (s v : ℕ) : ℕ := AS s (band s v) + rank s v * muT s (band s v)
 
 /-- Two live values have the same tuple exactly when they are aliases: the second lies in the
 `muT` values from the first's `lead`. -/
-theorem tupS_eq_iff {s v w : ℕ} (hs : s < 4) (hv : v < cutS s) (hw : w < cutS s) :
+theorem tupS_eq_iff {s v w : ℕ} (hs : s < 13) (hv : v < cutS s) (hw : w < cutS s) :
     tupS s w = tupS s v ↔ lead s v ≤ w ∧ w < lead s v + muT s (band s v) := by
   obtain ⟨v1, v2, v3⟩ := band_spec hs hv
   obtain ⟨w1, w2, w3⟩ := band_spec hs hw
@@ -348,7 +379,7 @@ theorem tupS_eq_iff {s v w : ℕ} (hs : s < 4) (hv : v < cutS s) (hw : w < cutS 
     rw [hc, hr]
 
 /-- The aliases of a live value are live. -/
-theorem lead_add_le {s v : ℕ} (hs : s < 4) (hv : v < cutS s) :
+theorem lead_add_le {s v : ℕ} (hs : s < 13) (hv : v < cutS s) :
     lead s v + muT s (band s v) ≤ cutS s := by
   obtain ⟨-, -, v3⟩ := band_spec hs hv
   have hrv := rank_lt hs hv
@@ -362,7 +393,7 @@ theorem lead_add_le {s v : ℕ} (hs : s < 4) (hv : v < cutS s) :
 /-! ## Units, chains and positions -/
 
 /-- The table shape of unit `u`. -/
-def ushape (u : ℕ) : ℕ := [0, 3, 3, 3, 3, 1, 1, 2, 2, 2, 2, 2, 2].getD u 2
+def ushape (u : ℕ) : ℕ := u % 13
 
 /-- Width of group field `u` (zero past the 13 units). -/
 def ubits (u : ℕ) : ℕ := if u < 13 then shB (ushape u) else 0
@@ -398,11 +429,7 @@ def locAux (p : ℕ) : ℕ → ℕ → ℕ × ℕ
 /-- The chain and step of position `p < 625`. -/
 def locate (p : ℕ) : ℕ × ℕ := locAux p 42 0
 
-theorem ushape_lt (u : ℕ) : ushape u < 4 := by
-  unfold ushape
-  rcases Nat.lt_or_ge u 13 with h | h
-  · interval_cases u <;> decide
-  · rw [List.getD_eq_default _ _ (by simpa using h)]; decide
+theorem ushape_lt (u : ℕ) : ushape u < 13 := Nat.mod_lt _ (by decide)
 
 theorem ubits_eq {u : ℕ} (hu : u < 13) : ubits u = shB (ushape u) := if_pos hu
 
@@ -436,7 +463,7 @@ def field (u : ℕ) (I : Index) : ℕ := digitW ubits I.toNat u
 def gsum (I : Index) : ℕ := ∑ u ∈ Finset.range 13, cost u (field u I)
 
 /-- The free chain's digit: the layer minus the total cost, when that is in `[0, 63]`. -/
-def freeDigit (c : ℕ) : ℕ := if 24 ≤ c ∧ c ≤ 87 then 87 - c else 0
+def freeDigit (c : ℕ) : ℕ := if 23 ≤ c ∧ c ≤ 86 then 86 - c else 0
 
 /-- The live entries of unit `u`. -/
 def cut (u : ℕ) : ℕ := cutS (ushape u)
@@ -445,10 +472,10 @@ def cut (u : ℕ) : ℕ := cutS (ushape u)
 entries, and the free digit keeps dummy indices off the layer. -/
 def dummy (I : Index) : Prop := ∃ u < 13, cut u ≤ field u I
 
-/-- The free digit of an index: `[gsum = 87]` for a dummy (so its digit sum is never `87`),
+/-- The free digit of an index: `[gsum = 86]` for a dummy (so its digit sum is never `86`),
 else `freeDigit (gsum I)`. -/
 def freeD (I : Index) : ℕ :=
-  if dummy I then (if gsum I = 87 then 1 else 0) else freeDigit (gsum I)
+  if dummy I then (if gsum I = 86 then 1 else 0) else freeDigit (gsum I)
 
 /-- Digit of chain `k` (on naturals). -/
 def digitN (I : Index) (k : ℕ) : ℕ :=
@@ -520,7 +547,7 @@ def rootExp (r : ℕ) : ℕ := (r + 1) * 1152921504606846976
 def len (k : Fin numChains) : ℕ := lenN k
 
 /-- The accepted layer. -/
-def layer : ℕ := 87
+def layer : ℕ := 86
 
 /-- Digit of chain `k`. -/
 def digit (I : Index) (k : Fin numChains) : ℕ := digitN I k
@@ -552,7 +579,7 @@ def params : Params where
   chainMd := chainMd
   idxMd := idxMd
   rootMd := rootMd
-  hiTop := fun k => decide (k.val ∈ [1, 7, 12, 17, 22, 27, 32, 38, 39])
+  hiTop := fun k => decide (k.val ∈ [1, 7, 12, 14, 21, 22, 26, 33, 35])
 
 /-- The HL-GROUP-3 scheme. -/
 def scheme : OracleAlgorithm.Scheme := params.scheme
@@ -645,8 +672,8 @@ theorem sum_digits (I : Index) :
 
 /-- **Acceptance** is a window on the total cost. -/
 theorem accepted_iff (I : Index) :
-    params.Accepted I ↔ ¬ dummy I ∧ 24 ≤ gsum I ∧ gsum I < 88 := by
-  change ∑ k : Fin numChains, digit I k = 87 ↔ _
+    params.Accepted I ↔ ¬ dummy I ∧ 23 ≤ gsum I ∧ gsum I < 87 := by
+  change ∑ k : Fin numChains, digit I k = 86 ↔ _
   rw [sum_digits]
   unfold freeD freeDigit
   by_cases hd : dummy I
@@ -855,7 +882,7 @@ theorem gword_zero : gword 0 = LeanIsa.cellBits (ofK 1) := by
 theorem gword_one : gword 1 = LeanIsa.cellBits (ofK g) := by
   show LeanIsa.cellBits (ofK (g ^ 1)) = _; rw [pow_one]
 
-end Group3
+end FusionCodec
 
 
 end OptimalOTS.LeanIsaBaseline.Layer

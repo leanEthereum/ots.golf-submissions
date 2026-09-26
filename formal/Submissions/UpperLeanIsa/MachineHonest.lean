@@ -459,7 +459,7 @@ include hC hacc in
 theorem hlive : ∀ u < 13, field u (IF P f pk m bits) < VF u := hC.live _ hacc
 
 include hC hacc in
-theorem hsum : XF P T f pk m bits 0 + gsum T (XF P T f pk m bits) = 88 := by
+theorem hsum : XF P T f pk m bits 0 + gsum T (XF P T f pk m bits) = 87 := by
   have h : ∑ k : Fin numChains, P.digit (effective (IF P f pk m bits)) k = P.layer := hacc
   rw [hC.layer, Finset.sum_congr rfl (fun k _ => (hd_eq P T hC _ (hlive hC hacc) k).symm),
     Fin.sum_univ_eq_sum_range (fun k => hd T (y0F P f pk m bits) k) 42] at h
@@ -537,8 +537,8 @@ theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   apply congrArg ofK
   have hs := hsum hC hacc
   change hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,
-    cost T w (hxs T (IF P f pk m bits) (w + 1)) = 88 at hs
-  exact (LeanIsaFieldRescale.checksum_exact (by omega : 88 ≤ 300) (by omega)).mpr hs
+    cost T w (hxs T (IF P f pk m bits) (w + 1)) = 87 at hs
+  exact (LeanIsaFieldRescale.checksum_exact (by omega : 87 ≤ 300) (by omega)).mpr hs
 
 include hC hlen hacc in
 /-- **The honest prologue.** -/
@@ -547,9 +547,9 @@ theorem honest_pro : ∀ y ∈ proList, y.Rel f (hv P T f pk m bits) := by
   unfold proList at hy
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hy
-  rcases hy with ((h | h | h) | ⟨c, hc, rfl⟩) | h | h
-  · subst h; exact hv_one
-  · subst h; show hv P T f pk m bits 3 = natV 5503
+  rcases hy with ((h | h) | ⟨c, hc, rfl⟩) | h | h
+  · subst h; refine ⟨hv_one, ?_⟩
+    show hv P T f pk m bits 3 = natV 5503
     rw [hv_lt P T f pk m bits (by omega)]; exact inputWord_len_of pk m bits hlen
   · subst h; exact hv_g
   · exact hv_cc (by omega)

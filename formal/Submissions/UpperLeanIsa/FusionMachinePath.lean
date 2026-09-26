@@ -1,21 +1,20 @@
-import Submissions.UpperLeanIsa.MachineRun
+import Submissions.UpperLeanIsa.FusionMachineRun
 
 /-!
 # Forced paths and the landing exit
 
-Every completing walk follows the 19 straight prologue instructions, the free dispatch,
-then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `frU s j`: the first
-group's unit runs in frame 14 when the free digit `s` is `0`, in frame 1 otherwise. The block relations give
-GP_u = initialProduct(87,s) * C_(sum of preceding group costs), so the exit target is
+Every completing walk follows the 25 straight prologue instructions, the free dispatch,
+then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `j`. The block relations give
+GP_u = initialProduct(86,s) * C_(sum of preceding group costs), so the exit target is
 GP_13 = g ^ seedExp t with t = s + Σ costs. The exit table (`seed_table`, a hash-free identity)
-shows that only t = 87 lands on the sentinel; every other total lands on a pad or past the
+shows that only t = 86 lands on the sentinel; every other total lands on a pad or past the
 bytecode (`exit_forced`).
 
 walk_full extracts the path facts, landings, exact instruction count and cycle cost.
 walk_mk assembles them in the honest direction. No hash binding is needed for these results.
 -/
 
-namespace OptimalOTS.HLG3
+namespace OptimalOTS.HLFusion
 
 open LeanerVM.Parameters LeanerVM.Semantics OracleComp
 open OptimalOTS.LeanIsaBaseline.Layer
@@ -101,15 +100,13 @@ end Walks
 
 /-! ## The prologue -/
 
-theorem proList_lcost : lcost proList = 28 := by unfold proList; rfl
-
 theorem cinstrAt_proList (T : Tab) {t : ℕ} (ht : t < proList.length) :
     cinstrAt T (0 + t) = proList[t] := by
   rw [Nat.zero_add, cinstrAt_pro T (by rw [proList_length] at ht; omega)]
   unfold prologue
   rw [if_pos (by rw [proList_length] at ht; exact ht), List.getD_eq_getElem _ _ ht]
 
-theorem cinstrAt_19 (T : Tab) : cinstrAt T 19 = .dispatch 0 := by
+theorem cinstrAt_25 (T : Tab) : cinstrAt T 25 = .dispatch 0 := by
   rw [cinstrAt_pro T (by omega)]; unfold prologue; rw [if_neg (by omega), if_pos rfl]
 
 theorem pro_mem_init : CInstr.init ∈ proList := by unfold proList; simp
@@ -118,7 +115,7 @@ theorem pro_mem_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 16) (h16 : c ≠ 16) :
     CInstr.setc (cCell c) (cV c) ∈ proList := by
   unfold proList
   simp only [List.mem_append, List.mem_map, List.mem_range]
-  left; right
+  left; left; right
   exact ⟨c - 1, by omega, by rw [Nat.sub_add_cancel h1]⟩
 
 theorem pro_mem_frame {f : ℕ} (hf : f < 15) : CInstr.setc (fCell f) (frameV f) ∈ proList := by
@@ -131,44 +128,20 @@ theorem pro_mem_h0 : CInstr.mul (hCell 0) gCell (h1Cell 0) ∈ proList := by unf
 
 /-! ## Units and frames -/
 
-/-- The frame of unit `j` (`j < 14`) on the path of free digit `s`: unit 1 (the first group) runs
-in frame 14 when `s = 0`. -/
-def frU (s j : ℕ) : ℕ := if j = 1 then frG0 s else j
+/-- Unit `j` uses frame `j`, independently of the free digit. -/
+def frU (_s j : ℕ) : ℕ := j
 
-theorem frU_zero (s : ℕ) : frU s 0 = 0 := by unfold frU; rw [if_neg (by omega)]
+theorem frU_zero (s : ℕ) : frU s 0 = 0 := rfl
+theorem frU_ne {s j : ℕ} (_hj : j ≠ 1) : frU s j = j := rfl
+theorem frU_lt (s : ℕ) {j : ℕ} (hj : j < 14) : frU s j < 14 := hj
+theorem frU_pos (s : ℕ) {j : ℕ} (hj : j ≠ 0) : frU s j ≠ 0 := hj
+theorem gOf_frU (s : ℕ) {j : ℕ} (_h1 : j ≠ 0) (_hj : j < 14) : gOf (frU s j) = j-1 := rfl
+theorem Wf_frU (s : ℕ) {j : ℕ} (_hj : j < 14) : Wf (frU s j) = Wf j := rfl
 
-theorem frU_ne {s j : ℕ} (hj : j ≠ 1) : frU s j = j := by unfold frU; rw [if_neg hj]
-
-theorem frU_lt (s : ℕ) {j : ℕ} (hj : j < 14) : frU s j < 15 := by
-  unfold frU frG0; split_ifs <;> omega
-
-theorem frU_pos (s : ℕ) {j : ℕ} (hj : j ≠ 0) : frU s j ≠ 0 := by
-  unfold frU frG0; split_ifs <;> omega
-
-theorem gOf_frU (s : ℕ) {j : ℕ} (h1 : j ≠ 0) (hj : j < 14) : gOf (frU s j) = j - 1 := by
-  unfold frU frG0 gOf; split_ifs <;> omega
-
-theorem Wf_frU (s : ℕ) {j : ℕ} (hj : j < 14) : Wf (frU s j) = Wf j := by
-  by_cases h0 : j = 0
-  · subst h0; rw [frU_zero]
-  · rw [Wf_pos (frU_pos s h0), Wf_pos h0, gOf_frU s h0 hj]
-    unfold gOf; rw [if_neg (by omega)]
-
-/-- The block variant of group `u` on the path of free digit `s`. -/
-def zU (s u : ℕ) : Bool := decide (u = 0 ∧ s = 0)
+def zU (_s _u : ℕ) : Bool := false
 
 theorem bodyF_frU_succ (T : Tab) (s : ℕ) {u : ℕ} (hu : u < 13) (x : ℕ) :
-    bodyF T (frU s (u + 1)) x = body T u x (zU s u) := by
-  by_cases h0 : u = 0
-  · subst h0
-    by_cases hs : s = 0
-    · subst hs
-      have : zU 0 0 = true := by decide
-      rw [this]; exact bodyF_14 T x
-    · have h1 : frU s (0 + 1) = 0 + 1 := by unfold frU frG0; rw [if_pos rfl, if_neg hs]
-      have h2 : zU s 0 = false := decide_eq_false (by omega)
-      rw [h1, h2, bodyF_succ T hu]
-  · rw [frU_ne (by omega), bodyF_succ T hu, show zU s u = false from decide_eq_false (by omega)]
+    bodyF T (frU s (u+1)) x = body T u x (zU s u) := bodyF_succ T hu x
 
 theorem bodyF_frU_zero (T : Tab) (s x : ℕ) : bodyF T (frU s 0) x = fbody x := by
   rw [frU_zero, bodyF_zero]
@@ -176,18 +149,13 @@ theorem bodyF_frU_zero (T : Tab) (s x : ℕ) : bodyF T (frU s 0) x = fbody x := 
 /-- The control op after unit `j - 1`: the dispatch of unit `j`, or the exit. -/
 def ctlF' (s j : ℕ) : CInstr := if j < 14 then .dispatch (frU s j) else .exit
 
-theorem ctlOf_frU (s : ℕ) {j x : ℕ} (hj : j < 14) (hx : j = 0 → x = s) :
-    ctlOf (frU s j) x = ctlF' s (j + 1) := by
+theorem ctlOf_frU (s : ℕ) {j x : ℕ} (hj : j < 14) (_hx : j = 0 → x = s) :
+    ctlOf (frU s j) x = ctlF' s (j+1) := by
   by_cases h0 : j = 0
-  · subst h0
-    rw [frU_zero, hx rfl]
-    unfold ctlOf ctlF'
-    rw [if_pos rfl, if_pos (by omega)]
-    unfold frU; rw [if_pos rfl]
-  · unfold ctlOf ctlF'
-    rw [if_neg (frU_pos s h0), gOf_frU s h0 hj, Nat.sub_add_cancel (by omega)]
-    unfold ctlF
-    split_ifs <;> first | rfl | omega | (rw [frU_ne (by omega)])
+  · subst j; rfl
+  · simp only [frU,ctlOf,if_neg h0,gOf,Nat.sub_add_cancel (show 1 ≤ j by omega)]
+    unfold ctlF ctlF' frU
+    split_ifs <;> first | rfl | omega
 
 /-! ## The index vector of an image -/
 
@@ -218,7 +186,7 @@ structure PathFacts (T : Tab) (B : BlakeRel) (v : ℕ → E) (xs : ℕ → ℕ) 
 
 /-- The dispatch slot of unit `f` on the path of `xs` (for `f = 14`, the exit). -/
 def ctlSlot (T : Tab) (xs : ℕ → ℕ) (f : ℕ) : ℕ :=
-  if f = 0 then 19 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
+  if f = 0 then 25 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
     (bodyF T (frU (xs 0) (f - 1)) (xs (f - 1))).length
 
 theorem ctlSlot_succ (T : Tab) (xs : ℕ → ℕ) (f : ℕ) :
@@ -230,7 +198,7 @@ theorem cinstrAt_ctlSlot (hT : T.Hyp) {xs : ℕ → ℕ} {f : ℕ} (hf : f ≤ 1
     cinstrAt T (ctlSlot T xs f) = ctlF' (xs 0) f ∧ ctlSlot T xs f < sentinel := by
   rcases Nat.eq_zero_or_pos f with rfl | hf0
   · refine ⟨?_, by unfold ctlSlot sentinel; simp⟩
-    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_19 T
+    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_25 T
   · obtain ⟨j, rfl⟩ : ∃ j, f = j + 1 := ⟨f - 1, by omega⟩
     rw [ctlSlot_succ]
     have hx : xs j < Wf (frU (xs 0) j) := by rw [Wf_frU _ (by omega)]; exact hV j (by omega)
@@ -258,8 +226,8 @@ theorem nextMul_mem (T : Tab) (s : ℕ) {j x : ℕ} (hj : j < 13) (hx : j = 0 �
   by_cases h0 : j = 0
   · subst h0
     rw [bodyF_frU_zero, hx rfl]
-    have : frU s (0 + 1) = frG0 s := by unfold frU; rw [if_pos rfl]
-    rw [this]; unfold fbody; simp
+    have : frU s (0 + 1) = frG0 s := rfl
+    rw [this]; unfold fbody frG0; simp
   · obtain ⟨u, rfl⟩ : ∃ u, j = u + 1 := ⟨j - 1, by omega⟩
     rw [bodyF_frU_succ T s (by omega), frU_ne (by omega)]
     unfold body
@@ -272,7 +240,7 @@ section Units
 variable {B : BlakeRel} {v : ℕ → E}
 
 /-- One unit, from its dispatch to its control op: the landing, the block's relations. -/
-theorem walk_unit (hT : T.Hyp) {d f n c x : ℕ} (hf : f < 15) (hci : cinstrAt T d = .dispatch f)
+theorem walk_unit (hT : T.Hyp) {d f n c x : ℕ} (hf : f < 14) (hci : cinstrAt T d = .dispatch f)
     (hg : v gCell = gV) (hmul : v (h1Cell f) = v (hCell f) * v gCell) (h : Walk T B v n d c)
     (hxd : xOf f (slotOf ((v (hCell f)).limb 0)) = x) :
     x < Wf f ∧ v (hCell f) = ofK (gpow (ent f x)) ∧
@@ -305,11 +273,11 @@ end Units
 
 /-- Steps of the whole path. -/
 def totalSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  20 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
+  26 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
 
 /-- Cycles of the whole path. -/
 def totalCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  29 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
+  35 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
 
 /-! ### The landing product -/
 
@@ -332,15 +300,15 @@ theorem cost_le (hT : T.Hyp) {u x : ℕ} (hu : u < 13) (hx : x < VF u) : cost T 
 theorem prod_eq {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
     (hpro : ∀ y ∈ proList, y.RelB B v)
     (hblk : ∀ f < 14, ∀ y ∈ bodyF T (frU (xs 0) f) (xs f), y.RelB B v) : ∀ u ≤ 13,
-      v (gpCell u) = ofK (LeanIsaFieldRescale.initialProduct 87 (xs 0) *
+      v (gpCell u) = ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0) *
         LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, cost T w (xs (w + 1)))) := by
   intro u
   induction u with
   | zero =>
     intro _
-    have hseed : CInstr.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 87 (xs 0))) ∈
+    have hseed : CInstr.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0))) ∈
         bodyF T (frU (xs 0) 0) (xs 0) := by rw [bodyF_frU_zero]; unfold fbody; simp
-    have h : v (gpCell 0) = ofK (LeanIsaFieldRescale.initialProduct 87 (xs 0)) :=
+    have h : v (gpCell 0) = ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0)) :=
       hblk 0 (by omega) _ hseed
     rw [Finset.sum_range_zero]
     change v (gpCell 0) = ofK (_ * gpow 0)
@@ -357,35 +325,35 @@ theorem prod_eq {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (
     change ofK ((_ * LeanIsaFieldRescale.costFactor _) * LeanIsaFieldRescale.costFactor _) = _
     rw [mul_assoc, LeanIsaFieldRescale.factor_add]
 
-/-- The exponent of the landing product for the total `t`: `sentinel + Q (t − 87)` modulo the
+/-- The exponent of the landing product for the total `t`: `sentinel + Q (t − 86)` modulo the
 order of `g`. -/
-def seedExp (t : ℕ) : ℕ := (10376293541461884921 + LeanIsaFieldRescale.stride * t) % ordG
+def seedExp (t : ℕ) : ℕ := (11529215046068731897 + LeanIsaFieldRescale.stride * t) % ordG
 
 theorem seed_lt (t : ℕ) : seedExp t < ordG := Nat.mod_lt _ (by decide)
 
-theorem seedExp_87 : seedExp 87 = sentinel := by
+theorem seedExp_86 : seedExp 86 = sentinel := by
   norm_num [seedExp, ordG, sentinel, LeanIsaFieldRescale.stride]
 
 /-- The free seed times `C_c` is `g ^ seedExp (s + c)`. -/
 theorem initialProduct_mul (s c : ℕ) :
-    LeanIsaFieldRescale.initialProduct 87 s * LeanIsaFieldRescale.costFactor c =
+    LeanIsaFieldRescale.initialProduct 86 s * LeanIsaFieldRescale.costFactor c =
       gpow (seedExp (s + c)) := by
-  have hl : LeanIsaFieldRescale.costFactor 87 ≠ 0 := pow_ne_zero _ g_ne_zero
+  have hl : LeanIsaFieldRescale.costFactor 86 ≠ 0 := pow_ne_zero _ g_ne_zero
   rw [LeanIsaFieldRescale.initialProduct, mul_assoc, LeanIsaFieldRescale.factor_add,
     div_mul_eq_mul_div, div_eq_iff hl, LeanIsaFieldRescale.costFactor,
     LeanIsaFieldRescale.costFactor, gpow_mul_gpow, gpow_mul_gpow, seedExp,
     ← gpow_mod (_ % ordG + _), Nat.mod_add_mod, ← gpow_mod (LeanIsaFieldRescale.sentinel + _)]
   have he : (LeanIsaFieldRescale.sentinel + LeanIsaFieldRescale.stride * (s + c)) % ordG =
-      (10376293541461884921 + LeanIsaFieldRescale.stride * (s + c) +
-        LeanIsaFieldRescale.stride * 87) % ordG := by
+      (11529215046068731897 + LeanIsaFieldRescale.stride * (s + c) +
+        LeanIsaFieldRescale.stride * 86) % ordG := by
     unfold LeanIsaFieldRescale.stride ordG LeanIsaFieldRescale.sentinel; omega
   rw [he]
 
 /-- **The exit table.** For every reachable total `t ≤ 284`, the exit target `g ^ seedExp t` is
-the sentinel only at the layer `t = 87`; otherwise it is past the bytecode or one of the pads
-`sentinel − 5 … sentinel − 1` (the totals `87 − 16 j`, since `16 Q ≡ 1`). -/
+the sentinel only at the layer `t = 86`; otherwise it is past the bytecode or one of the pads
+`sentinel − 5 … sentinel − 1` (the totals `86 − 16 j`, since `16 Q ≡ 1`). -/
 theorem seed_table : ∀ t < 285,
-    t = 87 ∨ 2 ^ 18 ≤ seedExp t ∨ (262137 ≤ seedExp t ∧ seedExp t < 262143) := by
+    t = 86 ∨ 2 ^ 18 ≤ seedExp t ∨ (262137 ≤ seedExp t ∧ seedExp t < 262143) := by
   decide +kernel
 
 theorem slotOf_high {x : ℕ} (h1 : 2 ^ 18 ≤ x) (h2 : x < 2 ^ 64 - 1) : slotOf (gpow x) = 2 ^ 18 := by
@@ -399,7 +367,7 @@ theorem slotOf_high {x : ℕ} (h1 : 2 ^ 18 ≤ x) (h2 : x < 2 ^ 64 - 1) : slotOf
 landing product `g ^ seedExp t` is `g ^ sentinel`: every other target is a pad (it fails) or past
 the bytecode. -/
 theorem exit_forced {B : BlakeRel} {v : ℕ → E} {t n c : ℕ} (ht : t ≤ 284)
-    (h : Walk T B v n (slotOf (gpow (seedExp t))) c) : t = 87 := by
+    (h : Walk T B v n (slotOf (gpow (seedExp t))) c) : t = 86 := by
   rcases seed_table t (by omega) with h96 | hhi | ⟨hlo, hlt⟩
   · exact h96
   · rw [slotOf_high hhi (by have := seed_lt t; unfold ordG at this; omega)] at h
@@ -407,10 +375,9 @@ theorem exit_forced {B : BlakeRel} {v : ℕ → E} {t n c : ℕ} (ht : t ≤ 284
     unfold sentinel at this; omega
   · rw [slotOf_gpow (by omega)] at h
     obtain ⟨-, hR, -⟩ := h.inv (by unfold sentinel; omega)
-    rcases cinstrAt_cases T (seedExp t) with ⟨h1, -⟩ | ⟨-, h1, -⟩ | ⟨-, h1, -⟩ | ⟨-, h1, -⟩ | h1
+    rcases cinstrAt_cases T (seedExp t) with ⟨h1, -⟩ | ⟨-, h1, -⟩ | ⟨-, h1, -⟩ | h1
     · omega
     · unfold gEnd at h1; omega
-    · unfold zEnd at h1; omega
     · unfold baseF at h1; omega
     · rw [h1] at hR; exact (show False from hR).elim
 
@@ -488,8 +455,8 @@ theorem walk_full (hT : T.Hyp) {n c : ℕ} (h : Walk T B v n 0 c) :
     show slotOf _ = _
     rw [hgp', limb_ofK_zero]
   rw [hnext0] at hw2
-  have ht96 : t = 87 := exit_forced (by omega) hw2
-  have hsen : seedExp t = sentinel := by rw [ht96]; exact seedExp_87
+  have ht96 : t = 86 := exit_forced (by omega) hw2
+  have hsen : seedExp t = sentinel := by rw [ht96]; exact seedExp_86
   rw [hsen, slotOf_gpow (by unfold sentinel; omega)] at hw2
   obtain ⟨rfl, rfl⟩ := hw2.at_sentinel
   refine ⟨hV, ⟨hRp, fun f hf => (hall f hf).2.2.1,
@@ -599,7 +566,7 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
         x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelB B (Lx L)))
     {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow 0, 1⟩)) :
     Pinned (Lx L) := by
-  have hp := rel_prefix Sm B hst 19 0 n c
+  have hp := rel_prefix Sm B hst 25 0 n c
     (fun i hi => by
       rw [cinstrAt_proList T (by rw [proList_length]; exact hi)]
       exact proList_straight _ (List.getElem_mem _))
@@ -616,4 +583,4 @@ end Prefix
 
 end
 
-end OptimalOTS.HLG3
+end OptimalOTS.HLFusion

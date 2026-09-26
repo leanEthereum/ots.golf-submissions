@@ -1,162 +1,153 @@
-# Field-rescaled Group3 with rarest-cut signing, aliased tables and a landing exit
+# Fused chain binding at 1149 cycles
 
-Claim **1209** cycles: `109` non-hash instructions `+ 98 × 10 + 120`, `steps = 207`.
-This is the 9-call root of the 1289 design (ROOT9, every root call has a constant tag) with two
-changes. The signer keeps the *rarest* accepted class of all `2^19` trials (rarest-cut), and the
-security proof charges index queries and signing through a certified tier schedule. The group
-tables alias the cheap (3,10) tuples at several field values, which raises the accepted mass
-enough to lower the layer from 96 to 88: eight fewer chain hashes per verification (−80). The
-machine layout, the 9-call root, the frame-14 copy of the first group and the landing exit are
-those of the 1289 design. The previous records are 1281, 1282, 1283, 1291 (rehomed root), 1294,
-1295, 1319, 1332, 1598 and 85343.
-The contract is pinned at `da1418bfec2a599ac36d035f3a1ec551e73d73a0`, Lean 4.33.1.
+Claim **1149 cycles**: **129 ordinary instructions + 90 BLAKE2S × 10 + 120 boundary cycles**.
+Every completing path executes 219 instructions. The 90 hashes are 86 chain steps, one index,
+and three root calls. This improves the 1209 reference by 60 cycles (4.96%).
 
-## Scheme and raw table interface
+The reference is the verified submission by lucemans at
+`6363c32ead978b927a23860bfb863dff4ba9987e`:
+https://ots.golf/submissions/ae54a7a1c4f0d7c6f00e42030c96e468.
+The local 1198 continuation is preserved separately. This construction retains its rarest-cut
+signer and much of the machine framework, and proves a new fused dependency DAG and security
+reduction. `Fusion*.lean` contains the active construction; older modules provide shared lemmas
+and preserve the earlier proof development.
 
-The raw hash-index word has 128 bits. The scheme drops its least significant bit and uses
-127 effective bits. The first machine table duplicates each effective tuple at adjacent raw
-indices; the XOR tie still checks the entire raw index. `IndexBits` proves the exact fibers
-of this projection. `MachineTable` proves that the machine digits agree with the effective
-scheme digits.
+## Fusing chain and root work
 
-The effective widths are `[9,9,9,9,9,11,11,10,10,10,10,10,10]`; raw widths increase the first
-to 10. The shapes (`SchemeGroup3`) are `(3,9)` for the first group, `(4,11)` for the quads
-(groups 5, 6), `(3,10)` for groups 7..12 and plain `(3,9)` for the exporters (groups 1..4). A
-table lists, per cost `c`, the first `nT s c` lex tuples of digit sum `c`, each at `muT s c`
-adjacent field values (its *aliases*). The (3,10) tables have multiplicities 2, 8, 2 at costs 1,
-2, 3 and multiplicity 1 elsewhere; every other table has multiplicity 1. The last value of each
-(3,10) table is a *dummy*; an index with a dummy field gets free digit `[gsum = 88]`, so its digit
-sum is never 88. Otherwise the free digit is `88 - gsum`. Acceptance is exactly: no dummy field
-and `25 ≤ gsum ≤ 88` (`accepted_iff`). The machine has `VF u` blocks per group,
-`[1024, 512, 512, 512, 512, 2048, 2048, 1023 × 6]`, one block per live field value.
+A binding chain's final hash includes five other chain tops in the packet: two as cv words
+and three alongside the current chain word as message words. The metadata identifies the
+parent chain. Thus a chain hash already required for reconstruction also authenticates five
+dependency tops. The six groups are:
 
-A *class* is the digit vector of an accepted index; its *weight* is the number of accepted
-indices with that digit vector, the product of the field multiplicities (`weight_eq`). There are
-**35402584949483527480931065832952447** accepted effective indices (`218.19 × 2^107`, accepted
-mass `A ≈ 2^-12.23`) in 18 tiers of weights `1, 2, 4, …, 2^16, 2^18`
-(`TierSchedule.tierA`, `tierN`).
+| Binding chains | Dependency tops |
+| --- | --- |
+| 1, 2, 7 | 14, 15, 16, 19, 20 |
+| 3, 4, 5, 6 | 21, 24, 25, 31, 34 |
+| 8, 9, 10, 11 | 35, 36, 39, 40, 41 |
+| 14, 15, 16 | 12, 13, 0, 17, 18 |
+| 19, 20, 21 | 22, 23, 27, 28, 32 |
+| 24, 25, 26 | 33, 37, 38, 29, 30 |
 
-The signature contains 42 128-bit words and a 127-bit nonce; the loader supplies the nonce
-cell's zero high bit. The chain lengths have 625 steps in total. Every accepted verification
-performs 88 chain hashes, one index hash, and nine root hashes. Each hash costs two abstract
-compressions, giving keygen 1268 and verification 196; signing costs exactly `2^20`
-compressions.
+Each binding group's all-zero tuple is excluded, so every accepted signature reconstructs
+at least one final binding hash in that group. The acyclic dependency order ensures coherent
+key generation and reconstruction. Domain-separation proofs cover ordinary chain steps,
+fused endpoints, index queries, and root queries with their exact bit strings.
 
-## Rarest-cut signing
+The final root uses three hashes. Root 0 takes tops 1 and 2 as cv, and tops 3–6 as message.
+Root 1 takes top 26 and the low half of root 0 as cv, and tops 8–11 as message.
+Root 2 takes top 7 and the low half of root 1 as cv, with four ONE message words.
+Its low half is the public key. Binding propagates through the DAG to all 42 tops.
 
-`LayerScheme.signLoop` makes all `2^19` trials at fresh untried nonces (no early stop) and keeps
-the accepted trial of least weight; a trial replaces the best only if it is strictly lighter, so
-the earliest trial of the minimum tier wins. Signing fails only when no trial is accepted.
-`LayerAvailability` bounds the failure by `(1 − A)^(2^19 − 1) ≤ 2^-128` (the keygen cache holds
-at most one index-shaped entry); in floating point the value is `2^-157.4`.
+## Tables, signing, and exact probability bounds
 
-## Security argument
+The signature is 42 complete 128-bit words and a 127-bit nonce, totaling 5503 bits. The signer
+tries `2^19` nonces and keeps the accepted class of least weight, breaking ties by earliest
+trial. A class's weight counts its effective 127-bit indices. Thirteen group tables encode
+41 chain digits; the free chain digit completes the total to **86**. The group cost lies in
+`[23,86]`, so the free digit lies in `[0,63]`.
 
-The proof follows `.tmp/rarest/tier-proof.md` (conditions §10 with `I = 2^127`, `CR = 1/2`,
-non-index rate `2^-128` per compression), generic in the tier schedule:
+Alias multiplicities vary by group and cost band. Live raw field prefixes have lengths
+`[1022,512,512,512,512,2047,2047,1023,995,974,969,1024,969]`.
+Unused field values reject. `FusionCodec` specifies the exact tuples and aliases;
+`FusionTier` and `FusionNumeric` prove their counts and numerical bounds.
 
-- `TierCodec`: the class codec and `TierHyp` (the class weights and counts per tier of the
-  scheme match a schedule `Sched`, `K = 127`). `Records.Hyp` carries
-  `tier : ∃ S, S.Valid ∧ P.TierHyp S` in place of the old `numValid` bounds and `digit_inj`.
-- `TierNumeric`: `Sched.Valid`, the exact rational conditions: tier masses, `ȳ_t^(2^19)`
-  bounds, the collision slope `H' ≤ hp`, the linear slope `κ₁ ≥ κ_post, SC_f/(2L)`, the knee
-  `b0`, `κ_max ≤ 2^-127`, availability and `A ≤ 2^-10`.
-- `TierSchedule`: the layer-88 schedule `g1281Sched` (`hp = 1.18976·2^-127`,
-  `κ₁ = hp/2 = 0.59488·2^-127`, `b0 = 1`, so `κ_max ≈ 0.892·2^-127`), `ȳ` powers by 19
-  outward-rounded squarings at precision `2^256`, and `Group3.tierHyp`, a kernel-evaluated
-  count of the accepted field tuples by total cost and multiplicity code.
-- `TierRow`, `TierKernel`, `TierSign`: the signer as `signTier` on extended messages, one-trial
-  bounds under RowGood (`η₀ = (2^66 + 2^19)/(2^127 − 2^19)`), the winner law by value-function
-  induction, and the kernel bounds K1–K5 (fresh and cached winners, self-collision, tail, and
-  the average post-sign rate `κ_B = 2^-128 + (p − 2^-127)^+/2 = max(2^-128, p/2)`).
-- `TierPotential`: the pre-sign potential `Pre = (1 + b/I)·G + Z + Y` with its charge on a fresh
-  index query, and the quadratic budget term `K(b) = κ₁ b + H'/(4I)·((b − b0)^+)^2` with
-  `K(b) ≤ b/2^127` for `b ≤ 2^127` (`Kb_le`).
-- `TierPsi`: the RowGood supermartingale `Ψ` (exponent `2^-56`, deviation `2^66`), normalized
-  so that it starts below `2^-500` and is at least 1 whenever a row with `u ≤ 2^126` fails
-  RowGood.
-- `TierLoss`: the loss of signing is at most `G + Z + Y + SC_f` (P1).
-- `StageA`: `ΦA = hidden + second-preimage + sumW·(Pre + Ψ + K(b))`, its charges, the
-  continuation through signing, and the master bound. `StageB`: `ΦB` with the class-dependent
-  rate `κ_B` and the `IdxPost` charge `p(c)` per index query. `IdxCharges` gives the index-query
-  charge per class. `IdxRho`, `IdxRows`, `RowPotential` and `RowIneq` of the 1281 root are
-  removed.
-- `Security.main_bound`: `probTrue ≤ 2^-500 + (B − keygenCost)/2^127` for `B ≤ 2^127`;
-  `keygenCost = 1268 > 0` gives the strict bound `< B/2^127` (`κ_mul_sub_lt`). Larger budgets use
-  the bound of one. `Group3Security` instantiates the proof and admissibility.
+There are 18 dyadic class weights `1,2,...,2^17`. The schedule uses
+`hp = 1393370080481 / 2^40 / 2^127`, `k1 = hp/2`, and `b0 = 1`.
+Independent numerical estimates give about 135.139 bits of signing availability and a
+normalized security slope of 0.950447. The Lean proof uses exact integer counts and
+outward-rounded rational certificates, proving signing failure at most `2^-128` and
+127-bit strong unforgeability for the actual adaptive cached-oracle experiment.
+Key generation uses at most 1256 abstract compressions; verification uses at most 180.
 
-The generic `Events`, `Transcript`, `Exposure`, `Targets`, `KeygenBridge`, `CostPrefix` and
-`Correctness` are those of the 1289 root, with the index type replaced by classes and the new
-signing loop.
+The new security proof normalizes each chain query to the reconstruction's final dependency
+context, proves hidden-input and matching-output bounds for the fused packets, and extracts
+a forgery event through the dependency DAG. It covers both successful and failed signing.
 
-## Field constants and the landing exit
+## Addresses, constants, and execution
 
-Let `Q = 2^60`, `M = 2^64 - 1`, and `C_c = g^(Q*c)` in the ISA's GF(2^64) subfield.
-Because `16*Q ≡ 1 mod M`, `C_16 = g` and `(C_c)^16 = g^c`.
-`FieldRescale` proves these identities and injectivity over all costs through 300.
+The memory layout places selected high and low hash halves in adjacent cv cells. Ordinary
+position tags use the existing cost constants. Fused endpoint tags additionally reuse the
+checked signature-length cell (5503) and the forced terminal landing product. Their exact
+bits are proved distinct and are matched to the abstract scheme's metadata.
 
-The fifteen landing frames reuse `C_1..C_15` (frames are separated by `Q = 2^60`, and
-`15 Q + 2^33 < M`). The 21-slot prologue pins ONE, length, g and `C_1 … C_15` (`C_16 = g`;
-the costs used are 0 … 16), then computes the index and dispatches (slot 20); slot 21 is a pad.
-The frame proofs cover all admitted memory sizes through `2^32` cells.
+The prologue has 25 straight instructions and dispatches at slot 25; slot 26 is a pad.
+The free block always materializes its top, removing the former zero-digit frame variant.
+Group regions run from slot 27 through 235318. Free blocks begin at 255615 with stride 68;
+the sentinel is 262143. The code and memory tables have `2^18` and `2^16` rows, respectively,
+for **327680 seeded rows**.
 
-The free block seeds `g^262143 / C_88 * C_s`; each group multiplies by its own `C_cost`, so the
-last product is `GP_13 = g^seedExp t` with `t = s + sum costs` and
-`seedExp t = (262143 + Q (t − 88)) mod M`. The exit is `JUMP(ONE, GP_13, ONE)`. The exit table
-(`MachinePath.seed_table`, `decide +kernel` over `t ≤ 284`) shows `seedExp t` is the sentinel
-`262143` only at `t = 88`; the totals `88 − 16j` (`j = 1 … 5`) land on the pads `262143 − j`,
-and every other total lands past the bytecode (`exit_forced`). So a completing run has
-`s + sum costs = 88`, without any hash-binding assumption.
+The landing seed is `initialProduct(86,s)`. The final exponent is
+`(11529215046068731897 + 2^60 * (s + sum(group costs))) mod (2^64 - 1)`.
+Only total 86 reaches the sentinel; every other total in the conservative range 0..284
+lands on a pad or beyond the program. Frame guards also reject entry into a block's middle.
+The universal cycle theorem quantifies over every admitted memory size, image, and step count.
 
-Group regions run from slot 22 through 234653 (`gEnd = 234654`); the first group's frame-14
-copy follows at `234654 … 250525` (`zOff = 234632`, `zEnd = 250526`). Free blocks start at
-`255615 + 68*s`, `s < 64`. Code capacity is 262144. The honest memory has 65536 cells, giving
-327680 seeded rows.
+The machine checks root 2 before roots 0 and 1: committed memory lets an instruction assert
+a relation involving values checked later. Soundness therefore reconstructs those relations
+in mathematical dependency order. The honest prover first reconstructs all tops, then collects
+the complete output pairs and root states; repeated oracle queries share cached answers.
 
-## Root and memory layout
+## Validation status
 
-Call 0 uses cv `(top 38, top 37)` (cells 150/151; `rootInit = top37 ++ top38`) and message
-tops 3..6, tag `C_1`. Call 1 uses the state after call 0 as its cv (`stCell 0`) and message
-`[top 0, top 1, top 2, top 7]`, tag `C_2`. Calls `r=2..6` use cv `(top (5r+2), top (5r+3))` and
-`[lo(previous), top (5r+4), top (5r+5), top (5r+6)]`, tag `C_(r+1)`. Call 7 uses the state after
-call 6 as its cv and message tops 8..11, tag `C_8`; call 8 the state after call 7 as its cv and
-message `[lo(state 7), top 39, top 40, top 41]`, tag `C_9`. The public key is the low half of the
-last state (`copy (stCell 8) pkCell` ends the last group). `Events.root_binding` walks back from
-the public key (`lo_eq_of_rootInput`); `Events.tops_eq_of_rootInputs` covers the top placement.
+The original 1149-cycle certificate at `d8e29b3` was submitted as
+[PR #47](https://github.com/leanEthereum/ots.golf-submissions/pull/47).
+[Its hosted check](https://ots.golf/submissions/f9ecc2114da4705241500bb9b239941d)
+timed out after 1232 seconds; every submission module had compiled successfully.
 
-The free top is read by call 1 in group 0's block. It is the signature cell `wCell 0` when the
-free digit `s` is 0 and the free chain's output cell `tfCell` otherwise; the block cannot know
-`s`, so group 0 has two variants (`body T u v z`, `rt`): `z = false` in frame 1 and `z = true` in
-frame 14 (landing hints `hCell 14 = 183`, `h1Cell 14 = 184`, frame constant `C_15`). The free
-block of digit `s` ends with `MUL(H_F, g, H'_F)` and `JUMP(ONE, H_F, F_F)` for `F = frG0 s`
-(14 if `s = 0`, else 1), so frame isolation forces the variant. The forced walk visits unit `j`
-in frame `frU s j`; both variants have the same length and cost.
+This revision reduces proof-checking work while keeping the bytecode, address layout,
+signature scheme, exported certificate statement, and **1149-cycle** claim unchanged:
 
-Group 0 (the alias table, chains 1, 2, 7) is the home of call 1 and runs before group 5
-executes call 0: the image is committed, and `MachineSound.root_step` locates each call by
-membership, not by execution order. Groups 1..4 export the cv words; groups 5 and 6 (the quads)
-are the homes of calls 0 and 7, groups 7..11 those of calls 2..6, and group 12 that of call 8.
-The uniform counts are `CU = [5,8,8,8,8,6,6,6,6,6,6,6,6]` (sum 85); the free block's count is 4.
+- Consolidate the 88 chained length-certificate fragments into `LengthPowers`,
+  `LengthLogValues`, and `LengthBounds`, with sequential elaboration. The arithmetic
+  declarations and proofs are byte-for-byte identical to the original fragments.
+- Prove transitivity of `Earlier` and check the 627 adjacent pairs in `locationOrder`.
+  `List.isChain_iff_pairwise` then gives the same pairwise ordering theorem, replacing
+  the direct check of 196878 pairs. The old ordering certificate alone took 31.386
+  seconds during local kernel replay; the revised module builds in about 3 seconds.
 
-`MachineProgram` proves block lengths, uniform costs, and frame isolation. `MachinePath`
-extracts the forced path; a landing names a live block (`x < VF u`), so the tie shows the index
-has no dummy field. `MachineCycles` proves 207 instructions and 1089 execution cycles, plus the
-120-cycle boundary charge. `MachineSound`, `MachineProver`, `MachineHonest`, and
-`MachineHonestPath` connect these instructions to the verifier for every fixed oracle table.
-`MachineFaithful` proves the contract's honest-execution equivalence. `MachineGroup3` and
-`Solution` assemble the concrete clauses.
+Final local validation:
 
-## Validation and status
+- Clean submission build with pinned dependencies prebuilt: **250.279 seconds**,
+  versus 451.757 seconds for the original submission; **24707 bytes** of output.
+- Full exports include the certificate, seeded-row theorem, submission definition, all
+  permitted axioms and the comparator's exact primitive list. The pinned comparator's
+  statement/primitive comparison and axiom checks pass.
+- Fresh Lean kernel replay of the exported proof passes in **278.563 seconds**.
+  Parsing, comparison, axiom checking and replay together take **319.189 seconds**.
+- The sampled peak process-tree proportional memory is **10.33 GiB**
+  for compilation and **4.66 GiB** for the exported-proof checks.
+  These are sampled local measurements, not enforced production resource bounds.
+- The root has 103 files. The leanISA contract modules, challenge template, toolchain,
+  Lake manifest and Lake configuration match hosted contract `ca67ddc3`.
 
-The local `Solution` build passes (`lake build Submissions.UpperLeanIsa.Solution`, about 75 s
-wall for all `UpperLeanIsa` modules on 16 threads). Exported `certificate`, `seeded_rows` and
-`submission` depend only on `propext`, `Classical.choice` and `Quot.sound`; no `sorry`, `admit`
-or `native_decide` is used. The policy checker (`verifier/check_submission.py upper-leanisa`)
-has not been re-run on this root.
+The measured build, two exports and exported-proof checks sum to **584.298 seconds**;
+this is a sum of separately timed development checks, not an official verifier runtime.
+Evidence and profiling scripts are in the sibling `leanisa-1149-timeout-evidence` directory.
+The mandatory official Linux preflight still requires Landlock, unavailable on this host.
+The standalone development checks do not bypass that verifier or certify its sandbox.
+A new hosted run is required to confirm the revised submission fits its wall-clock limit.
 
-Executable models: `.tmp/t1281/model/tables/machine.py` (layout, regions, exit pads and the
-claim `109 + 10·98 + 120 = 1209` for the layer-88 tables) and
-`.tmp/t1281/model/tables/numeric.py` (the tier schedule).
+Executable research checks exercised accepted indices with both free-digit extremes, three
+complete signing runs, middle-block landings, incorrect layer totals, and modified memory
+cells. Six negative controls demonstrate why allowing an all-zero binding tuple would leave
+a dependency unauthenticated. Those tests used a deterministic test oracle; the Lean proof
+is the security and universal-correctness evidence.
+
+## Failed directions and remaining obstacles
+
+Allowing zero-cost binding tuples improves the table distribution but breaks binding: a group
+can disclose all its parent tops without executing any hash that authenticates its children.
+The negative controls reproduce this problem. The current tables exclude all six origins.
+
+Reducing root hashes requires a new dependency-aware security proof; replacing only the root
+code does not establish unforgeability. Dynamic metadata derived from mutable root outputs
+also complicates domain separation. Fixed tags with proved cell values avoid that obligation.
+
+The current score still spends 129 cycles on initialization, index ties, copies, hints, frame
+transitions, and landing products. Some uniform padding is part of the constant path bound.
+Further work can optimize those operations jointly with table shapes, or search below layer 86
+while maintaining the exact availability and strong-security inequalities. The search and this
+certificate establish an upper bound, not an optimality lower bound near 1010 or any other value.
 
 ## Credits
 
@@ -183,3 +174,8 @@ claim `109 + 10·98 + 120 = 1209` for the layer-88 tables) and
 - Rarest-cut signing (the tier proof, the `Tier*` files and the rewired stage proofs), the
   aliased layer-88 tables with their tier-schedule certificate, and the 1209 machine were
   prepared with Claude Opus 5.5.
+
+- This layer-87 table search, regenerated tier certificates, and fused length-guard port were prepared with Codex.
+
+- The six-group fused construction, exact layer-86 search, dependency-aware security proof,
+  new address layout, and complete 1149-cycle machine certificate were prepared with Codex.

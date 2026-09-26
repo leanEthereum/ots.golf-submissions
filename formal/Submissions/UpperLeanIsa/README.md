@@ -1,27 +1,20 @@
-# leanISA — 1209 cycles
+# 1149-cycle leanISA construction
 
-Field-rescaled Group3 with a 127-bit effective index, rarest-cut signing, aliased group tables
-on the layer 88, a nine-call root with constant tags, and a landing exit (the exit jumps to the
-last landing product; a hash-free exit table forces the layer). The signer makes all `2^19`
-trials and keeps the accepted class with the fewest accepted indices; the security proof pays
-for index queries and signing with a certified 18-tier schedule. The (3,10) tables place their
-cheap tuples at several field values, which raises the accepted mass and lowers the layer. The
-free chain's top is a message word of root call 1, read by a second, frame-isolated copy of the
-first group's blocks when the free digit is 0.
-Every completing execution takes **1209 cycles**:
-`109 + 98 × 10 + 120`, with exactly **207 instructions**.
+This root exports `Submission.Certificate 1149`. Six groups use final chain hashes to bind
+30 dependency tops, leaving three root hashes. The complete proof covers admissibility,
+127-bit strong security, bytecode validity, honest-prover equivalence, soundness against any
+committed image, and the cycle bound. The score is `129 + 90 × 10 + 120 = 1149`.
 
-- 42 chains; 88 continuation hashes per accepted signature.
-- 127-bit nonce; 5503-bit signature.
-- 1268 key-generation compressions; exactly 2^20 signing compressions; 196 verification compressions.
-- Strict 127-bit strong security, including the adaptive index-grinding proof for the
-  rarest-cut signer.
-- Program log-size 18; honest memory log-size 16; 327680 seeded rows.
-- Soundness and cycle bounds cover every admitted prover-selected memory size, image, and step count.
+See [NOTES.md](NOTES.md) for the construction, validation status, and credits.
 
-`Solution.lean` exports `submission`, `certificate : submission.Certificate 1209`, and `seeded_rows`.
-Build with `lake build Submissions.UpperLeanIsa.Solution` in the pinned contract project.
+Build in a prepared project with the pinned dependencies:
 
-Local Lean compilation succeeds. The official verifier requires a Linux host with Landlock
-and its documented resource-isolation setup; it cannot run on the current development host.
-See `NOTES.md` for the construction, proof changes, and credits.
+```sh
+lake build Submissions.UpperLeanIsa.Solution
+```
+
+`Solution.lean` is the competition entry point and `claim.txt` contains the score.
+The original PR #47 check timed out after compilation. This revision consolidates the
+length certificates and replaces the quadratic ordering check with adjacent checks.
+The clean build, exported-statement comparison, axiom checks and fresh kernel replay pass
+locally. The 1149-cycle program is unchanged; hosted timing remains to be confirmed.
