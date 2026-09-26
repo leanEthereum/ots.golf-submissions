@@ -80,9 +80,26 @@ theorem Params.locationOrder_mem (P : Params) (a : Loc P) : a ∈ P.locationOrde
     apply List.mem_append_right
     exact List.mem_map.mpr ⟨r,List.mem_finRange r,rfl⟩
 
+/-- The dependency order is transitive, so adjacent checks suffice for a whole list. -/
+theorem earlier_trans {a b c : Loc P} (hab : Earlier a b) (hbc : Earlier b c) :
+    Earlier a c := by
+  rcases a with ⟨ka,ja⟩ | ra <;>
+    rcases b with ⟨kb,jb⟩ | rb <;>
+    rcases c with ⟨kc,jc⟩ | rc <;>
+    simp only [Earlier] at hab hbc ⊢
+  · rcases hab with hab | ⟨rfl,hab⟩ <;> rcases hbc with hbc | ⟨rfl,hbc⟩
+    · exact Or.inl (Nat.lt_trans hab hbc)
+    · exact Or.inl hab
+    · exact Or.inl hbc
+    · exact Or.inr ⟨rfl,Nat.lt_trans hab hbc⟩
+  all_goals first | trivial | contradiction | exact Nat.lt_trans hab hbc
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem concrete_ordered : params.locationOrder.Pairwise Earlier := by decide +kernel
+theorem concrete_ordered : params.locationOrder.Pairwise Earlier := by
+  haveI : IsTrans (Loc params) Earlier := ⟨fun _ _ _ => earlier_trans⟩
+  apply List.isChain_iff_pairwise.mp
+  decide +kernel
 
 theorem concrete_location_count : params.locationOrder.length = 628 := by decide +kernel
 

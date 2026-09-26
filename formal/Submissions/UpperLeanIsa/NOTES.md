@@ -89,22 +89,43 @@ the complete output pairs and root states; repeated oracle queries share cached 
 
 ## Validation status
 
-The complete local `Solution` certificate compiles for **1149**, including all six clauses
-and the seeded-row bound. A clean rebuild with pinned dependencies prebuilt took **451.757
-seconds** and emitted **30549 bytes**. The exported submission, certificate, seeded-row bound,
-admissibility, security, faithfulness, soundness, and cycle theorem depend only on `propext`,
-`Classical.choice`, and `Quot.sound`. The source-policy checker accepts all 189 files.
+The original 1149-cycle certificate at `d8e29b3` was submitted as
+[PR #47](https://github.com/leanEthereum/ots.golf-submissions/pull/47).
+[Its hosted check](https://ots.golf/submissions/f9ecc2114da4705241500bb9b239941d)
+timed out after 1232 seconds; every submission module had compiled successfully.
 
-Largest child peak RSS was 15591036 KiB. Summed process RSS overcounted shared pages and reached
-52.94 GiB; the kernel's whole-environment cgroup lifetime peak was **21089607680 bytes
-(19.64 GiB)**, below 24 GiB, with no OOM events. That counter includes other work and cached
-files and was not reset. It is not an isolated or enforced verifier resource verdict.
-Detailed build, axiom, source-policy, source-hash, and memory evidence is retained in the sibling
-`leanisa-1150-evidence` directory. These checks are distinct from the official comparator and replay.
+This revision reduces proof-checking work while keeping the bytecode, address layout,
+signature scheme, exported certificate statement, and **1149-cycle** claim unchanged:
 
-The official verifier cannot start on this host because its mandatory preflight reports:
-`Landlock is not enabled on this kernel: refusing to build untrusted code`.
-The sandbox was not bypassed. This work has not published a competition submission.
+- Consolidate the 88 chained length-certificate fragments into `LengthPowers`,
+  `LengthLogValues`, and `LengthBounds`, with sequential elaboration. The arithmetic
+  declarations and proofs are byte-for-byte identical to the original fragments.
+- Prove transitivity of `Earlier` and check the 627 adjacent pairs in `locationOrder`.
+  `List.isChain_iff_pairwise` then gives the same pairwise ordering theorem, replacing
+  the direct check of 196878 pairs. The old ordering certificate alone took 31.386
+  seconds during local kernel replay; the revised module builds in about 3 seconds.
+
+Final local validation:
+
+- Clean submission build with pinned dependencies prebuilt: **250.279 seconds**,
+  versus 451.757 seconds for the original submission; **24707 bytes** of output.
+- Full exports include the certificate, seeded-row theorem, submission definition, all
+  permitted axioms and the comparator's exact primitive list. The pinned comparator's
+  statement/primitive comparison and axiom checks pass.
+- Fresh Lean kernel replay of the exported proof passes in **278.563 seconds**.
+  Parsing, comparison, axiom checking and replay together take **319.189 seconds**.
+- The sampled peak process-tree proportional memory is **10.33 GiB**
+  for compilation and **4.66 GiB** for the exported-proof checks.
+  These are sampled local measurements, not enforced production resource bounds.
+- The root has 103 files. The leanISA contract modules, challenge template, toolchain,
+  Lake manifest and Lake configuration match hosted contract `ca67ddc3`.
+
+The measured build, two exports and exported-proof checks sum to **584.298 seconds**;
+this is a sum of separately timed development checks, not an official verifier runtime.
+Evidence and profiling scripts are in the sibling `leanisa-1149-timeout-evidence` directory.
+The mandatory official Linux preflight still requires Landlock, unavailable on this host.
+The standalone development checks do not bypass that verifier or certify its sandbox.
+A new hosted run is required to confirm the revised submission fits its wall-clock limit.
 
 Executable research checks exercised accepted indices with both free-digit extremes, three
 complete signing runs, middle-block landings, incorrect layer totals, and modified memory

@@ -1,4 +1,4 @@
-import Submissions.UpperLeanIsa.LengthBoundsPart43
+import Submissions.UpperLeanIsa.LengthBounds
 
 namespace OptimalOTS.HLG3.LengthGate
 open LeanerVM.Parameters LeanerVM.Semantics

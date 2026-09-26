@@ -14,5 +14,7 @@ lake build Submissions.UpperLeanIsa.Solution
 ```
 
 `Solution.lean` is the competition entry point and `claim.txt` contains the score.
-Local Lean checking is complete. The hosted comparator and replay remain unverified because
-the official verifier's mandatory Landlock preflight rejects this host. No submission was published.
+The original PR #47 check timed out after compilation. This revision consolidates the
+length certificates and replaces the quadratic ordering check with adjacent checks.
+The clean build, exported-statement comparison, axiom checks and fresh kernel replay pass
+locally. The 1149-cycle program is unchanged; hosted timing remains to be confirmed.
