@@ -6,7 +6,7 @@ open scoped Classical
 noncomputable section
 
 abbrev ChainLoc (P : Params) := (k : Fin 42) × Fin (P.codec.len k - 1)
-abbrev Loc (P : Params) := ChainLoc P ⊕ Fin 3
+abbrev Loc (P : Params) := ChainLoc P ⊕ Fin 2
 abbrev Record (P : Params) := (Fin 42 → Word) × (Loc P → BitVec hashBits)
 variable {P : Params}
 
@@ -72,7 +72,7 @@ theorem queryLocation_chainInput (hP : P.Hyp) (t : Tops) (k : Fin 42)
     queryLocation P ⟨896, P.chainInput t k j x⟩ = some (.inl ⟨k,j⟩) :=
   queryLocation_raw hP ⟨.inl ⟨k,j⟩,t,x,0⟩
 
-theorem queryLocation_rootInput (hP : P.Hyp) (t : Tops) (r : Fin 3) (st : BitVec 256) :
+theorem queryLocation_rootInput (hP : P.Hyp) (t : Tops) (r : Fin 2) (st : BitVec 256) :
     queryLocation P ⟨896, P.rootInput t r st⟩ = some (.inr r) :=
   queryLocation_raw hP ⟨.inr r,t,0,st⟩
 
@@ -106,17 +106,17 @@ def Record.tops (ξ : Record P) : Tops := Layer.Params.topAt ξ.top
 
 def Record.rootState (ξ : Record P) : ℕ → BitVec 256
   | 0 => 0
-  | r+1 => if h : r < 3 then ξ.2 (.inr ⟨r,h⟩) else 0
+  | r+1 => if h : r < 2 then ξ.2 (.inr ⟨r,h⟩) else 0
 
 theorem Record.rootState_zero (ξ : Record P) : ξ.rootState 0 = 0 := rfl
 
-theorem Record.rootState_succ (ξ : Record P) (r : Fin 3) : ξ.rootState (r.val+1) = ξ.2 (.inr r) :=
+theorem Record.rootState_succ (ξ : Record P) (r : Fin 2) : ξ.rootState (r.val+1) = ξ.2 (.inr r) :=
   dif_pos r.isLt
 
-theorem Record.rootState_succ_lt (ξ : Record P) (r : ℕ) (hr : r < 3) :
+theorem Record.rootState_succ_lt (ξ : Record P) (r : ℕ) (hr : r < 2) :
     ξ.rootState (r+1) = ξ.2 (.inr ⟨r,hr⟩) := dif_pos hr
 
-theorem Record.rootState_succ_ge (ξ : Record P) (r : ℕ) (hr : ¬ r < 3) :
+theorem Record.rootState_succ_ge (ξ : Record P) (r : ℕ) (hr : ¬ r < 2) :
     ξ.rootState (r+1) = 0 := dif_neg hr
 
 def Record.rawInput (ξ : Record P) (a : Loc P) : RawInput P :=
@@ -133,10 +133,10 @@ def Record.query (ξ : Record P) (a : Loc P) : Query := ⟨896,ξ.input a⟩
 theorem Record.query_inl (ξ : Record P) (k : Fin 42) (j : Fin (P.codec.len k - 1)) :
     ξ.query (.inl ⟨k,j⟩) = ⟨896,P.chainInput ξ.tops k j (ξ.word k j)⟩ := rfl
 
-theorem Record.query_inr (ξ : Record P) (r : Fin 3) :
+theorem Record.query_inr (ξ : Record P) (r : Fin 2) :
     ξ.query (.inr r) = ⟨896,P.rootInput ξ.tops r (ξ.rootState r)⟩ := rfl
 
-def Record.pk (ξ : Record P) : PublicKey := (ξ.2 (.inr 2)).extractLsb' 0 128
+def Record.pk (ξ : Record P) : PublicKey := (ξ.2 (.inr 1)).extractLsb' 0 128
 
 def Record.table (ξ : Record P) (k : Fin 42) : List Word := (List.range (P.codec.len k)).map (ξ.word k)
 def Record.sk (ξ : Record P) : SecretKey := ⟨ξ.table,ξ.pk⟩

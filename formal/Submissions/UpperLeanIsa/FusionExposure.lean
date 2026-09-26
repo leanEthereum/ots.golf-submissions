@@ -126,7 +126,7 @@ def Hidden (d : Cut) : Loc P → Prop
 theorem hidden_inl (d : Cut) (k : Fin numChains) (j : Fin (P.codec.len k - 1)) :
     Hidden d (.inl ⟨k, j⟩) ↔ j.val < d k := Iff.rfl
 
-theorem not_hidden_inr (d : Cut) (r : Fin 3) : ¬ Hidden (P := P) d (.inr r) := fun h => h
+theorem not_hidden_inr (d : Cut) (r : Fin 2) : ¬ Hidden (P := P) d (.inr r) := fun h => h
 
 variable (P) in
 /-- The data visible at a cut. -/
@@ -220,7 +220,7 @@ theorem data_chain_eq (d : Cut) (ξ ζ : Record P)
 
 attribute [local semireducible] publicData in
 theorem data_root_eq (d : Cut) (ξ ζ : Record P)
-    (h : publicData d ξ = publicData d ζ) (r : Fin 3) :
+    (h : publicData d ξ = publicData d ζ) (r : Fin 2) :
     ξ.2 (.inr r) = ζ.2 (.inr r) :=
   Option.some.inj (congrArg (fun v : PublicData P => v.2 (.inr r)) h)
 
@@ -249,7 +249,7 @@ theorem data_rootState_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
   cases r with
   | zero => rfl
   | succ r =>
-    by_cases hr : r < 3
+    by_cases hr : r < 2
     · rw [Record.rootState_succ_lt _ r hr, Record.rootState_succ_lt _ r hr,
         data_root_eq d ξ ζ h ⟨r, hr⟩]
     · rw [Record.rootState_succ_ge _ r hr, Record.rootState_succ_ge _ r hr]
@@ -257,7 +257,7 @@ theorem data_rootState_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
 theorem data_pk_eq (d : Cut) (ξ ζ : Record P) (h : publicData d ξ = publicData d ζ) :
     ξ.pk = ζ.pk := by
   unfold Record.pk
-  rw [data_root_eq d ξ ζ h 2]
+  rw [data_root_eq d ξ ζ h 1]
 
 theorem exposed_query_eq {d : Cut} (hd : ValidCut P d) (ξ ζ : Record P)
     (h : publicData d ξ = publicData d ζ) (a : Loc P) (ha : ¬ Hidden d a) :

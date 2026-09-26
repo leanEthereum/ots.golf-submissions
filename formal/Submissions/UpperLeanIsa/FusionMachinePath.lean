@@ -3,7 +3,7 @@ import Submissions.UpperLeanIsa.FusionMachineRun
 /-!
 # Forced paths and the landing exit
 
-Every completing walk follows the 25 straight prologue instructions, the free dispatch,
+Every completing walk follows the 24 straight prologue instructions, the free dispatch,
 then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `j`. The block relations give
 GP_u = initialProduct(86,s) * C_(sum of preceding group costs), so the exit target is
 GP_13 = g ^ seedExp t with t = s + Σ costs. The exit table (`seed_table`, a hash-free identity)
@@ -106,7 +106,7 @@ theorem cinstrAt_proList (T : Tab) {t : ℕ} (ht : t < proList.length) :
   unfold prologue
   rw [if_pos (by rw [proList_length] at ht; exact ht), List.getD_eq_getElem _ _ ht]
 
-theorem cinstrAt_25 (T : Tab) : cinstrAt T 25 = .dispatch 0 := by
+theorem cinstrAt_24 (T : Tab) : cinstrAt T 24 = .dispatch 0 := by
   rw [cinstrAt_pro T (by omega)]; unfold prologue; rw [if_neg (by omega), if_pos rfl]
 
 theorem pro_mem_init : CInstr.init ∈ proList := by unfold proList; simp
@@ -186,7 +186,7 @@ structure PathFacts (T : Tab) (B : BlakeRel) (v : ℕ → E) (xs : ℕ → ℕ) 
 
 /-- The dispatch slot of unit `f` on the path of `xs` (for `f = 14`, the exit). -/
 def ctlSlot (T : Tab) (xs : ℕ → ℕ) (f : ℕ) : ℕ :=
-  if f = 0 then 25 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
+  if f = 0 then 24 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
     (bodyF T (frU (xs 0) (f - 1)) (xs (f - 1))).length
 
 theorem ctlSlot_succ (T : Tab) (xs : ℕ → ℕ) (f : ℕ) :
@@ -198,7 +198,7 @@ theorem cinstrAt_ctlSlot (hT : T.Hyp) {xs : ℕ → ℕ} {f : ℕ} (hf : f ≤ 1
     cinstrAt T (ctlSlot T xs f) = ctlF' (xs 0) f ∧ ctlSlot T xs f < sentinel := by
   rcases Nat.eq_zero_or_pos f with rfl | hf0
   · refine ⟨?_, by unfold ctlSlot sentinel; simp⟩
-    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_25 T
+    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_24 T
   · obtain ⟨j, rfl⟩ : ∃ j, f = j + 1 := ⟨f - 1, by omega⟩
     rw [ctlSlot_succ]
     have hx : xs j < Wf (frU (xs 0) j) := by rw [Wf_frU _ (by omega)]; exact hV j (by omega)
@@ -273,11 +273,11 @@ end Units
 
 /-- Steps of the whole path. -/
 def totalSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  26 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
+  25 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
 
 /-- Cycles of the whole path. -/
 def totalCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  35 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
+  34 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
 
 /-! ### The landing product -/
 
@@ -566,7 +566,7 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
         x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelB B (Lx L)))
     {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow 0, 1⟩)) :
     Pinned (Lx L) := by
-  have hp := rel_prefix Sm B hst 25 0 n c
+  have hp := rel_prefix Sm B hst 24 0 n c
     (fun i hi => by
       rw [cinstrAt_proList T (by rw [proList_length]; exact hi)]
       exact proList_straight _ (List.getElem_mem _))

@@ -101,7 +101,7 @@ theorem concrete_ordered : params.locationOrder.Pairwise Earlier := by
   apply List.isChain_iff_pairwise.mp
   decide +kernel
 
-theorem concrete_location_count : params.locationOrder.length = 628 := by decide +kernel
+theorem concrete_location_count : params.locationOrder.length = 627 := by decide +kernel
 
 /-- Coherence of every key-generation output for any fixed oracle, with no good-event assumption. -/
 theorem concrete_coherent (f : HashTable) (seeds : Fin 42 → Word) :

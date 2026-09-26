@@ -240,9 +240,9 @@ theorem body_lcost {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (
   omega
 
 
-theorem proList_length : proList.length = 25 := by unfold proList; rfl
+theorem proList_length : proList.length = 24 := by unfold proList; rfl
 
-theorem proList_lcost : lcost proList = 34 := by unfold proList lcost; rfl
+theorem proList_lcost : lcost proList = 33 := by unfold proList lcost; rfl
 
 theorem cinstrAt_sentinel (T : Tab) : cinstrAt T sentinel = .pad := by
   unfold cinstrAt
@@ -264,14 +264,14 @@ def canonicalSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
     ∑ u ∈ Finset.range 13, ((body T u (xs (u+1)) false).length + (ctlF (u+1)).steps)
 
 theorem sum_ordinary_bodies : (∑ u ∈ Finset.range 13, (gcu u - 2)) = 73 := by decide
-theorem sum_roots : (∑ u ∈ Finset.range 13, hm u) = 3 := by decide
+theorem sum_roots : (∑ u ∈ Finset.range 13, hm u) = 2 := by decide
 theorem sum_controls : (∑ u ∈ Finset.range 13, (ctlF (u+1)).cost) = 25 := by decide
 theorem sum_control_steps : (∑ u ∈ Finset.range 13, (ctlF (u+1)).steps) = 25 := by decide
 
 theorem canonical_cost (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
     (hx : ∀ u < 13, xs (u+1) < VF u)
     (hlayer : xs 0 + ∑ u ∈ Finset.range 13, cost T u (xs (u+1)) = 86) :
-    canonicalCost T xs + 120 = 1149 := by
+    canonicalCost T xs + 120 = 1138 := by
   have hb : ∀ u ∈ Finset.range 13, lcost (body T u (xs (u+1)) false) =
       gcu u - 2 + 10 * cost T u (xs (u+1)) + 10 * hm u := by
     intro u hu
@@ -287,7 +287,7 @@ theorem canonical_cost (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
 theorem canonical_steps (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
     (hx : ∀ u < 13, xs (u+1) < VF u)
     (hlayer : xs 0 + ∑ u ∈ Finset.range 13, cost T u (xs (u+1)) = 86) :
-    canonicalSteps T xs = 219 := by
+    canonicalSteps T xs = 217 := by
   have hb : ∀ u ∈ Finset.range 13, (body T u (xs (u+1)) false).length =
       gcu u - 2 + cost T u (xs (u+1)) + hm u :=
     fun u hu => body_len hT (Finset.mem_range.mp hu) (hx u (Finset.mem_range.mp hu))

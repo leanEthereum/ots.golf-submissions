@@ -22,7 +22,7 @@ theorem reconstruction_spec (P : Fusion.Params) (f : HashTable) (I : Index) (bit
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
     let t' := P.reconFromValue f I bits (k::l) t
-    have hdep : ∀ u : Fin 6, owner k = some u → ∀ d ∈ children u, t d = t' d := by
+    have hdep : ∀ u : Fin 7, owner k = some u → ∀ d ∈ children u, t d = t' d := by
       intro u hu d hd
       apply (P.reconFromValue_preserves f I bits (k::l) t d ?_).symm
       intro hmem
@@ -152,7 +152,7 @@ theorem hv_c {c : ℕ} (h1 : 47 ≤ c) (h2 : c < 2 ^ 16) {x : E}
 
 theorem hv_one : hv P T f pk m bits oneCell = oneV := hv_c (by decide) (by decide) (hc_one ..)
 theorem hv_g : hv P T f pk m bits gCell = gV := hv_c (by decide) (by decide) (hc_g ..)
-theorem hv_cc {c : ℕ} (hc : c ≤ 22) : hv P T f pk m bits (cCell c) = cV c := by
+theorem hv_cc {c : ℕ} (hc : c ≤ 21) : hv P T f pk m bits (cCell c) = cV c := by
   rcases Nat.eq_zero_or_pos c with rfl | h0
   · rw [cV_zero]; exact hv_one
   · exact hv_c (by unfold cCell; split_ifs <;> omega)
@@ -210,10 +210,10 @@ theorem hv_xh {k : ℕ} (hk : k<42) (_hk0 : k≠0) (_he : ¬ exported k) :
     hv P T f pk m bits (xhCell k) = cellOfBits (topOf T bits (y0F P f pk m bits) (AF P T f pk m bits) k) ∧
       hv P T f pk m bits (junkCell k (xhCell k)) = hiOf T (y0F P f pk m bits) (AF P T f pk m bits) k := hv_top hk trivial
 
-theorem hv_st {r : ℕ} (hr : r<3) :
+theorem hv_st {r : ℕ} (hr : r<2) :
     hv P T f pk m bits (stCell r) = loC (RAF P T f pk m bits r) ∧
       hv P T f pk m bits (stCell r+1) = hiC (RAF P T f pk m bits r) := by
-  have hh : ∀ r<3, 256 ≤ stCell r ∧ stCell r+1<346 := by decide
+  have hh : ∀ r<2, 256 ≤ stCell r ∧ stCell r+1<346 := by decide
   have hb := hh r hr
   obtain ⟨e1,e2⟩ := hc_st T bits (y0F P f pk m bits) (AF P T f pk m bits) (RAF P T f pk m bits) hr
   exact ⟨hv_c (by omega) (by omega) e1,hv_c (by omega) (by omega) e2⟩

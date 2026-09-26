@@ -2,7 +2,7 @@ import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.FusionMachineLayout
 import Submissions.UpperLeanIsa.LengthGate
 
-/-! The 1149-cycle bytecode and its local instruction algebra. The complete machine
+/-! The 1138-cycle bytecode and its local instruction algebra. The complete machine
 certificate is assembled in `FusionMachine.lean`. -/
 
 namespace OptimalOTS.HLFusion
@@ -92,14 +92,14 @@ def topCell (k : ℕ) : ℕ := ([292, 281, 282, 294, 296, 298, 300, 289, 302, 30
 def xhCell (k : ℕ) : ℕ := topCell k
 
 /-- The root state pair after call `r`. -/
-def stCell (r : ℕ) : ℕ := [286,290,344].getD r 0
+def stCell (r : ℕ) : ℕ := [286,290].getD r 0
 
 /-- The intermediate pair after step `t` of chain `k`. -/
 def xcCell (k t : ℕ) : ℕ := xcBase k + 2 * t
 /-- The cell the root reads chain `k`'s top from, when its digit is `d`. -/
 def rtopCell (k d : ℕ) : ℕ := if d = 0 ∧ ¬ exported k then wCell k else topCell k
-/-- The cv pairs: tops `(1,2)`, then top 26 and root 0, then top 7 and root 1. -/
-def rootCv (r : ℕ) : ℕ := [281,285,289].getD r 0
+/-- The cv pairs: tops `(1,2)`, then top 26 and root 0. -/
+def rootCv (r : ℕ) : ℕ := [281,285].getD r 0
 
 /-- Offset selecting the high half at the final step. -/
 def topOff (k : ℕ) : ℕ := if k ∈ [1, 7, 12, 14, 21, 22, 26, 33, 35] then 1 else 0
@@ -301,8 +301,13 @@ def copy (a b : ℕ) : CInstr := .mul a oneCell b
 /-- The tag position of step `t` of the `d` steps of chain `k`. -/
 def tpos (k d t : ℕ) : ℕ := OFFT k + (LEN k - 1 - d + t)
 
+/-- Chains whose final step fuses five dependency tops. -/
 def binds (k : ℕ) : Prop := k ∈ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16, 19, 20, 21, 24, 25, 26]
 instance (k : ℕ) : Decidable (binds k) := by unfold binds; infer_instance
+
+/-- Chains whose final step carries top 7 in place of the low tag digit. -/
+def light (k : ℕ) : Prop := k ∈ [39, 40, 41]
+instance (k : ℕ) : Decidable (light k) := by unfold light; infer_instance
 
 def depTop (k i : ℕ) : ℕ :=
   ([[14, 15, 16, 19, 20], [], [], [], [], [21, 24, 25, 31, 34], [35, 36, 39, 40, 41], [12, 13, 0, 17, 18], [22, 23, 27, 28, 32], [33, 37, 38, 29, 30], [], [], []].getD (unitOf k) []).getD i 0
@@ -311,32 +316,35 @@ def depCv (k : ℕ) : ℕ := ([269, 0, 0, 0, 0, 273, 277, 257, 261, 265, 0, 0, 0
 
 def fusedMdCell (k : ℕ) : ℕ := ([0, 61, 62, 64, 65, 3, 213, 63, 67, 68, 69, 70, 0, 0, 52, 53, 54, 0, 0, 55, 56, 57, 0, 0, 58, 59, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).getD k 0
 
-def rootMdCell (r : ℕ) : ℕ := [51,71,72].getD r 0
+def rootMdCell (r : ℕ) : ℕ := [51,71].getD r 0
 
 /-- Step `t` of the `d` steps of chain `k` (the last writes `dst`): position `LEN k − 1 − d + t`,
-tag cells `C` of the base-9 digits of its tag position, cv pair `(ONE, g)`, metadata `ONE`. -/
+tag cells `C` of the base-9 digits of its tag position, cv pair `(ONE, g)`, metadata `ONE`.
+A light final step replaces the low digit by top 7 and uses the cv pair `(C_1, C_2)`. -/
 def chainOp (k d t dst : ℕ) : CInstr :=
   let x := if t = 0 then wCell k else xcCell k (t-1)
   let out := if t+1 = d then dst - topOff k else xcCell k t
   if t+1 = d ∧ binds k then
     .blake x (topCell (depTop k 2)) (topCell (depTop k 3)) (topCell (depTop k 4))
       (depCv k) out (fusedMdCell k)
+  else if t+1 = d ∧ light k then
+    .blake x (topCell 7) (cCell (tpos k d t / 9 % 9)) (cCell (tpos k d t / 81)) (cCell 1) out oneCell
   else .blake x (cCell (tpos k d t % 9)) (cCell (tpos k d t / 9 % 9))
     (cCell (tpos k d t / 81)) oneCell out oneCell
 
 /-- The `d` steps of chain `k`. -/
 def chainOps (k d dst : ℕ) : List CInstr := (List.range d).map (fun t => chainOp k d t dst)
 
-/-- The straight part of the prologue (slots `0 … 24`). -/
+/-- The straight part of the prologue (slots `0 … 23`). -/
 def proList : List CInstr :=
   [.init,.setc gCell gV] ++
     ((List.range 15).map (fun c => .setc (cCell (c+1)) (cV (c+1)))) ++
-    ([17,18,19,20,21,22].map (fun c => .setc (cCell c) (cV c))) ++
+    ([17,18,19,20,21].map (fun c => .setc (cCell c) (cV c))) ++
     [.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell,.mul (hCell 0) gCell (h1Cell 0)]
 
-/-- Slots `0 … 26`: the straight prologue, the free dispatch at 25, and one pad. -/
+/-- Slots `0 … 26`: the straight prologue, the free dispatch at 24, and two pads. -/
 def prologue (s : ℕ) : CInstr :=
-  if s < 25 then proList.getD s .pad else if s = 25 then .dispatch 0 else .pad
+  if s < 24 then proList.getD s .pad else if s = 24 then .dispatch 0 else .pad
 
 /-- The control op after the block of group `f - 1`: the next dispatch, or the exit. -/
 def ctlF (f : ℕ) : CInstr := if f < 13 then .dispatch (f + 1) else .exit
@@ -370,17 +378,16 @@ def segs (T : Tab) (u v : ℕ) : List CInstr := (List.range (gk u)).flatMap (seg
 def zexp (T : Tab) (u v : ℕ) : ℕ :=
   ((List.range (gk u)).map (fun i => if copied u i ∧ T u v i = 0 then 1 else 0)).sum
 
-/-- Root calls 0, 1, and 2 execute in groups 5, 6, and 0, respectively. -/
-def hcall (u : ℕ) : ℕ := if u = 5 then 0 else if u = 6 then 1 else 2
+/-- Root calls 0 and 1 execute in groups 5 and 6, respectively. -/
+def hcall (u : ℕ) : ℕ := if u = 5 then 0 else 1
 
 /-- The message cell `j < 4` of a home root call. The legacy variant argument is unused. -/
 def rt (T : Tab) (u v : ℕ) (_z : Bool) (j : ℕ) : ℕ :=
-  if u = 0 then oneCell else if u = 5 then rtopCell (3+j) (T u v j)
-  else rtopCell (8+j) (T u v j)
+  if u = 5 then rtopCell (3+j) (T u v j) else rtopCell (8+j) (T u v j)
 
 /-- The root call of a home block, using its fixed domain-separated metadata cell. -/
 def rootIns (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=
-  if u = 0 ∨ u = 5 ∨ u = 6 then
+  if u = 5 ∨ u = 6 then
     [.blake (rt T u v z 0) (rt T u v z 1) (rt T u v z 2) (rt T u v z 3)
       (rootCv (hcall u)) (stCell (hcall u)) (rootMdCell (hcall u))]
   else []
@@ -390,7 +397,7 @@ def npad (T : Tab) (u v : ℕ) : ℕ := gcu u - 4 - (tie u v).length - zexp T u 
 
 /-- The last straight op: the next group's `MUL(H, g, H')`, or the public-key copy. -/
 def nextOp (u : ℕ) : CInstr :=
-  if u < 12 then .mul (hCell (u+2)) gCell (h1Cell (u+2)) else copy (stCell 2) pkCell
+  if u < 12 then .mul (hCell (u+2)) gCell (h1Cell (u+2)) else copy (stCell 1) pkCell
 
 /-- The product op of the block of `v` in group `u`. -/
 def prodOp (T : Tab) (u v : ℕ) : CInstr := .mul (gpCell u) (cCell (cost T u v)) (gpCell (u + 1))

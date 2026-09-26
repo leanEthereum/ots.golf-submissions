@@ -103,6 +103,7 @@ theorem chainOp_bounded {k d t dst : ℕ} (hk : k < 42) (ht : t < d) (hd : d ≤
   have b2 := topCell_lt (hdps.2.2 2 (by decide))
   have b3 := topCell_lt (hdps.2.2 3 (by decide))
   have b4 := topCell_lt (hdps.2.2 4 (by decide))
+  have b7 := topCell_lt (k := 7) (by decide)
   have hp : tpos k d t / 81 < 64 := by
     have := OFFT_bound k hk; unfold tpos; omega
   unfold chainOp
@@ -116,11 +117,10 @@ theorem rtopCell_lt {k d : ℕ} (hk : k < 42) : rtopCell k d < 346 := by
 theorem rt_lt (T : Tab) {u v : ℕ} {z : Bool} {j : ℕ} (_hu : u < 13) (hj : j < 4) : rt T u v z j < 346 := by
   unfold rt
   split_ifs
-  · decide
   · exact rtopCell_lt (by omega)
   · exact rtopCell_lt (by omega)
 
-theorem root_cells : ∀ u < 13, rootCv (hcall u)+1 < 346 ∧ stCell (hcall u)+1 < 346 ∧ rootMdCell (hcall u) < 73 := by decide
+theorem root_cells : ∀ u < 13, rootCv (hcall u)+1 < 346 ∧ stCell (hcall u)+1 < 346 ∧ rootMdCell (hcall u) < 72 := by decide
 
 theorem rootIns_bounded (T : Tab) {u v : ℕ} {z : Bool} (hu : u < 13) :
     ∀ x ∈ rootIns T u v z, x.Bounded := by
@@ -167,7 +167,7 @@ theorem body_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13)
   · exact rootIns_bounded T hu x h
   · rw [h.2]; simp only [NOP, CInstr.Bounded, oneCell]; omega
   · subst h; unfold nextOp; split_ifs <;> simp only [CInstr.Bounded, copy, hCell, gCell, h1Cell,
-      show stCell 2 = 344 from rfl, oneCell, pkCell] <;> (try split_ifs) <;> omega
+      show stCell 1 = 290 from rfl, oneCell, pkCell] <;> (try split_ifs) <;> omega
 
 theorem fbody_bounded (s : ℕ) (hs : s < 64) : ∀ x ∈ fbody s, x.Bounded := by
   intro x hx
