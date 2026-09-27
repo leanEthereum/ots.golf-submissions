@@ -91,6 +91,12 @@ four five-child packets and four four-child packets can fit its domain constants
 C1..C14; its first layer84 screen also failed (best-loss normalized slope about1.806).
 That hybrid is only a research model and has no Lean scheme or machine certificate.
 
+`TierKnee.lean` proves the largest legal integer knee for a positive collision slope,
+and proves that it never increases the quadratic budget term. It is a standalone
+research helper; the exported 1124 certificate still uses its original schedule.
+Further screens with heterogeneous aliases, wider cost bands, and conditional binary
+projections did not produce a passing 1110 candidate. These screens are not proofs.
+
 Do not omit zero-digit copies or the hint-times-g checks when estimating a new machine.
 The latter prevent jumps into block interiors. Removing zero-binding exclusions leaves
 children unauthenticated. Weighted-rank ideas require an explicit implementation and a
