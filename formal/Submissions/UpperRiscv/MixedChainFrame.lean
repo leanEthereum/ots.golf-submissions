@@ -9,28 +9,29 @@ open Riscv2Program
 set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 
-def CtxReg (r : Reg) : Prop := r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x13
+def CtxReg (r : Reg) : Prop := r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x13 ∨ r = .x6
 
-theorem Ctx.frame {s t : MachineState} {index : RawIdx} {pk : PublicKey} (ctx : Ctx s index pk)
+theorem Ctx.frame {s t : MachineState} {index : RawIdx} {pk : PublicKey} {a : ℕ} (ctx : Ctx s index pk a)
     (regs : ∀ r, CtxReg r → t.getReg r = s.getReg r) (mem : t.mem = s.mem)
-    (code : t.code = s.code) : Ctx t index pk := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ctx.code.code_eq code⟩
+    (code : t.code = s.code) : Ctx t index pk a := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ctx.short, ?_, ctx.code.code_eq code⟩
   · rw [regs .x30 (by simp [CtxReg])]; exact ctx.pk0
   · rw [regs .x31 (by simp [CtxReg])]; exact ctx.pk1
   · rw [regs .x5 (by simp [CtxReg])]; exact ctx.call
   · intro q
     simpa only [MachineState.getHalfword, MachineState.getMem, mem] using ctx.lanes q
   · rw [regs .x13 (by simp [CtxReg])]; exact ctx.sigLen
+  · rw [regs .x6 (by simp [CtxReg])]; exact ctx.bound
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
 theorem HashInv.frame {s t : MachineState} {x : graph.Assignment} {k : Fin 32} {base : ℕ}
-    (inv : HashInv index wire pk s x k base) (next : ℕ) (hp : t.getReg .x10 = W next)
+    (inv : HashInv index wire pk a s x k base) (next : ℕ) (hp : t.getReg .x10 = W next)
     (hb : 32 ≤ next ∧ next+24 ≤ 0x78000000)
     (regs : ∀ r, r ≠ .x10 → r ≠ .x28 → t.getReg r = s.getReg r)
-    (mem : t.mem = s.mem) (code : t.code = s.code) : HashInv index wire pk t x k next := by
+    (mem : t.mem = s.mem) (code : t.code = s.code) : HashInv index wire pk a t x k next := by
   refine ⟨inv.ctx.frame (fun r hr => ?_) mem code, hp, hb, ?_, ?_, ?_, ?_⟩
-  · rcases hr with rfl | rfl | rfl | rfl <;> exact regs _ (by decide) (by decide)
+  · rcases hr with rfl | rfl | rfl | rfl | rfl <;> exact regs _ (by decide) (by decide)
   · rw [regs .x11 (by decide) (by decide)]; exact inv.length
   · rw [regs .x12 (by decide) (by decide)]; exact inv.out
   · intro j hj; exact memBits_of_mem_eq mem (inv.payload j hj)
@@ -44,9 +45,10 @@ theorem holdsAt_frame {s t : MachineState} {x : graph.Assignment} {k : Fin 32} {
 /-- Hash-input width in `x11` at the boundary before chain `k`: the previous chain's width. -/
 def prevBits (k : ℕ) : ℕ := if k ≤ 16 then 144 else 192
 
+variable (a) in
 /-- State at a boundary between complete chains. -/
 structure ChainsInv (s : MachineState) (x : graph.Assignment) (k : ℕ) : Prop where
-  ctx : Ctx s index pk
+  ctx : Ctx s index pk a
   input : s.getReg .x10 = W (prevInput k)
   out : 1 ≤ k → s.getReg .x12 = W (outAddr (k-1))
   length : s.getReg .x11 = W (prevBits k)
@@ -61,9 +63,9 @@ theorem rootSlice_of_memAnswer {s : MachineState} (k : Fin 32) {y : BitVec 256}
   exact h
 
 theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Fin 32}
-    (inv : HashInv index wire pk s x k (work k))
+    (inv : HashInv index wire pk a s x k (work k))
     (answer : MemBits s (W (outAddr k)) (tops x k)) :
-    ChainsInv index wire pk s x (k.val+1) := by
+    ChainsInv index wire pk a s x (k.val+1) := by
   refine ⟨inv.ctx, ?_, ?_, ?_, inv.payload, ?_⟩
   · rw [inv.input]
     unfold prevInput
@@ -81,7 +83,7 @@ theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Fin 32}
 theorem prevInput_32 : prevInput 32 = slot 31 := by decide +kernel
 
 theorem final_root {s : MachineState} {x : graph.Assignment}
-    (inv : ChainsInv index wire pk s x 32) : RootInv index pk s x := by
+    (inv : ChainsInv index wire pk a s x 32) : RootInv index pk a s x := by
   refine ⟨inv.ctx, ?_, inv.out (by decide), completed_root s (tops x) inv.done⟩
   rw [inv.input, prevInput_32]
 

@@ -7,8 +7,8 @@ The paper scheme of `OptimalOTS.Dag` accepts an index when it is below `numCuts`
 scheme of this root reads its index as `pack` of the 256-bit answer to `H(message ‖ nonce)` (the
 low bits of the first 28 bytes, packed) and accepts it when it lies in `validSet` (its 28 digits
 sum to `target`), so that the machine reads the chain positions directly from the answer bytes.
-Everything else (graph, key generation, signing loop, verification, strong-forgery experiment)
-is the paper's definition verbatim.
+Everything else (graph, key generation, signing loop, verification) is the paper's definition
+verbatim; the strong-forgery experiment is the contract's, on signature bits (`Forest.wireScheme`).
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -190,22 +190,6 @@ def verify (pk : PublicKey) (m : Message) (σ : Signature) : OracleComp Spec Boo
 
 /-- Verification cost at a valid index and payload length: the index query plus reconstruction. -/
 def verifyCost (i : Idx) : ℕ := idxCost + S.graph.reconstructCost (S.sets i)
-
-/-- Strong-forgery experiment. The attacker wins when its pair is accepted and differs from the
-signed pair; after signing failure, any accepted pair wins. All parties share one oracle table. -/
-def experiment (A : Adversary) : OracleComp Spec Bool := do
-  let (pk, sk) ← S.keygen
-  let (m₁, st) ← A.choose pk
-  let σ₁ ← S.sign sk m₁
-  let (m₂, σ₂) ← A.forge st σ₁
-  let ok ← S.verify pk m₂ σ₂
-  return ok && decide (σ₁.map (fun s => (m₁, s)) ≠ some (m₂, σ₂))
-
-/-- Strong unforgeability: for every attacker and pathwise budget `B` for the entire experiment,
-the probability of an accepted fresh pair is strictly below `B / 2 ^ securityBits`. -/
-def Secure : Prop :=
-  ∀ (A : Adversary) (B : ℕ), CostAtMost (S.experiment A) B →
-    probTrue (S.experiment A) < (B : ℝ≥0∞) / 2 ^ securityBits
 
 end GScheme
 

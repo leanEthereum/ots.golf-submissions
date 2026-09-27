@@ -7,7 +7,7 @@ import Submissions.UpperRiscv.GoodRec
 For every adversary `A` whose experiment costs at most `B ≤ 2 ^ 127` on every path,
 
 ```
-probTrue (GScheme.experiment forestScheme A) ≤ 2 ε (B - 1036) + 2 δ,  ε = 2 ^ (-128),
+probTrue (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) ≤ 2 ε (B - 1036) + 2 δ,  ε = 2 ^ (-128),
 ```
 
 where `δ = 2 · 1025² · 2 ^ (-144)` bounds the weight of the bad records (`GoodRec.lean`).
@@ -43,10 +43,10 @@ namespace Forest
 
 open Name
 
-attribute [local irreducible] fiberA graph CostAtMost GScheme.experiment rest rest₂ signIdx GScheme.keygen GScheme.sign
+attribute [local irreducible] fiberA graph CostAtMost OracleAlgorithm.experiment rest rest₂ signIdx GScheme.keygen GScheme.sign
 attribute [local irreducible] validSet numValid
 
-variable (A : Adversary)
+variable (A : WireGame)
 /-! ## Stage A -/
 
 /-- The quantity bounded after the first stage. -/
@@ -265,7 +265,7 @@ theorem E_run_keygen_forest
 /-- The experiment as a uniform average over records of the continuation after key generation,
 up to the records whose keygen points collide. -/
 theorem E_run_experiment (g' : Bool × Cache → ℝ≥0∞) (hg : ∀ a, g' a ≤ 1) :
-    E (run (GScheme.experiment forestScheme A) ∅) g' ≤
+    E (run (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) ∅) g' ≤
       ∑ ξ : Rec, w * (E (run (rest A (pkOf ξ, graph.evalRec ξ)) (kc ξ)) g' + ind (¬ DistinctRec ξ)) := by
   rw [experiment_eq]
   have h1 := run_bind forestScheme.keygen (rest A) ∅
@@ -273,7 +273,7 @@ theorem E_run_experiment (g' : Bool × Cache → ℝ≥0∞) (hg : ∀ a, g' a �
   exact E_run_keygen_forest _ fun a => E_le_one _ hg
 
 /-- The budget after key generation, for the concrete scheme. -/
-theorem costAtMost_rest_forest {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) :
+theorem costAtMost_rest_forest {B : ℕ} (hB : CostAtMost (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) B) :
     1036 ≤ B ∧ ∀ ξ : Rec, CostAtMost (rest A (pkOf ξ, graph.evalRec ξ)) (B - 1036) := by
   rw [experiment_eq] at hB
   obtain ⟨h1, h2⟩ := costAtMost_keygen_bind forestScheme (rest A) hB
@@ -284,7 +284,7 @@ theorem costAtMost_rest_forest {B : ℕ} (hB : CostAtMost (GScheme.experiment fo
         (B - graph.keygenCost) := h2 ξ
     rwa [publicKey_eq_pkOf, graph_keygenCost] at h2'
 
-theorem keygen_le {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) : 1036 ≤ B :=
+theorem keygen_le {B : ℕ} (hB : CostAtMost (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) B) : 1036 ≤ B :=
   (costAtMost_rest_forest A hB).1
 
 theorem sum_w_ind_not_goodRec_le : ∑ ξ : Rec, w * ind (¬ GoodRec ξ) ≤ δ := by
@@ -297,8 +297,8 @@ theorem sum_w_ind_not_distinctRec_le : ∑ ξ : Rec, w * ind (¬ DistinctRec ξ)
   unfold ind
   split_ifs <;> simp
 
-theorem main_bound {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) (hB' : B ≤ 2 ^ 127) :
-    probTrue (GScheme.experiment forestScheme A) ≤ κ * ((B - 1036 : ℕ) : ℝ≥0∞) + 2 * δ := by
+theorem main_bound {B : ℕ} (hB : CostAtMost (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) B) (hB' : B ≤ 2 ^ 127) :
+    probTrue (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) ≤ κ * ((B - 1036 : ℕ) : ℝ≥0∞) + 2 * δ := by
   obtain ⟨h1036, hrest⟩ := costAtMost_rest_forest A hB
   rw [probTrue_eq]
   refine (E_run_experiment A g g_le_one).trans ?_

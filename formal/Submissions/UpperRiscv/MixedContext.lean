@@ -6,7 +6,7 @@ open Riscv2Program (W Code laneBase hashBase)
 open OptimalOTS.Dag
 
 abbrev target : ℕ := OptimalOTS.target
-def blockZero : ℕ := 4096 + 4*39
+def blockZero : ℕ := 4096 + 4*35
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q
@@ -37,14 +37,17 @@ theorem dispatch_le (index : RawIdx) (q : ℕ) : dispatch index q ≤ 15420 := b
   have := coarseDigit_lt index q
   omega
 
-/-- Register and dispatch facts shared by the wide and narrow chain phases. -/
-structure Ctx (s : MachineState) (index : RawIdx) (pk : PublicKey) : Prop where
+/-- Register and dispatch facts shared by the wide and narrow chain phases. `a` is the loader's
+length register `a3 = min |σ| 5505`, compared against the bound in `x6` by the decision. -/
+structure Ctx (s : MachineState) (index : RawIdx) (pk : PublicKey) (a : ℕ) : Prop where
   pk0 : s.getReg .x30 = pk.extractLsb' 0 64
   pk1 : s.getReg .x31 = pk.extractLsb' 64 64
   call : s.getReg .x5 = Riscv.hashCall
   lanes : ∀ q : Fin 16,
     (s.getHalfword (W (laneAddr q))).toNat = baseLane q - dispatch index q
-  sigLen : s.getReg .x13 = W 5504
+  sigLen : s.getReg .x13 = W a
+  short : a ≤ 5505
+  bound : s.getReg .x6 = W 5505
   code : Riscv.CodeAt s (W 4096) verifier
 
 end OptimalOTS.RiscvMixedProgram

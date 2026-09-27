@@ -10,7 +10,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
 def entryNodes (k : Fin 32) : List Name := if expands k then readNodes index k else []
 def tableNodes (k : Fin 32) : List Name := if expands k then suffixNodes index k else chainNodes k
@@ -23,8 +23,9 @@ theorem chain_entry_split (k : Fin 32) : chainNodes k = entryNodes index k ++ ta
   · exact chain_split_first index k
   · rfl
 
+variable (a) in
 structure Prepared (s : MachineState) (x : graph.Assignment) (k : Fin 32) : Prop where
-  inv : HashInv index wire pk s x k (work k)
+  inv : HashInv index wire pk a s x k (work k)
   ready : if expands k then HoldsAt s x k (RiscvUpperForest.ForestVerifier.pos index k+1)
     else MemBits s (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k)))
 
@@ -33,10 +34,10 @@ theorem enter_refines (k : Fin 32) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (hlen : wire.length = 5376)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      Prepared index wire pk u z k → Riscv.CodeAt u u.pc tail →
+      Prepared index wire pk a u z k → Riscv.CodeAt u u.pc tail →
       ∀ left, rest ≤ left → Riscv.Refines left u (K (z,entryCursor k)) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (ctx : Ctx s index pk) (input : s.getReg .x10 = W (prevInput k))
+    (ctx : Ctx s index pk a) (input : s.getReg .x10 = W (prevInput k))
     (len : s.getReg .x11 = W (chainBits k)) (payload : PayloadFrom s wire k)
     (done : Completed s (tops x) k)
     (located : Riscv.CodeAt s s.pc (enter k (prevInput k) ++ tail))
@@ -57,7 +58,7 @@ theorem enter_refines (k : Fin 32) (tail : Code)
     intro v z invV heldV locatedV left hleft
     apply redirect_refines index wire pk k (wireSlot k) v z tail invV locatedV _ c left (by omega)
     intro w invW memW locatedW
-    have readyW : Prepared index wire pk w z k := by
+    have readyW : Prepared index wire pk a w z k := by
       refine ⟨(by rw [work_of_expands hn]; exact invW), ?_⟩
       rw [if_pos hn]
       exact holdsAt_frame memW heldV
@@ -70,7 +71,7 @@ theorem enter_refines (k : Fin 32) (tail : Code)
     intro u invU heldU locatedU
     have he : wireSlot k = work k := (work_of_not_expands hn).symm
     rw [he] at invU heldU
-    have prep : Prepared index wire pk u x k := ⟨invU, by rw [if_neg hn]; exact heldU⟩
+    have prep : Prepared index wire pk a u x k := ⟨invU, by rw [if_neg hn]; exact heldU⟩
     have h := continuation u x prep locatedU (fuel-2) (by omega)
     simpa only [Bool.false_eq_true, ↓reduceIte, entryCursor, hn, if_false, Nat.add_zero] using h
 
@@ -79,10 +80,10 @@ theorem table_refines (k : Fin 32) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (hlen : wire.length = 5376)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      ChainsInv index wire pk u z (k.val+1) → Riscv.CodeAt u u.pc tail →
+      ChainsInv index wire pk a u z (k.val+1) → Riscv.CodeAt u u.pc tail →
       ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursor k+chainBits k)) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (prep : Prepared index wire pk s x k)
+    (prep : Prepared index wire pk a s x k)
     (located : Riscv.CodeAt s s.pc (List.replicate (remaining index k) .ECALL ++ tail))
     (bound : remaining index k+rest ≤ fuel) :
     Riscv.Refines fuel s
@@ -91,7 +92,7 @@ theorem table_refines (k : Fin 32) (tail : Code)
   set p := RiscvUpperForest.ForestVerifier.pos index k with hp
   have hp32 : p < 32 := by have := pos_le index k; omega
   have finish : ∀ (u : MachineState) (z : graph.Assignment),
-      HashInv index wire pk u z k (work k) → MemBits u (W (outAddr k)) (tops z k) →
+      HashInv index wire pk a u z k (work k) → MemBits u (W (outAddr k)) (tops z k) →
       Riscv.CodeAt u u.pc tail → ∀ left, rest ≤ left →
       Riscv.Refines left u (K (z,cursor k+chainBits k)) c := by
     intro u z invU topU locatedU left hleft
@@ -115,7 +116,7 @@ theorem table_refines (k : Fin 32) (tail : Code)
     rw [hcount] at located bound ⊢
     rw [List.replicate_succ, List.cons_append] at located
     rw [show 32-(p+1)+1+c = 1+(32-(p+1)+c) by omega]
-    have inv : HashInv index wire pk s x k (wireSlot k) := by rw [hw]; exact prep.inv
+    have inv : HashInv index wire pk a s x k (wireSlot k) := by rw [hw]; exact prep.inv
     have held : MemBits s (W (wireSlot k)) (ofBits (chainBits k) (wire.drop (wireOffset k))) := by
       rw [hw]; have h := prep.ready; rw [if_neg hn] at h; exact h
     apply read_prefix_refines index wire pk k (List.replicate (32-(p+1)) .ECALL ++ tail)

@@ -180,9 +180,9 @@ theorem child_hashParent {h p : Name} (hp : hashParent h = some p) : child p = s
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   all_goals rfl
 
-/-- The input of a hash node has length 144, 192 (chains) or 6144 (root). -/
+/-- The input of a hash node has length 144, 192 (chains) or 6143 (root). -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 144 ∨ p.len = 192 ∨ p.len = 6144 := by
+    p.len = 144 ∨ p.len = 192 ∨ p.len = 6143 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · rename_i k t
     rcases chainBits_cases k with hk | hk <;> simp [Name.len, hk]
@@ -428,8 +428,10 @@ theorem fHid_isSome_some_iff (A : Finset Name) (ξ : Rec) (q : Query) :
 
 /-! ## The event `Spr` -/
 
-/-- The 192-bit slice committed by the root: the low half of the cell, for every chain. -/
-def rootSlice (_k : Fin 32) (w : BitVec 256) : BitVec 192 := lo192 w
+/-- The slice of a top committed by the root: the low 192 bits of the cell, except the last bit
+of chain `31`, which lies beyond the 6143-bit root input. -/
+def rootSlice (k : Fin 32) (w : BitVec 256) : BitVec 192 :=
+  if k.val = 31 then (w.setWidth 191).setWidth 192 else lo192 w
 
 /-- `sim ξ h w`: the answer `w` agrees with the honest output of the hash node `h` on the bits the
 graph consumes: the high 192 bits along a chain, the low 192 bits at a chain top (read by the root
@@ -465,38 +467,72 @@ honest input of `h`, simulates the honest output of `h`. Without labels a string
 `p.len` is a candidate preimage for every hash node with that input length, so the event is a
 union over the hash nodes; the charge per fresh query stays below `ε` because a chain node is
 simulated on 192 bits (`spr_charge`). -/
-def Spr (c : Cache) (ξ : Rec) : Prop :=
+def SprHash (c : Cache) (ξ : Rec) : Prop :=
   ∃ h p, hashParent h = some p ∧ ∃ u : BitVec p.len, u ≠ val ξ p ∧
     ∃ w, c ⟨p.len, u⟩ = some w ∧ sim ξ h w
 
+/-- The root query lengths of signatures shorter than the full `5504` bits: `ℓ + 639` for
+`ℓ < 5504`. No hash node and no index query has such an input length. -/
+def ShortLen (n : ℕ) : Prop := 639 ≤ n ∧ n < 6143
+
+/-- Some cached answer at a short root length begins with the public key. -/
+def SprShort (c : Cache) (ξ : Rec) : Prop :=
+  ∃ n, ShortLen n ∧ ∃ u : BitVec n, ∃ w, c ⟨n, u⟩ = some w ∧ trunc128 w = pkOf ξ
+
+/-- The simulation event: a hash node is simulated, or a short root query hits the public key. -/
+def Spr (c : Cache) (ξ : Rec) : Prop := SprHash c ξ ∨ SprShort c ξ
+
+theorem not_shortLen_of_hashParent {h p : Name} (hp : hashParent h = some p) : ¬ ShortLen p.len := by
+  unfold ShortLen
+  rcases len_hashParent_cases hp with e | e | e <;> omega
+
 theorem Spr.mono {c c' : Cache} (h : Cache.Sub c c') {ξ : Rec} (hs : Spr c ξ) :
     Spr c' ξ := by
-  obtain ⟨hn, p, hp, u, hu, w, hw, ht⟩ := hs
-  exact ⟨hn, p, hp, u, hu, w, h _ _ hw, ht⟩
+  rcases hs with ⟨hn, p, hp, u, hu, w, hw, ht⟩ | ⟨n, hn, u, w, hw, ht⟩
+  · exact Or.inl ⟨hn, p, hp, u, hu, w, h _ _ hw, ht⟩
+  · exact Or.inr ⟨n, hn, u, w, h _ _ hw, ht⟩
 
-/-- Caching an index query does not change `Spr`: no hash input has its length. -/
+theorem shortLen_ne_enc {n : ℕ} (hn : ShortLen n) : n ≠ emsgBits + nonceBits := by
+  have e : emsgBits + nonceBits = 512 := rfl
+  unfold ShortLen at hn
+  omega
+
+/-- Caching an index query does not change `Spr`: no hash input and no short root length has its
+length. -/
 theorem spr_cacheQuery_enc (c : Cache) (ξ : Rec) (u : EncInput)
     (w : BitVec 256) : Spr (c.cacheQuery (encQuery u) w) ξ ↔ Spr c ξ := by
   have key : ∀ (h p : Name), hashParent h = some p → ∀ u' : BitVec p.len,
       c.cacheQuery (encQuery u) w ⟨p.len, u'⟩ = c ⟨p.len, u'⟩ :=
     fun h p hp u' => QueryCache.cacheQuery_of_ne _ _ (mk_ne_encQuery hp u' u)
+  have keyS : ∀ n, ShortLen n → ∀ u' : BitVec n,
+      c.cacheQuery (encQuery u) w ⟨n, u'⟩ = c ⟨n, u'⟩ :=
+    fun n hn u' => QueryCache.cacheQuery_of_ne _ _ (ne_encQuery_of_length_ne (shortLen_ne_enc hn) u)
   constructor
-  · rintro ⟨h, p, hp, u', hu, w', hw, ht⟩
-    rw [key h p hp] at hw
-    exact ⟨h, p, hp, u', hu, w', hw, ht⟩
-  · rintro ⟨h, p, hp, u', hu, w', hw, ht⟩
-    refine ⟨h, p, hp, u', hu, w', ?_, ht⟩
-    rw [key h p hp]
-    exact hw
+  · rintro (⟨h, p, hp, u', hu, w', hw, ht⟩ | ⟨n, hn, u', w', hw, ht⟩)
+    · rw [key h p hp] at hw
+      exact Or.inl ⟨h, p, hp, u', hu, w', hw, ht⟩
+    · rw [keyS n hn] at hw
+      exact Or.inr ⟨n, hn, u', w', hw, ht⟩
+  · rintro (⟨h, p, hp, u', hu, w', hw, ht⟩ | ⟨n, hn, u', w', hw, ht⟩)
+    · refine Or.inl ⟨h, p, hp, u', hu, w', ?_, ht⟩
+      rw [key h p hp]
+      exact hw
+    · refine Or.inr ⟨n, hn, u', w', ?_, ht⟩
+      rw [keyS n hn]
+      exact hw
 
 /-- An entry of an overlay is an entry of one of the two caches. -/
 theorem spr_of_extend {c f : Cache} {ξ : Rec} (hs : Spr (Cache.extend c f) ξ) :
     Spr c ξ ∨ Spr f ξ := by
-  obtain ⟨h, p, hp, u, hu, w, hw, ht⟩ := hs
-  rw [Cache.extend_apply, Option.or_eq_some_iff] at hw
-  rcases hw with hw | ⟨-, hw⟩
-  · exact Or.inl ⟨h, p, hp, u, hu, w, hw, ht⟩
-  · exact Or.inr ⟨h, p, hp, u, hu, w, hw, ht⟩
+  rcases hs with ⟨h, p, hp, u, hu, w, hw, ht⟩ | ⟨n, hn, u, w, hw, ht⟩
+  · rw [Cache.extend_apply, Option.or_eq_some_iff] at hw
+    rcases hw with hw | ⟨-, hw⟩
+    · exact Or.inl (Or.inl ⟨h, p, hp, u, hu, w, hw, ht⟩)
+    · exact Or.inr (Or.inl ⟨h, p, hp, u, hu, w, hw, ht⟩)
+  · rw [Cache.extend_apply, Option.or_eq_some_iff] at hw
+    rcases hw with hw | ⟨-, hw⟩
+    · exact Or.inl (Or.inr ⟨n, hn, u, w, hw, ht⟩)
+    · exact Or.inr (Or.inr ⟨n, hn, u, w, hw, ht⟩)
 
 /-- The honest output of a hash node does not simulate that of another hash node whose input has
 the same length. -/
@@ -508,14 +544,17 @@ def NoOutCollision (ξ : Rec) : Prop :=
 def GoodRec (ξ : Rec) : Prop := DistinctRec ξ ∧ NoOutCollision ξ
 
 theorem not_spr_kc {ξ : Rec} (hξ : GoodRec ξ) : ¬ Spr (kc ξ) ξ := by
-  rintro ⟨h, p, hp, u, hu, w, hw, ht⟩
-  obtain ⟨h', p', hp', hq, rfl⟩ := kc_apply_some ξ _ w hw
-  by_cases hh : h = h'
-  · subst hh
-    rw [hp] at hp'
-    obtain rfl := Option.some.inj hp'
-    exact hu (eq_of_heq (Sigma.mk.inj_iff.1 hq).2)
-  · exact hξ.2 h p h' p' hp hp' (Sigma.mk.inj_iff.1 hq).1 hh ht
+  rintro (⟨h, p, hp, u, hu, w, hw, ht⟩ | ⟨n, hn, u, w, hw, -⟩)
+  · obtain ⟨h', p', hp', hq, rfl⟩ := kc_apply_some ξ _ w hw
+    by_cases hh : h = h'
+    · subst hh
+      rw [hp] at hp'
+      obtain rfl := Option.some.inj hp'
+      exact hu (eq_of_heq (Sigma.mk.inj_iff.1 hq).2)
+    · exact hξ.2 h p h' p' hp hp' (Sigma.mk.inj_iff.1 hq).1 hh ht
+  · obtain ⟨h', p', hp', hq, -⟩ := kc_apply_some ξ _ w hw
+    have hl : n = p'.len := (Sigma.mk.inj_iff.1 hq).1
+    exact not_shortLen_of_hashParent hp' (hl ▸ hn)
 
 theorem sub_fExp_kc (A? : Option (Finset Name)) {ξ : Rec} (hξ : DistinctRec ξ) :
     Cache.Sub (fExp A? ξ) (kc ξ) := by
@@ -530,8 +569,7 @@ theorem not_spr_fExp (A? : Option (Finset Name)) {ξ : Rec} (hξ : GoodRec ξ) :
   fun hs => not_spr_kc hξ (hs.mono (sub_fExp_kc A? hξ.1))
 
 theorem not_spr_empty (ξ : Rec) : ¬ Spr ∅ ξ := by
-  rintro ⟨h, p, hp, u, hu, w, hw, -⟩
-  simp at hw
+  rintro (⟨h, p, hp, u, hu, w, hw, -⟩ | ⟨n, hn, u, w, hw, -⟩) <;> simp at hw
 
 /-- `ε = 2 ^ (-128)`. -/
 def ε : ℝ≥0∞ := ((2 : ℝ≥0∞) ^ 128)⁻¹
@@ -614,10 +652,17 @@ theorem card_filter_trunc_le' (k : Fin 32) (a : BitVec (chainBits k)) :
   simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hw ⊢
   exact (trunc_256 k w).symm.trans hw
 
-/-- The root slice pins 192 of the 256 bits of a top. -/
+/-- The root slice pins 192 (191 for chain `31`) of the 256 bits of a top. -/
 theorem card_filter_rootSlice_le (k : Fin 32) (a : BitVec 192) :
-    (Finset.univ.filter fun w : BitVec 256 => rootSlice k w = a).card ≤ 2 ^ 112 :=
-  (card_filter_lo192_le' a).trans (by norm_num)
+    (Finset.univ.filter fun w : BitVec 256 => rootSlice k w = a).card ≤ 2 ^ 112 := by
+  by_cases hk : k.val = 31
+  · refine le_trans (Finset.card_le_card fun w hw => ?_)
+      ((card_filter_setWidth_le 191 (by norm_num) (a.setWidth 191)).trans (by norm_num))
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and, rootSlice, hk, ↓reduceIte] at hw ⊢
+    rw [← hw, BitVec.setWidth_setWidth_of_le _ (by norm_num), BitVec.setWidth_eq]
+  · refine le_trans (Finset.card_le_card fun w hw => ?_) ((card_filter_lo192_le' a).trans (by norm_num))
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and, rootSlice, hk, ↓reduceIte] at hw ⊢
+    exact hw
 
 theorem card_filter_sim_le' (ξ : Rec) (h : Name) (hh : h ≠ rh) :
     (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 112 := by
@@ -647,32 +692,54 @@ theorem mem_hashNodes {h : Name} : h ∈ hashNodes ↔ (hashParent h).isSome := 
 
 attribute [irreducible] hashNodes
 
-theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 6144) :
+theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 6143) :
     h = rh := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · simp [Name.len, chainBits] at hl
     split_ifs at hl <;> contradiction
   · rfl
 
-/-- The answers simulating some hash node whose input has length `n`. -/
+/-- The answers creating `Spr` at a fresh query of length `n`: those simulating some hash node
+whose input has length `n`, and at a short root length those beginning with the public key. -/
 def simSet (ξ : Rec) (n : ℕ) : Finset (BitVec 256) :=
-  Finset.univ.filter fun w => ∃ h p, hashParent h = some p ∧ p.len = n ∧ sim ξ h w
+  Finset.univ.filter fun w => (∃ h p, hashParent h = some p ∧ p.len = n ∧ sim ξ h w) ∨
+    (ShortLen n ∧ trunc128 w = pkOf ξ)
 
-/-- At most `2 ^ 128` answers simulate some hash node of a given input length. -/
+theorem mem_simSet_of_hash {ξ : Rec} {h p : Name} (hp : hashParent h = some p) {w : BitVec 256}
+    (hs : sim ξ h w) : w ∈ simSet ξ p.len := by
+  rw [simSet, Finset.mem_filter]
+  exact ⟨Finset.mem_univ _, Or.inl ⟨h, p, hp, rfl, hs⟩⟩
+
+theorem mem_simSet_of_short {ξ : Rec} {n : ℕ} (hn : ShortLen n) {w : BitVec 256}
+    (hs : trunc128 w = pkOf ξ) : w ∈ simSet ξ n := by
+  rw [simSet, Finset.mem_filter]
+  exact ⟨Finset.mem_univ _, Or.inr ⟨hn, hs⟩⟩
+
+/-- At most `2 ^ 128` answers create `Spr` at a query of a given length. -/
 theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := by
-  by_cases hn : n = 6144
+  by_cases hsn : ShortLen n
+  · refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_trunc128_le (pkOf ξ))
+    rw [simSet, Finset.mem_filter] at hw
+    rw [Finset.mem_filter]
+    rcases hw with ⟨-, ⟨h, p, hp, hl, -⟩ | ⟨-, hs⟩⟩
+    · exact absurd (hl ▸ hsn) (not_shortLen_of_hashParent hp)
+    · exact ⟨Finset.mem_univ _, hs⟩
+  by_cases hn : n = 6143
   · subst hn
     refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_trunc128_le (trunc128 (ξ.2 rh.fin)))
     rw [simSet, Finset.mem_filter] at hw
     rw [Finset.mem_filter]
-    obtain ⟨-, h, p, hp, hl, hs⟩ := hw
-    obtain rfl := eq_rh_of_hashParent_len hp hl
-    exact ⟨Finset.mem_univ _, hs⟩
+    rcases hw with ⟨-, ⟨h, p, hp, hl, hs⟩ | ⟨hs, -⟩⟩
+    · obtain rfl := eq_rh_of_hashParent_len hp hl
+      exact ⟨Finset.mem_univ _, hs⟩
+    · exact absurd hs hsn
   · have hsub : simSet ξ n ⊆ hashNodes.biUnion fun h =>
         Finset.univ.filter fun w : BitVec 256 => sim ξ h w ∧ h ≠ rh := by
       intro w hw
       rw [simSet, Finset.mem_filter] at hw
-      obtain ⟨-, h, p, hp, hl, hs⟩ := hw
+      obtain ⟨-, ⟨h, p, hp, hl, hs⟩ | ⟨hs, -⟩⟩ := hw
+      swap
+      · exact absurd hs hsn
       rw [Finset.mem_biUnion]
       refine ⟨h, mem_hashNodes.2 (by rw [hp]; rfl), Finset.mem_filter.2 ⟨Finset.mem_univ _, hs, ?_⟩⟩
       rintro rfl
@@ -723,14 +790,21 @@ theorem spr_charge (c : Cache) (ξ : Rec) (q : Query) (hq : c q = none) :
   · rw [if_neg hs, zero_add]
     -- a new `Spr` entry sits at `q`; its answer simulates some hash node of the query's length
     have key : ∀ w, Spr (c.cacheQuery q w) ξ → w ∈ simSet ξ q.1 := by
-      rintro w ⟨h, p, hp, u, hu, w', hw', ht⟩
-      by_cases hqq : (⟨p.len, u⟩ : Query) = q
-      · subst hqq
-        rw [QueryCache.cacheQuery_self] at hw'
-        obtain rfl := Option.some.inj hw'
-        exact Finset.mem_filter.2 ⟨Finset.mem_univ _, h, p, hp, rfl, ht⟩
-      · rw [QueryCache.cacheQuery_of_ne _ _ hqq] at hw'
-        exact (hs ⟨h, p, hp, u, hu, w', hw', ht⟩).elim
+      rintro w (⟨h, p, hp, u, hu, w', hw', ht⟩ | ⟨n, hn, u, w', hw', ht⟩)
+      · by_cases hqq : (⟨p.len, u⟩ : Query) = q
+        · subst hqq
+          rw [QueryCache.cacheQuery_self] at hw'
+          obtain rfl := Option.some.inj hw'
+          exact mem_simSet_of_hash hp ht
+        · rw [QueryCache.cacheQuery_of_ne _ _ hqq] at hw'
+          exact (hs (Or.inl ⟨h, p, hp, u, hu, w', hw', ht⟩)).elim
+      · by_cases hqq : (⟨n, u⟩ : Query) = q
+        · subst hqq
+          rw [QueryCache.cacheQuery_self] at hw'
+          obtain rfl := Option.some.inj hw'
+          exact mem_simSet_of_short hn ht
+        · rw [QueryCache.cacheQuery_of_ne _ _ hqq] at hw'
+          exact (hs (Or.inr ⟨n, hn, u, w', hw', ht⟩)).elim
     calc ∑ w : BitVec 256, (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
           (if Spr (c.cacheQuery q w) ξ then 1 else 0)
         ≤ ∑ w : BitVec 256, (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
@@ -899,8 +973,8 @@ theorem low192_lowCat (c : ℕ → BitVec 256) : ∀ j, (lowCat c j).setWidth 19
     rw [lowCat, setWidth_cast, BitVec.setWidth_append, dif_pos (by omega), low192_lowCat c j]
 
 theorem low192_rootCat (c : Fin 32 → BitVec 256) : (rootCat c).setWidth 192 = lo192 (c 0) := by
-  unfold rootCat
-  rw [setWidth_cast, low192_lowCat]
+  unfold rootCat rootRegion
+  rw [BitVec.setWidth_setWidth_of_le _ (by norm_num), setWidth_cast, low192_lowCat]
   rfl
 
 /-- A filter whose members all have the same low 192 bits has at most `2 ^ 64` elements. -/
