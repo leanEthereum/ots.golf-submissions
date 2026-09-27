@@ -1,160 +1,127 @@
-# 1124-cycle four-child leanISA construction
+# 1110-cycle affine-frame leanISA construction
 
-The complete certificate in `Solution.lean` targets 1124 cycles. This research branch
-continues toward a fully certified result at most 1110; it has not reached that goal.
+`Solution.lean` exports the complete `Submission.Certificate 1110`, together with
+its seeded-row bound. The score is `110 + 88 * 10 + 120 = 1110`. Every completing
+execution has 198 instructions. The certificate covers full admissibility,
+127-bit strong security, bytecode validity, honest-prover equivalence, soundness
+against arbitrary committed images, and the universal cycle bound.
 
-## Construction
+## The fourteen-cycle saving
 
-The signature has 42 disclosed 128-bit chain words and a full 128-bit nonce, totaling
-5504 bits. The message/public-key/nonce index supplies 127 effective bits. The signer
-chooses its rarest accepted cut among 2^19 trials. The concrete tables have 21 alias-weight
-tiers and their exact schedule bounds the normalized security slope by
-0.9101406258355382. `FourChildTier` links the enumerated tables to the exact counts;
-`FourSecurity` and `FourAdmissible` prove strong unforgeability and full admissibility.
+The preceding complete certificate at b5063a0 costs 1124 cycles. It uses two
+JUMPs per stage: a dispatch and an entry that restores frame one. This construction
+removes all fourteen entry JUMPs by keeping a different frame throughout each block.
+The former hint MUL becomes an XOR, so no operation is added.
 
-Nine binding groups each have at least one positive parent digit. Their final chain
-queries bind four child tops using the packet
-`[child0, child1, current, child2, child3, tag, metadata]`.
-A tag/metadata pair identifies each binding parent. All needed domain words come from
-C1 through C13, ordinary and index metadata remain C0 and C16, and root metadata is C4.
-The single root binds tops 3,4,5,6,8,9. The graph is acyclic and its root plus nine binding
-packets cover all 42 tops. The codec rejects each all-zero binding tuple.
+For execution stage f=0 use exponent 14; for f=1..13 use exponent f. If the hinted
+block entry is e, the preceding XOR checks `H1 = H + a^exponent`, where `H = g^e`.
+One JUMP enters e with frame `H1`. Every cell c in that block is encoded as
+`g^c / (g^e + a^exponent)`. Straight instructions keep this nonzero frame. The
+final exit resets the frame to one. The address generator remains the pinned g.
 
-Thirteen constants C1 through C13 are pinned before the full-nonce length gate.
-C1,C2,C3,C4 occupy cells 105,106,47,107 to reject its otherwise possible long-length
-aliases. The remaining aliases lie in loader-padded cells. After the gate establishes
-length 5504, that loaded word supplies frame 1; frame 0 uses C1 and frames 2–13 use
-C2–C13. Their field exponents remain separated by more than 2^33. This removes the C14
-initializer. Each of the nine positive binding-group costs contributes `cost - 1` to
-the product; the free block targets 77 instead of 86. The exact sum identity restores
-all nine hashes at the exit, so the hash count and signature scheme are unchanged.
+The fixed a is chosen by a finite polynomial-avoidance argument. For each wrong
+stage, wrong target slot, first operand, and potential memory cell, a successful
+read would give a nonzero polynomial equation. The sum of all polynomial degree
+bounds is strictly less than the field size 2^64, so a common nonroot exists.
+Additional polynomial constraints keep every frame nonzero, prevent a dispatch
+from halting, separate powers 0..300, and force a checksum landing in the program
+to be its intended sentinel. The layout and a depend only on the fixed table,
+never on the input, committed image, or oracle. This is a noncomputable fixed
+bytecode definition permitted by the contract; the proof does not select a
+base separately for each execution.
 
-ONE and g remain adjacent at 48 and 49. The four-child CV pairs and root CV pair have
-disjoint physical answer pairs; ten chains take the high half of their final hash so
-the selected tops are adjacent.
+The checksum guard matters independently of the entry guards. Without it, a
+wrong checksum could re-enter the prologue after the final JUMP resets the frame
+to one. `AffineExit.checksum_landing_exact` rules out every such program target.
+`AffinePath.run_full` then extracts all fourteen blocks from every completing
+execution, with the exact step count and cost. This argument covers every
+admitted memory size and cache-free oracle-answer path.
 
-Group 5 supplies the four root message words directly from the signature for zero digits;
-all other groups materialize their tops. The group ordinary-instruction allowances are
-`[7,8,8,8,8,6,9,8,8,8,8,8,8]`, totaling 102. Including the free block and prologue/exit gives
-124 ordinary cycles. There are 86 chain hashes, one index hash and one root hash:
+## Scheme and layout
 
-`124 + 88 * 10 + 120 = 1124`.
+The signature contains 42 disclosed 128-bit chain words and the full 128-bit
+nonce, totaling 5504 bits. The index supplies 127 effective bits. The signer
+uses rarest-cut signing over 2^19 trials. The existing layer-86 tables and
+21-tier exact schedule remain in use; their normalized security slope is
+0.9101406258355382.
 
-Every completing execution has 212 instructions. The bytecode has 2^18 slots, the group
-prefix ends at slot 243173, and the free blocks start at 255615. Memory has 2^16 cells,
-so the seeded-row total is 327680, strictly below 2^20. The public execution witnesses
-cannot reduce the cycle bound: `FourMachineCycles` quantifies over all admitted memory
-sizes, committed images, and completing step counts. `FourMachineSound` excludes completing
-images for rejected signatures; `FourMachineFaithful` proves the honest prover equivalence.
-Key generation uses 720 oracle queries (1440 charged compressions), and verification uses
-at most 176 charged compressions in the abstract oracle model.
+Nine binding groups have at least one positive parent digit. The final step of
+each parent binds four child tops with two domain words. One root binds the
+remaining six tops. The graph is acyclic and its root and binding packets cover
+all 42 tops. The all-zero tuple of each binding group is excluded. Verification
+performs 86 chain hashes, one index hash, and one root hash.
+
+The thirteen C1..C13 initializers now pin a^1..a^13. Cell 49 pins a^14; ONE stays
+at cell 48. These supply all fourteen stage biases without another initializer.
+C1,C2,C3,C4 occupy cells 105,106,47,107, which reject the nonzero aliases of the
+single-instruction length gate. `AffineLength` proves the gate still enforces
+length 5504 and ONE with the new powers.
+
+The ordinary hash CV is (ONE,a^14), ordinary metadata is ONE, and index metadata
+is a^14. Binding tags use powers 1..13, binding metadata powers 1,2,3 (6 for unused
+parents), and the actual root metadata is power 4. Codec-only root metadata uses
+powers 15..23. `AffineCodec` proves the domain separation, full admissibility and
+strong security of this codec. `AffineCompat`, `AffineValues`, and `AffineSound`
+connect these exact words and queries to the bytecode.
+
+Nine guaranteed binding hashes are deducted from the group checksum costs.
+The free seed is `g^sentinel / a^77 * a^s`, and each group multiplies by
+`a^(cost-deduction)`. The exit restores the nine deductions and forces the full
+layer to be 86. `AffineProver` fills the affine hints and products along with
+the chain and root answers. `AffineReplay` and `AffineHonestPath` prove that
+accepted signatures complete; `AffineFaithful` handles both verifier decisions.
+
+The bytecode has 2^18 slots and memory 2^16 cells, for 327680 seeded rows, below
+2^20. The group prefix ends at 243173; free blocks begin at 255615. Entries and
+strides are unchanged from 1124; bodies and controls shift one slot earlier,
+and removed entry slots become trailing padding. Hash, signature, nonce, and
+top cells retain their addresses. Group 5 reads zero-digit root words directly
+from the signature; other groups still materialize the required tops.
 
 ## Validation
 
-The complete 1124-cycle solution built with the pinned Lean version (8919 jobs). Its
-256,820,865-byte export contains 55,400 declarations and passed exact statement/primitive
-comparison, the axiom audit, and a fresh unchanged Lean kernel replay. Replay took
-319.726 seconds; all local export checks took 360.680 seconds, with sampled peak PSS of
-5,204,140,032 bytes. Only propext, Classical.choice and Quot.sound were used.
-The official Linux sandbox cannot run here because Landlock is unavailable;
-standalone local checks do not constitute a hosted verdict. No 1124 submission has been pushed.
+The complete 1110 solution builds with the pinned Lean toolchain (8941 jobs).
+Its 313,845,556-byte export contains 61,781 declarations. Exact statement and
+primitive comparison, the export axiom check, and a fresh unchanged Lean kernel
+replay all passed. Kernel replay took 373.987 seconds; the complete comparison
+process took 419.224 seconds with sampled peak PSS 5,247,025,152 bytes. A separate
+audit of 19 main declarations found only propext, Classical.choice and Quot.sound.
+The source-policy check passed, and checked Lean-source hashes were preserved.
 
-The preceding 1125-cycle checkpoint fb0489b passed exact statement/primitive comparison,
-axiom audit and a fresh unchanged Lean kernel replay. Its 256,735,416-byte export contained
-55,390 declarations. Kernel replay took 398.423 seconds; all export checks took 440.173 seconds
-with 4,221,604,864 bytes of sampled peak PSS. It used only propext, Classical.choice and Quot.sound.
-That complete checkpoint is retained in Git.
+Evidence is recorded in `leanisa-1110-evidence`, including the replay transcript,
+profiles, export hashes and source hashes. No hosted 1110 verdict is claimed,
+and this branch has not been pushed. The official Linux sandbox cannot run in
+this workspace because Landlock is unavailable; standalone local checks are
+not a hosted verdict.
 
-The preceding full nonce128 certificate at commit 191ba69 proved 1138 cycles. Its exact
-export comparison, axiom audit and fresh kernel replay passed in 355.328 seconds, with
-peak PSS of 5,205,716,992 bytes. That checkpoint is retained in Git.
-The earlier 1149 timeout fix, commit 3c87a7b, passed the hosted verifier:
+The preceding complete 1124 certificate at b5063a0 passed exact statement and
+primitive comparison, its axiom audit, and fresh unchanged Lean kernel replay.
+Its export was 256,820,865 bytes and 55,400 declarations; replay took 319.726 seconds.
+Older complete checkpoints are fb0489b (1125) and 191ba69 (1138).
+
+The 1149-cycle timeout fix at 3c87a7b passed the hosted verifier:
 [official transcript](https://ots.golf/submissions/ad10465b7c22e33d9c89c82d6e85d57b/log).
-The original d8e29b3 timeout on PR47 is a different revision.
+The original d8e29b3 timeout on PR47 was a different revision. Consolidated
+length certificates and adjacent-pair order checks retain those timeout fixes.
 
-A closed field-power reduction initially made the new root-domain compatibility proof
-expensive. A general symbolic `tagWord_eq_cell` lemma avoids that reduction; the concrete
-table module then compiled in about four seconds. The older timeout fixes are retained:
-consolidated length certificates and adjacent-pair checks for the transitive location order.
+## Research history and next directions
 
-## Remaining work toward 1110
+Nonce128 layer-85, full-index, twelve-group and five-child screens did not pass
+all security, availability and code-size bounds. These failures do not prove
+that those layers are impossible. Rotating binding packets does not supply free
+domain separation: different rotations can coincide on attacker-chosen children.
+A 1010-cycle lower bound has not been proved.
 
-The target is still at most 1110, not a lower-bound claim. The next improvement must save
-ordinary instructions, reduce the number of chain hashes while maintaining the exact
-security and availability inequalities, or both. The previous nonce128 layer-85 and full
-128-bit-index searches did not pass every constraint. The four-child layer-85 searches
-also failed the security bound; they do not prove that layer impossible.
+`TierKnee` and `ImplicitNonce` are independent research helpers. An omitted nonce
+flag model gave a conditional 1116 estimate, but its generalized security theorem
+and machine proof were not completed. Those experiments are superseded for this
+goal by the complete affine construction. They remain available for later research.
 
-New twelve-group screens with eight triples, three quadruples and a quintuple did not
-pass the security/code-size constraints at layer85. A proposed eight-group hybrid with
-four five-child packets and four four-child packets can fit its domain constants into
-C1..C14; its first layer84 screen also failed (best-loss normalized slope about1.806).
-That hybrid is only a research model and has no Lean scheme or machine certificate.
-
-`TierKnee.lean` proves the largest legal integer knee for a positive collision slope,
-and proves that it never increases the quadratic budget term. It is a standalone
-research helper; the exported 1124 certificate still uses its original schedule.
-Further screens with heterogeneous aliases, wider cost bands, and conditional binary
-projections did not produce a passing 1110 candidate. These screens are not proofs.
-
-Omitting a finite nonce flag from the wire gives a more promising next step. The abstract
-verifier can try both values of an extra nonce bit, while a machine path executes the
-one selected index hash in its free-chain block. No signature-word permutation is needed.
-Packing the 64 free-chain lengths uses 2400 slots per flag value, including that index
-hash. Existing C5 and C6 provide distinct metadata, separated from chain and root domains.
-
-A full-128-bit-index, mixed-alias numerical model has an exact-arithmetic candidate at
-`126 + 87 * 10 + 120 = 1116`, with 260350 occupied bytecode slots and normalized schedule
-slope below 0.941283 for a 129-bit nonce row. Its 111 class-weight tiers include factors
-of three. An independent integer convolution agrees with the search evaluator, and
-outward-rounded rational checks pass for the proposed generalized numeric conditions.
-This is a research candidate, not a certificate: the nonce-row security theorem, the
-compression reduction, codec/count proofs, and machine implementation are still missing.
-The 1110 screens with layer84 and one or three omitted flag bits did not pass all bounds.
-
-`ImplicitNonce.lean` proves finite flag recovery's cost, determinism and fixed-oracle
-semantics; freshness after forgetting a flag; and arithmetic for absorbing a repeated
-verification into a larger fixed key-generation prefix. It also proves the 2400-slot
-sum. These helper results use only the allowed axioms and are not imported by Solution.
-They do not establish the complete security reduction. The exported claim remains 1124.
-
-Do not omit zero-digit copies or the hint-times-g checks when estimating a new machine.
-The latter prevent jumps into block interiors. Removing zero-binding exclusions leaves
-children unauthenticated. Weighted-rank ideas require an explicit implementation and a
-budget for all extra field constants. The suggested 1010 figure is not a proved lower bound.
-
-## Affine-frame 1110 candidate (not yet a complete certificate)
-
-The `Affine*` modules develop a direct fourteen-cycle saving from 1124. For stage
-`u` and destination `s`, an XOR computes the frame `g^s + a^u`; the following JUMP
-enters the body directly. A block beginning at `e` encodes each cell operand as
-`g^c / (g^e + a^u)`. This removes all fourteen entry JUMPs. The fourteen powers
-`a^1` through `a^14` reuse the thirteen cost initializers and the old in-memory `g`
-initializer. The VM's address generator remains the pinned `g`.
-
-`AffineSelect` proves that one fixed base avoids every incorrect first read for
-all target slots and memory sizes up to 2^32. Each collision gives a nonzero
-polynomial of degree at most 300; the sum of the degrees of all constraints is
-strictly less than 2^64. Further constraints keep frames nonzero, prevent a
-dispatch from halting, separate the first 301 powers, and force any checksum
-landing in the bytecode to be the correct halt. The base depends only on the
-fixed layout, never the runtime input, committed image, or oracle.
-
-`AffineCodec` proves full admissibility and security with these domain words,
-using the existing layer-86 tables and signing schedule. `AffineProgram` defines
-the fixed bytecode and proves bytecode validity and the row bound. `AffineDecode`
-connects the wrong-landing guard to that program. `AffineSemantics` proves exact
-rebased hash queries and control instructions. `AffineLength` proves the existing
-single-instruction length check still works. `AffineCost` proves that a valid
-layer-86 path executes 198 instructions and costs 990 + 120 = 1110 cycles.
-
-These modules build with the pinned toolchain, and their main declarations passed
-an audit allowing only propext, Classical.choice, and Quot.sound. They are not
-imported by `Solution.lean`: its complete certificate and claim remain 1124.
-The remaining work is to connect every raw block to the costed lists, prove that
-every completing execution follows a valid layer-86 path, and construct and
-verify the honest memory witness. A full 1110 export, comparison, kernel replay,
-and hosted verification have not been performed.
+Further improvement requires fewer ordinary assertions or fewer hashes with the
+exact security and availability inequalities preserved. Keep initialization,
+zero-digit copies, checks on jump targets, the length gate, the row bound, and
+the public-boundary charge in every estimate. The present saving comes entirely
+from entry-jump removal, not from dropping a binding or verification check.
 
 ## Credits
 
@@ -195,4 +162,4 @@ and hosted verification have not been performed.
 - The validated-length frame and shifted checksum, reducing the machine to 1124 cycles,
   were prepared with Codex.
 - The affine-frame candidate and its polynomial avoidance, secure codec, instruction
-  semantics, length check and conditional 1110 path bound were prepared with Codex.
+  semantics, length check, universal 1110-cycle proof, soundness, honest prover and complete certificate were prepared with Codex.

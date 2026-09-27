@@ -1,10 +1,10 @@
 import Submissions.UpperLeanIsa.AffineCodec
 import Submissions.UpperLeanIsa.FourMachineDecode
 
-/-! A fixed affine-frame bytecode candidate. Each block starts with its first
+/-! The fixed affine-frame bytecode. Each block starts with its first
 useful instruction; the old entry jump becomes trailing padding. The security
-certificate is inherited from `AffineCodec`; the full machine certificate is
-not yet assembled. -/
+certificate is inherited from `AffineCodec`; `AffineMachine` assembles the full
+1110-cycle certificate. -/
 
 namespace OptimalOTS.AffineVM
 

@@ -1,9 +1,9 @@
 import Submissions.UpperLeanIsa.AffineLength
 import Submissions.UpperLeanIsa.FourMachineCycles
 
-/-! Exact cost of the proposed straight blocks and a well-formed layer-86 path.
-The missing machine-walk proof must still show that every completing execution
-has such a path. These results are not `Submission.CyclesAtMost`. -/
+/-! Exact cost of the straight blocks and a well-formed layer-86 path.
+`AffinePath.run_full` connects actual completing executions to these lists;
+`AffineCycles.cycles` derives the universal `Submission.CyclesAtMost` clause. -/
 
 namespace OptimalOTS.AffineVM
 
