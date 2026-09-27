@@ -10,7 +10,8 @@ been submitted to the hosted verifier.
 Standalone exact export comparison and axiom auditing passed, followed by a fresh Lean
 kernel replay (315 seconds; 355 seconds including parsing and comparison). These are
 local checks of the proof, not a hosted verifier verdict. Source policy passes with
-86 files and about 2.8 MB after removing 22 unused legacy modules from this root.
+88 files and about 2.8 MB after removing 22 unused legacy modules from this root
+and adding the four-child research lemmas.
 
 The signature now uses exactly 5504 bits. The nonce-row factors use 2^128; effective
 index width, attack ceiling and security target remain 127 bits. With the same tables,
@@ -41,12 +42,28 @@ The remaining research helpers are:
   nonce row. At attack budgets at most 2^127, setting the linear slope to hp/2 gives
   an upper slope of 5*hp/8, compared with 3*hp/4 for a 127-bit nonce. The algebra is
   now also implemented in the complete signing-row analysis and machine proof.
+- `FourChildShape.lean` proves a nine-group graph connecting all 42 tops to one root.
+  Each final packet binds four children and identifies its parent using two constant
+  words, drawn from C_1 through C_13. Coverage, acyclic evaluation, packet binding and
+  location separation are kernel checked. The graph uses the existing thirteen groups
+  of indexed chains, with groups 1 through 4 as nonbinding leaves. There is no complete
+  scheme or machine for it yet.
+- `FourChildNumeric.lean` proves all exact `Tier.Sched.Valid` conditions for a retuned
+  layer-86 schedule with 21 weight tiers and a normalized slope at most 0.910141.
+  A padded instruction model gives 1125 cycles and 243173 prefix slots, below 257791.
+  The counts still need to be linked to a concrete Lean codec, and the single-root
+  scheme and machine need their full proofs. **1125 is not yet a certified score.**
 
 Numerical searches tried 128-bit effective indices, varied field widths, and mixed alias
-multiplicities within a cost band. None produced a candidate meeting every security,
-availability, and code-size condition. Search scores are floating-point diagnostics.
+multiplicities within a cost band. No 1110 candidate passed every security,
+availability, and code-size condition. Search scores are floating-point diagnostics;
+the separate 1125 schedule above was subsequently checked with exact arithmetic and Lean.
 A weighted acceptance condition accounting for zero-digit copies also needs an efficient
 machine checksum: its extra cost-factor initialization cannot be omitted from a cycle claim.
+Two 60,000-step searches of the twelve-group four-child model reached a hypothetical
+1109-cycle instruction budget, but failed the security and code-size conditions. The best
+screened normalized slopes were approximately 2.08 and 2.12, above the required 1.
+The structural cycle calculation is not a certified score.
 
 The remaining notes describe the binding construction and its earlier validation history.
 
@@ -118,7 +135,7 @@ cost-0 tuple. `FusionCodec` specifies the exact tuples and aliases;
 There are 18 dyadic class weights `1,2,...,2^17`. The schedule uses
 `hp = 1415907530965 / 2^40 / 2^127`, `k1 = hp/2`, and `b0 = 1`.
 Independent numerical estimates give about 133.145 bits of signing availability and a
-normalized security slope of 0.9658203. The Lean proof uses exact integer counts and
+normalized security slope of 0.8048503 for the 128-bit nonce revision. The Lean proof uses exact integer counts and
 outward-rounded rational certificates, proving signing failure at most `2^-128` and
 127-bit strong unforgeability for the actual adaptive cached-oracle experiment.
 Key generation uses at most 1254 abstract compressions; verification uses at most 178.
