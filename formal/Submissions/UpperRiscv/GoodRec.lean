@@ -6,7 +6,7 @@ import Submissions.UpperRiscv.Resample
 A record is good (`GoodRec`) when its keygen points are pairwise distinct and no honest output
 simulates another hash node with an input of the same length. Both failures are collision events
 on at least 144 bits between two coordinates of the uniform record; the union bound over the
-ordered pairs of hash nodes gives `δ = 2 · 1025² · 2⁻¹⁴⁴` (`sum_w_not_goodRec_le`).
+ordered pairs of hash nodes gives `δ = 2 · 1057² · 2⁻¹⁴⁴` (`sum_w_not_goodRec_le`).
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -43,7 +43,7 @@ theorem sum_ind_le_of_card_updHash (s : Name) (hs : ∀ k, s ≠ src k) (S : Fin
 
 /-- Resampling a source on a closed set: an event with at most one good value of the source has
 weight at most `ε₁`. -/
-theorem sum_ind_le_of_card_updSrc (k : Fin 32) (S : Finset Rec)
+theorem sum_ind_le_of_card_updSrc (k : Fin 33) (S : Finset Rec)
     (hS : ∀ ξ ∈ S, ∀ b : BitVec (chainBits k), updSrc ξ k b ∈ S) (f : Rec → Prop) [DecidablePred f]
     (hf : ∀ ξ, (Finset.univ.filter fun b : BitVec (chainBits k) => f (updSrc ξ k b)).card ≤ 1) :
     ∑ ξ ∈ S, (if f ξ then w else 0) ≤ ε₁ * ∑ ξ ∈ S, w := by
@@ -59,7 +59,7 @@ theorem sum_ind_le_of_card_updSrc (k : Fin 32) (S : Finset Rec)
         rw [one_mul]
         exact mul_le_mul' (inv_source_card_le k) le_rfl
 
-theorem hashNode_ne_src {h p : Name} (hp : hashParent h = some p) (k : Fin 32) : h ≠ src k := by
+theorem hashNode_ne_src {h p : Name} (hp : hashParent h = some p) (k : Fin 33) : h ≠ src k := by
   rintro rfl
   cases hp
 
@@ -148,7 +148,7 @@ theorem card_pair_updHash_le {h p h' p' : Name} (hp : hashParent h = some p)
     exact absurd ⟨val (updHash ξ (coordOf h) b) p, (hinv b).symm.trans hb.2.symm⟩ hq
 
 theorem card_pair_updSrc_le {h p h' p' : Name} (hp : hashParent h = some p)
-    (hp' : hashParent h' = some p') (hne : h ≠ h') (ξ : Rec) {k : Fin 32} (hk : coordOf h = src k) :
+    (hp' : hashParent h' = some p') (hne : h ≠ h') (ξ : Rec) {k : Fin 33} (hk : coordOf h = src k) :
     (Finset.univ.filter fun b : BitVec (chainBits k) =>
       pointOf (updSrc ξ k b) h p = pointOf (updSrc ξ k b) h' p').card ≤ 1 := by
   have hinv : ∀ b, pointOf (updSrc ξ k b) h' p' = pointOf ξ h' p' := fun b => by
@@ -182,7 +182,7 @@ theorem sum_pair_le {h p h' p' : Name} (hp : hashParent h = some p)
     rw [sum_w, mul_one]
 
 theorem sum_w_not_distinct_le :
-    ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0) ≤ 1025 * 1025 * ε₁ := by
+    ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0) ≤ 1057 * 1057 * ε₁ := by
   calc ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0)
       ≤ ∑ ξ : Rec, ∑ h ∈ hashNodes, ∑ h' ∈ hashNodes,
           (if h ≠ h' ∧ pt ξ h = pt ξ h' then w else 0) := by
@@ -215,7 +215,7 @@ theorem sum_w_not_distinct_le :
           by_cases he : pointOf ξ h p = pointOf ξ h' p'
           · rw [if_pos ⟨hne, by rw [pt_eq hp, pt_eq hp', he]⟩, if_pos he]
           · rw [if_neg (fun hc => he (by rw [← pt_eq hp, ← pt_eq hp']; exact hc.2)), if_neg he]
-    _ = 1025 * 1025 * ε₁ := by
+    _ = 1057 * 1057 * ε₁ := by
         rw [Finset.sum_const, Finset.sum_const, card_hashNodes, nsmul_eq_mul, nsmul_eq_mul,
           Nat.cast_ofNat, ← mul_assoc]
 
@@ -252,7 +252,7 @@ theorem sum_sim_pair_le {h p h' p' : Name} (hp : hashParent h = some p)
   · rw [sum_w, mul_one]
 
 theorem sum_w_not_noOutCollision_le :
-    ∑ ξ : Rec, (if ¬ NoOutCollision ξ then w else 0) ≤ 1025 * 1025 * ε₁ := by
+    ∑ ξ : Rec, (if ¬ NoOutCollision ξ then w else 0) ≤ 1057 * 1057 * ε₁ := by
   calc ∑ ξ : Rec, (if ¬ NoOutCollision ξ then w else 0)
       ≤ ∑ ξ : Rec, ∑ h ∈ hashNodes, ∑ h' ∈ hashNodes,
           (if h ≠ h' ∧ h ≠ rh ∧ sim ξ h (ξ.2 h'.fin) then w else 0) := by
@@ -288,14 +288,14 @@ theorem sum_w_not_noOutCollision_le :
         by_cases hs : sim ξ h (ξ.2 h'.fin)
         · rw [if_pos ⟨hne, hrh, hs⟩, if_pos hs]
         · rw [if_neg (fun hc => hs hc.2.2), if_neg hs]
-    _ = 1025 * 1025 * ε₁ := by
+    _ = 1057 * 1057 * ε₁ := by
         rw [Finset.sum_const, Finset.sum_const, card_hashNodes, nsmul_eq_mul, nsmul_eq_mul,
           Nat.cast_ofNat, ← mul_assoc]
 
 /-! ## Good records -/
 
 /-- The weight of the bad records. -/
-def δ : ℝ≥0∞ := 2 * (1025 * 1025) * ε₁
+def δ : ℝ≥0∞ := 2 * (1057 * 1057) * ε₁
 
 theorem sum_w_not_goodRec_le : ∑ ξ : Rec, (if ¬ GoodRec ξ then w else 0) ≤ δ := by
   calc ∑ ξ : Rec, (if ¬ GoodRec ξ then w else 0)
@@ -311,14 +311,14 @@ theorem sum_w_not_goodRec_le : ∑ ξ : Rec, (if ¬ GoodRec ξ then w else 0) �
           exact le_add_right le_rfl
     _ = ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0) +
           ∑ ξ : Rec, (if ¬ NoOutCollision ξ then w else 0) := Finset.sum_add_distrib
-    _ ≤ 1025 * 1025 * ε₁ + 1025 * 1025 * ε₁ := add_le_add sum_w_not_distinct_le sum_w_not_noOutCollision_le
+    _ ≤ 1057 * 1057 * ε₁ + 1057 * 1057 * ε₁ := add_le_add sum_w_not_distinct_le sum_w_not_noOutCollision_le
     _ = δ := by rw [δ]; ring
 
 theorem sum_w_not_distinctRec_le : ∑ ξ : Rec, (if ¬ DistinctRec ξ then w else 0) ≤ δ := by
   refine sum_w_not_distinct_le.trans ?_
   rw [δ]
-  calc (1025 : ℝ≥0∞) * 1025 * ε₁ = 1 * (1025 * 1025) * ε₁ := by ring
-    _ ≤ 2 * (1025 * 1025) * ε₁ := by gcongr; norm_num
+  calc (1057 : ℝ≥0∞) * 1057 * ε₁ = 1 * (1057 * 1057) * ε₁ := by ring
+    _ ≤ 2 * (1057 * 1057) * ε₁ := by gcongr; norm_num
 
 end Forest
 

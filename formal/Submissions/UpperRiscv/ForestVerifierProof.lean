@@ -16,15 +16,15 @@ open Forest Forest.Name
 
 set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
-attribute [local irreducible] Forest.setsName Forest.fixedChoice Forest.fixedPositions Forest.fixedDigits
+attribute [local irreducible] Forest.setsName Forest.fixedChoice Forest.fixedDigits
 
 /-- The bits consumed by earlier disclosures in a list of named nodes. -/
-def precedingBits (i : RawIdx) (nodes : List Name) (n : Name) : ℕ :=
-  ((nodes.filter fun w => disclosed (fixedPositions i) w && decide (w.idx < n.idx)).map Name.len).sum
+def precedingBits (i : RawIdx) (v : ℕ) (nodes : List Name) (n : Name) : ℕ :=
+  ((nodes.filter fun w => disclosed (posV i v) w && decide (w.idx < n.idx)).map Name.len).sum
 
 /-- Sequential disclosure offsets agree with the graph's bit-string encoding. -/
 theorem precedingBits_eq (i : Idx) (n : Name) :
-    precedingBits i order n = graph.offset (fins (setsName i)) n.fin := by
+    precedingBits i (freeDigit i.val) order n = graph.offset (fins (setsName i)) n.fin := by
   rw [Graph.offset_eq]
   change _ = chunkOff graph.len ((List.finRange N).filter _) n.fin
   rw [← order_fin]
@@ -38,35 +38,36 @@ theorem precedingBits_eq (i : Idx) (n : Name) :
   exact (lenF_fin x).symm
 
 /-- Number of signature bits consumed at a named node. -/
-def consumedBits (i : RawIdx) (n : Name) : ℕ :=
-  if disclosed (fixedPositions i) n then n.len else 0
+def consumedBits (i : RawIdx) (v : ℕ) (n : Name) : ℕ :=
+  if disclosed (posV i v) n then n.len else 0
 
 /-- A machine step with a running signature cursor measured in bits. -/
-def cursorStep (i : RawIdx) (payload : List Bool)
+def cursorStep (i : RawIdx) (v : ℕ) (payload : List Bool)
     (x : graph.Assignment) (cursor : ℕ) (n : Name) :
     OracleComp Spec (graph.Assignment × ℕ) :=
-  if disclosed (fixedPositions i) n then
+  if disclosed (posV i v) n then
     pure (Function.update x n.fin
       (ofBits (graph.len n.fin) ((payload.drop cursor).take (graph.len n.fin))), cursor + n.len)
-  else if evaluated (fixedPositions i) n then
+  else if evaluated (posV i v) n then
     (fun y => (Function.update x n.fin y, cursor)) <$> evalName x n
   else pure (Function.update x n.fin 0, cursor)
 
 private theorem evaluated_iff_reachable (i : Idx) (n : Name)
     (hn : n ∉ setsName i) :
-    evaluated (fixedPositions i) n = true ↔ reachable (setsName i) n = true := by
-  rw [evaluated_eq, reachable_eq_true, visited_iff]
+    evaluated (posV i (freeDigit i.val)) n = true ↔ reachable (setsName i) n = true := by
+  rw [show posV i (freeDigit i.val) = fixedPositions i from rfl, evaluated_eq, reachable_eq_true,
+    visited_iff]
   exact ⟨fun h => h.2, fun h => ⟨hn, h⟩⟩
 
 /-- A cursor step agrees with an offset read when its cursor names the next disclosure. -/
 theorem cursorStep_eq (i : Idx) (payload : List Bool)
     (x : graph.Assignment) (cursor : ℕ) (n : Name)
-    (hc : disclosed (fixedPositions i) n = true →
+    (hc : disclosed (posV i (freeDigit i.val)) n = true →
       cursor = graph.offset (fins (setsName i)) n.fin) :
-    cursorStep i payload x cursor n =
-      (fun y => (y, cursor + consumedBits i n)) <$>
+    cursorStep i (freeDigit i.val) payload x cursor n =
+      (fun y => (y, cursor + consumedBits i (freeDigit i.val) n)) <$>
         step (setsName i) (graph.decode (fins (setsName i)) payload) x n := by
-  by_cases hd : disclosed (fixedPositions i) n = true
+  by_cases hd : disclosed (posV i (freeDigit i.val)) n = true
   · have hn := (disclosed_eq i n).mp hd
     simp only [cursorStep, hd, if_true, consumedBits, step, hn, map_pure]
     rw [hc hd]
@@ -77,18 +78,18 @@ theorem cursorStep_eq (i : Idx) (payload : List Bool)
     split_ifs <;> simp only [map_pure, Functor.map_map]
 
 /-- Execute the node sequence, consuming signature values in topological order. -/
-def runNodes (i : RawIdx) (payload : List Bool) :
+def runNodes (i : RawIdx) (v : ℕ) (payload : List Bool) :
     List Name → graph.Assignment → ℕ → OracleComp Spec graph.Assignment
   | [], x, _ => pure x
   | n :: ns, x, cursor => do
-      let (y, next) ← cursorStep i payload x cursor n
-      runNodes i payload ns y next
+      let (y, next) ← cursorStep i v payload x cursor n
+      runNodes i v payload ns y next
 
-private theorem precedingBits_head (i : RawIdx) (n : Name) (nodes : List Name)
+private theorem precedingBits_head (i : RawIdx) (v : ℕ) (n : Name) (nodes : List Name)
     (hs : (n :: nodes).Pairwise (fun a b => a.idx < b.idx)) :
-    precedingBits i (n :: nodes) n = 0 := by
+    precedingBits i v (n :: nodes) n = 0 := by
   have hn := (List.pairwise_cons.mp hs).1
-  have hf : nodes.filter (fun w => disclosed (fixedPositions i) w && decide (w.idx < n.idx)) = [] := by
+  have hf : nodes.filter (fun w => disclosed (posV i v) w && decide (w.idx < n.idx)) = [] := by
     apply List.filter_eq_nil_iff.mpr
     intro w hw
     simp only [Bool.and_eq_true, decide_eq_true_eq, not_and]
@@ -97,11 +98,11 @@ private theorem precedingBits_head (i : RawIdx) (n : Name) (nodes : List Name)
   simp only [precedingBits, Nat.lt_irrefl, decide_false, Bool.and_false,
     List.filter_cons_of_neg, Bool.false_eq_true, not_false_eq_true, hf, List.map_nil, List.sum_nil]
 
-private theorem precedingBits_cons (i : RawIdx) (n m : Name) (nodes : List Name)
+private theorem precedingBits_cons (i : RawIdx) (v : ℕ) (n m : Name) (nodes : List Name)
     (hnm : n.idx < m.idx) :
-    precedingBits i (n :: nodes) m = consumedBits i n + precedingBits i nodes m := by
+    precedingBits i v (n :: nodes) m = consumedBits i v n + precedingBits i v nodes m := by
   simp only [precedingBits, hnm, decide_true, Bool.and_true, List.filter_cons]
-  by_cases hd : disclosed (fixedPositions i) n = true
+  by_cases hd : disclosed (posV i v) n = true
   · simp only [hd, if_true, List.map_cons, List.sum_cons, consumedBits]
   · simp only [hd, Bool.false_eq_true, if_false, consumedBits, Nat.zero_add]
 
@@ -109,9 +110,9 @@ private theorem precedingBits_cons (i : RawIdx) (n m : Name) (nodes : List Name)
 theorem runNodes_eq (i : Idx) (payload : List Bool) (nodes : List Name)
     (hs : nodes.Pairwise (fun a b => a.idx < b.idx))
     (x : graph.Assignment) (cursor : ℕ)
-    (hc : ∀ n ∈ nodes, cursor + precedingBits i nodes n =
+    (hc : ∀ n ∈ nodes, cursor + precedingBits i (freeDigit i.val) nodes n =
       graph.offset (fins (setsName i)) n.fin) :
-    runNodes i payload nodes x cursor =
+    runNodes i (freeDigit i.val) payload nodes x cursor =
       nodes.foldlM (step (setsName i) (graph.decode (fins (setsName i)) payload)) x := by
   induction nodes generalizing x cursor with
   | nil => rfl
@@ -119,7 +120,7 @@ theorem runNodes_eq (i : Idx) (payload : List Bool) (nodes : List Name)
     have hn := (List.pairwise_cons.mp hs).1
     have htail := (List.pairwise_cons.mp hs).2
     have hcursor : cursor = graph.offset (fins (setsName i)) n.fin := by
-      simpa only [precedingBits_head i n nodes hs, Nat.add_zero] using hc n (by simp)
+      simpa only [precedingBits_head i _ n nodes hs, Nat.add_zero] using hc n (by simp)
     rw [runNodes, cursorStep_eq i payload x cursor n (fun _ => hcursor)]
     simp only [map_eq_pure_bind, bind_assoc, pure_bind, List.foldlM_cons]
     apply congrArg (fun f => step (setsName i) (graph.decode (fins (setsName i)) payload) x n >>= f)
@@ -127,7 +128,7 @@ theorem runNodes_eq (i : Idx) (payload : List Bool) (nodes : List Name)
     apply ih htail
     intro m hm
     have h := hc m (List.mem_cons_of_mem n hm)
-    rw [precedingBits_cons i n m nodes (hn m hm)] at h
+    rw [precedingBits_cons i _ n m nodes (hn m hm)] at h
     simpa only [Nat.add_assoc] using h
 
 /-- All nodes have unique slots, traversed in increasing slot order. -/
@@ -139,7 +140,7 @@ theorem order_sorted : order.Pairwise (fun a b => a.idx < b.idx) := by
 /-- The direct compiler's high-level reconstruction, with a sequential disclosure cursor. -/
 def directReconstruct (i : Idx) (payload : List Bool) :
     OracleComp Spec graph.Assignment :=
-  runNodes i payload order (fun _ => 0) 0
+  runNodes i (freeDigit i.val) payload order (fun _ => 0) 0
 
 /-- Direct reconstruction is exactly the certified DAG reconstruction. -/
 theorem directReconstruct_eq (i : Idx) (payload : List Bool) :
@@ -153,8 +154,8 @@ def directVerify (pk : PublicKey) (m : Message) (bits : List Bool) :
     OracleComp Spec Bool := do
   let i ← packIndex (emsg m pk) (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
-    if bits.length = 5504 then
-      let y ← directReconstruct ⟨i, hi⟩ (Payload.permute (bits.drop 128))
+    if bits.length = 5464 ∧ bits.drop 5456 = Forest.freeTag ⟨i, hi⟩ then
+      let y ← directReconstruct ⟨i, hi⟩ ((Payload.permute (bits.drop 128)).take 5328)
       return decide ((y rh.fin).setWidth 128 = pk)
     else return false
   else return false
@@ -168,15 +169,16 @@ theorem directVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
   funext i
   by_cases hi : i ∈ validSet
   · rw [dif_pos hi, dif_pos hi]
-    have hlen := Wire.payload_length_iff bits ⟨i, hi⟩
-    simp only [Forest.decodeSignature, Payload.length_permute] at hlen
-    change (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) ↔ bits.length = 5504 at hlen
-    simp only [hlen, directReconstruct_eq]
+    have hlen := Wire.payload_wellFormed_iff bits ⟨i, hi⟩
+    have hR := Forest.fixed_revealBits ⟨i, hi⟩
+    change Forest.forestScheme.WellFormed ⟨i, hi⟩ (Payload.permute (bits.drop 128)) ↔ _ at hlen
+    change graph.revealBits (fins (setsName ⟨i, hi⟩)) = 5328 at hR
+    simp only [hlen, hR, directReconstruct_eq]
   · rw [dif_neg hi, dif_neg hi]
 
 /-- The sequential disclosure cursor advances by one value exactly at disclosed nodes. -/
-theorem consumedBits_value (i : RawIdx) (n : Name) :
-    consumedBits i n = if disclosed (fixedPositions i) n then n.len else 0 := rfl
+theorem consumedBits_value (i : RawIdx) (v : ℕ) (n : Name) :
+    consumedBits i v n = if disclosed (posV i v) n then n.len else 0 := rfl
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.ForestVerifier.directVerify_eq' depends on axioms: [propext, Classical.choice, Quot.sound]

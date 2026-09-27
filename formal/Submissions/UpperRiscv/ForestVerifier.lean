@@ -23,12 +23,12 @@ attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.setsName Forest.fixedChoice Forest.fixedPositions Forest.fixedDigits
 
 /-- The nodes of chain `k`, in topological order. -/
-def chainNodes (k : Fin 32) : List Name :=
-  src k :: (List.finRange 32).flatMap (fun t => [ci k t, ch k t, cv k t])
+def chainNodes (k : Fin 33) : List Name :=
+  src k :: (List.finRange 32).flatMap (fun t => [ci k t, ch k t, cv k t]) ++ [tp k]
 
 /-- Topological order: the chains one after the other, then the root. -/
 def order : List Name :=
-  (List.finRange 32).flatMap chainNodes ++ [rc, rh]
+  (List.finRange 33).flatMap chainNodes ++ [rc, rh]
 
 set_option maxRecDepth 100000 in
 theorem order_fin : order.map Name.fin = List.finRange N := by decide +kernel
@@ -44,6 +44,7 @@ def evalName (x : graph.Assignment) (n : Name) :
       hash (x rc.fin)
   | .ci k t => pure ((detVal (.ci k t) x).cast (graph_len_fin (.ci k t)).symm)
   | .cv k t => pure ((detVal (.cv k t) x).cast (graph_len_fin (.cv k t)).symm)
+  | .tp k => pure ((detVal (.tp k) x).cast (graph_len_fin (.tp k)).symm)
   | .rc => pure ((detVal .rc x).cast (graph_len_fin .rc).symm)
 
 theorem evalName_eq (x : graph.Assignment) (n : Name) :
@@ -95,8 +96,8 @@ def verify (pk : PublicKey) (m : Message) (bits : List Bool) :
   let i ← packIndex (emsg m pk) (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
     let A := Forest.setsName ⟨i, hi⟩
-    if (bits.drop 128).length = graph.revealBits (fins A) then
-      let y ← reconstruct A (Payload.permute (bits.drop 128))
+    if Forest.forestScheme.WellFormed ⟨i, hi⟩ (Payload.permute (bits.drop 128)) then
+      let y ← reconstruct A ((Payload.permute (bits.drop 128)).take (graph.revealBits (fins A)))
       return decide ((y rh.fin).setWidth 128 = pk)
     else return false
   else return false
@@ -106,31 +107,31 @@ theorem verify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     verify pk m bits = Wire.scheme.verify pk m bits := by
   change verify pk m bits = Forest.forestScheme.verify pk m (Forest.decodeSignature bits)
   unfold verify GScheme.verify Forest.decodeSignature
-  simp only [Payload.length_permute]
   apply congrArg (fun f => packIndex (emsg m pk) (ofBits 128 (bits.take 128)) >>= f)
   funext i
   by_cases hi : i ∈ validSet
   · rw [dif_pos hi, dif_pos hi]
-    change (if (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) then _ else _) =
-      (if (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) then _ else _)
     split_ifs with hlen
-    · rw [reconstruct_eq]
+    · dsimp only
+      rw [reconstruct_eq]
       congr 1
       funext y
       exact congrArg pure (by congr)
     · rfl
   · rw [dif_neg hi, dif_neg hi]
 
-/-- Whether a node supplies one of the 32 signature values. -/
-def disclosed (positions : Fin 32 → Fin 32) : Name → Bool
-  | .ci k t => decide (positions k = t)
+/-- Whether a node supplies one of the 33 signature values. -/
+def disclosed (positions : Fin 33 → Fin 33) : Name → Bool
+  | .ci k t => decide ((positions k).val = t.val)
+  | .tp k => decide ((positions k).val = 32)
   | _ => false
 
 /-- Whether a node is computed from earlier nodes rather than read from the signature. -/
-def evaluated (positions : Fin 32 → Fin 32) : Name → Bool
+def evaluated (positions : Fin 33 → Fin 33) : Name → Bool
   | .src _ => false
   | .ci k t => decide ((positions k).val < t.val)
   | .ch k t | .cv k t => decide ((positions k).val ≤ t.val)
+  | .tp k => decide ((positions k).val < 32)
   | .rc | .rh => true
 
 /-- The machine's disclosure predicate agrees with the certified cut. -/
@@ -144,6 +145,9 @@ theorem disclosed_eq (i : Idx) (n : Name) :
   | src k => simp only [disclosed, Bool.false_eq_true, src_not_mem_cutOf]
   | ch k t => simp only [disclosed, Bool.false_eq_true, ch_not_mem_cutOf]
   | cv k t => simp only [disclosed, Bool.false_eq_true, cv_not_mem_cutOf]
+  | tp k =>
+    rw [tp_mem_cutOf_iff]
+    simp only [disclosed, decide_eq_true_eq, fixedChoice]
   | rc => simp only [disclosed, Bool.false_eq_true, rc_not_mem_cutOf]
   | rh => simp only [disclosed, Bool.false_eq_true, rh_not_mem_cutOf]
 
@@ -155,7 +159,7 @@ private theorem evaluated_child {A : Finset Name} {n p : Name} (hc : child n = s
 theorem evaluated_eq (i : Idx) (n : Name) :
     evaluated (fixedPositions i) n = true ↔ Evaluated (Forest.setsName i) n := by
   rw [Forest.setsName]
-  have chain (k : Fin 32) (t : Fin 32) :
+  have chain (k : Fin 33) (t : Fin 32) :
       Evaluated (cutOf (fixedChoice i)) (ch k t) ↔ (fixedPositions i k).val ≤ t.val := by
     rw [evaluated_ch_iff]
     simp only [fixedChoice]
@@ -174,6 +178,9 @@ theorem evaluated_eq (i : Idx) (n : Name) :
     simp only [evaluated, decide_eq_true_eq]
     rw [← chain k t]
     exact ⟨evaluated_child rfl, evaluated_of_child rfl (ch_not_mem_cutOf _ _ _)⟩
+  | tp k =>
+    rw [evaluated_tp_iff]
+    simp only [evaluated, decide_eq_true_eq, fixedChoice]
   | rc => exact iff_of_true rfl (evaluated_rc _)
   | rh => exact iff_of_true rfl (evaluated_rh _)
 

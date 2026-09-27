@@ -26,7 +26,7 @@ theorem length_encode (G : Graph) (A : Finset (Fin G.size)) (x : G.Assignment) :
 
 theorem signLoop_returns (S : GScheme) (x : S.graph.Assignment) (m : Message) :
     ∀ k tried σ, some σ ∈ support (S.signLoop x m k tried) →
-      ∃ i, σ.2 = S.graph.encode (S.sets i) x
+      ∃ i, σ.2 = S.graph.encode (S.sets i) x ++ S.tag i
   | 0, _, _, h => by simp [GScheme.signLoop] at h
   | k + 1, tried, σ, h => by
     rw [GScheme.signLoop] at h
@@ -44,7 +44,7 @@ theorem signLoop_returns (S : GScheme) (x : S.graph.Assignment) (m : Message) :
     · simp at h
 
 theorem sign_returns (S : GScheme) (x : S.graph.Assignment) (m : Message) (σ : Signature)
-    (h : some σ ∈ support (S.sign x m)) : ∃ i, σ.2 = S.graph.encode (S.sets i) x :=
+    (h : some σ ∈ support (S.sign x m)) : ∃ i, σ.2 = S.graph.encode (S.sets i) x ++ S.tag i :=
   signLoop_returns S x m trials ∅ σ h
 
 theorem signatureSize (S : GScheme) :
@@ -53,7 +53,7 @@ theorem signatureSize (S : GScheme) :
     some σ ∈ support (S.sign sk m) → (encodeSignature σ).length ≤ nonceBits + (maxSignatureBits - nonceBits)
   intro sk m σ hσ
   obtain ⟨i, hi⟩ := signLoop_returns S sk m trials ∅ σ hσ
-  rw [length_encodeSignature, hi, length_encode]
+  rw [length_encodeSignature, hi, List.length_append, length_encode]
   have h := S.reveal_le i
   omega
 
@@ -70,7 +70,8 @@ theorem rejectsOversized (S : GScheme) :
   simp only [Set.mem_iUnion] at hmem
   obtain ⟨i, _, hmem⟩ := hmem
   by_cases hi : i ∈ validSet
-  · have hwrong : σ.2.length ≠ S.graph.revealBits (S.sets ⟨i, hi⟩) := by
+  · have hwrong : ¬ S.WellFormed ⟨i, hi⟩ σ.2 := by
+      rintro ⟨hl, -⟩
       have h := S.reveal_le ⟨i, hi⟩
       omega
     simp only [dif_pos hi, if_neg hwrong, support_pure, Set.mem_singleton_iff] at hmem

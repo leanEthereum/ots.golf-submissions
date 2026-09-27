@@ -7,68 +7,65 @@ open Riscv2Program
 
 set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
-attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
+attribute [local irreducible] Forest.fixedDigits
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey) {a : ℕ}
+variable (index : RawIdx) (v : ℕ) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
-def readNodes (k : Fin 32) : List Name :=
-  src k :: (List.range (RiscvUpperForest.ForestVerifier.pos index k+1)).flatMap (tripleN k)
-def suffixNodes (k : Fin 32) : List Name :=
-  (List.range' (RiscvUpperForest.ForestVerifier.pos index k+1)
-    (32-(RiscvUpperForest.ForestVerifier.pos index k+1))).flatMap (tripleN k)
-
-theorem chain_split_first (k : Fin 32) : chainNodes k = readNodes index k ++ suffixNodes index k := by
-  have h := pos_le index k
-  rw [chainNodes_eq, range_split (RiscvUpperForest.ForestVerifier.pos index k+1) (by omega),
-    List.flatMap_append]
-  rfl
+theorem take_ofBits (l : List Bool) (n : ℕ) : ofBits n (l.take n) = ofBits n l := by
+  simpa only [List.drop_zero] using ofBits_drop_take l (cap := n) (start := 0) (len := n) (by omega)
 
 /-- The first chain hash includes the reader's pure prefix and its one disclosed input. -/
-theorem read_prefix_refines (k : Fin 32) (tail : Code)
+theorem read_prefix_refines (k : Fin 33) (hk : RiscvUpperForest.ForestVerifier.pos index v k ≤ 31) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
-    (hlen : wire.length = 5376)
+    (hlen : 5328 ≤ wire.length)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      HashInv index wire pk a u z k (wireSlot k) →
-      HoldsAt u z k (RiscvUpperForest.ForestVerifier.pos index k+1) →
+      HashInv index v wire pk a u z k (valueAddr k) →
+      HoldsAt u z k (RiscvUpperForest.ForestVerifier.pos index v k+1) →
       Riscv.CodeAt u u.pc tail → ∀ left, rest ≤ left →
-      Riscv.Refines left u (K (z,cursor k+chainBits k)) c)
+      Riscv.Refines left u (K (z, Payload.graphOff k+chainBits k)) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (inv : HashInv index wire pk a s x k (wireSlot k))
-    (held : MemBits s (W (wireSlot k)) (ofBits (chainBits k) (wire.drop (wireOffset k))))
+    (inv : HashInv index v wire pk a s x k (valueAddr k))
+    (held : MemBits s (W (valueAddr k)) (ofBits (chainBits k) (wire.drop (wireOffset k))))
     (located : Riscv.CodeAt s s.pc (.ECALL::tail)) (bound : 1+rest ≤ fuel) :
     Riscv.Refines fuel s
-      (runNodes' index (Payload.permute wire) (readNodes index k) x (cursor k) >>= K) (1+c) := by
-  set p := RiscvUpperForest.ForestVerifier.pos index k with hp
-  have hp32 : p < 32 := by have := pos_le index k; omega
-  obtain ⟨x', run, frame⟩ := prefix_run index (Payload.permute wire) k p le_rfl x (cursor k)
-  have nodes : readNodes index k =
+      (runNodes' index v (Payload.permute wire) (readNodes index v k) x (Payload.graphOff k) >>= K)
+      (1+c) := by
+  set p := RiscvUpperForest.ForestVerifier.pos index v k with hp
+  have hp32 : p < 32 := by omega
+  obtain ⟨x', run, ftp, frame⟩ :=
+    prefix_run index v (Payload.permute wire) k p le_rfl (by omega) x (Payload.graphOff k)
+  have nodes : readNodes index v k =
       (src k :: (List.range p).flatMap (tripleN k)) ++ [ci k ⟨p,hp32⟩,ch k ⟨p,hp32⟩,cv k ⟨p,hp32⟩] := by
     unfold readNodes
     rw [← hp, List.range_succ, List.flatMap_append, List.flatMap_singleton, List.cons_append]
     simp [tripleN, hp32]
   rw [nodes, runNodes'_append, run, pure_bind]
-  have inv' : HashInv index wire pk a s x' k (wireSlot k) := by
-    refine ⟨inv.ctx, inv.input, inv.inputRange, inv.length, inv.out, inv.payload, ?_⟩
+  have hne1 : k.val ≠ 1 → TailInv index v wire s x' k := by
+    intro h1
+    have h := inv.tail h1
+    unfold TailInv tailAfter at h ⊢
+    have e : lastAnswer x' 1 = lastAnswer x 1 := by
+      unfold lastAnswer
+      rw [frame 1 (fun e => h1 (by rw [← e]; rfl))]
+    rw [e]
+    exact h
+  have inv' : HashInv index v wire pk a s x' k (valueAddr k) := by
+    refine ⟨inv.ctx, inv.input, inv.inputRange, inv.length, inv.out, inv.payload, ?_, hne1⟩
     intro j hj
     have he : tops x' j = tops x j := by
       unfold tops
-      rw [frame j (by intro he; subst j; omega)]
+      rw [ftp j]
     rw [he]; exact inv.done j hj
-  have held' : MemBits s (W (wireSlot k))
+  have held' : MemBits s (W (valueAddr k))
       (ofBits (graph.len (ci k ⟨p,hp32⟩).fin)
-        (((Payload.permute wire).drop (cursor k)).take (graph.len (ci k ⟨p,hp32⟩).fin))) := by
-    have take : ∀ n, ofBits n (((Payload.permute wire).drop (cursor k)).take n) =
-        ofBits n ((Payload.permute wire).drop (cursor k)) := by
-      intro n
-      simpa only [List.drop_zero] using
-        ofBits_drop_take ((Payload.permute wire).drop (cursor k)) (cap := n) (start := 0) (len := n) (by omega)
-    rw [take]
+        (((Payload.permute wire).drop (Payload.graphOff k)).take (graph.len (ci k ⟨p,hp32⟩).fin))) := by
+    rw [take_ofBits]
     have hw : graph.len (ci k ⟨p,hp32⟩).fin = chainBits k := graph_len_fin _
     rw [hw, permute_read wire hlen k]
     exact held
-  apply step_refines index wire pk k ⟨p,hp32⟩ (wireSlot k) tail K c rest
-    (cursor k) (cursor k+chainBits k) s x' fuel _
-    (triple_run_read index (Payload.permute wire) k ⟨p,hp32⟩ rfl x' (cursor k))
+  apply step_refines index v wire pk k ⟨p,hp32⟩ (valueAddr k) tail K c rest
+    (Payload.graphOff k) (Payload.graphOff k+chainBits k) s x' fuel _
+    (triple_run_read index v (Payload.permute wire) k ⟨p,hp32⟩ rfl x' (Payload.graphOff k))
     inv' held' located bound
   intro u y invU answer locatedU left hleft
   exact continuation u _ invU (holdsAt_succ answer) locatedU left hleft

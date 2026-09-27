@@ -4,8 +4,8 @@ import Submissions.UpperRiscv.GScheme
 /-!
 # The bare-chain forest
 
-A family of cuts indexed by the accepted indices, with sixteen 144-bit and sixteen 192-bit values. Verification
-costs 203 compressions.
+A family of cuts indexed by the accepted indices, with twenty-one 144-bit and twelve 192-bit
+values, followed by the free digit as an 8-bit tag. Verification costs 191 compressions.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -28,6 +28,12 @@ def setsName (i : Idx) : Finset Name := cutOf (fixedChoice i)
 
 theorem setsName_injective : Function.Injective setsName := fixedCut_injective
 
+/-- The free digit of an index as eight bits, least significant first. -/
+def freeTag (i : Idx) : List Bool := toBits (BitVec.ofNat 8 (freeDigit i.val))
+
+theorem length_freeTag (i : Idx) : (freeTag i).length = 8 := by
+  simp [freeTag, toBits]
+
 /-- The concrete scheme. -/
 def forestScheme : GScheme where
   graph := graph
@@ -40,12 +46,14 @@ def forestScheme : GScheme where
   no_hidden_source := by
     intro i
     exact (no_hidden_source_iff (setsName i)).mpr (fixedCut_isCut i).covers
+  tag := freeTag
   reveal_le := by
     intro i
-    show graph.revealBits (fins (setsName i)) ≤ 5376
-    rw [revealBits_eq]
-    change ∑ n ∈ cutOf (fixedChoice i), n.len ≤ 5376
-    rw [reveal_cutOf]
+    show graph.revealBits (fins (setsName i)) + (freeTag i).length ≤ 5376
+    rw [revealBits_eq, length_freeTag]
+    change ∑ n ∈ cutOf (fixedChoice i), n.len + 8 ≤ 5376
+    rw [reveal_cutOf _ (fixedChoice_capChoice i)]
+    norm_num
   keygen_le := by
     show graph.keygenCost ≤ 2 ^ 20
     rw [graph_keygenCost]
@@ -54,12 +62,12 @@ def forestScheme : GScheme where
 theorem isCut_setsName (i : Idx) : IsCut (setsName i) :=
   fixedCut_isCut i
 
-theorem cost_setsName (i : Idx) : ∑ n ∈ evaluatedSet (setsName i), n.cost = 202 :=
+theorem cost_setsName (i : Idx) : ∑ n ∈ evaluatedSet (setsName i), n.cost = 190 :=
   fixedCut_cost i
 
-/-- Every signature verifies in `203` compressions. -/
-theorem forestScheme_verifyCost (i : Idx) : forestScheme.verifyCost i = 203 := by
-  show idxCost + graph.reconstructCost (fins (setsName i)) = 203
+/-- Every signature verifies in `191` compressions. -/
+theorem forestScheme_verifyCost (i : Idx) : forestScheme.verifyCost i = 191 := by
+  show idxCost + graph.reconstructCost (fins (setsName i)) = 191
   have hidx : idxCost = 1 := by decide
   rw [reconstructCost_eq, hidx]
   have h := cost_setsName i

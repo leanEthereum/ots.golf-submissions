@@ -444,9 +444,10 @@ theorem verify_support (S : GScheme) (pk : PublicKey) (m : Message)
       Cache.Sub c p.2 ∧ (p.1 = true →
         ∃ w, p.2 ⟨emsgBits + nonceBits, swapHalves (emsg m pk ++ σ.1)⟩ = some w ∧
           ∃ hi : pack w ∈ validSet,
-            σ.2.length = S.graph.revealBits (S.sets ⟨_, hi⟩) ∧
+            S.WellFormed ⟨_, hi⟩ σ.2 ∧
             ∃ y : S.graph.Assignment,
-              S.graph.ReconEqs p.2 (S.sets ⟨_, hi⟩) (S.graph.decode (S.sets ⟨_, hi⟩) σ.2) y ∧
+              S.graph.ReconEqs p.2 (S.sets ⟨_, hi⟩)
+                (S.graph.decode (S.sets ⟨_, hi⟩) (σ.2.take (S.graph.revealBits (S.sets ⟨_, hi⟩)))) y ∧
               S.publicKey y = pk) := by
   intro p hp
   unfold GScheme.verify at hp
@@ -457,7 +458,7 @@ theorem verify_support (S : GScheme) (pk : PublicKey) (m : Message)
   dsimp only at hp hw
   by_cases hi : pack w ∈ validSet
   · rw [dif_pos hi] at hp
-    by_cases hlen : σ.2.length = S.graph.revealBits (S.sets ⟨_, hi⟩)
+    by_cases hlen : S.WellFormed ⟨_, hi⟩ σ.2
     · rw [if_pos hlen, run_bind, support_bind] at hp
       simp only [Set.mem_iUnion] at hp
       obtain ⟨⟨y, c₂⟩, hy, hp⟩ := hp

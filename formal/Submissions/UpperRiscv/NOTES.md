@@ -1,3 +1,117 @@
+# Free count digit and two caps: 346-cycle candidate
+
+This extends the 348-cycle candidate (length test folded into the decision).
+
+## Construction
+
+- 33 chains. The signature is 5464 bits: nonce 128, 21 chain values of 144
+  bits and 12 of 192 bits (payload 5328 bits), then the count byte `v` (bits
+  5456 to 5463). Chain 0 (the free chain) hashes `v + 1` times. The 32 index
+  digits `d` go to 16 pairs of chains `2q+1`, `2q+2`.
+- Accepted set: `S + v = 146` with `S` the index digit sum and `v < 16`. The
+  pair caps are `20` for pairs 0 to 4, `21` for pairs 5 to 9 and `30` for pairs 10 to 15. The
+  caps sum to 385, which excludes the alias `S + v = 401`.
+- Chains 1 and 15 are caps: they hash `d` times instead of `d + 1`. A cap with
+  digit 0 reveals its top. Its value lies on its root slot, and no other
+  answer buffer covers that slot.
+- The root region is 826 bytes from `0x3FFFA0`: the root slots of the 33
+  chains in address order (18, 24 or 32 bytes each). The root query reads the
+  first `a3 + 1144` bits, which is 6608 for a full signature and at most 6649
+  (13 blocks). Past the region are six bytes: the high cap's answer bytes 18 to
+  23 if it hashed, else the loaded signature. Every chain has its own value
+  address, answer buffer and state offset (`MixedProgram` tables). 10 chains
+  expand.
+
+## Machine
+
+- Index phase: 38 instructions and 35 cycles. `LD x1` loads 5465, which is
+  both the dispatch base of the free chain and the decision bound.
+  `LBU x29` and `SLLI` compute `4 v`. `SUB x27, x27, x29` runs before the
+  `REMU` check. The lane words are at `0x4002E8`, above every answer buffer.
+  Lane 0's base is raised by 167, so that the residue is zero exactly when
+  `S + v = 146 (mod 255)`. The lane sum wraps three times for every input.
+- Free chain: the first hash, then `SUB x28, x1, x29` and `JALR` into a
+  255-entry table that ends at prologue 0. The entries for `v < 16` are hash
+  steps. The others branch to the index phase's rejection.
+- Pairs: the 348 dispatch, with a new column table (`place`), 12 rejection
+  stubs, and 15-step rows for expanding or cap first chains.
+- Decision: `SLTU x10, x13, x1` accepts only if `a3 < 5465`.
+
+Accounting on an accepting run: 35 index + (6 + v) free chain + 137 pair
+overhead + S pair hashes + 22 root/decision = 346, with `S + v = 146`. The
+image has 15,719 instructions and 88 data bytes, which is 62,964 bytes.
+
+## Proof
+
+- `MixedIndexArith.count_remainder_iff` proves the count check.
+  `MixedIndexPhase` proves the index phase.
+- `MixedFree`: the free chain refines `entryNodes 0`, then the `v < 16`
+  test, then `tableNodes 0`. `MixedFreeArith` proves the table facts.
+- `MixedChain*`, `MixedPair`, `MixedPhase`: chains are indexed by execution
+  position (`Fin 33`). The memory invariant (`ChainsInv`) keeps the unread
+  values, the committed root slots and the six bytes past the region.
+  `MixedLayout` proves the order constraints on every answer buffer by kernel
+  decision (`unread_disjoint'`, `completed_disjoint'`, `tail_disjoint'`).
+  `MixedMemory.memBits_region` assembles the region from the slots.
+- `MixedRoot`: the root reads any 6656-bit value at the region, in at most
+  13 blocks, then the decision.
+- `CappedCost.bound`: `6 + v + pairs + 22 <= 311` on every path that passes
+  the count check. `MixedVerifier.image_refines` gives at most 346 cycles on
+  every execution.
+- Scheme (`Names` to `FixedChoice`): each chain has a top node `tp k`, the
+  root slot of its last answer. For the caps (chains 1 and 15) this slot is
+  the state itself, so a zero cap digit reveals the top. The root input is the
+  6608-bit region of the 33 tops in address order (`rootRegion_injective`).
+  Keygen costs 1069 compressions and verification costs 191.
+- Accepted set (`Valid`, `PairCount`): digit sum in `[131, 146]` and pair caps
+  20×5, 21×5, 30×6. The free digit is `146 - sum`, so all 33 digits sum to 146
+  and distinct cuts are incomparable. The exact count is
+  32768630519944966874703949789741158, which is at least `89 · 2^108`
+  (availability unchanged).
+- Free digit: `GScheme.tag` appends the free digit as 8 bits, and the verifier
+  rejects any other tag. An accepted forgery with the signed nonce and message
+  has the same index and therefore the same tag. Freshness on bit strings
+  thus reduces to freshness of the revealed values (`StageB.events_stB`).
+- Security (`Values` to `Main`): the simulation event at level 31 compares
+  the root slot (at least 144 bits, so at most `2^112` answers match).
+  `events_ne` and `events_same` handle a revealed cap top. The bound becomes
+  `κ(B − 1069) + 2δ` with `δ = 2 · 1057² · 2^-144`.
+- Short and oversized signatures (`StagedVerifier`): at 5464 bits the staged
+  verifier prunes to the forest verifier. With a valid index, the count check
+  holds exactly when the byte is the tag (`count_iff_free`, `freeTag_iff`).
+  Every other path is a constant `false` suffix. This covers the alias
+  `v = 255`, digit sums in `[386, 401]` (pair caps sum to 385), a failed pair
+  cap and `v ≥ 16`. Below 5464 bits, acceptance requires a root query of length
+  `ℓ + 1144 ∈ [1144, 6608)` whose answer begins with the public key
+  (`Values.SprShort`). Above 5464 bits, `a ≥ 5465` rejects on every path. The
+  root query reads the six bytes past the region (`rootTail`).
+
+## Validation
+
+- An independent generator reproduces the Lean-exported image instruction for
+  instruction (sha256 of the canonical JSON
+  `90553ebb152a53f39853045b3fc8be9659245ff5e152851770633c3710e8c7b3`).
+- 22,346 transcript executions against a chain-level staged reference, with
+  the same oracle and programmed answers. They cover:
+  - all 4,096 pair landings,
+  - every count byte from 0 to 255,
+  - the checksum aliases 401 and 656 at every first forbidden pair,
+  - digit sums from 0 to 480,
+  - all 5,464 bit flips of one honest signature,
+  - every length from 0 to 5505, larger lengths up to 2^20, and oversized
+    tails,
+  - programmed short and oversized roots (accepted exactly at 5464 bits or
+    less).
+- Every execution made the same queries and gave the same verdict as the
+  reference, and none trapped. The cycle count equalled the analytic path
+  cost. The maximum was 346. An exact worst-case search over every execution
+  gives 346.
+- `lake build Submissions.UpperRiscv.Solution` succeeds. `certificate`
+  (`Certificate 346`) and `image_size` use only `propext`, `Classical.choice`
+  and `Quot.sound`. No hosted verdict is claimed.
+
+---
+
 # Length test folded into the decision: 348-cycle candidate
 
 This extends the 349-cycle capped-rank record (PR #40). Earlier notes below
