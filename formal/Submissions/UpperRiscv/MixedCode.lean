@@ -7,22 +7,11 @@ namespace OptimalOTS.RiscvMixedProgram
 open RiscvZkvm.Rv64
 open Riscv2Program
 
-/-- Position of a copy in the concrete instruction image. -/
-def copyOffset (q d : ℕ) : ℕ :=
-  50 + groupOffset (group q) + 256*(copies q-1-d) + slotOffset q
-
-theorem copyStart_eq (q d : ℕ) : copyStart q d = 4096+4*copyOffset q d := by
-  unfold copyStart copiesStart copyOffset
-  omega
-
 def wellPlaced (cursor : ℕ) : List (ℕ × Code) → Bool
   | [] => true
   | (off, body) :: rest => decide (cursor ≤ off) && wellPlaced (off+body.length) rest
 
-theorem fragments_placed : wellPlaced 0 fragments = true := by decide +kernel
-
-theorem keys_complete : ∀ q : Fin 16, ∀ d : Fin (copies q),
-    (q.val, d.val) ∈ fragmentKeys := by decide +kernel
+theorem fragments_placed : wellPlaced copiesAt fragments = true := by decide +kernel
 
 theorem mem_insertFragment (a b : ℕ × Code) (parts : List (ℕ × Code)) :
     a ∈ insertFragment b parts ↔ a = b ∨ a ∈ parts := by
@@ -32,14 +21,22 @@ theorem mem_insertFragment (a b : ℕ × Code) (parts : List (ℕ × Code)) :
     rw [insertFragment]
     split_ifs <;> simp_all [List.mem_cons, or_left_comm]
 
-theorem mem_addStubs (a : ℕ × Code) (stubs : List ℕ) :
-    a ∈ addStubs stubs ↔ a ∈ copyFragments ∨ ∃ ip ∈ stubs, a = (ip-50,reject) := by
-  induction stubs with
-  | nil => simp [addStubs]
-  | cons ip rest ih =>
-    rw [addStubs, mem_insertFragment, ih]
-    simp only [List.mem_cons, exists_eq_or_imp]
-    tauto
+theorem mem_foldr_insert (a : ℕ × Code) (parts : List (ℕ × Code)) :
+    a ∈ parts.foldr insertFragment [] ↔ a ∈ parts := by
+  induction parts with
+  | nil => simp
+  | cons b rest ih => rw [List.foldr_cons, mem_insertFragment, ih, List.mem_cons]
+
+theorem mem_fragments (a : ℕ × Code) :
+    a ∈ fragments ↔ a ∈ copyFragments ∨ ∃ ip ∈ rejectStubs, a = (ip, reject) := by
+  unfold fragments
+  rw [mem_foldr_insert, List.mem_append, List.mem_map]
+  simp only [eq_comm]
+
+theorem keys_complete (q d : ℕ) (hq : q < 16) (hd : d < 16) : (q, d) ∈ fragmentKeys := by
+  unfold fragmentKeys
+  simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq]
+  exact ⟨q, hq, d, hd, rfl, rfl⟩
 
 /-- Generic placement proof: checking the small fragment metadata is enough; do not
 reduce the whole image once for every copy. -/
@@ -75,29 +72,54 @@ theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
   have h := located (i+n) (by rw [List.length_drop] at hn; omega)
   rw [List.getElem?_drop, ← h, Nat.mul_add, BitVec.ofNat_add, BitVec.add_assoc]
 
+theorem tables_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
+    Riscv.CodeAt s (W (4096+4*copiesAt)) tables := by
+  have ht := global.append_right (first := indexPhase ++ freePrologue ++ freeTable ++ prologue 0)
+    (last := tables)
+  rw [head_length, W_add] at ht
+  exact ht
+
 theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
-    (q : Fin 16) (d : Fin (copies q)) :
+    (q d : ℕ) (hq : q < 16) (hd : d < 16) :
     Riscv.CodeAt s (W (copyStart q d)) (copyCode q d) := by
-  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 9 nop) (last := tables)
-  rw [show (indexPhase ++ prologue 0 ++ List.replicate 9 nop).length = 50 by decide, W_add] at ht
-  have mem : (groupOffset (group q)+256*(15-d.val)+slotOffset q, copyCode q d) ∈ fragments :=
-    (mem_addStubs _ _).mpr (Or.inl
-      (List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩))
-  have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
-  exact h
+  have mem : (bodyAt q d, copyCode q d) ∈ fragments :=
+    (mem_fragments _).mpr (Or.inl (List.mem_map.mpr ⟨(q, d), keys_complete q d hq hd, rfl⟩))
+  exact assemble_located s 4096 fragments copiesAt fragments_placed (tables_located s global) _ _ mem
 
 theorem rejectStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (ip : ℕ) (hi : ip ∈ rejectStubs) :
     Riscv.CodeAt s (W (4096+4*ip)) reject := by
-  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 9 nop) (last := tables)
-  rw [show (indexPhase ++ prologue 0 ++ List.replicate 9 nop).length = 50 by decide, W_add] at ht
-  have mem : (ip-50,reject) ∈ fragments :=
-    (mem_addStubs _ _).mpr (Or.inr ⟨ip,hi,rfl⟩)
-  have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
-  have hb : 50 ≤ ip := by
-    simp only [rejectStubs, List.mem_cons, List.not_mem_nil, or_false] at hi
-    omega
-  have he : copiesStart+4*(ip-50) = 4096+4*ip := by unfold copiesStart; omega
-  simpa only [he] using h
+  have mem : (ip, reject) ∈ fragments := (mem_fragments _).mpr (Or.inr ⟨ip, hi, rfl⟩)
+  exact assemble_located s 4096 fragments copiesAt fragments_placed (tables_located s global) _ _ mem
+
+theorem indexStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
+    Riscv.CodeAt s (W (4096+4*indexStub)) reject := by
+  have h := global.append_left (first := indexPhase)
+    (last := freePrologue ++ freeTable ++ prologue 0 ++ tables)
+  have h2 := (CodeAt.drop (by simpa only [List.append_assoc] using h) indexStub)
+  have e : indexPhase.drop indexStub = reject ++ [.ADDI .x11 .x0 144] := by decide +kernel
+  rw [e] at h2
+  have h3 := h2.append_left
+  rw [W_add] at h3
+  exact h3
+
+theorem freeTable_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
+    Riscv.CodeAt s (W (4096+4*freeTableAt)) (freeTable ++ prologue 0) := by
+  have e : verifier = (indexPhase ++ freePrologue) ++ ((freeTable ++ prologue 0) ++ tables) := by
+    simp only [verifier, List.append_assoc]
+  rw [e] at global
+  have h := global.append_right.append_left
+  have e2 : (indexPhase ++ freePrologue).length = freeTableAt := by decide +kernel
+  rw [e2, W_add] at h
+  exact h
+
+theorem freePrologue_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
+    Riscv.CodeAt s (W (4096+4*38)) (freePrologue ++ freeTable ++ prologue 0) := by
+  have e : verifier = indexPhase ++ ((freePrologue ++ freeTable ++ prologue 0) ++ tables) := by
+    simp only [verifier, List.append_assoc]
+  rw [e] at global
+  have h := global.append_right.append_left
+  rw [index_length, W_add] at h
+  exact h
 
 end OptimalOTS.RiscvMixedProgram

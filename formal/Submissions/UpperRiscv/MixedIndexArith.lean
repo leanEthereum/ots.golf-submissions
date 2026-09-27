@@ -246,15 +246,10 @@ theorem remainder_fold_answer (a : MachineState) (hm : MasksLoaded a) (answer : 
   simp only [Finset.sum_range_succ, Finset.sum_range_zero, hf, hc]
   ring
 
-/-- The cheap address checksum deliberately keeps two ranks. The pair tables eliminate 413. -/
-def IndexRank (i : ℕ) : Prop :=
-  (∑ k ∈ Finset.range 32, digit i k) = 158 ∨
-  (∑ k ∈ Finset.range 32, digit i k) = 413
+/-- The count check: the index digits and the count byte sum to `146` modulo `255`. -/
+def CountCheck (i v : ℕ) : Prop := (digitSum i + v) % 255 = 146
 
-instance : DecidablePred IndexRank := fun _ => inferInstanceAs (Decidable (_ ∨ _))
-
-theorem accepted_indexRank {i : ℕ} (hi : Accepted i) : IndexRank i :=
-  Or.inl hi.1
+instance (i v : ℕ) : Decidable (CountCheck i v) := by unfold CountCheck; infer_instance
 
 theorem digit_sum_pairs (i : ℕ) :
     (∑ k ∈ Finset.range 32, digit i k) =
@@ -263,33 +258,9 @@ theorem digit_sum_pairs (i : ℕ) :
   norm_num
   ring
 
-theorem caps_sum_le {i : ℕ} (hc : ∀ q : Fin 16, PairAllowed i q.val) :
-    (∑ k ∈ Finset.range 32, digit i k) ≤ 412 := by
-  rw [digit_sum_pairs]
-  calc
-    _ ≤ ∑ q ∈ Finset.range 16, PairCode.cap q := by
-      apply Finset.sum_le_sum
-      intro q hq
-      exact hc ⟨q, Finset.mem_range.mp hq⟩
-    _ = 412 := by decide +kernel
-
-theorem accepted_iff_rank_caps (i : ℕ) :
-    Accepted i ↔ IndexRank i ∧ ∀ q : Fin 16, PairAllowed i q.val := by
-  constructor
-  · intro h
-    exact ⟨accepted_indexRank h, h.2⟩
-  · rintro ⟨hr, hc⟩
-    refine ⟨?_, hc⟩
-    have bound := caps_sum_le hc
-    rcases hr with h | h
-    · exact h
-    · omega
-
-theorem indexRank_iff (answer : BitVec hashBits) :
-    IndexRank (pack answer) ↔
-      (∑ k ∈ Finset.range 32, fieldDigit answer k) = 158 ∨
-      (∑ k ∈ Finset.range 32, fieldDigit answer k) = 413 := by
-  unfold IndexRank
+theorem digitSum_pack (answer : BitVec hashBits) :
+    digitSum (pack answer) = ∑ k ∈ Finset.range 32, fieldDigit answer k := by
+  unfold digitSum
   rw [Finset.sum_congr rfl fun k hk => digit_pack answer (Finset.mem_range.mp hk)]
 
 theorem addressSum_eq (a : MachineState)
@@ -306,22 +277,23 @@ theorem addressSum_eq (a : MachineState)
     h 2 (by norm_num), h 3 (by norm_num), eb]
   abel
 
+theorem laneSum_bound (a : MachineState) (hm : MasksLoaded a) :
+    (laneSum a 4).toNat ≤ 4 * 4340410370284600380 := by
+  rw [laneSum_toNat a hm 4 le_rfl]
+  have h := Finset.sum_le_sum (s := Finset.range 4) (fun g _ => laneNat_le (a.getReg (wordReg g)).toNat g)
+  norm_num at h ⊢
+  exact h
+
+/-- The four lane words sum with exactly three 64-bit wraps. -/
 theorem addressSum_toNat (a : MachineState) (hm : MasksLoaded a)
     (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) :
-    (addressSum a 4).toNat =
-      4 * baseWord 0 - 3 * 2 ^ 64 - (laneSum a 4).toNat := by
-  have bound : (laneSum a 4).toNat ≤ 4 * 4340410370284600380 := by
-    rw [laneSum_toNat a hm 4 le_rfl]
-    have h := Finset.sum_le_sum (s := Finset.range 4) (fun g _ => laneNat_le (a.getReg (wordReg g)).toNat g)
-    norm_num at h ⊢
-    exact h
+    (addressSum a 4).toNat = 18321511289191483004 - (laneSum a 4).toNat := by
+  have bound := laneSum_bound a hm
   rw [addressSum_eq a hb]
-  have eb : (W (4 * baseWord 0)).toNat = 4 * baseWord 0 - 3 * 2 ^ 64 := by
+  have eb : (W (4 * baseWord 0)).toNat = 18321511289191483004 := by
     decide +kernel
   rw [BitVec.toNat_sub_of_le, eb]
   rw [BitVec.le_def, eb]
-  have en : baseWord 0 = 18445835621712285080 := by decide +kernel
-  rw [en]
   omega
 
 theorem raw_sum_mod (a : MachineState) (hm : MasksLoaded a) (answer : BitVec hashBits)
@@ -338,16 +310,13 @@ theorem raw_sum_mod (a : MachineState) (hm : MasksLoaded a) (answer : BitVec has
   simp only [preFold, Finset.sum_range_succ, Finset.sum_range_zero]
   omega
 
-theorem address_remainder_iff (a : MachineState) (hm : MasksLoaded a)
+/-- Subtracting four times the count byte leaves residue zero exactly at the count check. -/
+theorem count_remainder_iff (a : MachineState) (hm : MasksLoaded a)
     (answer : BitVec hashBits) (hw : WordsLoaded a answer)
-    (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) :
-    (addressSum a 4).toNat % 255 = 0 ↔ IndexRank (pack answer) := by
+    (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) (v : ℕ) (hv : v < 256) :
+    (addressSum a 4 - W (4 * v)).toNat % 255 = 0 ↔ CountCheck (pack answer) v := by
   have congruence := raw_sum_mod a hm answer hw
-  have bound : (laneSum a 4).toNat ≤ 4 * 4340410370284600380 := by
-    rw [laneSum_toNat a hm 4 le_rfl]
-    have h := Finset.sum_le_sum (s := Finset.range 4) (fun g _ => laneNat_le (a.getReg (wordReg g)).toNat g)
-    norm_num at h ⊢
-    exact h
+  have bound := laneSum_bound a hm
   have total : (∑ k ∈ Finset.range 32, fieldDigit answer k) ≤ 480 := by
     calc
       _ ≤ ∑ _k ∈ Finset.range 32, 15 := by
@@ -358,9 +327,11 @@ theorem address_remainder_iff (a : MachineState) (hm : MasksLoaded a)
         simp only [wid, if_pos hk', Nat.reducePow] at h
         omega
       _ = 480 := by norm_num
-  rw [addressSum_toNat a hm hb, indexRank_iff]
-  have en : baseWord 0 = 18445835621712285080 := by decide +kernel
-  rw [en]
+  have hs := addressSum_toNat a hm hb
+  have h4 : (W (4 * v)).toNat = 4 * v := W_toNat _ (by omega)
+  rw [BitVec.toNat_sub_of_le (by rw [BitVec.le_def, h4, hs]; omega), h4, hs]
+  unfold CountCheck
+  rw [digitSum_pack]
   omega
 
 end OptimalOTS.RiscvMixedProgram

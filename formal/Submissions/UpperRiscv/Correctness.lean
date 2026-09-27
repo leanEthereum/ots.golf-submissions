@@ -55,7 +55,7 @@ theorem sign_result (S : GScheme) (x : S.graph.Assignment) (m : Message)
     (σ : Signature) (c d : Cache)
     (h : (some σ, d) ∈ support (run (S.sign x m) c)) :
     ∃ i : Idx, ∃ w : BitVec hashBits,
-      σ.2 = S.graph.encode (S.sets i) x ∧
+      σ.2 = S.graph.encode (S.sets i) x ++ S.tag i ∧
       d ⟨emsgBits + nonceBits, swapHalves (emsg m (S.publicKey x) ++ σ.1)⟩ = some w ∧
       idxOf w = i.val := by
   rw [sign_eq_map, run_map, support_map, Set.mem_image] at h
@@ -74,7 +74,7 @@ theorem sign_result (S : GScheme) (x : S.graph.Assignment) (m : Message)
 theorem verify_accepts (S : GScheme) (x : S.graph.Assignment) (m : Message)
     (σ : Signature) (c : Cache) (hc : S.graph.CacheConsistent x c)
     (i : Idx) (w : BitVec hashBits)
-    (hσ : σ.2 = S.graph.encode (S.sets i) x)
+    (hσ : σ.2 = S.graph.encode (S.sets i) x ++ S.tag i)
     (hw : c ⟨emsgBits + nonceBits, swapHalves (emsg m (S.publicKey x) ++ σ.1)⟩ = some w)
     (hi : idxOf w = i.val) :
     ∀ p ∈ support (run (S.verify (S.publicKey x) m σ) c), p.1 = true := by
@@ -89,13 +89,18 @@ theorem verify_accepts (S : GScheme) (x : S.graph.Assignment) (m : Message)
   have hji : j = i.val := hj.trans hi
   subst j
   rw [dif_pos i.2] at hp
-  have hlen : σ.2.length = S.graph.revealBits (S.sets i) := by
-    rw [hσ, S.graph.length_encode]
+  have henc := S.graph.length_encode (S.sets i) x
+  have hlen : S.WellFormed i σ.2 := by
+    rw [hσ]
+    refine ⟨by rw [List.length_append, henc], ?_⟩
+    rw [List.drop_append_of_le_length (by rw [henc]), ← henc, List.drop_length, List.nil_append]
+  have htake : σ.2.take (S.graph.revealBits (S.sets i)) = S.graph.encode (S.sets i) x := by
+    rw [hσ, ← henc, List.take_left]
   rw [if_pos hlen, run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
   obtain ⟨⟨y, e⟩, hy, hp⟩ := hp
   obtain ⟨hde, he⟩ := S.graph.reconstruct_support _ _ d ⟨y, e⟩ hy
-  rw [hσ] at he
+  rw [htake] at he
   have hec := Graph.CacheConsistent.mono S.graph (hcd.trans hde) hc
   have hr := reconstruct_eq S.graph (S.sets i) x y e hec (S.no_hidden_source i)
     he S.graph.root Graph.Visited.root

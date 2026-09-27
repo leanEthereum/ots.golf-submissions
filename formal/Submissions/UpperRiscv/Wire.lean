@@ -17,20 +17,6 @@ open OptimalOTS.Dag
 
 attribute [local irreducible] validSet numValid
 
-theorem reveal_positive (i : Idx) :
-    0 < Forest.forestScheme.graph.revealBits (Forest.forestScheme.sets i) := by
-  change 0 < Forest.graph.revealBits (Forest.fins (Forest.setsName i))
-  rw [Forest.revealBits_eq]
-  have present : Forest.chainNode 0 (Forest.fixedChoice i 0) ∈ Forest.setsName i := by
-    change _ ∈ Forest.cutOf (Forest.fixedChoice i)
-    rw [Forest.mem_cutOf_iff]
-    exact ⟨0, rfl⟩
-  have bound := Finset.single_le_sum (s := Forest.setsName i)
-    (f := fun n => n.len) (fun _ _ => Nat.zero_le _) present
-  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 144 := Forest.chainNode_len _ _
-  rw [len] at bound
-  omega
-
 theorem accepted_payload_positive (pk : PublicKey) (m : Message)
     (σ : Signature) (accepted : true ∈ support (Forest.forestScheme.verify pk m σ)) :
     0 < σ.2.length := by
@@ -38,8 +24,10 @@ theorem accepted_payload_positive (pk : PublicKey) (m : Message)
   simp only [Set.mem_iUnion] at accepted
   obtain ⟨i, _, accepted⟩ := accepted
   split_ifs at accepted with hi hlen
-  · rw [hlen]
-    exact reveal_positive ⟨i, hi⟩
+  · rw [hlen.1]
+    change 0 < _ + (Forest.freeTag ⟨i, hi⟩).length
+    rw [Forest.length_freeTag]
+    omega
   · simp at accepted
   · simp at accepted
 
@@ -58,10 +46,10 @@ def scheme : OracleAlgorithm.Scheme := WireAdapter.scheme RiscvUpperForest.schem
 
 theorem admissible : scheme.Admissible :=
   WireAdapter.admissible RiscvUpperForest.scheme Forest.decodeSignature Forest.decode_encode canonical
-    RiscvUpperForest.admissible 203 RiscvUpperForest.cost (by decide)
+    RiscvUpperForest.admissible 191 RiscvUpperForest.cost (by decide)
 
-theorem cost : scheme.VerifyCostAtMost 203 :=
-  WireAdapter.verifyCost RiscvUpperForest.scheme Forest.decodeSignature 203 RiscvUpperForest.cost
+theorem cost : scheme.VerifyCostAtMost 191 :=
+  WireAdapter.verifyCost RiscvUpperForest.scheme Forest.decodeSignature 191 RiscvUpperForest.cost
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.Wire.admissible' depends on axioms: [propext, Classical.choice, Quot.sound]

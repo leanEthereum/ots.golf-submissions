@@ -19,13 +19,11 @@ theorem index_take (bits : List Bool) : ofBits 128 (bits.take 128) = ofBits 128 
 theorem image_code : image.code = verifier := rfl
 
 /-- The certified cycle bound on every execution. -/
-def cycleBound : ℕ := 348
+def cycleBound : ℕ := 346
 
-/-- A chain value lies inside the first 5504 bits, where padding changes nothing. -/
-theorem padded_slice (bits : List Bool) (k : Fin 32) :
-    ofBits (chainBits k) (((padded bits).drop 128).drop (wireOffset k)) =
-      ofBits (chainBits k) ((bits.drop 128).drop (wireOffset k)) := by
-  have hc := wireOffset_contained k
+/-- A slice inside the first 5504 bits reads the same from the loaded, zero-extended signature. -/
+theorem padded_drop (bits : List Bool) (off n : ℕ) (h : off + n ≤ 5504) :
+    ofBits n ((padded bits).drop off) = ofBits n (bits.drop off) := by
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
   simp only [ofBits, BitVec.getLsbD_ofNat, hi, decide_true, Bool.true_and, testBit_foldr_bits,
@@ -33,33 +31,58 @@ theorem padded_slice (bits : List Bool) (k : Fin 32) :
     List.length_take, List.getElem?_take, List.getElem?_replicate]
   split_ifs <;> first | rfl | omega | (rw [List.getElem?_eq_none (by omega)]; rfl) | simp_all
 
+theorem countByte_eq (bits : List Bool) : countByte bits = rawCountByte bits := by
+  unfold countByte rawCountByte
+  rw [padded_drop bits 5456 8 (by norm_num)]
+
 theorem initial_chains (pk : PublicKey) (m : Message) (bits : List Bool) (answer : BitVec hashBits)
-    (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier) (x : graph.Assignment) :
-    ChainsInv (rawIdx answer) ((padded bits).drop 128) pk (min bits.length 5505)
-      (afterIndex pk m bits answer) x 0 := by
+    (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier) :
+    ChainsInv (rawIdx answer) (rawCountByte bits) ((padded bits).drop 128) pk
+      (min bits.length 5505) (afterIndex pk m bits answer) (fun _ => 0) 0 := by
   refine ⟨afterIndex_ctx pk m bits answer located,
     (afterIndex_setupRegs pk m bits answer).2, ?_, (afterIndex_setupRegs pk m bits answer).1,
-    ?_, ?_⟩
+    ?_, ?_, ?_⟩
   · intro h; omega
   · intro j hj
-    rw [padded_slice]
+    rw [List.drop_drop, padded_drop bits _ _ (by have := wireOffset_contained j; omega),
+      ← List.drop_drop]
     exact afterIndex_payloadFrom pk m bits answer j hj
   · intro j hj; omega
+  · unfold TailInv
+    rw [if_pos (by omega), List.drop_drop, padded_drop bits _ _ (by norm_num), ← List.drop_drop]
+    exact afterIndex_tail pk m bits answer
 
 theorem stagedVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
     some <$> stagedVerify pk m bits = (do
       let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits bits))
-      if IndexRank (pack answer) then
-        some <$> stagedBlocks (rawIdx answer) (Payload.permute ((padded bits).drop 128)) pk
-          (min bits.length 5505) 16 0 (fun _ => 0) 0
+      if CountCheck (pack answer) (rawCountByte bits) then
+        (runNodes' (rawIdx answer) (rawCountByte bits) (Payload.permute ((padded bits).drop 128))
+          (entryNodes (rawIdx answer) (rawCountByte bits) 0) (fun _ => 0) (Payload.graphOff 0) >>=
+          fun r => if rawCountByte bits < 16 then
+            runNodes' (rawIdx answer) (rawCountByte bits) (Payload.permute ((padded bits).drop 128))
+              (tableNodes (rawIdx answer) (rawCountByte bits) 0) r.1 r.2 >>= fun r' =>
+              some <$> stagedBlocks (rawIdx answer) (rawCountByte bits)
+                (Payload.permute ((padded bits).drop 128)) pk (min bits.length 5505)
+                (ofBits 48 (((padded bits).drop 128).drop 5328)) 16 0 r'.1 r'.2
+            else pure (some false))
       else pure (some false)) := by
-  unfold stagedVerify
+  rw [stagedVerify_eq]
   have ht : ofBits nonceBits (bits.take 128) = ofBits nonceBits bits := index_take bits
-  rw [ht, map_bind]
+  rw [ht, map_bind, ← countByte_eq]
   apply bind_congr_of_forall_mem_support
   intro answer _
-  change some <$> (if IndexRank (pack answer) then _ else _) = _
-  split_ifs <;> rfl
+  have htail : sigTail bits = ofBits 48 (((padded bits).drop 128).drop 5328) := by
+    unfold sigTail; rw [List.drop_drop]
+  by_cases hc : CountCheck (pack answer) (countByte bits)
+  · have hc' : (digitSum (pack answer) + countByte bits) % 255 = 146 := hc
+    rw [if_pos hc', if_pos hc]
+    unfold stagedChains
+    rw [htail, map_bind]
+    refine bind_congr (fun r => ?_)
+    split_ifs <;> simp only [map_bind, map_pure]
+    rfl
+  · have hc' : ¬ (digitSum (pack answer) + countByte bits) % 255 = 146 := hc
+    rw [if_neg hc', if_neg hc, map_pure]
 
 /-- Every accepted and rejected execution follows the staged verifier's exact oracle trace. -/
 theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
@@ -73,36 +96,37 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   have global : Riscv.CodeAt (Riscv.initialState image pk m bits) (W 4096) verifier := by
     rw [pc0] at located
     exact located
-  have e : verifier = indexPhase ++ (prologue 0 ++ List.replicate 9 nop ++ tables) := by
+  have e : verifier = indexPhase ++ (freePrologue ++ freeTable ++ prologue 0 ++ tables) := by
     simp only [verifier, List.append_assoc]
   rw [e] at located
-  rw [stagedVerify_unfold, show cycleBound = 316 + 32 from rfl]
-  apply indexPhase_refines pk m bits _ 316 1337
-    (fun answer => some <$> stagedBlocks (rawIdx answer) (Payload.permute ((padded bits).drop 128))
-      pk (min bits.length 5505) 16 0 (fun _ => 0) 0) _ (by norm_num) located
-    (by rw [indexPhase_length]; norm_num)
-  intro answer rank left hleft
-  set index := rawIdx answer
-  set s := afterIndex pk m bits answer
-  have inv := initial_chains pk m bits answer global (fun _ => 0)
-  have located2 : ∃ junk, Riscv.CodeAt s s.pc (blockCodeAt 0 ++ junk) := by
-    have h := located.append_right (first := indexPhase)
-    have hp : (Riscv.initialState image pk m bits).pc + BitVec.ofNat 64 (4 * 35) =
-        W blockZero := by rw [pc0]; decide
-    rw [indexPhase_length, hp] at h
-    have h' := h.code_eq (afterIndex_code pk m bits answer)
-    rw [← afterIndex_pc pk m bits answer] at h'
-    exact ⟨_, h'⟩
-  have bound := stagedCost_le index rank
-  exact (stagedBlocks_refines index ((padded bits).drop 128) pk
-    (by simp only [padded, List.length_drop, List.length_append, List.length_take,
-      List.length_replicate]; omega)
-    16 0 rfl (by omega) s (fun _ => 0) left inv located2 (by omega)).mono bound
-
-/--
-info: 'OptimalOTS.RiscvMixedProgram.image_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms image_refines
+  rw [stagedVerify_unfold, show cycleBound = 311 + 35 from rfl]
+  have hwire : 5328 ≤ ((padded bits).drop 128).length := by
+    rw [List.length_drop, length_padded]; norm_num
+  apply indexPhase_refines pk m bits _ 1299 1337 _ 311 (by norm_num) located
+    (by rw [indexPhase_length])
+  intro answer check left hleft
+  set v := rawCountByte bits
+  have hv256 : v < 256 := countByte_lt bits
+  have inv := initial_chains pk m bits answer global
+  have pc := afterIndex_pc pk m bits answer
+  have small : v < 16 → 6 + v + stagedCost (rawIdx answer) v 16 0 ≤ 311 :=
+    fun hs => stagedCost_le (rawIdx answer) v hs check
+  have run := free_refines (rawIdx answer) v ((padded bits).drop 128) pk hv256
+    (fun r' => some <$> stagedBlocks (rawIdx answer) v (Payload.permute ((padded bits).drop 128)) pk
+      (min bits.length 5505) (ofBits 48 (((padded bits).drop 128).drop 5328)) 16 0 r'.1 r'.2)
+    (stagedCost (rawIdx answer) v 16 0) (if v < 16 then stagedCost (rawIdx answer) v 16 0 else 0)
+    hwire ?_ (afterIndex pk m bits answer) (fun _ => 0) left inv (by rw [pc]; rfl)
+    (by split_ifs with hs <;> [have := small hs; skip] <;> omega)
+  · refine run.mono ?_
+    unfold freeCost
+    split_ifs with hs
+    · have := small hs
+      omega
+    · omega
+  · intro u z hs invU locU left' hleft'
+    rw [if_pos hs] at hleft'
+    have h := stagedBlocks_refines (rawIdx answer) v ((padded bits).drop 128) pk hs hwire 16 0 rfl
+      (by norm_num) u z left' invU ⟨[], by simpa [blockCodeAt] using locU⟩ hleft'
+    simpa using h
 
 end OptimalOTS.RiscvMixedProgram

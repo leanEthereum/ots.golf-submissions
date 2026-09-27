@@ -2,11 +2,10 @@ import Submissions.UpperRiscv.MixedLanding
 
 namespace OptimalOTS.RiscvMixedProgram
 open OptimalOTS.Dag
-open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
+open RiscvZkvm.Rv64 Forest Forest.Name OracleComp
 open Riscv2Program
 
-def landingIP (q a d : ℕ) : ℕ :=
-  50 + groupOffset (group q) + 256*(15-d) + slotOffset q + (15-a)
+def landingIP (q a d : ℕ) : ℕ := bodyAt q d + (15-a)
 def rejectJump (ip : ℕ) : Instr :=
   .BEQ .x0 .x0 (BitVec.ofInt 13 (4*((stubFor ip : ℤ)-ip)))
 
@@ -27,24 +26,23 @@ theorem landing_reject_refines (index : RawIdx) (q : Fin 16) (s : MachineState)
     (bad : pairCap q < digit index.val (2*q.val)+coarseDigit index q)
     (fuel : ℕ) (bound : 4 ≤ fuel) :
     Riscv.Refines fuel s (pure (some false)) 4 := by
-  let a : Fin 16 := ⟨digit index.val (2*q.val), by
-    simpa [fineWidth] using fineDigit_lt index q q.isLt⟩
+  let a : Fin 16 := ⟨digit index.val (2*q.val), fineDigit_lt index q⟩
   let d : Fin 16 := ⟨coarseDigit index q, coarseDigit_lt index q⟩
   let ip := landingIP q a d
   obtain ⟨hlen, hrow, hstub, hadmit, htarget⟩ := rejecting_landing_facts q a d bad
-  have loc := copy_located s global q ⟨d.val, by simpa [copies] using d.isLt⟩
+  have loc := copy_located s global q d q.isLt d.isLt
   have fetch := loc (15-a.val) (by
-    simp only [copyCode, copyBody, List.length_append]; omega)
+    simp only [copyCode, List.length_append]; omega)
   have head : (copyCode q d)[15-a.val]? = some (rowInstr q d (15-a.val)) := by
-    simp only [copyCode, copyBody, List.append_assoc, List.getElem?_append, hlen, ↓reduceIte]
-    simp only [hashRow, List.getElem?_map, List.getElem?_range, hlen,
-      show 15-a.val < 2^fineWidth q-(if expands (2*q.val) then 1 else 0) by
+    simp only [copyCode, List.append_assoc, List.getElem?_append, hlen, ↓reduceIte]
+    simp only [hashRow, List.getElem?_map, List.getElem?_range,
+      show 15-a.val < 16-(if shortRow (2*q.val+1) then 1 else 0) by
         simpa [hashRow] using hlen, ↓reduceIte, Option.map_some]
-  have addr : copyStart q d+4*(15-a.val) = landing0 q-dispatch index q := by
-    simpa [fineWidth, a, d] using (pair_landing index q q.isLt).symm
+  have addr : copyStart q d+4*(15-a.val) = landing0 q-dispatch index q :=
+    (pair_landing index q).symm
   have ipc : 4096+4*ip = landing0 q-dispatch index q := by
     rw [← addr]
-    simp only [ip, landingIP, copyStart, copiesStart, copies]
+    simp only [ip, landingIP, copyStart]
     omega
   rw [head, hrow, W_add, addr, ← pc] at fetch
   have transition : step s = some (s.setPC (W (4096+4*stubFor ip))) := by

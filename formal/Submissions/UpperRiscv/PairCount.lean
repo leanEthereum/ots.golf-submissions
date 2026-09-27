@@ -1,9 +1,9 @@
 import Submissions.UpperRiscv.Count
 
-/-! Exact counting for the restricted pair alphabet of the 349-cycle scheme. -/
+/-! Exact counting for the restricted pair alphabet of the 346-cycle scheme. -/
 namespace OptimalOTS.PairCode
 
-def cap (q : ℕ) : ℕ := if q < 8 then 23 else if q < 10 then 24 else 30
+def cap (q : ℕ) : ℕ := if q < 5 then 20 else if q < 10 then 21 else 30
 
 abbrev Pair := Fin 16 × Fin 16
 
@@ -108,12 +108,21 @@ theorem table_getD (S n s : ℕ) (hs : s ≤ S) : (table S n).getD s 0 = count n
     · rw [ih (s-v) (by omega)]
     · rfl
 
+/-- The number of capped pair tuples whose digit sum lies in `[131, 146]`. -/
+def windowCount : ℕ := ∑ s ∈ Finset.Icc 131 146, count 16 s
+
+theorem windowCount_table :
+    windowCount = ∑ s ∈ Finset.Icc 131 146, (table 146 16).getD s 0 := by
+  unfold windowCount
+  refine Finset.sum_congr rfl fun s hs => ?_
+  rw [table_getD 146 16 s (Finset.mem_Icc.mp hs).2]
+
 set_option maxRecDepth 100000 in
-theorem exact_count : count 16 158 = 29517020996343900342099578715398432 := by
-  rw [← table_getD 158 16 158 le_rfl]
+theorem exact_count : windowCount = 32768630519944966874703949789741158 := by
+  rw [windowCount_table]
   decide +kernel
 
-theorem count_lower : 89 * 2^108 ≤ count 16 158 := by
+theorem count_lower : 89 * 2^108 ≤ windowCount := by
   rw [exact_count]
   norm_num
 

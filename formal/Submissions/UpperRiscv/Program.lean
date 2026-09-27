@@ -53,8 +53,8 @@ def imm12 (z : ℤ) : BitVec 12 := BitVec.ofInt 12 z
 store base of the lane area (`x10` through the index phase). -/
 def hashBase : ℕ := 0x400000
 
-/-- The lane area: four words below the public key. -/
-def laneBase : ℕ := 0x4002E0
+/-- The lane area: four words above every hash output buffer. -/
+def laneBase : ℕ := 0x4002E8
 
 /-- The address of lane word `g`. -/
 def laneWordAddr (g : ℕ) : ℕ := laneBase + 8 * g
