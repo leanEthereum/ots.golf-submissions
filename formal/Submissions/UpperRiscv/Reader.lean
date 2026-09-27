@@ -20,18 +20,18 @@ open Forest Forest.Name
 
 set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
-attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
+attribute [local irreducible] Forest.fixedDigits
 
-variable (index : RawIdx) (payload : List Bool)
+variable (index : RawIdx) (v : ℕ) (payload : List Bool)
 
 /-- The sequential reader, also returning its final cursor. -/
 def runNodes' : List Name → graph.Assignment → ℕ →
     OracleComp Spec (graph.Assignment × ℕ)
   | [], x, cursor => pure (x, cursor)
-  | n :: ns, x, cursor => cursorStep index payload x cursor n >>= fun r => runNodes' ns r.1 r.2
+  | n :: ns, x, cursor => cursorStep index v payload x cursor n >>= fun r => runNodes' ns r.1 r.2
 
 theorem runNodes_eq_fst (nodes : List Name) (x : graph.Assignment) (cursor : ℕ) :
-    runNodes index payload nodes x cursor = Prod.fst <$> runNodes' index payload nodes x cursor := by
+    runNodes index v payload nodes x cursor = Prod.fst <$> runNodes' index v payload nodes x cursor := by
   induction nodes generalizing x cursor with
   | nil => simp [runNodes, runNodes']
   | cons n ns ih =>
@@ -42,8 +42,8 @@ theorem runNodes_eq_fst (nodes : List Name) (x : graph.Assignment) (cursor : ℕ
     exact ih y next
 
 theorem runNodes'_append (l₁ l₂ : List Name) (x : graph.Assignment) (cursor : ℕ) :
-    runNodes' index payload (l₁ ++ l₂) x cursor =
-      runNodes' index payload l₁ x cursor >>= fun r => runNodes' index payload l₂ r.1 r.2 := by
+    runNodes' index v payload (l₁ ++ l₂) x cursor =
+      runNodes' index v payload l₁ x cursor >>= fun r => runNodes' index v payload l₂ r.1 r.2 := by
   induction l₁ generalizing x cursor with
   | nil => simp only [List.nil_append, runNodes', pure_bind]
   | cons n ns ih =>
@@ -51,25 +51,28 @@ theorem runNodes'_append (l₁ l₂ : List Name) (x : graph.Assignment) (cursor 
     simp only [ih]
 
 /-- The disclosed position of chain `k`. -/
-abbrev pos (k : Fin 32) : ℕ := (fixedPositions index k).val
+abbrev pos (k : Fin 33) : ℕ := (posV index v k).val
 
-theorem pos_le (k : Fin 32) : pos index k ≤ 31 := by
-  show (fixedPositions index k).val ≤ 31
-  have := (fixedPositions index k).isLt
+theorem pos_le (k : Fin 33) : pos index v k ≤ 32 := by
+  show (posV index v k).val ≤ 32
+  have := (posV index v k).isLt
   omega
 
-theorem cursorStep_src (k : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
-    cursorStep index payload x cursor (src k) = pure (Function.update x (src k).fin 0, cursor) := by
+/-- The graph cursor of chain `k`: the bits revealed by the chains before it. -/
+def chainCursor (k : ℕ) : ℕ := Payload.graphOff k
+
+theorem cursorStep_src (k : Fin 33) (x : graph.Assignment) (cursor : ℕ) :
+    cursorStep index v payload x cursor (src k) = pure (Function.update x (src k).fin 0, cursor) := by
   unfold cursorStep
   simp only [disclosed, evaluated, Bool.false_eq_true, if_false]
 
-theorem cursorStep_ci (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
-    cursorStep index payload x cursor (ci k t) =
-      if pos index k = t.val then
+theorem cursorStep_ci (k : Fin 33) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
+    cursorStep index v payload x cursor (ci k t) =
+      if pos index v k = t.val then
         pure (Function.update x (ci k t).fin
           (ofBits (graph.len (ci k t).fin) ((payload.drop cursor).take (graph.len (ci k t).fin))),
           cursor + chainBits k)
-      else if pos index k < t.val then
+      else if pos index v k < t.val then
         pure (Function.update x (ci k t).fin
           ((Forest.trunc k (x (prev k t).fin)).cast (graph_len_fin (ci k t)).symm), cursor)
       else pure (Function.update x (ci k t).fin 0, cursor) := by
@@ -80,9 +83,9 @@ theorem cursorStep_ci (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor :
   · simp only [evalName, map_pure, detVal_ci]
   · rfl
 
-theorem cursorStep_ch (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
-    cursorStep index payload x cursor (ch k t) =
-      if pos index k ≤ t.val then
+theorem cursorStep_ch (k : Fin 33) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
+    cursorStep index v payload x cursor (ch k t) =
+      if pos index v k ≤ t.val then
         (fun y =>
           (Function.update x (ch k t).fin (y.cast (graph_len_fin (ch k t)).symm), cursor)) <$>
           hash (x (ci k t).fin)
@@ -93,9 +96,9 @@ theorem cursorStep_ch (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor :
   · simp only [evalName, Functor.map_map]
   · rfl
 
-theorem cursorStep_cv (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
-    cursorStep index payload x cursor (cv k t) =
-      if pos index k ≤ t.val then
+theorem cursorStep_cv (k : Fin 33) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
+    cursorStep index v payload x cursor (cv k t) =
+      if pos index v k ≤ t.val then
         pure (Function.update x (cv k t).fin
           ((x (ch k t).fin).cast (lenF_ch k t) |>.cast (graph_len_fin (cv k t)).symm), cursor)
       else pure (Function.update x (cv k t).fin 0, cursor) := by
@@ -105,11 +108,31 @@ theorem cursorStep_cv (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor :
   · simp only [evalName, map_pure, detVal_cv]
   · rfl
 
-/-- The root input node: the concatenation of the chain tops. -/
+/-- A chain top: read from the signature for a cap with digit zero, else the root slot of the
+last answer. -/
+theorem cursorStep_tp (k : Fin 33) (x : graph.Assignment) (cursor : ℕ) :
+    cursorStep index v payload x cursor (tp k) =
+      if pos index v k = 32 then
+        pure (Function.update x (tp k).fin
+          (ofBits (graph.len (tp k).fin) ((payload.drop cursor).take (graph.len (tp k).fin))),
+          cursor + topBits k)
+      else
+        pure (Function.update x (tp k).fin
+          ((topSlice k ((x (cv k 31).fin).cast (lenF_fin _))).cast (graph_len_fin (tp k)).symm),
+          cursor) := by
+  unfold cursorStep
+  have := (posV index v k).isLt
+  simp only [disclosed, evaluated, decide_eq_true_eq]
+  split_ifs
+  · rfl
+  · simp only [evalName, map_pure, detVal_tp]
+  · omega
+
+/-- The root input node: the region of the chain tops. -/
 theorem cursorStep_rc (x : graph.Assignment) (cursor : ℕ) :
-    cursorStep index payload x cursor rc =
+    cursorStep index v payload x cursor rc =
       pure (Function.update x rc.fin
-        ((rootCat fun k => (x (cv k 31).fin).cast (lenF_fin _)).cast (graph_len_fin rc).symm),
+        ((rootRegion fun k => (x (tp k).fin).cast (lenF_fin _)).cast (graph_len_fin rc).symm),
         cursor) := by
   unfold cursorStep
   simp only [disclosed, evaluated, Bool.false_eq_true, if_false, if_true]
@@ -117,7 +140,7 @@ theorem cursorStep_rc (x : graph.Assignment) (cursor : ℕ) :
 
 /-- The root hash. -/
 theorem cursorStep_rh (x : graph.Assignment) (cursor : ℕ) :
-    cursorStep index payload x cursor rh =
+    cursorStep index v payload x cursor rh =
       (fun y => (Function.update x rh.fin (y.cast (graph_len_fin rh).symm), cursor)) <$>
         hash (x rc.fin) := by
   unfold cursorStep

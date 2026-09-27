@@ -31,14 +31,14 @@ theorem submission_implements : submission.Implements := by
     some <$> RiscvMixedProgram.stagedVerify pk m bits
   exact (RiscvMixedProgram.image_refines pk m bits).1
 
-/-- Every accepting or rejecting run costs at most 348 cycles: 32 for index processing,
-at most 295 for all chain blocks, and at most 21 for the root and decision. -/
-theorem submission_cycles : submission.CyclesAtMost 348 := by
+/-- Every accepting or rejecting run costs at most 346 cycles: 35 for index processing, at most
+6 + v for the free chain, the pairs, and at most 22 for the root and decision. -/
+theorem submission_cycles : submission.CyclesAtMost 346 := by
   intro pk m bits b cycles completed
   exact (RiscvMixedProgram.image_refines pk m bits).2 b cycles completed
 
-/-- Every requirement of a scored RISC-V submission, at 348 cycles. -/
-theorem machineCertificate : submission.Certificate 348 :=
+/-- Every requirement of a scored RISC-V submission, at 346 cycles. -/
+theorem machineCertificate : submission.Certificate 346 :=
   ⟨submission_admissible, submission_secure, submission_implements, submission_cycles⟩
 
 /--

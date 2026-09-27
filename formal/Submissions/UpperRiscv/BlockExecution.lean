@@ -106,7 +106,7 @@ theorem CodeAt.initial (image : Image) (pk : PublicKey) (m : Message)
 
 /-- The straight-line instruction subset used by the verifier. -/
 def linearInstruction : Instr → Bool
-  | .ADDI .. | .LUI .. | .LD .. | .SD .. | .SH .. | .LHU .. | .ADD .. | .SUB .. | .MUL ..
+  | .ADDI .. | .LUI .. | .LD .. | .SD .. | .SH .. | .LHU .. | .LBU .. | .ADD .. | .SUB .. | .MUL ..
   | .REMU .. | .XOR .. | .XORI .. | .AND .. | .OR .. | .SLTU .. | .SLTIU .. | .SLLI .. | .SRLI .. => true
   | _ => false
 
@@ -116,6 +116,7 @@ def memoryReady (s : MachineState) : Instr → Prop
       isValidDwordAccess (s.getReg base + signExtend12 offset) = true
   | .SH base _ offset | .LHU _ base offset =>
       isValidHalfwordAccess (s.getReg base + signExtend12 offset) = true
+  | .LBU _ base offset => isValidByteAccess (s.getReg base + signExtend12 offset) = true
   | _ => True
 
 theorem linear_admitted (i : Instr) (linear : linearInstruction i = true) :

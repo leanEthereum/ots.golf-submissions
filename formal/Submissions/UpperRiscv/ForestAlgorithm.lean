@@ -8,7 +8,7 @@ import Submissions.UpperRiscv.Deterministic
 # The verified forest under the generic algorithm interface
 
 The forest satisfies the generic admission requirements: perfect correctness, signing failure at
-most `2⁻¹²⁸`, and verification within 203 compressions on every path. Security is proved for the
+most `2⁻¹²⁸`, and verification within 191 compressions on every path. Security is proved for the
 scheme on signature bits (`Forest.wireScheme_secure`).
 -/
 
@@ -30,11 +30,11 @@ attribute [local irreducible] TypedScheme.VerifyCostAtMost
 def scheme : TypedScheme := Forest.forestScheme.toAlgorithm
 
 /-- This bound covers all public keys, messages and signatures, including rejecting inputs. -/
-theorem cost : scheme.VerifyCostAtMost 203 := by
-  apply AlgorithmAdapter.verifyCost Forest.forestScheme (v := 202) (by decide)
+theorem cost : scheme.VerifyCostAtMost 191 := by
+  apply AlgorithmAdapter.verifyCost Forest.forestScheme (v := 190) (by decide)
   intro i
   have h := Forest.forestScheme_verifyCost i
-  change 1 + Forest.forestScheme.graph.reconstructCost (Forest.forestScheme.sets i) = 203 at h
+  change 1 + Forest.forestScheme.graph.reconstructCost (Forest.forestScheme.sets i) = 191 at h
   omega
 
 theorem keygen_cost : scheme.KeygenCostAtMost keygenBudget :=
@@ -67,9 +67,9 @@ theorem admissible : scheme.Admissible (1 / 2 ^ 128) where
   keygenCost := keygen_cost
   signCost := sign_cost
 
-/-- A complete admissible, 203-compression construction. -/
+/-- A complete admissible, 191-compression construction. -/
 theorem certificate :
-    scheme.Admissible (1 / 2 ^ 128) ∧ scheme.VerifyCostAtMost 203 :=
+    scheme.Admissible (1 / 2 ^ 128) ∧ scheme.VerifyCostAtMost 191 :=
   ⟨admissible, cost⟩
 
 /--

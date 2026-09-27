@@ -177,13 +177,11 @@ theorem costAtMost_verify (hidx : blockCost (emsgBits + nonceBits) = 1) {v : ℕ
   unfold GScheme.verify
   refine CostAtMost.bind_le (costAtMost_index hidx _ _) (b₂ := v) (fun i => ?_) le_rfl
   split_ifs with hi
-  · dsimp only
-    split_ifs
-    · exact CostAtMost.bind_le
+  all_goals first
+    | exact costAtMost_pure _ _
+    | exact CostAtMost.bind_le
         (CostAtMost.mono (Dag.Graph.costAtMost_reconstruct S.graph (S.sets ⟨i, hi⟩) _) (hv _))
         (fun _ => costAtMost_pure _ 0) (by simp)
-    · exact costAtMost_pure _ _
-  · exact costAtMost_pure _ _
 
 end GScheme
 

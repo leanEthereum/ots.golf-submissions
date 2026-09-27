@@ -5,10 +5,11 @@ import Submissions.UpperRiscv.Valid
 
 The paper scheme of `OptimalOTS.Dag` accepts an index when it is below `numCuts`. The
 scheme of this root reads its index as `pack` of the 256-bit answer to `H(message ‖ nonce)` (the
-low bits of the first 28 bytes, packed) and accepts it when it lies in `validSet` (its 28 digits
-sum to `target`), so that the machine reads the chain positions directly from the answer bytes.
-Everything else (graph, key generation, signing loop, verification) is the paper's definition
-verbatim; the strong-forgery experiment is the contract's, on signature bits (`Forest.wireScheme`).
+32 packed digits) and accepts it when it lies in `validSet`, so that the machine reads the chain
+positions directly from the answer bytes. A signature carries the revealed values followed by a
+tag that is a function of the index (`tag`); the verifier rejects any other tag. Everything else
+(graph, key generation, signing loop, verification) is the paper's definition; the strong-forgery
+experiment is the contract's, on signature bits (`Forest.wireScheme`).
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -36,8 +37,10 @@ structure GScheme where
   /-- The revealed values suffice: `sets i` meets every path from a secret source to the root. -/
   no_hidden_source :
     ∀ i v, graph.Visited (sets i) v → v ∉ sets i → ¬ (graph.kind v).IsSource
-  /-- Signatures reveal at most `maxRevealBits` bits besides the nonce. -/
-  reveal_le : ∀ i, graph.revealBits (sets i) ≤ (maxSignatureBits - nonceBits)
+  /-- Bits appended to the revealed values: a function of the index, checked by the verifier. -/
+  tag : Idx → List Bool
+  /-- Signatures reveal at most `maxRevealBits` bits besides the nonce, the tag included. -/
+  reveal_le : ∀ i, graph.revealBits (sets i) + (tag i).length ≤ (maxSignatureBits - nonceBits)
   /-- Key generation costs at most `keygenBudget`. -/
   keygen_le : graph.keygenCost ≤ keygenBudget
 
@@ -164,7 +167,7 @@ def signLoop (x : S.graph.Assignment) (m : Message) :
       let η : Nonce := (fresh.equivFin.symm (Fin.cast (by omega) j)).1
       let i ← packIndex (emsg m (S.publicKey x)) η
       if hi : i ∈ validSet then
-        return some (η, S.graph.encode (S.sets ⟨i, hi⟩) x)
+        return some (η, S.graph.encode (S.sets ⟨i, hi⟩) x ++ S.tag ⟨i, hi⟩)
       else
         signLoop x m k (insert η tried)
     else
@@ -174,14 +177,23 @@ def signLoop (x : S.graph.Assignment) (m : Message) :
 def sign (x : S.graph.Assignment) (m : Message) : OracleComp Spec (Option Signature) :=
   S.signLoop x m trials ∅
 
-/-- Reject invalid indices or payload lengths; otherwise reconstruct the root and compare its
-public-key bits with `pk`. -/
+/-- The payload of a signature at a valid index is well formed: the revealed values followed by
+the index's tag. -/
+def WellFormed (i : Idx) (payload : List Bool) : Prop :=
+  payload.length = S.graph.revealBits (S.sets i) + (S.tag i).length ∧
+    payload.drop (S.graph.revealBits (S.sets i)) = S.tag i
+
+instance (i : Idx) (payload : List Bool) : Decidable (S.WellFormed i payload) := by
+  unfold WellFormed; infer_instance
+
+/-- Reject invalid indices or malformed payloads; otherwise reconstruct the root from the
+revealed values and compare its public-key bits with `pk`. -/
 def verify (pk : PublicKey) (m : Message) (σ : Signature) : OracleComp Spec Bool := do
   let i ← packIndex (emsg m pk) σ.1
   if hi : i ∈ validSet then
     let A := S.sets ⟨i, hi⟩
-    if σ.2.length = S.graph.revealBits A then
-      let y ← S.graph.reconstruct A (S.graph.decode A σ.2)
+    if S.WellFormed ⟨i, hi⟩ σ.2 then
+      let y ← S.graph.reconstruct A (S.graph.decode A (σ.2.take (S.graph.revealBits A)))
       return decide (S.publicKey y = pk)
     else
       return false

@@ -1,101 +1,86 @@
 import Mathlib
 
-/-! The abstract graph numbers chains in execution order, which is also the order of their
-24-byte working cells. The wire permutes sixteen 144-bit states, followed by
-sixteen 192-bit states stored in place. Twenty-four wire values need no expansion. `index`
-gives the wire position of a graph payload bit and `coindex` the graph position of a
-wire bit; they are mutually inverse on 5376-bit payloads and the identity elsewhere. -/
+/-! The abstract graph numbers chains in execution order and reveals their values in that
+order. On the wire the 33 values lie at the byte offsets of the machine's memory layout,
+followed by the tag. `index` gives the wire position of a graph payload bit and `coindex` the
+graph position of a wire bit; they are mutually inverse on payloads of at least 5328 bits (the
+values), and the identity from bit 5328 on. -/
 
 set_option maxRecDepth 100000
 
 namespace OptimalOTS.Payload
 
-/-- Chain-index permutation and inverse on the sixteen narrow states. -/
-def order (k : ℕ) : ℕ := [1,2,5,6,0,9,3,4,10,7,8,13,11,12,14,15].getD k 0
-def inverseOrder (k : ℕ) : ℕ := [4,0,1,6,7,2,3,9,10,5,8,12,13,11,14,15].getD k 0
+/-- Bits of the 33 revealed values. -/
+def valueBits : ℕ := 5328
 
-private theorem order_lt : ∀ k < 16, order k < 16 := by decide +kernel
-private theorem inverseOrder_lt : ∀ k < 16, inverseOrder k < 16 := by decide +kernel
-private theorem inverse_order : ∀ k < 16, inverseOrder (order k) = k := by decide +kernel
-private theorem order_inverse : ∀ k < 16, order (inverseOrder k) = k := by decide +kernel
+/-- Width of the value of chain `k`. -/
+def width (k : ℕ) : ℕ := if 15 ≤ k ∧ k < 27 then 192 else 144
+
+/-- Graph offset of the value of chain `k`. -/
+def graphOff (k : ℕ) : ℕ :=
+  if k < 15 then 144 * k else if k < 27 then 2160 + 192 * (k - 15) else 4464 + 144 * (k - 27)
+
+/-- Wire offset of the value of chain `k`: its payload byte in memory. -/
+def wireOff (k : ℕ) : ℕ :=
+  8 * [42, 648, 78, 24, 114, 60, 204, 96, 258, 222, 276, 240, 612, 294, 630, 0, 312, 570, 336,
+    360, 384, 408, 432, 456, 480, 504, 528, 552, 594, 150, 132, 168, 186].getD k 0
+
+/-- The chain of graph payload bit `i`. -/
+def graphChain (i : ℕ) : ℕ :=
+  if i < 2160 then i / 144 else if i < 4464 then 15 + (i - 2160) / 192 else 27 + (i - 4464) / 144
+
+/-- The chain of wire bit `j`. -/
+def wireChain (j : ℕ) : ℕ :=
+  ((List.range 33).find? fun k => wireOff k ≤ j ∧ j < wireOff k + width k).getD 0
+
+/-- Wire position of graph bit `i` of the values. -/
+def index' (i : ℕ) : ℕ := wireOff (graphChain i) + (i - graphOff (graphChain i))
+
+/-- Graph position of wire bit `j` of the values. -/
+def coindex' (j : ℕ) : ℕ := graphOff (wireChain j) + (j - wireOff (wireChain j))
+
+private theorem index'_lt : ∀ i < 5328, index' i < 5328 := by decide +kernel
+private theorem coindex'_lt : ∀ j < 5328, coindex' j < 5328 := by decide +kernel
+private theorem coindex'_index' : ∀ i < 5328, coindex' (index' i) = i := by decide +kernel
+private theorem index'_coindex' : ∀ j < 5328, index' (coindex' j) = j := by decide +kernel
 
 /-- Wire offset (in bits) of graph payload bit `i`. -/
 def index (len i : ℕ) : ℕ :=
-  if len = 5376 ∧ i < 2304 then
-    144 * order (i / 144) + i % 144
-  else i
+  if valueBits ≤ len ∧ i < valueBits then index' i else i
 
 /-- Graph payload offset of wire bit `i`. -/
 def coindex (len i : ℕ) : ℕ :=
-  if len = 5376 ∧ i < 2304 then
-    144 * inverseOrder (i / 144) + i % 144
-  else i
-
-private theorem index_lt_5376 : ∀ i < 5376, index 5376 i < 5376 := by
-  intro i hi
-  unfold index
-  split_ifs with h
-  · have := order_lt (i / 144) (by omega); omega
-  · exact hi
-
-private theorem coindex_lt_5376 : ∀ i < 5376, coindex 5376 i < 5376 := by
-  intro i hi
-  unfold coindex
-  split_ifs with h
-  · have := inverseOrder_lt (i / 144) (by omega); omega
-  · exact hi
+  if valueBits ≤ len ∧ i < valueBits then coindex' i else i
 
 theorem index_lt (len i : ℕ) (hi : i < len) : index len i < len := by
-  by_cases h : len = 5376
-  · subst h; exact index_lt_5376 i hi
-  · simpa [index, h] using hi
+  unfold index
+  split_ifs with h
+  · have := index'_lt i h.2; unfold valueBits at h; omega
+  · exact hi
 
 theorem coindex_lt (len i : ℕ) (hi : i < len) : coindex len i < len := by
-  by_cases h : len = 5376
-  · subst h; exact coindex_lt_5376 i hi
-  · simpa [coindex, h] using hi
+  unfold coindex
+  split_ifs with h
+  · have := coindex'_lt i h.2; unfold valueBits at h; omega
+  · exact hi
 
-theorem coindex_index_5376 : ∀ i < 5376, coindex 5376 (index 5376 i) = i := by
-  intro i _
-  by_cases h : i < 2304
-  · have hk : i / 144 < 16 := by omega
-    have hp := order_lt (i / 144) hk
-    have hr : 144 * order (i / 144) + i % 144 < 2304 := by omega
-    unfold index
-    rw [if_pos ⟨rfl, h⟩]
-    unfold coindex
-    rw [if_pos ⟨rfl, hr⟩]
-    rw [show (144 * order (i / 144) + i % 144) / 144 = order (i / 144) by omega,
-      show (144 * order (i / 144) + i % 144) % 144 = i % 144 by omega,
-      inverse_order _ hk]
-    omega
-  · simp [index, coindex, h]
+theorem coindex_index (len i : ℕ) (_hi : i < len) : coindex len (index len i) = i := by
+  unfold index
+  split_ifs with h
+  · unfold coindex
+    rw [if_pos ⟨h.1, index'_lt i h.2⟩]
+    exact coindex'_index' i h.2
+  · unfold coindex
+    rw [if_neg h]
 
-theorem index_coindex_5376 : ∀ i < 5376, index 5376 (coindex 5376 i) = i := by
-  intro i _
-  by_cases h : i < 2304
-  · have hk : i / 144 < 16 := by omega
-    have hp := inverseOrder_lt (i / 144) hk
-    have hr : 144 * inverseOrder (i / 144) + i % 144 < 2304 := by omega
-    unfold coindex
-    rw [if_pos ⟨rfl, h⟩]
-    unfold index
-    rw [if_pos ⟨rfl, hr⟩]
-    rw [show (144 * inverseOrder (i / 144) + i % 144) / 144 = inverseOrder (i / 144) by omega,
-      show (144 * inverseOrder (i / 144) + i % 144) % 144 = i % 144 by omega,
-      order_inverse _ hk]
-    omega
-  · simp [index, coindex, h]
-
-theorem coindex_index (len i : ℕ) (hi : i < len) : coindex len (index len i) = i := by
-  by_cases h : len = 5376
-  · subst h; exact coindex_index_5376 i hi
-  · simp [index, coindex, h]
-
-theorem index_coindex (len i : ℕ) (hi : i < len) : index len (coindex len i) = i := by
-  by_cases h : len = 5376
-  · subst h; exact index_coindex_5376 i hi
-  · simp [index, coindex, h]
+theorem index_coindex (len i : ℕ) (_hi : i < len) : index len (coindex len i) = i := by
+  unfold coindex
+  split_ifs with h
+  · unfold index
+    rw [if_pos ⟨h.1, coindex'_lt i h.2⟩]
+    exact index'_coindex' i h.2
+  · unfold index
+    rw [if_neg h]
 
 /-- Graph payload from the wire: bit `j` is wire bit `index j`. -/
 def permute (bits : List Bool) : List Bool :=
@@ -130,6 +115,58 @@ def unpermute (bits : List Bool) : List Bool :=
   · simp
   · intro i h1 h2
     simp only [getElem_unpermute, getElem_permute, length_permute, index_coindex _ _ h2]
+
+private theorem index'_chain : ∀ k < 33, ∀ j < width k, index' (graphOff k + j) = wireOff k + j := by
+  decide +kernel
+
+private theorem chain_lt : ∀ k < 33, graphOff k + width k ≤ valueBits := by decide +kernel
+
+/-- Bit `j` of the value of chain `k` in graph order is bit `j` of its wire value. -/
+theorem getElem?_permute_chain (bits : List Bool) (hlen : valueBits ≤ bits.length) {k j : ℕ}
+    (hk : k < 33) (hj : j < width k) :
+    (permute bits)[graphOff k + j]? = bits[wireOff k + j]? := by
+  have hb := chain_lt k hk
+  have hi : graphOff k + j < bits.length := by omega
+  rw [List.getElem?_eq_getElem (by simpa using hi), getElem_permute]
+  have e : index bits.length (graphOff k + j) = wireOff k + j := by
+    unfold index
+    rw [if_pos ⟨hlen, by omega⟩, index'_chain k hk j hj]
+  have hw : wireOff k + j < bits.length := by
+    rw [← e]; exact index_lt _ _ hi
+  rw [List.getElem?_eq_getElem hw]
+  simp only [e]
+
+/-- The permuted values depend only on the wire values. -/
+theorem take_permute_congr {l l' : List Bool} (hl : valueBits ≤ l.length) (hl' : valueBits ≤ l'.length)
+    (h : l.take valueBits = l'.take valueBits) :
+    (permute l).take valueBits = (permute l').take valueBits := by
+  apply List.ext_getElem
+  · simp only [List.length_take, length_permute]; omega
+  · intro i h1 h2
+    simp only [List.length_take, length_permute] at h1
+    have hi : i < valueBits := by omega
+    simp only [List.getElem_take, getElem_permute]
+    have e : ∀ len, valueBits ≤ len → index len i = index' i := fun len hlen => by
+      unfold index; rw [if_pos ⟨hlen, hi⟩]
+    have hb := index'_lt i hi
+    have key := congrArg (fun m : List Bool => m[index' i]?) h
+    simp only [List.getElem?_take, show index' i < valueBits from hb, ↓reduceIte] at key
+    simp only [e _ hl, e _ hl']
+    have b1 : index' i < l.length := by unfold valueBits at hl; omega
+    have b2 : index' i < l'.length := by unfold valueBits at hl'; omega
+    rw [List.getElem?_eq_getElem b1, List.getElem?_eq_getElem b2] at key
+    exact Option.some.inj key
+
+/-- The permutation moves no bit from `valueBits` on. -/
+theorem drop_permute (bits : List Bool) :
+    (permute bits).drop valueBits = bits.drop valueBits := by
+  apply List.ext_getElem
+  · simp
+  · intro i h1 h2
+    simp only [List.getElem_drop, getElem_permute]
+    congr 1
+    unfold index
+    rw [if_neg (by omega)]
 
 theorem injective : Function.Injective unpermute :=
   Function.LeftInverse.injective permute_unpermute

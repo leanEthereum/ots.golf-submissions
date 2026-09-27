@@ -40,12 +40,12 @@ def yv (y : graph.Assignment) (n : Name) : BitVec n.len := (y n.fin).cast (graph
 theorem sigma_cast {a b : ℕ} (h : a = b) (x : BitVec a) :
     (⟨a, x⟩ : Σ k : ℕ, BitVec k) = ⟨b, x.cast h⟩ := by subst h; rfl
 
-theorem trunc_cast_eq (k : Fin 32) {a b : ℕ} (h : a = b) (x : BitVec a) : trunc k (x.cast h) = trunc k x := by
+theorem trunc_cast_eq (k : Fin 33) {a b : ℕ} (h : a = b) (x : BitVec a) : trunc k (x.cast h) = trunc k x := by
   subst h; rfl
 
-theorem trunc_state (k : Fin 32) (x : BitVec (chainBits k)) : trunc k x = x := trunc_eq_self k x
+theorem trunc_state (k : Fin 33) (x : BitVec (chainBits k)) : trunc k x = x := trunc_eq_self k x
 
-theorem trunc_src (k : Fin 32) (x : BitVec (src k).len) : trunc k x = x := trunc_eq_self k x
+theorem trunc_src (k : Fin 33) (x : BitVec (src k).len) : trunc k x = x := trunc_eq_self k x
 
 theorem cast_injective {n m : ℕ} (h : n = m) {x y : BitVec n} (e : x.cast h = y.cast h) :
     x = y := by
@@ -67,56 +67,6 @@ theorem bv_append_inj {n m : ℕ} {x x' : BitVec n} {y y' : BitVec m} (h : x ++ 
     have := key i
     simpa [hi] using this
 
-/-- Bit `i` of `lowCat c j` is bit `i % 192` of top `i / 192`. -/
-theorem getLsbD_lowCat (c : ℕ → BitVec 256) : ∀ (j i : ℕ),
-    (lowCat c j).getLsbD i = (decide (i < 192 * (j + 1)) && (c (i / 192)).getLsbD (i % 192))
-  | 0, i => by
-    by_cases hi : i < 192
-    · simp [lowCat, lo192, BitVec.getLsbD_setWidth, hi, Nat.div_eq_of_lt hi, Nat.mod_eq_of_lt hi]
-    · simp [lowCat, lo192, BitVec.getLsbD_setWidth, hi]
-  | j + 1, i => by
-    rw [lowCat, getLsbD_cast', BitVec.getLsbD_append, getLsbD_lowCat c j i]
-    by_cases h1 : i < 192 * (j + 1)
-    · rw [if_pos h1]
-      simp [h1, show i < 192 * (j + 1 + 1) by omega]
-    · rw [if_neg h1]
-      by_cases h2 : i < 192 * (j + 1 + 1)
-      · have e1 : i / 192 = j + 1 := by omega
-        have e2 : i % 192 = i - 192 * (j + 1) := by omega
-        simp [lo192, BitVec.getLsbD_setWidth, h2, e1, e2, show i - 192 * (j + 1) < 192 by omega]
-      · simp [lo192, BitVec.getLsbD_setWidth, h2, show ¬ (i - 192 * (j + 1) < 192) by omega]
-
-/-- The root input determines the committed slice of every chain top. -/
-theorem rootCat_slice_inj {a b : Fin 32 → BitVec 256} (h : rootCat a = rootCat b) (k : Fin 32) :
-    rootSlice k (a k) = rootSlice k (b k) := by
-  have key : ∀ i, i < 6143 →
-      (topFun a (i / 192)).getLsbD (i % 192) = (topFun b (i / 192)).getLsbD (i % 192) := by
-    intro i hi
-    have e : (rootCat a).getLsbD i = (rootCat b).getLsbD i := by rw [h]
-    rw [rootCat, rootCat, BitVec.getLsbD_setWidth, BitVec.getLsbD_setWidth, rootRegion,
-      rootRegion, getLsbD_cast', getLsbD_cast', getLsbD_lowCat, getLsbD_lowCat] at e
-    have h1 : decide (i < 6143) = true := decide_eq_true hi
-    have h2 : decide (i < 192 * (31 + 1)) = true := decide_eq_true (by omega)
-    rw [h1, h2] at e
-    simpa only [Bool.true_and] using e
-  have hk := k.isLt
-  apply BitVec.eq_of_getLsbD_eq
-  intro j hj
-  have e1 : (192 * k.val + j) / 192 = k.val := by omega
-  have e2 : (192 * k.val + j) % 192 = j := by omega
-  unfold rootSlice
-  by_cases h31 : k.val = 31
-  · simp only [h31, ↓reduceIte, BitVec.getLsbD_setWidth]
-    by_cases hj' : j < 191
-    · have := key (192 * k.val + j) (by omega)
-      rw [e1, e2] at this
-      simpa [topFun, hj, hj'] using this
-    · simp [hj']
-  · simp only [h31, ↓reduceIte, lo192, BitVec.getLsbD_setWidth]
-    have := key (192 * k.val + j) (by omega)
-    rw [e1, e2] at this
-    simpa [topFun, hj] using this
-
 /-! ## Names -/
 
 theorem cost_eq_zero_of_len {n : Name} (h : n.len = 192) : n.cost = 0 := by
@@ -129,35 +79,46 @@ theorem len_eq_of_hashParent {h p : Name} (hp : hashParent h = some p) : h.len =
 theorem cost_hashParent {h p : Name} (hp : hashParent h = some p) : p.cost = 0 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;> rfl
 
-theorem hashParent_ne_src {h p : Name} (hp : hashParent h = some p) (k : Fin 32) : p ≠ src k := by
+theorem hashParent_ne_src {h p : Name} (hp : hashParent h = some p) (k : Fin 33) : p ≠ src k := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;>
     exact fun e => nomatch e
 
-theorem prev_zero (k : Fin 32) : prev k 0 = src k := by
+theorem prev_zero (k : Fin 33) : prev k 0 = src k := by
   simp [prev]
 
-theorem prev_succ (k : Fin 32) (t : Fin 32) (ht : t.val < 31) :
+theorem prev_succ (k : Fin 33) (t : Fin 32) (ht : t.val < 31) :
     prev k ⟨t.val + 1, by omega⟩ = cv k t := by
   simp [prev]
 
-theorem prev_of_ne_zero (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 0) :
+theorem prev_of_ne_zero (k : Fin 33) (t : Fin 32) (ht : ¬ t.val = 0) :
     prev k t = cv k ⟨t.val - 1, by omega⟩ := by
   simp [prev, ht]
 
-theorem hashOf_of_ne_zero (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 0) :
+theorem hashOf_of_ne_zero (k : Fin 33) (t : Fin 32) (ht : ¬ t.val = 0) :
     hashOf (ci k t) = some (ch k ⟨t.val - 1, by omega⟩) := by
   simp [hashOf, ht]
 
-theorem child_cv_of_ne (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 31) :
+theorem child_cv_of_ne (k : Fin 33) (t : Fin 32) (ht : ¬ t.val = 31) :
     child (cv k t) = some (ci k ⟨t.val + 1, by omega⟩) := by
   simp [Name.child, ht]
 
-theorem child_cv_top (k : Fin 32) (t : Fin 32) (ht : t.val = 31) : child (cv k t) = some rc := by
+theorem child_cv_top (k : Fin 33) (t : Fin 32) (ht : t.val = 31) : child (cv k t) = some (tp k) := by
   simp [Name.child, ht]
 
-theorem val_rc' (ξ : Rec) : val ξ rc = rootCat fun k => val ξ (cv k 31) := by
+theorem val_tp' (ξ : Rec) (k : Fin 33) : val ξ (tp k) = topSlice k (val ξ (cv k 31)) := by
+  rw [val_tp, val_cv]
+
+theorem val_rc' (ξ : Rec) : val ξ rc = rootRegion fun k => val ξ (tp k) := by
   rw [val_rc]
-  exact congrArg rootCat (funext fun k => (val_cv ξ k 31).symm)
+  exact congrArg rootRegion (funext fun k => (val_tp ξ k).symm)
+
+/-- A cut holds only chain inputs and tops. -/
+theorem IsCut.not_mem_of {A : Finset Name} (hA : IsCut A) (n : Name) (hci : ∀ k t, n ≠ ci k t)
+    (htp : ∀ k, n ≠ tp k) : n ∉ A := by
+  intro hn
+  rcases hA.values n hn with ⟨k, t, rfl⟩ | ⟨k, rfl⟩
+  · exact hci k t rfl
+  · exact htp k rfl
 
 /-! ## The kinds of the nodes -/
 
@@ -211,14 +172,14 @@ theorem yv_hash (hy : graph.ReconEqs d (fins A) given y) {h p : Name}
     rw [hyw]
     rfl
 
-theorem yv_hash_ch (hy : graph.ReconEqs d (fins A) given y) {k : Fin 32} {t : Fin 32}
+theorem yv_hash_ch (hy : graph.ReconEqs d (fins A) given y) {k : Fin 33} {t : Fin 32}
     (he : Evaluated A (ch k t)) :
     ∃ w : BitVec 256, d ⟨chainBits k, yv y (ci k t)⟩ = some w ∧ yv y (ch k t) = w := by
   obtain ⟨w, hd, hw⟩ := yv_hash hy (h := ch k t) (p := ci k t) rfl he
   exact ⟨w, hd, hw⟩
 
 theorem yv_hash_rh (hy : graph.ReconEqs d (fins A) given y) (he : Evaluated A rh) :
-    ∃ w : BitVec 256, d ⟨6143, yv y rc⟩ = some w ∧ yv y rh = w := by
+    ∃ w : BitVec 256, d ⟨6608, yv y rc⟩ = some w ∧ yv y rh = w := by
   obtain ⟨w, hd, hw⟩ := yv_hash hy (h := rh) (p := rc) rfl he
   exact ⟨w, hd, hw⟩
 
@@ -231,21 +192,26 @@ theorem yv_det (hy : graph.ReconEqs d (fins A) given y) {n : Name} (he : Evaluat
   rw [this]
   simp
 
-theorem yv_cv (hy : graph.ReconEqs d (fins A) given y) {k : Fin 32} {t : Fin 32}
+theorem yv_cv (hy : graph.ReconEqs d (fins A) given y) {k : Fin 33} {t : Fin 32}
     (he : Evaluated A (cv k t)) : yv y (cv k t) = yv y (ch k t) := by
   rw [yv_det hy he rfl (by simp)]
   rfl
 
 /-- The input of a chain hash: the truncated value before it. -/
-theorem yv_ci (hy : graph.ReconEqs d (fins A) given y) {k : Fin 32} {t : Fin 32}
+theorem yv_ci (hy : graph.ReconEqs d (fins A) given y) {k : Fin 33} {t : Fin 32}
     (he : Evaluated A (ci k t)) : yv y (ci k t) = trunc k (yv y (prev k t)) := by
   rw [yv_det hy he rfl (by simp)]
   show trunc k (y (prev k t).fin) = _
   unfold yv
   rw [trunc_cast_eq]
 
+theorem yv_tp (hy : graph.ReconEqs d (fins A) given y) {k : Fin 33} (he : Evaluated A (tp k)) :
+    yv y (tp k) = topSlice k (yv y (cv k 31)) := by
+  rw [yv_det hy he rfl (by simp)]
+  rfl
+
 theorem yv_rc (hy : graph.ReconEqs d (fins A) given y) (he : Evaluated A rc) :
-    yv y rc = rootCat fun k => yv y (cv k 31) := by
+    yv y rc = rootRegion fun k => yv y (tp k) := by
   rw [yv_det hy he rfl (by simp)]
   rfl
 
@@ -254,33 +220,33 @@ end Recon
 /-! ## The walk -/
 
 /-- The forged value at a node differs from the honest one on the bits the graph reads from it:
-all of them at a source, a chain input or the root input; the high 192 bits at a chain value below
-the top; the low 192 bits at a chain top. -/
+all of them at a source, a chain input, a top or the root input; the next state slice at a chain
+value below the last level; the root slot at the last level. -/
 def Dif (ξ : Rec) : (v : Name) → BitVec v.len → Prop
-  | cv k t, x => if t.val = 31 then rootSlice k x ≠ rootSlice k (val ξ (cv k t)) else
+  | cv k t, x => if t.val = 31 then topSlice k x ≠ topSlice k (val ξ (cv k t)) else
       trunc k x ≠ trunc k (val ξ (cv k t))
   | v, x => x ≠ val ξ v
 
-theorem dif_src {ξ : Rec} {k : Fin 32} {x : BitVec (src k).len} (h : x ≠ val ξ (src k)) :
+theorem dif_src {ξ : Rec} {k : Fin 33} {x : BitVec (src k).len} (h : x ≠ val ξ (src k)) :
     Dif ξ (src k) x := h
 
-theorem dif_ci {ξ : Rec} {k : Fin 32} {t : Fin 32} {x : BitVec (ci k t).len}
+theorem dif_ci {ξ : Rec} {k : Fin 33} {t : Fin 32} {x : BitVec (ci k t).len}
     (h : x ≠ val ξ (ci k t)) : Dif ξ (ci k t) x := h
 
 theorem dif_rc {ξ : Rec} {x : BitVec rc.len} (h : x ≠ val ξ rc) : Dif ξ rc x := h
 
-theorem dif_cv_of_lt {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : ¬ t.val = 31)
+theorem dif_cv_of_lt {ξ : Rec} {k : Fin 33} {t : Fin 32} (ht : ¬ t.val = 31)
     {x : BitVec (cv k t).len} : Dif ξ (cv k t) x ↔ trunc k x ≠ trunc k (val ξ (cv k t)) := by
   show (if t.val = 31 then _ else _) ↔ _
   rw [if_neg ht]
 
-theorem dif_cv_top {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : t.val = 31)
-    {x : BitVec (cv k t).len} : Dif ξ (cv k t) x ↔ rootSlice k x ≠ rootSlice k (val ξ (cv k t)) := by
+theorem dif_cv_top {ξ : Rec} {k : Fin 33} {t : Fin 32} (ht : t.val = 31)
+    {x : BitVec (cv k t).len} : Dif ξ (cv k t) x ↔ topSlice k x ≠ topSlice k (val ξ (cv k t)) := by
   show (if t.val = 31 then _ else _) ↔ _
   rw [if_pos ht]
 
-theorem sim_ch_of_lo192 {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : t.val = 31) {w : BitVec 256}
-    (hs : rootSlice k w = rootSlice k (ξ.2 (ch k t).fin)) : sim ξ (ch k t) w := by
+theorem sim_ch_of_lo192 {ξ : Rec} {k : Fin 33} {t : Fin 32} (ht : t.val = 31) {w : BitVec 256}
+    (hs : topSlice k w = topSlice k (ξ.2 (ch k t).fin)) : sim ξ (ch k t) w := by
   simpa [sim, ht] using hs
 
 /-- **The walk.** -/
@@ -297,7 +263,6 @@ theorem up {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
     have ih' : ∀ v', height v' < height v → (∀ m, Above m v' → m ∉ A) → v'.cost = 0 →
         Dif ξ v' (yv y v') → Spr d ξ :=
       fun v' hlt => ih (height v') (by omega) v' rfl
-    have notMem_of_len : ∀ m, ¬ m.len ≤ 192 → m ∉ A := fun m hm hmA => hm (hA.len_le hmA)
     cases v with
     | src k =>
       have hch : child (src k) = some (ci k 0) := rfl
@@ -311,13 +276,13 @@ theorem up {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
       -- through the hash node `ch k t`
       have hch : child (ci k t) = some (ch k t) := rfl
       have hhE : Evaluated A (ch k t) :=
-        ⟨notMem_of_len _ (by simp [Name.len]), fun m hm => hv m (Above.step hch hm)⟩
+        ⟨hA.not_mem_of _ (by simp) (by simp), fun m hm => hv m (Above.step hch hm)⟩
       obtain ⟨w, hd, hw⟩ := yv_hash_ch hy hhE
       by_cases hsim : sim ξ (ch k t) w
       · exact Or.inl ⟨ch k t, ci k t, rfl, yv y (ci k t), hne, w, hd, hsim⟩
       · have hch' : child (ch k t) = some (cv k t) := rfl
         have hcE : Evaluated A (cv k t) :=
-          ⟨notMem_of_len _ (by simp [Name.len]),
+          ⟨hA.not_mem_of _ (by simp) (by simp),
             fun m hm => hv m (Above.step hch (Above.step hch' hm))⟩
         refine ih' _ ?_ hcE.2 rfl ?_
         · have h1 := height_child hch
@@ -331,15 +296,15 @@ theorem up {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
             exact fun e => hsim (sim_ch_of_trunc ht e)
     | cv k t =>
       by_cases ht : t.val = 31
-      · have hch : child (cv k t) = some rc := child_cv_top k t ht
-        have hcE : Evaluated A rc :=
+      · have hch : child (cv k t) = some (tp k) := child_cv_top k t ht
+        have hcE : Evaluated A (tp k) :=
           ⟨hv _ (Above.child hch), fun m hm => hv m (Above.step hch hm)⟩
         refine ih' _ (by have := height_child hch; omega) hcE.2 rfl ?_
-        refine dif_rc fun heq => ?_
-        rw [yv_rc hy hcE, val_rc'] at heq
+        show yv y (tp k) ≠ val ξ (tp k)
         have ht' : t = 31 := Fin.ext ht
         subst ht'
-        exact (dif_cv_top rfl).1 hne (rootCat_slice_inj heq k)
+        rw [yv_tp hy hcE, val_tp']
+        exact (dif_cv_top rfl).1 hne
       · have hch : child (cv k t) = some (ci k ⟨t.val + 1, by omega⟩) := child_cv_of_ne k t ht
         have hcE : Evaluated A (ci k ⟨t.val + 1, by omega⟩) :=
           ⟨hv _ (Above.child hch), fun m hm => hv m (Above.step hch hm)⟩
@@ -347,10 +312,18 @@ theorem up {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
         refine dif_ci ?_
         rw [yv_ci hy hcE, val_ci, prev_succ k t (by omega)]
         exact (dif_cv_of_lt ht).1 hne
+    | tp k =>
+      have hch : child (tp k) = some rc := rfl
+      have hcE : Evaluated A rc :=
+        ⟨hv _ (Above.child hch), fun m hm => hv m (Above.step hch hm)⟩
+      refine ih' _ (by have := height_child hch; omega) hcE.2 rfl ?_
+      refine dif_rc fun heq => ?_
+      rw [yv_rc hy hcE, val_rc'] at heq
+      exact hne (congrFun (rootRegion_injective heq) k)
     | rc =>
       have hch : child rc = some rh := rfl
       have hhE : Evaluated A rh :=
-        ⟨notMem_of_len _ (by simp [Name.len]), fun m hm => hv m (Above.step hch hm)⟩
+        ⟨hA.not_mem_of _ (by simp) (by simp), fun m hm => hv m (Above.step hch hm)⟩
       obtain ⟨w, hd, hw⟩ := yv_hash_rh hy hhE
       by_cases hsim : sim ξ rh w
       · exact Or.inl ⟨rh, rc, rfl, yv y rc, hne, w, hd, hsim⟩
@@ -371,7 +344,7 @@ theorem events_none {A' : Finset Name} (hA' : IsCut A') {ξ : Rec} {d : Cache}
   obtain ⟨w, hd, -⟩ := yv_hash_rh hy hrE
   by_cases hne : yv y rc = val ξ rc
   · right
-    refine ⟨⟨6143, yv y rc⟩, ?_, by rw [hd]; rfl⟩
+    refine ⟨⟨6608, yv y rc⟩, ?_, by rw [hd]; rfl⟩
     rw [kc_isSome_iff]
     exact ⟨rh, rc, rfl, by rw [hne]; rfl⟩
   · left
@@ -383,13 +356,12 @@ theorem events_none {A' : Finset Name} (hA' : IsCut A') {ξ : Rec} {d : Cache}
     · exact absurd hm (not_above_rh m)
 
 /-- A cut node evaluated at another cut is not at the bottom of its chain. -/
-theorem ne_zero_of_evaluated {A' : Finset Name} (hA' : IsCut A') {k : Fin 32} {t : Fin 32}
+theorem ne_zero_of_evaluated {A' : Finset Name} (hA' : IsCut A') {k : Fin 33} {t : Fin 32}
     (hvE : Evaluated A' (ci k t)) : ¬ t.val = 0 := by
   intro ht
   obtain rfl : t = 0 := Fin.ext ht
   rcases hA'.covers k with h | ⟨m, hmA', hm⟩
-  · obtain ⟨_, _, e⟩ := hA'.values _ h
-    cases e
+  · rcases hA'.values _ h with ⟨_, _, e⟩ | ⟨_, e⟩ <;> cases e
   · rw [above_of_child (show child (src k) = some (ci k 0) from rfl)] at hm
     rcases hm with rfl | hm
     · exact hvE.1 hmA'
@@ -402,7 +374,39 @@ theorem events_ne {A A' : Finset Name} (hA : IsCut A) (hA' : IsCut A')
     (hy : graph.ReconEqs d (fins A') given y) (hacc : trunc128 (yv y rh) = pkOf ξ) :
     Spr d ξ ∨ Cache.Hits d (fHid (some A) ξ) := by
   obtain ⟨v, hvA, hvE⟩ := exists_mem_evaluated_of_ne hA hA' hcost hne
-  obtain ⟨k, t, rfl⟩ := hA.values v hvA
+  rcases hA.values v hvA with ⟨k, t, rfl⟩ | ⟨k, rfl⟩
+  swap
+  · -- a revealed cap top, evaluated by the forgery through `ch k 31`
+    have hcv : child (cv k 31) = some (tp k) := rfl
+    have hcvE : Evaluated A' (cv k 31) := by
+      refine ⟨hA'.not_mem_of _ (by simp) (by simp), fun m hm => ?_⟩
+      rw [above_of_child hcv] at hm
+      rcases hm with rfl | hm
+      · exact hvE.1
+      · exact hvE.2 m hm
+    have hhE : Evaluated A' (ch k 31) := by
+      refine ⟨hA'.not_mem_of _ (by simp) (by simp), fun m hm => ?_⟩
+      rw [above_of_child (show child (ch k 31) = some (cv k 31) from rfl)] at hm
+      rcases hm with rfl | hm
+      · exact hcvE.1
+      · exact hcvE.2 m hm
+    by_cases hvne : yv y (tp k) = val ξ (tp k)
+    · obtain ⟨w, hd, hw⟩ := yv_hash_ch hy hhE
+      have htr : topSlice k w = topSlice k (ξ.2 (ch k 31).fin) := by
+        have f3 : yv y (cv k 31) = w := (yv_cv hy hcvE).trans hw
+        have := hvne
+        rw [yv_tp hy hvE, val_tp', f3, val_cv] at this
+        exact this
+      have hsim : sim ξ (ch k 31) w := sim_ch_of_lo192 rfl htr
+      by_cases hpne : yv y (ci k 31) = val ξ (ci k 31)
+      · right
+        refine ⟨⟨chainBits k, yv y (ci k 31)⟩, ?_, by rw [hd]; rfl⟩
+        rw [fHid_isSome_some_iff]
+        exact ⟨ch k 31, ci k 31, rfl, hA.not_evaluated_hashOf hvA rfl, by rw [hpne]; rfl⟩
+      · left
+        exact Or.inl ⟨ch k 31, ci k 31, rfl, yv y (ci k 31), hpne, w, hd, hsim⟩
+    · left
+      exact up hA' hy hacc hvE.2 rfl hvne
   have ht0 : ¬ t.val = 0 := ne_zero_of_evaluated hA' hvE
   -- the hash node feeding the cut node, and its value node
   have hlt := t.isLt
@@ -413,15 +417,14 @@ theorem events_ne {A A' : Finset Name} (hA : IsCut A) (hA' : IsCut A')
   have hprev : prev k t = cv k t' := by rw [prev_of_ne_zero k t ht0, e1]
   have hcv : child (cv k t') = some (ci k t) := by
     rw [child_cv_of_ne k t' (by omega), e2]
-  have notMem_of_len : ∀ m, ¬ m.len ≤ 192 → m ∉ A' := fun m hm hmA => hm (hA'.len_le hmA)
   have hcvE : Evaluated A' (cv k t') := by
-    refine ⟨notMem_of_len _ (by simp [Name.len]), fun m hm => ?_⟩
+    refine ⟨hA'.not_mem_of (cv k t') (by simp) (by simp), fun m hm => ?_⟩
     rw [above_of_child hcv] at hm
     rcases hm with rfl | hm
     · exact hvE.1
     · exact hvE.2 m hm
   have hhE : Evaluated A' (ch k t') := by
-    refine ⟨notMem_of_len _ (by simp [Name.len]), fun m hm => ?_⟩
+    refine ⟨hA'.not_mem_of (ch k t') (by simp) (by simp), fun m hm => ?_⟩
     rw [above_of_child (show child (ch k t') = some (cv k t') from rfl)] at hm
     rcases hm with rfl | hm
     · exact hcvE.1
@@ -474,13 +477,15 @@ theorem events_same {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
     obtain ⟨a, ha, rfl⟩ := Finset.mem_map.mp hv
     exact hcon a ha
   obtain ⟨a, ha, hne'⟩ := hex
-  obtain ⟨k, t, rfl⟩ := hA.values a ha
-  refine up hA hy hacc (hA.antichain _ ha) rfl (dif_ci ?_)
-  intro heq
-  apply hne'
-  rw [yv_mem hy ha] at heq
-  unfold val at heq
-  exact cast_injective _ heq
+  have hneq : yv y a ≠ val ξ a := by
+    intro heq
+    apply hne'
+    rw [yv_mem hy ha] at heq
+    unfold val at heq
+    exact cast_injective _ heq
+  rcases hA.values a ha with ⟨_, _, rfl⟩ | ⟨_, rfl⟩
+  · exact up hA hy hacc (hA.antichain _ ha) rfl hneq
+  · exact up hA hy hacc (hA.antichain _ ha) rfl hneq
 
 end Forest
 

@@ -1,95 +1,102 @@
 import Submissions.UpperRiscv.MixedContext
-import Submissions.UpperRiscv.Reader
-import Submissions.UpperRiscv.Payload
+import Submissions.UpperRiscv.Names
+
+/-! Byte geometry of the chains: values, answer buffers, root slots, the six bytes past the
+region, and the order constraints that make every hash leave unread values and committed slots
+intact. Chains are numbered by execution position. -/
 
 set_option maxRecDepth 100000
 
 namespace OptimalOTS.RiscvMixedProgram
 open RiscvZkvm.Rv64
-open Riscv2Program (W W_toNat)
+open Riscv2Program (W W_toNat laneBase)
 open Forest
 
-/-- Cursor in the graph's payload order, including the final cursor at chain 32. -/
-def cursor (k : ℕ) : ℕ := if k < 16 then 144*k else 2304+192*(k-16)
-/-- Offset in the wire payload, in bits. -/
-def wireOffset (k : ℕ) : ℕ := 8 * wireByte k
+/-- Offset of chain `k`'s value in the payload, in bits. -/
+def wireOffset (k : ℕ) : ℕ := 8 * valueOffs.getD k 0
 
-theorem cursor_step (k : Fin 32) : cursor (k.val+1) = cursor k + chainBits k := by
-  unfold cursor chainBits
-  split_ifs <;> omega
+/-- Address of chain `k`'s root slot. -/
+def slotAddr (k : Fin 33) : ℕ := regionAddr + slotPos k / 8
 
-theorem cursor_zero : cursor 0 = 0 := rfl
-theorem cursor_end : cursor 32 = 5376 := by decide
+/-- The six bytes past the region, read by the root query of an oversized signature. -/
+def tailAddr : ℕ := regionAddr + 826
 
-theorem wireOffset_aligned (k : Fin 32) : wireOffset k % 8 = 0 := by
-  unfold wireOffset; omega
-
-theorem wireOffset_contained (k : Fin 32) : wireOffset k + chainBits k ≤ 5376 := by
-  revert k; decide
-
-theorem wireSlot_eq (k : Fin 32) : wireSlot k = 0x400040 + wireOffset k / 8 := by
-  revert k; decide
-
-theorem slot_bounds (k : Fin 32) :
-    0x3FFFE0 ≤ slot k ∧ slot k + 24 ≤ 0x4002E0 ∧ slot k % 8 = 0 := by
-  revert k; decide
-
-theorem output_bounds (k : Fin 32) :
-    0x3FFFD8 ≤ outAddr k ∧ outAddr k + 32 ≤ 0x4002E0 ∧ outAddr k % 8 = 0 := by
-  have h := slot_bounds k
-  unfold outAddr; omega
-
-/-- The state of every chain begins `truncOff k / 8` bytes into its answer buffer: byte 8 for a
-chain in its cell, byte 14 for the four chains hashed in place six bytes above their cells. -/
-theorem work_eq' : ∀ k : Fin 32, work k = outAddr k + truncOff k / 8 := by
+theorem valueAddr_eq' : ∀ k : Fin 33, valueAddr k = payloadAddr + wireOffset k / 8 := by
   decide +kernel
 
-theorem work_of_expands {k : ℕ} (h : expands k = true) : work k = slot k := by
-  unfold work
-  exact if_pos h
+theorem wireOffset_aligned' : ∀ k : Fin 33, wireOffset k % 8 = 0 := by decide +kernel
 
-theorem work_of_not_expands {k : ℕ} (h : ¬ expands k = true) : work k = wireSlot k := by
-  unfold work
-  exact if_neg h
+theorem wireOffset_contained' : ∀ k : Fin 33, wireOffset k + chainBits k ≤ 5328 := by
+  decide +kernel
 
-/-- Every wire value lies at or above its own cell's state address, so the ascending
-hash writes never reach an unread wire block. -/
-theorem wireSlot_ge_slot (k : Fin 32) : slot k ≤ wireSlot k := by
-  revert k; decide
+theorem chainBits_bytes' : ∀ k : Fin 33, chainBits k = 8 * chainBytes k := by decide +kernel
 
-/-- Expanding a chain never overwrites a later, unread wire block. -/
-theorem unread_disjoint (k j : Fin 32) (hkj : k.val < j.val) :
-    wireSlot j + chainBits j / 8 ≤ outAddr k ∨ outAddr k + 32 ≤ wireSlot j := by
-  right
-  have h := wireSlot_ge_slot j
-  unfold outAddr slot at *
-  omega
+theorem truncOff_bytes' : ∀ k : Fin 33, truncOff k = 8 * truncBytes k := by decide +kernel
 
-/-- Position of the bytes committed by the root for a completed chain: the low 192 bits
-of every cell. -/
-def rootSliceAddr (k : ℕ) : ℕ := outAddr k
-def rootSliceBits (_k : ℕ) : ℕ := 192
+theorem output_bounds' : ∀ k : Fin 33,
+    regionAddr ≤ outAddr k ∧ outAddr k + 32 ≤ laneBase ∧ outAddr k % 8 = 0 := by
+  decide +kernel
 
-/-- Every later hash preserves the committed slice of an earlier chain. -/
-theorem completed_disjoint (j k : Fin 32) (hjk : j.val < k.val) :
-    rootSliceAddr j + rootSliceBits j / 8 ≤ outAddr k ∨
-      outAddr k + 32 ≤ rootSliceAddr j := by
-  left
-  unfold rootSliceAddr rootSliceBits outAddr slot
-  omega
+theorem value_bounds' : ∀ k : Fin 33,
+    payloadAddr ≤ valueAddr k ∧ valueAddr k + chainBytes k ≤ tailAddr := by
+  decide +kernel
 
-theorem payload_index (k : Fin 32) (i : ℕ) (hi : i < chainBits k) :
-    Payload.index 5376 (cursor k + i) = wireOffset k + i := by
-  have narrow : ∀ j : Fin 32, j.val < 16 → wireOffset j = 144 * Payload.order j := by
-    decide +kernel
-  have wide : ∀ j : Fin 32, 16 ≤ j.val → wireOffset j = 2304 + 192 * (j.val - 16) := by
-    decide +kernel
-  by_cases hk : k.val < 16
-  · have hw : chainBits k = 144 := by simp [chainBits, hk]
-    rw [hw] at hi
-    rw [cursor, if_pos hk, Payload.index, if_pos ⟨rfl, by omega⟩]
-    rw [show (144 * k.val + i) / 144 = k.val by omega,
-      show (144 * k.val + i) % 144 = i by omega, narrow k hk]
-  · rw [cursor, if_neg hk, Payload.index, if_neg (by omega), wide k (by omega)]
+theorem slot_eq' : ∀ k : Fin 33, slotAddr k = outAddr k + topOff k / 8 := by decide +kernel
+
+theorem slotPos_aligned' : ∀ k : Fin 33, slotPos k % 8 = 0 := by decide +kernel
+
+theorem topBits_aligned' : ∀ k : Fin 33, topBits k % 8 = 0 := by decide +kernel
+
+/-- A cap's value lies on its root slot. -/
+theorem cap_value_slot' : ∀ k : Fin 33, capChain k = true →
+    valueAddr k = slotAddr k ∧ work k = valueAddr k := by
+  decide +kernel
+
+/-- Only expanding chains read their value away from their working address. -/
+theorem work_value' : ∀ k : Fin 33, expands k = false → work k = valueAddr k := by
+  decide +kernel
+
+theorem capChain_iff' : ∀ k : Fin 33, capChain k = true ↔ isCap k := by decide +kernel
+
+theorem cap_not_expands' : ∀ k : Fin 33, capChain k = true → expands k = false := by
+  decide +kernel
+
+/-- A hash never overwrites the value of a chain that runs later. -/
+theorem unread_disjoint' : ∀ k j : Fin 33, k.val < j.val →
+    valueAddr j + chainBytes j ≤ outAddr k ∨ outAddr k + 32 ≤ valueAddr j := by
+  decide +kernel
+
+/-- A hash never overwrites the root slot of a chain that ran earlier. -/
+theorem completed_disjoint' : ∀ j k : Fin 33, j.val < k.val →
+    slotAddr j + topBits j / 8 ≤ outAddr k ∨ outAddr k + 32 ≤ slotAddr j := by
+  decide +kernel
+
+/-- Only the high cap's answer buffer reaches the six bytes past the region. -/
+theorem tail_disjoint' : ∀ k : Fin 33, k.val ≠ 1 →
+    tailAddr + 6 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := by
+  decide +kernel
+
+theorem tail_in_cap : tailAddr = outAddr 1 + 18 := by decide
+
+theorem valueAddr_eq (k : Fin 33) : valueAddr k = payloadAddr + wireOffset k / 8 := valueAddr_eq' k
+theorem wireOffset_aligned (k : Fin 33) : wireOffset k % 8 = 0 := wireOffset_aligned' k
+theorem wireOffset_contained (k : Fin 33) : wireOffset k + chainBits k ≤ 5328 :=
+  wireOffset_contained' k
+theorem chainBits_bytes (k : Fin 33) : chainBits k = 8 * chainBytes k := chainBits_bytes' k
+theorem truncOff_bytes (k : Fin 33) : truncOff k = 8 * truncBytes k := truncOff_bytes' k
+theorem output_bounds (k : Fin 33) :
+    regionAddr ≤ outAddr k ∧ outAddr k + 32 ≤ laneBase ∧ outAddr k % 8 = 0 := output_bounds' k
+theorem value_bounds (k : Fin 33) :
+    payloadAddr ≤ valueAddr k ∧ valueAddr k + chainBytes k ≤ tailAddr := value_bounds' k
+theorem slot_eq (k : Fin 33) : slotAddr k = outAddr k + topOff k / 8 := slot_eq' k
+theorem work_eq (k : Fin 33) : work k = outAddr k + truncOff k / 8 := by
+  unfold work; rw [truncOff_bytes]; omega
+theorem unread_disjoint (k j : Fin 33) (h : k.val < j.val) :
+    valueAddr j + chainBytes j ≤ outAddr k ∨ outAddr k + 32 ≤ valueAddr j := unread_disjoint' k j h
+theorem completed_disjoint (j k : Fin 33) (h : j.val < k.val) :
+    slotAddr j + topBits j / 8 ≤ outAddr k ∨ outAddr k + 32 ≤ slotAddr j :=
+  completed_disjoint' j k h
+theorem tail_disjoint (k : Fin 33) (h : k.val ≠ 1) :
+    tailAddr + 6 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := tail_disjoint' k h
 
 end OptimalOTS.RiscvMixedProgram

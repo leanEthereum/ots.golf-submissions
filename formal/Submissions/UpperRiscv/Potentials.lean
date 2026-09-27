@@ -70,8 +70,8 @@ def wireScheme (V : PublicKey → Message → List Bool → OracleComp Spec Bool
 forest verifier, and it accepts any other signature only after a query of a short root length
 whose answer begins with the public key. -/
 structure WireVerifier (V : PublicKey → Message → List Bool → OracleComp Spec Bool) : Prop where
-  full : ∀ pk m bits, bits.length = 5504 → V pk m bits = forestScheme.verify pk m (decodeSignature bits)
-  short : ∀ pk m bits (c : Cache) (p : Bool × Cache), bits.length ≠ 5504 →
+  full : ∀ pk m bits, bits.length = 5464 → V pk m bits = forestScheme.verify pk m (decodeSignature bits)
+  short : ∀ pk m bits (c : Cache) (p : Bool × Cache), bits.length ≠ 5464 →
     p ∈ support (run (V pk m bits) c) → p.1 = true →
     ∃ n, ShortLen n ∧ ∃ u : BitVec n, ∃ w, p.2 ⟨n, u⟩ = some w ∧ trunc128 w = pk
 
@@ -140,7 +140,7 @@ theorem probTrue_eq : probTrue (OracleAlgorithm.experiment (wireScheme A.verify)
 
 /-- The signature of the record `ξ` for the outcome `r` of the signing loop. -/
 def sigOf (ξ : Rec) (r : Option (Nonce × Idx)) : Option Signature :=
-  r.map fun r => (r.1, graph.encode (forestScheme.sets r.2) (graph.evalRec ξ))
+  r.map fun r => (r.1, graph.encode (forestScheme.sets r.2) (graph.evalRec ξ) ++ freeTag r.2)
 
 /-- The disclosure set of the outcome of the signing loop. -/
 def cutOf? (r : Option (Nonce × Idx)) : Option (Finset Name) :=

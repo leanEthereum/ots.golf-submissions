@@ -40,10 +40,11 @@ inductive Above : Name → Name → Prop
 
 /-- Distance to the root. -/
 def height : Name → ℕ
-  | src _ => 98
-  | ci _ t => 97 - 3 * t
-  | ch _ t => 96 - 3 * t
-  | cv _ t => 95 - 3 * t
+  | src _ => 99
+  | ci _ t => 98 - 3 * t
+  | ch _ t => 97 - 3 * t
+  | cv _ t => 96 - 3 * t
+  | tp _ => 2
   | rc => 1
   | rh => 0
 
@@ -78,17 +79,18 @@ theorem not_above_rh (m : Name) : ¬ Above m rh := by
 def ancSet : Name → Finset Name
   | rh => ∅
   | rc => {rh}
+  | tp _ => {rc, rh}
   | cv k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
       (Finset.univ.filter fun t' : Fin 32 => t < t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 32 => t < t').image (cv k) ∪ {rc, rh}
+      (Finset.univ.filter fun t' : Fin 32 => t < t').image (cv k) ∪ {tp k, rc, rh}
   | ch k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
       (Finset.univ.filter fun t' : Fin 32 => t < t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {rc, rh}
+      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {tp k, rc, rh}
   | ci k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
       (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {rc, rh}
+      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {tp k, rc, rh}
   | src k => Finset.univ.image (ci k) ∪ Finset.univ.image (ch k) ∪ Finset.univ.image (cv k) ∪
-      {rc, rh}
+      {tp k, rc, rh}
 
 theorem child_eq_none {n : Name} (h : child n = none) : n = rh := by
   cases n <;> simp only [Name.child, reduceCtorEq] at h <;> try rfl
@@ -182,6 +184,7 @@ theorem ancSet_child {n p : Name} (h : child n = some p) : ancSet n = insert p (
         rw [filter_lt_eq_filter_le t (by omega)]]
       rw [filter_lt_succ t (by omega), Finset.image_insert, Finset.insert_union,
         Finset.insert_union, Finset.insert_union]
+  | tp k => simp only [Name.child, Option.some.injEq] at h; subst h; simp [ancSet]
   | rc => simp only [Name.child, Option.some.injEq] at h; subst h; simp [ancSet]
   | rh => simp [Name.child] at h
 
@@ -308,10 +311,12 @@ theorem no_hidden_source_iff (A : Finset Name) :
     · exact hvA' h1
     · exact hv' m hm hmA
 
-/-- The hash node whose output carries the value of a 192-bit node: `ch k (t-1)` for `ci k t`
-with `t ≥ 1` (none for sources and for `ci k 0`, whose value is the source). -/
+/-- The hash node whose output carries the value of a chain input or top: `ch k (t-1)` for
+`ci k t` with `t ≥ 1`, `ch k 31` for `tp k` (none for sources and for `ci k 0`, whose value is the
+source). -/
 def hashOf : Name → Option Name
   | ci k t => if h : t.val = 0 then none else some (ch k ⟨t.val - 1, by omega⟩)
+  | tp k => some (ch k 31)
   | _ => none
 
 /-- The value node between the hash node and the input node it feeds. -/
@@ -328,12 +333,11 @@ theorem child_hashOf {a h : Name} (hh : hashOf a = some h) :
     rw [dif_neg (by omega)]
     congr 2
     exact Fin.ext (by simp; omega)
+  | tp k =>
+    simp only [hashOf, Option.some.injEq] at hh
+    subst hh
+    exact ⟨cv k 31, rfl, rfl⟩
   | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hh
-
-theorem hashOf_isSome_iff (a : Name) :
-    (hashOf a).isSome ↔ ∃ k t, a = ci k t ∧ t.val ≠ 0 := by
-  cases a <;> simp only [hashOf]
-  all_goals try simp
 
 theorem len_of_hashOf {a p : Name} (hp : hashOf a = some p) : p.len = 256 := by
   cases a with
@@ -342,6 +346,7 @@ theorem len_of_hashOf {a p : Name} (hp : hashOf a = some p) : p.len = 256 := by
     split_ifs at hp
     simp only [Option.some.injEq] at hp
     subst hp; rfl
+  | tp k => simp only [hashOf, Option.some.injEq] at hp; subst hp; rfl
   | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hp
 
 theorem one_le_cost_of_hashOf {a p : Name} (hp : hashOf a = some p) : 1 ≤ p.cost := by
@@ -351,22 +356,18 @@ theorem one_le_cost_of_hashOf {a p : Name} (hp : hashOf a = some p) : 1 ≤ p.co
     split_ifs at hp
     simp only [Option.some.injEq] at hp
     subst hp; simp [Name.cost]
+  | tp k => simp only [hashOf, Option.some.injEq] at hp; subst hp; simp [Name.cost]
   | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hp
 
-/-- A cut: an antichain of chain input nodes meeting every source path. -/
+/-- A cut: an antichain of chain inputs and tops meeting every source path. -/
 structure IsCut (A : Finset Name) : Prop where
-  values : ∀ n ∈ A, ∃ k t, n = ci k t
+  values : ∀ n ∈ A, (∃ k t, n = ci k t) ∨ ∃ k, n = tp k
   antichain : ∀ n ∈ A, ∀ m, Above m n → m ∉ A
   covers : ∀ k, src k ∈ A ∨ ∃ m ∈ A, Above m (src k)
 
 theorem IsCut.rh_not_mem {A : Finset Name} (h : IsCut A) : rh ∉ A := by
   intro hm
-  obtain ⟨_, _, h'⟩ := h.values rh hm
-  cases h'
-
-theorem IsCut.len_le {A : Finset Name} (h : IsCut A) {n : Name} (hn : n ∈ A) : n.len ≤ 192 := by
-  obtain ⟨k, _, rfl⟩ := h.values n hn
-  exact chainBits_le k
+  rcases h.values rh hm with ⟨_, _, h'⟩ | ⟨_, h'⟩ <;> cases h'
 
 theorem above_hashOf {a h : Name} (hh : hashOf a = some h) : Above a h := by
   obtain ⟨v, hv, hva⟩ := child_hashOf hh
@@ -425,32 +426,38 @@ theorem exists_mem_evaluated_of_ne {A A' : Finset Name} (hA : IsCut A) (hA' : Is
       · exact ⟨a', ha'A', hA.antichain v hvA a' ha',
           fun m hm hmA => hA.antichain v hvA m (hm.trans ha') hmA⟩
   obtain ⟨a, haA', haE⟩ := hex
-  -- `a` is a chain input above its source, so it has a hash node `p` below it
-  obtain ⟨k, t, rfl⟩ := hA'.values a haA'
-  have ht0 : t.val ≠ 0 := by
-    intro h0
-    have ht : t = 0 := Fin.ext h0
-    subst ht
-    rcases hA.covers k with h | ⟨m, hmA, hm⟩
-    · obtain ⟨_, _, h'⟩ := hA.values _ h; cases h'
-    · rw [above_of_child (show child (src k) = some (ci k 0) from rfl)] at hm
-      rcases hm with rfl | hm
-      · exact haE.1 hmA
-      · exact haE.2 m hm hmA
-  set p : Name := ch k ⟨t.val - 1, by omega⟩ with hpdef
-  have hp : hashOf (ci k t) = some p := by
-    simp only [hashOf]
-    rw [dif_neg ht0]
+  -- `a` is a chain input above its source or a top, so it has a hash node `p` below it
+  have hex' : ∃ p, hashOf a = some p := by
+    rcases hA'.values a haA' with ⟨k, t, rfl⟩ | ⟨k, rfl⟩
+    · have ht0 : t.val ≠ 0 := by
+        intro h0
+        have ht : t = 0 := Fin.ext h0
+        subst ht
+        rcases hA.covers k with h | ⟨m, hmA, hm⟩
+        · rcases hA.values _ h with ⟨_, _, h'⟩ | ⟨_, h'⟩ <;> cases h'
+        · rw [above_of_child (show child (src k) = some (ci k 0) from rfl)] at hm
+          rcases hm with rfl | hm
+          · exact haE.1 hmA
+          · exact haE.2 m hm hmA
+      exact ⟨_, by simp only [hashOf]; rw [dif_neg ht0]⟩
+    · exact ⟨_, rfl⟩
+  obtain ⟨p, hp⟩ := hex'
   obtain ⟨v, hpv, hva⟩ := child_hashOf hp
-  have hpA : p ∉ A := fun h => by
-    obtain ⟨_, _, h'⟩ := hA.values _ h
-    rw [hpdef] at h'
-    cases h'
-  have hvA : v ∉ A := fun h => by
-    obtain ⟨_, _, h'⟩ := hA.values _ h
-    simp only [hpdef, Name.child, Option.some.injEq] at hpv
-    rw [← hpv] at h'
-    cases h'
+  have hpch : ∃ k t, p = ch k t := by
+    cases a <;> simp only [hashOf, reduceCtorEq] at hp
+    · split_ifs at hp
+      simp only [Option.some.injEq] at hp
+      exact ⟨_, _, hp.symm⟩
+    · exact ⟨_, _, (Option.some.inj hp).symm⟩
+  obtain ⟨kp, tp', rfl⟩ := hpch
+  have hv : v = cv kp tp' := (Option.some.inj hpv).symm
+  subst hv
+  have notmem : ∀ n ∈ A, n ≠ ch kp tp' ∧ n ≠ cv kp tp' := by
+    intro n hn
+    rcases hA.values n hn with ⟨_, _, rfl⟩ | ⟨_, rfl⟩ <;> simp
+  have hpA : ch kp tp' ∉ A := fun h => (notmem _ h).1 rfl
+  have hvA : cv kp tp' ∉ A := fun h => (notmem _ h).2 rfl
+  set p : Name := ch kp tp' with hpdef
   have hpE : Evaluated A p := by
     refine ⟨hpA, fun m hm => ?_⟩
     rw [above_of_child hpv] at hm

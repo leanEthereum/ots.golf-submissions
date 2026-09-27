@@ -280,7 +280,7 @@ theorem mem_support_run_inr_some {α : Type} {q : Query} {u : BitVec hashBits}
 theorem signLoop_eq_map (S : GScheme) (x : S.graph.Assignment) (m : Message) :
     ∀ (k : ℕ) (tried : Finset Nonce),
       S.signLoop x m k tried =
-        (Option.map fun r : Nonce × Idx => (r.1, S.graph.encode (S.sets r.2) x)) <$>
+        (Option.map fun r : Nonce × Idx => (r.1, S.graph.encode (S.sets r.2) x ++ S.tag r.2)) <$>
           signIdxLoop (emsg m (S.publicKey x)) k tried := by
   intro k
   induction k with
@@ -298,10 +298,10 @@ theorem signLoop_eq_map (S : GScheme) (x : S.graph.Assignment) (m : Message) :
     · rw [GScheme.signLoop, signIdxLoop, dif_neg hc, dif_neg hc]
       simp
 
-/-- `GScheme.sign` encodes the revealed values of the index found by `signIdx`. -/
+/-- `GScheme.sign` encodes the revealed values and the tag of the index found by `signIdx`. -/
 theorem sign_eq_map (S : GScheme) (x : S.graph.Assignment) (m : Message) :
     S.sign x m =
-      (Option.map fun r : Nonce × Idx => (r.1, S.graph.encode (S.sets r.2) x)) <$>
+      (Option.map fun r : Nonce × Idx => (r.1, S.graph.encode (S.sets r.2) x ++ S.tag r.2)) <$>
         signIdx (emsg m (S.publicKey x)) :=
   signLoop_eq_map S x m trials ∅
 

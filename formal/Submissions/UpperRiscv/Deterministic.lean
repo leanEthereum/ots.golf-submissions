@@ -88,12 +88,10 @@ theorem deterministic_verify (pk : PublicKey) (m : Message) (σ : Signature) :
   unfold GScheme.verify packIndex
   refine Deterministic.bind (Deterministic.map (Deterministic.hash _) _) fun i => ?_
   split_ifs
-  · dsimp only
-    split_ifs
-    · exact Deterministic.bind (S.graph.deterministic_reconstruct _ _)
+  all_goals first
+    | exact Deterministic.of_pure _
+    | exact Deterministic.bind (S.graph.deterministic_reconstruct _ _)
         fun _ => Deterministic.of_pure _
-    · exact Deterministic.of_pure _
-  · exact Deterministic.of_pure _
 
 /-- The adapter's verifier is deterministic. -/
 theorem verifyDeterministic : S.toAlgorithm.VerifyDeterministic :=

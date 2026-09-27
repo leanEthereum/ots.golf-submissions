@@ -1,5 +1,4 @@
-import Submissions.UpperRiscv.MixedChainFrame
-import Submissions.UpperRiscv.MixedCode
+import Submissions.UpperRiscv.MixedChain
 
 namespace OptimalOTS.RiscvMixedProgram
 open OptimalOTS.Dag
@@ -7,25 +6,25 @@ open RiscvZkvm.Rv64 Forest Forest.Name OracleComp
 open Riscv2Program
 
 def dispatchCode (q : ℕ) : Code :=
-  [.LHU .x28 .x12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q))),
+  [.LHU .x28 .x12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q+1))),
    .JALR .x0 .x28 (imm12 (jumpImm q))]
 
 theorem lane_offset' : ∀ q : Fin 16,
-    W (outAddr (2*q)) + signExtend12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q))) = W (laneAddr q) := by
+    W (outAddr (2*q+1)) + signExtend12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q+1))) = W (laneAddr q) := by
   decide +kernel
 
 theorem lane_access' : ∀ q : Fin 16, isValidHalfwordAccess (W (laneAddr q)) = true := by
   decide +kernel
 
-theorem dispatch_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey) {len : ℕ}
-    (q : Fin 16) (k : Fin 32) (hk : k.val = 2*q.val) (s : MachineState) (x : graph.Assignment)
-    (inv : HashInv index wire pk len s x k (work k)) (tail : Code)
+theorem dispatch_refines (index : RawIdx) (v : ℕ) (wire : List Bool) (pk : PublicKey) {len : ℕ}
+    (q : Fin 16) (k : Fin 33) (hk : k.val = 2*q.val+1) (s : MachineState) (x : graph.Assignment)
+    (inv : HashInv index v wire pk len s x k (work k)) (tail : Code)
     (located : Riscv.CodeAt s s.pc (dispatchCode q ++ tail))
     (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : 2 ≤ fuel)
-    (continuation : ∀ u, HashInv index wire pk len u x k (work k) → u.mem=s.mem →
+    (continuation : ∀ u, HashInv index v wire pk len u x k (work k) → u.mem=s.mem →
       u.pc = W (landing0 q-dispatch index q) → Riscv.Refines (fuel-2) u Q c) :
     Riscv.Refines fuel s Q (2+c) := by
-  let front : Code := [.LHU .x28 .x12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q)))]
+  let front : Code := [.LHU .x28 .x12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q+1)))]
   have ready : Riscv.LinearReady s front := by
     simp only [front, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady, and_true, true_and]
     rw [inv.out, hk, lane_offset' q]
@@ -38,7 +37,7 @@ theorem dispatch_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey) {l
     intro r hr
     simp [ha, front, execInstrBr, getReg_setReg_ite, hr]
   have ainput : a.getReg .x10 = W (work k) := by rw [aregs .x10 (by decide)]; exact inv.input
-  have ainv := HashInv.frame index wire pk inv (work k) ainput inv.inputRange
+  have ainv := HashInv.frame index v wire pk inv (work k) ainput inv.inputRange
     (fun r _ h28 => aregs r h28) (by rfl) acode
   have av : (a.getReg .x28).toNat = baseLane q-dispatch index q := by
     simp only [ha, front, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
@@ -55,9 +54,9 @@ theorem dispatch_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey) {l
     exact code.append_right.code_eq acode
   have transition := jalr_transition a (imm12 (jumpImm q)) aloc.head
   rw [target] at transition
-  have binv : HashInv index wire pk len (a.setPC (W (landing0 q-dispatch index q))) x k (work k) := by
-    apply HashInv.frame index wire pk (t := a.setPC (W (landing0 q-dispatch index q))) ainv (work k) ainput inv.inputRange
-      (fun r _ _ => rfl) rfl rfl
+  have binv : HashInv index v wire pk len (a.setPC (W (landing0 q-dispatch index q))) x k (work k) := by
+    apply HashInv.frame index v wire pk (t := a.setPC (W (landing0 q-dispatch index q))) ainv
+      (work k) ainput inv.inputRange (fun r _ _ => rfl) rfl rfl
   rw [show fuel = front.length+((fuel-2)+1) by simp [front]; omega,
     show 2+c = front.length+(c+1) by simp [front]; omega]
   apply Riscv.Refines.linear front code.append_left ready

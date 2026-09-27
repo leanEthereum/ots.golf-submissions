@@ -1,3 +1,19 @@
+# RISC-V upper bound: 346 cycles with a free count digit and two caps
+
+This extends the 348-cycle candidate. A 33rd chain takes its hash count from
+the signature's last byte `v`. The index digit sum `S` and `v` must satisfy
+`S + v = 146 (mod 255)`, with `v < 16`. The machine checks this with the lane
+checksum, `SUB` and `REMU`. Two chains are caps: they hash `d` times instead
+of `d + 1`. The root commits the 826-byte region of the 33 root slots, which
+is 13 blocks. The decision accepts only signatures of at most 5464 bits.
+
+Proved accounting: **346 = 35 index + (6 + v) free chain + (137 + S) pairs + 22
+root/decision** cycles on an accepting run. At most 346 cycles on every run.
+The image is **62,964 bytes** (15,719 instructions and 88 data bytes). The full
+signature is **5464 bits**. See `NOTES.md`.
+
+---
+
 # RISC-V upper bound: 348 cycles with the length test folded into the decision
 
 This extends the 349-cycle capped-rank record (PR #40). The index phase no
