@@ -9,11 +9,14 @@ The class of the index entry at `u` is the class of its answer (`atCls`). Over a
 * `Gp c = Σ_{v ∈ V(c)} ḡ(v)`, over the accepted classes held by index entries;
 * `Zp c = Σ_{u ∈ bad(c)} z_{t(u)}`, over the entries whose class another entry holds;
 * `Yp c = Σ_{u ∈ acc(c)} s(v(u))`, over the entries with an accepted class;
-* `Pre(c, b) = (1 + b / I) Gp c + Zp c + Yp c`.
+* `G1p c = Σ_{v ∈ V(c), a(v) = 1} ḡ(v)`, over the held classes of weight 1;
+* `Pre(c, b) = Gp c + Zp c + Yp c + (b / (2 I)) G1p c`.
 
-A fresh index query charges `Pre` at most `(1 + (b - 2) / I) H'` against two compressions of
-budget (`pre_charge_enc`, P2); other queries leave it unchanged (`pre_of_ne`, P3). The master
-lemma `master_budget_family` (M0) takes a potential that depends on the remaining budget.
+At a fresh index entry `G + Z` grows by `ḡ` of the new class, plus `ḡ` again only for a held class
+of weight 1 (`GZ_cacheQuery`, from `ḡ(v) = a(v) z_{t(v)}`). A fresh index query therefore charges
+`Pre` at most `H' + ((b - 2) / (2 I)) H̄₁` against two compressions of budget (`pre_charge_enc`,
+P2); other queries leave it unchanged (`pre_of_ne`, P3). The master lemma `master_budget_family`
+(M0) takes a potential that depends on the remaining budget.
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -128,9 +131,15 @@ def Zp (c : Cache) : ℝ≥0∞ := ∑ u ∈ P.badc c, P.atCls (fun v => zT S (P
 /-- `Y(c) = Σ_{u ∈ acc(c)} s(v(u))`. -/
 def Yp (c : Cache) : ℝ≥0∞ := ∑ u ∈ P.accc c, P.atCls (P.sC S) c u
 
-/-- `Pre(c, b) = (1 + b / I) G + Z + Y`. -/
+/-- `ḡ(v)` on the classes of weight 1, `0` on the others. -/
+def gbar1 (v : Cls) : ℝ≥0∞ := if P.cweight v = 1 then P.gbar S v else 0
+
+/-- `G₁(c) = Σ_{v ∈ V(c), a(v) = 1} ḡ(v)`. -/
+def G1p (c : Cache) : ℝ≥0∞ := ∑ v ∈ P.Vc c, P.gbar1 S v
+
+/-- `Pre(c, b) = G + Z + Y + (b / (2 I)) G₁`. -/
 def Pre (c : Cache) (b : ℕ) : ℝ≥0∞ :=
-  (1 + (b : ℝ≥0∞) / 2 ^ 127) * P.Gp S c + P.Zp S c + P.Yp S c
+  P.Gp S c + P.Zp S c + P.Yp S c + (b : ℝ≥0∞) / 2 ^ 128 * P.G1p S c
 
 variable {P S}
 
@@ -190,7 +199,7 @@ theorem atCls_congr (f : Cls → ℝ≥0∞) (u : EncInput) : P.atCls f c' u = P
 
 /-- `Pre` depends on the cache only through the classes of the index entries. -/
 theorem pre_congr (b : ℕ) : P.Pre S c' b = P.Pre S c b := by
-  simp only [Pre, Gp, Zp, Yp, Vc_congr h, badc_congr h, accc_congr h, atCls_congr h]
+  simp only [Pre, Gp, Zp, Yp, G1p, Vc_congr h, badc_congr h, accc_congr h, atCls_congr h]
 
 end congr
 
@@ -227,11 +236,12 @@ theorem cls_cq_none (ho : P.cls w = none) (u : EncInput) :
   · rw [hu, cls_cq_self, ho, cls_at_fresh hq]
   · exact cls_cq_ne w hu
 
-/-- `G` grows by at most `ḡ` of the new class. -/
-theorem Gp_cacheQuery :
-    P.Gp S (c.cacheQuery (P.encQuery u₀) w) ≤ P.Gp S c + (P.cls w).elim 0 (P.gbar S) := by
+/-- A sum over the held classes grows by `f` of the new class, if no old entry holds it. -/
+theorem sumV_cacheQuery (f : Cls → ℝ≥0∞) :
+    ∑ v ∈ P.Vc (c.cacheQuery (P.encQuery u₀) w), f v ≤
+      ∑ v ∈ P.Vc c, f v + (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 0 else f v) := by
   rcases ho : P.cls w with _ | i
-  · rw [Gp, Gp, Vc_congr (cls_cq_none hq w ho)]
+  · rw [Vc_congr (cls_cq_none hq w ho)]
     exact le_self_add
   · have hsub : P.Vc (c.cacheQuery (P.encQuery u₀) w) ⊆ insert i (P.Vc c) := by
       intro v hv
@@ -242,11 +252,27 @@ theorem Gp_cacheQuery :
       · rw [cls_cq_ne w h] at hu
         exact Finset.mem_insert_of_mem (mem_Vc.2 ⟨u, hu⟩)
     refine (Finset.sum_le_sum_of_subset hsub).trans ?_
-    rw [Option.elim_some, Gp]
+    rw [Option.elim_some]
     by_cases hi : i ∈ P.Vc c
-    · rw [Finset.insert_eq_of_mem hi]
-      exact le_self_add
-    · rw [Finset.sum_insert hi, add_comm]
+    · rw [Finset.insert_eq_of_mem hi, if_pos hi, add_zero]
+    · rw [Finset.sum_insert hi, if_neg hi, add_comm]
+
+/-- `G` grows by `ḡ` of the new class, if no old entry holds it. -/
+theorem Gp_cacheQuery :
+    P.Gp S (c.cacheQuery (P.encQuery u₀) w) ≤
+      P.Gp S c + (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 0 else P.gbar S v) :=
+  sumV_cacheQuery hq w _
+
+/-- `G₁` grows by at most `ḡ₁` of the new class. -/
+theorem G1p_cacheQuery :
+    P.G1p S (c.cacheQuery (P.encQuery u₀) w) ≤ P.G1p S c + (P.cls w).elim 0 (P.gbar1 S) := by
+  refine (sumV_cacheQuery hq w (P.gbar1 S)).trans (add_le_add le_rfl ?_)
+  rcases P.cls w with _ | i
+  · simp only [Option.elim_none, le_refl]
+  · rw [Option.elim_some, Option.elim_some]
+    split_ifs
+    · exact zero_le
+    · exact le_rfl
 
 /-- `Z` grows by at most `2 z` of the new class, and only if an old entry holds it. -/
 theorem Zp_cacheQuery :
@@ -399,6 +425,57 @@ theorem one_le_cIE : 1 ≤ Tier.cIE := by
     (Or.inr (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)), one_mul]
   exact tsub_le_self
 
+theorem one_le_cweight {v : Cls} (hv : v ∈ P.classes) : 1 ≤ P.cweight v := by
+  obtain ⟨I, hI, rfl⟩ := P.mem_classes.1 hv
+  exact Finset.one_le_card.2 ⟨I, Finset.mem_filter.2 ⟨Finset.mem_univ _, hI, rfl⟩⟩
+
+/-- **Lemma W.** `ḡ(v) = a(v) z_{t(v)}`. -/
+theorem gbar_eq (v : Cls) : P.gbar S v = P.cweight v * zT S (P.ctier S v) := by
+  have h : (2 : ℝ≥0∞) ^ 127 * (2 ^ 127)⁻¹ = 1 :=
+    ENNReal.mul_inv_cancel (pow_ne_zero _ two_ne_zero) (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)
+  rw [gbar, cIE_eq_mul, pC, zT, div_eq_mul_inv]
+  calc 2 ^ 127 * ILinv * (P.cweight v * (2 ^ 127)⁻¹) * S.wbar (P.ctier S v)
+      = (2 ^ 127 * (2 ^ 127)⁻¹) * (P.cweight v * (S.wbar (P.ctier S v) * ILinv)) := by ring
+    _ = _ := by rw [h, one_mul]
+
+/-- The pointwise bound behind Lemma D, for a class of weight `a ≥ 1` and `z = z_{t}`, with the
+hold condition `p` left abstract. -/
+theorem surplus_le (p : Prop) [Decidable p] {a : ℕ} (ha : 1 ≤ a) (z : ℝ≥0∞) :
+    (if p then 0 else (a : ℝ≥0∞) * z) + (if p then 2 * z else 0) ≤
+      (a : ℝ≥0∞) * z + (if p then (if a = 1 then (a : ℝ≥0∞) * z else 0) else 0) := by
+  by_cases hp : p
+  · rw [if_pos hp, if_pos hp, if_pos hp, zero_add]
+    split_ifs with h1
+    · rw [h1, Nat.cast_one, one_mul, two_mul]
+    · have h2 : (2 : ℝ≥0∞) ≤ a := by exact_mod_cast (by omega : 2 ≤ a)
+      rw [add_zero]
+      exact mul_le_mul' h2 le_rfl
+  · rw [if_neg hp, if_neg hp, if_neg hp, add_zero]
+
+/-- **Lemma D.** At a fresh index entry, `G + Z` grows by at most `ḡ` of the new class, plus
+`ḡ₁` of it if an old entry holds it. -/
+theorem GZ_cacheQuery {c : Cache} {u₀ : EncInput} (hq : c (P.encQuery u₀) = none)
+    (w : BitVec hashBits) :
+    P.Gp S (c.cacheQuery (P.encQuery u₀) w) + P.Zp S (c.cacheQuery (P.encQuery u₀) w) ≤
+      P.Gp S c + P.Zp S c + ((P.cls w).elim 0 (P.gbar S) +
+        (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then P.gbar1 S v else 0)) := by
+  calc P.Gp S (c.cacheQuery (P.encQuery u₀) w) + P.Zp S (c.cacheQuery (P.encQuery u₀) w)
+      ≤ (P.Gp S c + (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 0 else P.gbar S v)) +
+        (P.Zp S c +
+          (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 2 * zT S (P.ctier S v) else 0)) :=
+        add_le_add (Gp_cacheQuery hq w) (Zp_cacheQuery hq w)
+    _ = P.Gp S c + P.Zp S c +
+        ((P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 0 else P.gbar S v) +
+          (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 2 * zT S (P.ctier S v) else 0)) :=
+        add_add_add_comm _ _ _ _
+    _ ≤ _ := by
+        refine add_le_add le_rfl ?_
+        rcases ho : P.cls w with _ | i
+        · simp only [Option.elim_none, add_zero, le_refl]
+        · rw [Option.elim_some, Option.elim_some, Option.elim_some, Option.elim_some, gbar1,
+            gbar_eq]
+          exact surplus_le _ (one_le_cweight (P.cls_mem_classes ho)) _
+
 /-- The average new `G` term: `Σ_v p(v) ḡ(v) = c Σ_t N_t p_t² w̄_t`. -/
 theorem avg_Gp (hS : S.Valid) (hT : P.TierHyp S) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
@@ -433,21 +510,48 @@ theorem avg_Yp (hS : S.Valid) (hT : P.TierHyp S) :
         rw [nsmul_eq_mul]
         ring
 
-/-- The average new `Z` term: `2 Σ_{v ∈ V(c)} p(v) z_{t(v)} = (2 / I) G(c)`. -/
-theorem avg_Zp (c : Cache) :
+theorem two_div_pow_128 : (2 : ℝ≥0∞) / 2 ^ 128 = 1 / 2 ^ 127 := by
+  rw [show (128 : ℕ) = 1 + 127 from rfl, pow_add, pow_one,
+    ← ENNReal.mul_div_mul_left 1 (2 ^ 127) two_ne_zero ENNReal.ofNat_ne_top, mul_one]
+
+/-- The average surplus of a held weight-1 class: `Σ_{v ∈ V(c)} p(v) ḡ₁(v) = (2 / 2 I) G₁(c)`. -/
+theorem avg_surplus (c : Cache) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-        (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 2 * zT S (P.ctier S v) else 0) =
-      2 / 2 ^ 127 * P.Gp S c := by
-  rw [avg_cls, Gp, Finset.mul_sum]
+        (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then P.gbar1 S v else 0) =
+      2 / 2 ^ 128 * P.G1p S c := by
+  rw [avg_cls, G1p, Finset.mul_sum]
   simp only [mul_ite, mul_zero]
   have hsub : P.Vc c ⊆ P.classes := Finset.filter_subset _ _
   rw [Finset.sum_ite_mem, Finset.inter_eq_right.2 hsub]
   refine Finset.sum_congr rfl fun v _ => ?_
-  rw [zT, gbar, cIE_eq_mul,
-    show (2 : ℝ≥0∞) / 2 ^ 127 * (2 ^ 127 * ILinv * P.pC v * S.wbar (P.ctier S v)) =
-      (2 / 2 ^ 127 * 2 ^ 127) * (ILinv * P.pC v * S.wbar (P.ctier S v)) by ring,
-    ENNReal.div_mul_cancel (pow_ne_zero _ two_ne_zero) (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)]
-  ring
+  rw [gbar1, pC]
+  split_ifs with h
+  · rw [h, Nat.cast_one, two_div_pow_128]
+  · rw [mul_zero, mul_zero]
+
+/-- The average new `G₁` term: `Σ_{v : a(v) = 1} p(v) ḡ(v) ≤ H̄₁`. -/
+theorem avg_G1p_le (hS : S.Valid) (hT : P.TierHyp S) :
+    ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+        (P.cls w).elim 0 (P.gbar1 S) ≤ S.h1E := by
+  rw [avg_cls]
+  calc ∑ v ∈ P.classes, P.pC v * P.gbar1 S v
+      = ∑ v ∈ P.classes, (fun t => if S.a t = 1 then Tier.cIE * (S.pE t ^ 2 * S.wbar t) else 0)
+          (P.ctier S v) :=
+        Finset.sum_congr rfl fun v hv => by
+          simp only [gbar1, gbar, pC_eq hT hv, cweight_of_mem hT hv]
+          split_ifs <;> ring
+    _ = ∑ t ∈ Finset.range S.T,
+          S.N t • (if S.a t = 1 then Tier.cIE * (S.pE t ^ 2 * S.wbar t) else 0) :=
+        sum_classes hS hT
+          (fun t => if S.a t = 1 then Tier.cIE * (S.pE t ^ 2 * S.wbar t) else 0)
+    _ = Tier.cIE * ∑ t ∈ Finset.range S.T,
+          (if S.a t = 1 then (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t else 0) := by
+        rw [Finset.mul_sum]
+        refine Finset.sum_congr rfl fun t _ => ?_
+        split_ifs
+        · rw [nsmul_eq_mul]; ring
+        · rw [smul_zero, mul_zero]
+    _ ≤ S.h1E := S.H1_le hS
 
 theorem ILinv_mul_le (x : ℝ≥0∞) : ILinv * x ≤ Tier.cIE ^ 2 * x / 2 ^ 127 := by
   have h2 : Tier.cIE * ILinv * 2 ^ 127 = Tier.cIE ^ 2 := by rw [cIE_eq_mul]; ring
@@ -461,67 +565,62 @@ theorem ILinv_mul_le (x : ℝ≥0∞) : ILinv * x ≤ Tier.cIE ^ 2 * x / 2 ^ 127
 
 variable (P S)
 
-/-- **P2.** A fresh index query spends two compressions of budget and charges `Pre` at most
-`(1 + (b - 2) / I) H'` on average. -/
+/-- **P2₂.** A fresh index query spends two compressions of budget and charges `Pre` at most
+`H' + ((b - 2) / (2 I)) H̄₁` on average. -/
 theorem pre_charge_enc (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {u₀ : EncInput}
     (hq : c (P.encQuery u₀) = none) {b : ℕ} (hb : 2 ≤ b) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
       P.Pre S (c.cacheQuery (P.encQuery u₀) w) (b - 2) ≤
-      P.Pre S c b + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE := by
+      P.Pre S c b + (S.hpE + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128 * S.h1E) := by
   set K := (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹
-  set β := 1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127
-  set A := β * P.Gp S c + P.Zp S c + P.Yp S c
-  set g1 := fun w : BitVec hashBits => (P.cls w).elim 0 (P.gbar S)
-  set z1 := fun w : BitVec hashBits =>
-    (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 2 * zT S (P.ctier S v) else 0)
-  set y1 := fun w : BitVec hashBits => (P.cls w).elim 0 (P.sC S)
+  set β := ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128
+  set A := P.Gp S c + P.Zp S c + P.Yp S c + β * P.G1p S c
+  set g := fun w : BitVec hashBits => (P.cls w).elim 0 (P.gbar S)
+  set e := fun w : BitVec hashBits =>
+    (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then P.gbar1 S v else 0)
+  set y := fun w : BitVec hashBits => (P.cls w).elim 0 (P.sC S)
+  set g1 := fun w : BitVec hashBits => (P.cls w).elim 0 (P.gbar1 S)
   have hpt : ∀ w, P.Pre S (c.cacheQuery (P.encQuery u₀) w) (b - 2) ≤
-      A + (β * g1 w + z1 w + y1 w) := by
+      A + (g w + y w + e w + β * g1 w) := by
     intro w
     calc P.Pre S (c.cacheQuery (P.encQuery u₀) w) (b - 2)
-        ≤ β * (P.Gp S c + g1 w) + (P.Zp S c + z1 w) + (P.Yp S c + y1 w) :=
-          add_le_add (add_le_add (mul_le_mul' le_rfl (Gp_cacheQuery hq w))
-            (Zp_cacheQuery hq w)) (Yp_cacheQuery hq w).le
-      _ = A + (β * g1 w + z1 w + y1 w) := by ring
+        ≤ (P.Gp S c + P.Zp S c + (g w + e w)) + (P.Yp S c + y w) + β * (P.G1p S c + g1 w) :=
+          add_le_add (add_le_add (GZ_cacheQuery hq w) (Yp_cacheQuery hq w).le)
+            (mul_le_mul' le_rfl (G1p_cacheQuery hq w))
+      _ = A + (g w + y w + e w + β * g1 w) := by ring
   have eβ : ∑ w, K * (β * g1 w) = β * ∑ w, K * g1 w := by
     rw [Finset.mul_sum]
     exact Finset.sum_congr rfl fun _ _ => mul_left_comm _ _ _
-  have hβ : 1 ≤ β := le_self_add
-  have hα : β * P.Gp S c + 2 / 2 ^ 127 * P.Gp S c = (1 + (b : ℝ≥0∞) / 2 ^ 127) * P.Gp S c := by
-    rw [← add_mul, add_assoc, ENNReal.div_add_div_same]
-    congr 3
+  have hα : β * P.G1p S c + 2 / 2 ^ 128 * P.G1p S c = (b : ℝ≥0∞) / 2 ^ 128 * P.G1p S c := by
+    rw [← add_mul, ENNReal.div_add_div_same]
+    congr 2
     exact_mod_cast Nat.sub_add_cancel hb
   have hY : ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t ≤
-      β * (Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127) :=
+      Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127 :=
     calc _ ≤ ILinv * ((2 ^ 19 - 1) * ENNReal.ofReal S.SCsum) := by
           gcongr
           exact S.sum_sck_le hS
       _ ≤ Tier.cIE ^ 2 * ((2 ^ 19 - 1) * ENNReal.ofReal S.SCsum) / 2 ^ 127 := ILinv_mul_le _
-      _ = Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127 := by rw [mul_assoc]
-      _ ≤ _ := le_mul_of_one_le_left zero_le hβ
+      _ = _ := by rw [mul_assoc]
   calc ∑ w, K * P.Pre S (c.cacheQuery (P.encQuery u₀) w) (b - 2)
-      ≤ ∑ w, K * (A + (β * g1 w + z1 w + y1 w)) :=
+      ≤ ∑ w, K * (A + (g w + y w + e w + β * g1 w)) :=
         Finset.sum_le_sum fun w _ => mul_le_mul' le_rfl (hpt w)
-    _ = A + (∑ w, K * (β * g1 w) + ∑ w, K * z1 w + ∑ w, K * y1 w) := by
+    _ = A + (∑ w, K * g w + ∑ w, K * y w + ∑ w, K * e w + ∑ w, K * (β * g1 w)) := by
         have hK : ∀ a, ∑ _w : BitVec hashBits, K * a = a := fun a => sum_inv_card_mul a
         simp only [mul_add, Finset.sum_add_distrib, hK]
-    _ = A + (β * (Tier.cIE * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t) +
-          2 / 2 ^ 127 * P.Gp S c +
-          ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t) := by
-        rw [eβ, avg_Gp hS hT, avg_Zp, avg_Yp hS hT]
-    _ = (β * P.Gp S c + 2 / 2 ^ 127 * P.Gp S c) + P.Zp S c + P.Yp S c +
-          (β * (Tier.cIE * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t) +
-            ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t) := by
+    _ = A + (Tier.cIE * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t +
+          ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t +
+          2 / 2 ^ 128 * P.G1p S c + β * ∑ w, K * g1 w) := by
+        rw [eβ, avg_Gp hS hT, avg_Yp hS hT, avg_surplus]
+    _ = P.Gp S c + P.Zp S c + P.Yp S c + (β * P.G1p S c + 2 / 2 ^ 128 * P.G1p S c) +
+          ((Tier.cIE * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t +
+            ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t) +
+            β * ∑ w, K * g1 w) := by
         ring
-    _ ≤ P.Pre S c b + β * S.hpE := by
+    _ ≤ P.Pre S c b + (S.hpE + β * S.h1E) := by
         rw [hα]
-        refine add_le_add le_rfl ?_
-        calc _ ≤ β * (Tier.cIE * ENNReal.ofReal S.Hsum) +
-              β * (Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127) :=
-              add_le_add (by gcongr; exact S.sum_wbar_le hS) hY
-          _ = β * (Tier.cIE * ENNReal.ofReal S.Hsum +
-              Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127) := (mul_add _ _ _).symm
-          _ ≤ β * S.hpE := by gcongr; exact S.Hprime_le hS
+        refine add_le_add le_rfl (add_le_add ?_ (mul_le_mul' le_rfl (avg_G1p_le hS hT)))
+        exact (add_le_add (by gcongr; exact S.sum_wbar_le hS) hY).trans (S.Hprime_le hS)
 
 /-- **P3.** A query at no index point leaves `Pre` unchanged. -/
 theorem pre_of_ne {c : Cache} {q : Query} (hq : ∀ u, q ≠ P.encQuery u) (w : BitVec hashBits)
@@ -546,7 +645,11 @@ theorem pre_noEnc {c : Cache} (hc : ∀ u, c (P.encQuery u) = none) (b : ℕ) : 
     obtain ⟨v, hv⟩ := mem_accc.1 hu
     rw [hk u] at hv
     cases hv
-  rw [Pre, hG, hZ, hY, mul_zero, add_zero, add_zero]
+  have hG1 : P.G1p S c = 0 := Finset.sum_eq_zero fun v hv => by
+    obtain ⟨u, hu⟩ := mem_Vc.1 hv
+    rw [hk u] at hu
+    cases hu
+  rw [Pre, hG, hZ, hY, hG1, mul_zero, add_zero, add_zero, add_zero]
 
 end Params
 

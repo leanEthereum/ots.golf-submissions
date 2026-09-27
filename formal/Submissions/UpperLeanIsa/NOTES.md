@@ -1,10 +1,11 @@
-# Fused chain binding at 1125 cycles
+# Fused chain binding at 1115 cycles
 
-Claim **1125 cycles**: **125 ordinary instructions + 88 BLAKE2S × 10 + 120 boundary cycles**.
-Every completing path executes 213 instructions. The 88 hashes are 86 chain steps, one index,
-and one root call. This improves the 1209 reference by 84 cycles (6.95%), the 1149 fused
-record by 24 cycles, the recorded 1138 root by 13 cycles, and the unsubmitted 1126 root, from
-which this root descends, by 1 cycle.
+Claim **1115 cycles**: **125 ordinary instructions + 87 BLAKE2S × 10 + 120 boundary cycles**.
+Every completing path executes 212 instructions. The 87 hashes are 85 chain steps, one index,
+and one root call. This improves the 1209 reference by 94 cycles (7.78%), the 1149 fused
+record by 34 cycles, the recorded 1138 root by 23 cycles, and the unsubmitted 1125 root, from
+which this root descends, by 10 cycles. The step from 1125 is one chain hash: the layer drops
+from 86 to 85, and a new pre-sign potential keeps the security slope below 1 at layer 85.
 
 The reference is the verified submission by lucemans at
 `6363c32ead978b927a23860bfb863dff4ba9987e`:
@@ -54,18 +55,26 @@ low half is the public key. Binding propagates through the DAG to all 42 tops.
 The signature is 42 complete 128-bit words and a 127-bit nonce, totaling 5503 bits. The signer
 tries `2^19` nonces and keeps the accepted class of least weight, breaking ties by earliest
 trial. A class's weight counts its effective 127-bit indices. Thirteen group tables encode
-41 chain digits; the free chain digit completes the total to **86**. The group cost lies in
-`[23,86]`, so the free digit lies in `[0,63]`.
+41 chain digits; the free chain digit completes the total to **85**. The group cost lies in
+`[22,85]`, so the free digit lies in `[0,63]`.
 
-The field lengths are `[1024,512,512,512,512,2048,2048,1024,1024,1024,1024,1024,1024]`. Units
-from 7 on enumerate digits at most 15. Units 8, 9, 10 and 12 have a cost-17 band. An exporter
-can run the all-zero tuple only at raw field value 0. `FusionCodec` specifies the exact tuples
+The field lengths are `[1024,512,512,512,512,2048,2048,1024,1024,1024,1024,1024,1024]`. Unit 7
+has 1020 live values; its last 4 field values are dummies, which no accepted index uses. Units
+from 7 on enumerate digits at most 15. Units 8, 9 and 10 have a cost-17 band. An exporter can
+run the all-zero tuple only at raw field value 0. `FusionCodec` specifies the exact tuples
 and aliases; `FusionTier` and `FusionNumeric` prove their counts and numerical bounds.
 
-There are 17 dyadic class weights `1,2,...,2^16`. The schedule uses
-`hp = 1455516033378 / 2^40 / 2^127`, `k1 = 727758180568 / 2^40 / 2^127`, and
-`b0 = 38312964426242204025790222380575`. The normalized security slope is 0.992838 and
-the signing availability is about 132.7 bits. The Lean proof uses exact integer counts and
+There are 21 dyadic class weights `1,2,...,2^20`. The schedule uses
+`hp = 2014953938675 / 2^40 / 2^127`, `k1 = 1007477734885 / 2^40 / 2^127`,
+`h1 = 568695663674 / 2^40 / 2^127` and `b0 = 916139622403514217087474011998551`. The
+normalized security slope is 0.980948 and the signing availability is about 129.9 bits.
+
+The pre-sign potential is `G + Z + Y + (b / 2I) · G₁`, where `G₁` is the `G` mass of the held
+classes of weight 1. A fresh index answer whose class is already held does not raise `G`, and
+this saving pays for the `Z` increase of every class of weight at least 2. Only the weight-1 tier
+keeps a budget term, with the coefficient `h1 / 8`. The slope is
+`k1 + (h1 / 8) · max(0, 1 − 2 (2 k1 − hp) / h1)²` in units of `2^-127`, where `h1` bounds the
+weight-1 part of `H̄`. The Lean proof uses exact integer counts and
 outward-rounded rational certificates, proving signing failure at most `2^-128` and 127-bit
 strong unforgeability for the actual adaptive cached-oracle experiment.
 
@@ -85,18 +94,18 @@ never-executed pads. The prologue sets no `C_15`:
   five-dep chain 4, so the 17 tags `C_1 … C_14`, `g`, 5503 and `GP_13` need no extra constant.
 
 Group 0 blocks have `7 + c` slots, group 5 blocks `7 + c` (with the root call), group 6 blocks
-`9 + c`, and the other groups `8 + c`. Group regions run from slot 27 through 243269. Free
+`9 + c`, and the other groups `8 + c`. Group regions run from slot 27 through 241721. Free
 blocks begin at 255615 with stride 68; the sentinel is 262143. The code and memory tables have
 `2^18` and `2^16` rows, respectively, for **327680 seeded rows**.
 
 The cycle accounting is 18 prologue and exit, and 107 block non-hash instructions (125), one
-index hash, 86 chain hashes and one root hash (88), and the 120-cycle boundary charge:
-`125 + 88 × 10 + 120 = 1125`.
+index hash, 85 chain hashes and one root hash (87), and the 120-cycle boundary charge:
+`125 + 87 × 10 + 120 = 1115`.
 
 Units 7, 8, 9, 10 and 12 have no cost-0 tuple and multiply `C_(cost − 1)`. The landing seed
-is `initialProduct(81,s)`, and `initialProduct(81,s) · C_p = initialProduct(86,s) · C_(p+5)`.
-The final exponent is `(11529215046068731897 + 2^60 * (s + sum(group costs))) mod (2^64 - 1)`.
-Only total 86 reaches the sentinel; every other total in the range 0..284 lands on a pad or
+is `initialProduct(80,s)`, and `initialProduct(80,s) · C_p = initialProduct(85,s) · C_(p+5)`.
+The final exponent is `(12682136550675578873 + 2^60 * (s + sum(group costs))) mod (2^64 - 1)`.
+Only total 85 reaches the sentinel; every other total in the range 0..284 lands on a pad or
 beyond the program. Frame guards (frames 0 to 13, constants `C_1 … C_14`) reject entry into a
 block's middle. The universal cycle theorem quantifies over every admitted memory size, image,
 and step count.
@@ -124,7 +133,10 @@ limit.
   `(0,0,0,c)` excluded; the exact gate fails (slope 1.0088). Relaxing the binding of group 12
   would pay for it, but the packets then lack two dependency slots.
 - Dropping `C_15` by leaving holes in the cost bands fails the gate (slope 1.0186).
-- Layer 85 fails for every design searched. That is search evidence, not an impossibility
+- Layer 85 fails the earlier potential `(1 + b/I) · G + Z + Y` for every design searched
+  (slope 1.374 on these tables).
+- Layer 84 stays out of reach with the new potential: its slope is at least `hp / 2`, and that
+  is at least 1.056 for the best layer-84 design found. That is search evidence, not an impossibility
   proof.
 
 ## Credits
@@ -155,3 +167,5 @@ limit.
 - The removal of `C_15` (split product, index cv `(C_14, GP_13)`), the digit bound 15 with
   the retuned tier certificate, the 1125-cycle machine certificate and the removal of the
   pre-fusion modules were prepared with Claude Opus 5.5.
+- The pre-sign potential with the weight-1 budget term, the layer-85 tables and the 1115-cycle
+  machine certificate were prepared with Claude Opus 5.5.

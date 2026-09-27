@@ -16,7 +16,7 @@ signing and the second stage. For a tier schedule `S` the potential with remaini
 
 (`Pre` the pre-sign potential, `Ψ` the RowGood supermartingale, `K` the budget term). It does
 not grow in average at any fresh query (`ΦA_charge`, tier-proof.md A1): an index query moves
-`Pre` by at most `(1 + (b - 2)/I) H'`, paid by `K`, and leaves `Ψ` a martingale; a chain or root
+`Pre` by at most `H' + ((b - 2) / 2I) H̄₁`, paid by `K`, and leaves `Ψ` a martingale; a chain or root
 query moves the hidden and second-preimage terms by at most `2 · 2 ^ -129` per compression, paid
 by the slope `κ₁` of `K`. The continuation (`stageA_cont`, A2): a row that is not good pays
 through `Ψ / θ ≥ 1`; otherwise signing is one expectation over its outcomes, a lost signature
@@ -282,10 +282,10 @@ theorem ΦA_charge (hP : P.SecurityHyp) (hS : S.Valid) (hT : P.codec.TierHyp S) 
     rw [h4]
     calc (∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
             P.codec.Pre S (c.cacheQuery (P.codec.encQuery u₀) u) (b - 2)) + P.codec.PsiE S c + S.Kb (b - 2)
-        ≤ (P.codec.Pre S c b + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE) + P.codec.PsiE S c +
-            S.Kb (b - 2) := by gcongr
+        ≤ (P.codec.Pre S c b + (S.hpE + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128 * S.h1E)) +
+            P.codec.PsiE S c + S.Kb (b - 2) := by gcongr
       _ = P.codec.Pre S c b + P.codec.PsiE S c +
-            (S.Kb (b - 2) + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE) := by ring
+            (S.Kb (b - 2) + (S.hpE + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128 * S.h1E)) := by ring
       _ ≤ P.codec.Pre S c b + P.codec.PsiE S c + S.Kb b := by gcongr
   · have hne : ∀ u, q ≠ P.codec.encQuery u := fun u h => henc ⟨u, h⟩
     have h1 := P.hiddenHit_charge hP beforeSigning_valid v (P.fiber₀ v) (fun ξ h => h) c q
@@ -553,10 +553,8 @@ theorem stageA_cont (hP : P.SecurityHyp) (hS : S.Valid) (hT : P.codec.TierHyp S)
     rw [hb'', ← Nat.cast_add, Nat.add_sub_cancel' hL]
   have hSC := S.SCf_le hS
   have hkp := S.kpost_le hS
-  have hGZY : P.codec.Gp S d + P.codec.Zp S d + P.codec.Yp S d ≤ P.codec.Pre S d b' := by
-    unfold Pre
-    gcongr
-    exact le_mul_of_one_le_left bot_le le_self_add
+  have hGZY : P.codec.Gp S d + P.codec.Zp S d + P.codec.Yp S d ≤ P.codec.Pre S d b' :=
+    le_self_add
   have hk1 : S.k1E * b' ≤ S.Kb b' := by
     unfold Tier.Sched.Kb
     exact le_self_add

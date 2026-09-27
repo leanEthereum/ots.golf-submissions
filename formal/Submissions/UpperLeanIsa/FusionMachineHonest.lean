@@ -261,7 +261,7 @@ include hC hacc in
 theorem hlive : ∀ u < 13, field u (IF P f pk m bits) < VF u := hC.live _ hacc
 
 include hC hacc in
-theorem hsum : XF P T f pk m bits 0 + gsum T (XF P T f pk m bits) = 86 := by
+theorem hsum : XF P T f pk m bits 0 + gsum T (XF P T f pk m bits) = 85 := by
   have h : ∑ k : Fin numChains, P.codec.digit (effective (IF P f pk m bits)) k = P.codec.layer := hacc
   rw [hC.layer, Finset.sum_congr rfl (fun k _ => (hd_eq P T hC _ (hlive hC hacc) k).symm),
     Fin.sum_univ_eq_sum_range (fun k => hd T (y0F P f pk m bits) k) 42] at h
@@ -322,8 +322,8 @@ theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   apply congrArg ofK
   have hs := hsum hC hacc
   change hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,
-    cost T w (hxs T (IF P f pk m bits) (w + 1)) = 86 at hs
-  rw [landing_total hT (hxs_valid T _ (hlive hC hacc)), hs, seedExp_86]
+    cost T w (hxs T (IF P f pk m bits) (w + 1)) = 85 at hs
+  rw [landing_total hT (hxs_valid T _ (hlive hC hacc)), hs, seedExp_85]
 
 include hT hC hlen hacc in
 /-- The index query of the honest image. -/

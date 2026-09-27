@@ -2,16 +2,16 @@ import Submissions.UpperLeanIsa.FusionMachinePath
 import OptimalOTS.LeanIsa
 
 /-!
-# The universal 1125-cycle bound
+# The universal 1115-cycle bound
 
 A completing walk exits on the sentinel, so the last landing product is g^sentinel
-(`exit_forced`, via the hash-free exit table). The free seed `initialProduct(81, s)` and the
+(`exit_forced`, via the hash-free exit table). The free seed `initialProduct(80, s)` and the
 group products (`C_(cost − 1)` on the five shifted units, which have positive cost) therefore
-imply C_(s+sum costs)=C_86. Raising to the sixteenth power proves equality of the small integer
-totals, so every completing path has exactly 86 chain hashes.
+imply C_(s+sum costs)=C_85. Raising to the sixteenth power proves equality of the small integer
+totals, so every completing path has exactly 85 chain hashes.
 
 There are 107 non-hash block instructions, 17 non-hash prologue instructions and the exit, one
-index hash, and one root hash. Every completing run has 213 instructions and costs 1005 before
+index hash, and one root hash. Every completing run has 212 instructions and costs 995 before
 the 120-cycle boundary charge. The bound covers every admitted memory size and step count.
 -/
 
@@ -35,7 +35,7 @@ variable {B : BlakeRel} {v : ℕ → E}
 
 /-- **Exponent identity.** The hash-free relations on any path force the layer. -/
 theorem layer_of_facts (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (hP : PathFacts T B v xs)
-    (hL : Landing v xs) : xs 0 + gsum T xs = 86 := by
+    (hL : Landing v xs) : xs 0 + gsum T xs = 85 := by
   have h13 := prod_eq hT hV hP.pro hP.blk 13 le_rfl
   rw [hP.gp13, initialProduct_shift, pcost_sum hT hV] at h13
   have hbound : ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) ≤ ∑ _w ∈ Finset.range 13, 17 :=
@@ -46,7 +46,7 @@ theorem layer_of_facts (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (hP : Pat
   rw [Finset.sum_const, Finset.card_range, smul_eq_mul] at hbound
   have hx0 : xs 0 < 64 := by have := hV 0 (by omega); rwa [Wf_zero] at this
   have heq := (ofK_injective h13).symm
-  exact (LeanIsaFieldRescale.checksum_exact (by omega : 86 ≤ 300)
+  exact (LeanIsaFieldRescale.checksum_exact (by omega : 85 ≤ 300)
     (by omega : xs 0 + ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) ≤ 300)).mp heq
 
 end Layer
@@ -72,9 +72,9 @@ theorem cF_sum (T : Tab) (xs : ℕ → ℕ) :
   unfold gsum
   congr 1
 
-/-- On the layer, every path costs `1005` cycles. -/
-theorem totalCost_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 + gsum T xs = 86) :
-    totalCost T xs = 1005 := by
+/-- On the layer, every path costs `995` cycles. -/
+theorem totalCost_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 + gsum T xs = 85) :
+    totalCost T xs = 995 := by
   unfold totalCost
   have : ∀ f ∈ Finset.range 14, 2 + lcost (bodyF T (frU (xs 0) f) (xs f)) =
       gcuF f + 10 * cF T f (xs f) + 10 * hmF f := fun f hf => by
@@ -87,9 +87,9 @@ theorem totalCost_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 +
     ← Finset.mul_sum, gcuF_sum, hmF_sum, cF_sum, h]
   norm_num
 
-/-- On the layer, every path executes `213` instructions. -/
-theorem totalSteps_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 + gsum T xs = 86) :
-    totalSteps T xs = 213 := by
+/-- On the layer, every path executes `212` instructions. -/
+theorem totalSteps_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 + gsum T xs = 85) :
+    totalSteps T xs = 212 := by
   unfold totalSteps
   have : ∀ f ∈ Finset.range 14, 2 + (bodyF T (frU (xs 0) f) (xs f)).length =
       gcuF f + cF T f (xs f) + hmF f := fun f hf => by
@@ -102,15 +102,15 @@ theorem totalSteps_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 
     hmF_sum, cF_sum, h]
   norm_num
 
-/-- The claim: `boundaryCycles + 1005`. -/
-def claim : ℕ := 1125
+/-- The claim: `boundaryCycles + 995`. -/
+def claim : ℕ := 1115
 
 theorem boundary_eq : LeanIsa.boundaryCycles = 120 := by decide
 
 /-! ## The certificate clauses -/
 
 /-- **Cycles.** Every completing execution of the bytecode, under every admissible memory size,
-every committed image and every step count, costs exactly `1005` plus the boundary. -/
+every committed image and every step count, costs exactly `995` plus the boundary. -/
 theorem cycles (hT : T.Hyp) (S : LeanIsa.Submission) (hS : S.program = program T) :
     S.CyclesAtMost claim := by
   intro pk m σ κ h16 hκ L n cost h

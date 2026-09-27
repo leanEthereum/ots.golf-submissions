@@ -150,12 +150,12 @@ def hiC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 128 128)
 
 /-- The honest landing product before group `u`. -/
 def gpV (I : Word) (u : ℕ) : E :=
-  ofK (LeanIsaFieldRescale.initialProduct 81 (hxs T I 0) *
+  ofK (LeanIsaFieldRescale.initialProduct 80 (hxs T I 0) *
     LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, pcost T w (hxs T I (w + 1))))
 
 /-- The honest landing product before group `u` times `C_14`. -/
 def tpV (I : Word) (u : ℕ) : E :=
-  ofK (LeanIsaFieldRescale.initialProduct 81 (hxs T I 0) *
+  ofK (LeanIsaFieldRescale.initialProduct 80 (hxs T I 0) *
     LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, pcost T w (hxs T I (w + 1)) + 14))
 
 def pairK (i : ℕ) : ℕ := [12, 13, 22, 23, 33, 37, 14, 15, 21, 24, 35, 36, 1, 2, 26, 29, 7, 8, 0, 3, 4, 5, 6, 0, 9, 10, 11, 16, 17, 18, 19, 20, 25, 27, 28, 0, 30, 31, 32, 34, 38, 39, 40, 41].getD i 0

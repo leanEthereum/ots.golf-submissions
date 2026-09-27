@@ -1,10 +1,10 @@
-# 1125-cycle leanISA construction
+# 1115-cycle leanISA construction
 
-This root exports `Submission.Certificate 1125`. Nine groups use final chain hashes to bind
+This root exports `Submission.Certificate 1115`. Nine groups use final chain hashes to bind
 dependency tops: five with five-dep packets and four with three-dep packets. One root hash
 remains. The complete proof covers admissibility, 127-bit strong security, bytecode validity,
 honest-prover equivalence, soundness against any committed image, and the cycle bound. The
-score is `125 + 88 × 10 + 120 = 1125`.
+score is `125 + 87 × 10 + 120 = 1115`.
 
 See [NOTES.md](NOTES.md) for the construction, validation status, and credits.
 
