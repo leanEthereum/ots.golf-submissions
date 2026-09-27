@@ -48,8 +48,6 @@ theorem live_iff {u : ℕ} (hu : u < 13) (v : ℕ) (hv : v < 2 ^ gb u) :
   · subst u; norm_num [gb, VF] at hv ⊢; omega
   · rw [if_neg h0, if_neg h0]
 
-theorem chainAt_eq : ∀ u < 13, ∀ i < gk u, FusionCodec.chainAt u i = chainOf u i := by decide
-
 theorem lenN_eq : ∀ k < 42, FusionCodec.lenN k = LEN k := by decide
 
 theorem off_eq : ∀ k < 42, FusionCodec.off k = OFFT k := by decide
@@ -110,6 +108,12 @@ theorem fusionTab_hyp : fusionTab.Hyp where
     have h := FusionCodec.tupS_lt (FusionCodec.ushape_lt u) hv' (i := i) (by rw [hk]; exact hi)
     rw [shLen_eq u hu i hi] at h
     exact h
+  coord_lt16 u hu h7 v hv i _ := by
+    have h := FusionCodec.tupS_lt_gB (FusionCodec.ushape_lt u) (rawCode_lt hu hv) i
+    have hg : FusionCodec.gB (FusionCodec.ushape u) = 16 := by
+      unfold FusionCodec.gB FusionCodec.ushape; rw [Nat.mod_eq_of_lt hu, if_pos h7]
+    rw [hg] at h
+    exact h
 
 theorem fusion_freeDigit (c : ℕ) : FusionCodec.freeDigit c = freeDigit c := by
   unfold FusionCodec.freeDigit freeDigit
@@ -159,7 +163,8 @@ theorem fusion_compat : Compat Fusion.params fusionTab where
     unfold FusionCodec.gword
     rw [cellBits_gpow_one, cellBits_gpow_zero]
   chainMd := cellBits_gpow_zero
-  idxMd := cellBits_gpow_one
+  idxCv := rfl
+  idxMd := cellBits_gpow_zero
   fusedMd _ := rfl
   rootMd r := by
     change Fusion.tagWord (Fusion.rootIndex r) = _

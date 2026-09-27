@@ -150,8 +150,13 @@ def hiC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 128 128)
 
 /-- The honest landing product before group `u`. -/
 def gpV (I : Word) (u : ℕ) : E :=
-  ofK (LeanIsaFieldRescale.initialProduct 82 (hxs T I 0) *
+  ofK (LeanIsaFieldRescale.initialProduct 81 (hxs T I 0) *
     LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, pcost T w (hxs T I (w + 1))))
+
+/-- The honest landing product before group `u` times `C_14`. -/
+def tpV (I : Word) (u : ℕ) : E :=
+  ofK (LeanIsaFieldRescale.initialProduct 81 (hxs T I 0) *
+    LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, pcost T w (hxs T I (w + 1)) + 14))
 
 def pairK (i : ℕ) : ℕ := [12, 13, 22, 23, 33, 37, 14, 15, 21, 24, 35, 36, 1, 2, 26, 29, 7, 8, 0, 3, 4, 5, 6, 0, 9, 10, 11, 16, 17, 18, 19, 20, 25, 27, 28, 0, 30, 31, 32, 34, 38, 39, 40, 41].getD i 0
 
@@ -166,14 +171,16 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   if c < 48 then 0
   else if c=48 then oneV
   else if c=49 then gV
-  else if 51 ≤ c ∧ c < 66 then cV (c-50)
+  else if 51 ≤ c ∧ c < 65 then cV (c-50)
+  else if c=65 then gpV T (idxOf y0) 13
   else if c=80 then loC y0
   else if c=81 then hiC y0
   else if 100 ≤ c ∧ c < 113 then fpat (c-100) (hxs T (idxOf y0) (c-100+1))
   else if 120 ≤ c ∧ c < 132 then natV (ofDigitsW gb (fun w => hxs T (idxOf y0) (w+1)) (c-120+1))
   else if 160 ≤ c ∧ c < 174 then ofK (gpow (ent (c-160) (hxs T (idxOf y0) (c-160))))
   else if 180 ≤ c ∧ c < 194 then ofK (gpow (ent (c-180) (hxs T (idxOf y0) (c-180))+1))
-  else if 200 ≤ c ∧ c < 214 then gpV T (idxOf y0) (c-200)
+  else if 200 ≤ c ∧ c < 213 then gpV T (idxOf y0) (c-200)
+  else if 220 ≤ c ∧ c < 233 then tpV T (idxOf y0) (c-220)
   else if c < 256 then 0
   else if c=302 then loC (RA 0)
   else if c=303 then hiC (RA 0)

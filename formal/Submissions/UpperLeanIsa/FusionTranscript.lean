@@ -108,19 +108,6 @@ def RootPath (c : Cache) (t : Tops) : List (Fin 1) → BitVec 256 → Prop
   | r::l,st => (c ⟨896,P.rootInput t r st⟩).isSome ∧
       RootPath c t l (table c ⟨896,P.rootInput t r st⟩)
 
-theorem RootPath.mono {c c' : Cache} (h : Cache.Sub c c') (t : Tops)
-    (l : List (Fin 1)) (st : BitVec 256) (hp : P.RootPath c t l st) :
-    P.RootPath c' t l st ∧ P.rootFromValue (table c') t l st = P.rootFromValue (table c) t l st := by
-  induction l generalizing st with
-  | nil => exact ⟨trivial,rfl⟩
-  | cons r l ih =>
-    have he := table_of_sub h hp.1
-    obtain ⟨hl,hv⟩ := ih _ hp.2
-    constructor
-    · exact ⟨h.isSome hp.1,by rw [he]; exact hl⟩
-    · rw [rootFromValue,rootFromValue,he]
-      exact hv
-
 theorem rootFrom_support (t : Tops) (l : List (Fin 1)) (st : BitVec 256) (c : Cache) :
     ∀ p ∈ support (run (P.rootFrom t l st) c), Cache.Sub c p.2 ∧
       p.1 = P.rootFromValue (table p.2) t l st ∧ P.RootPath p.2 t l st := by

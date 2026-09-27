@@ -2,16 +2,16 @@ import Submissions.UpperLeanIsa.FusionMachinePath
 import OptimalOTS.LeanIsa
 
 /-!
-# The universal 1126-cycle bound
+# The universal 1125-cycle bound
 
 A completing walk exits on the sentinel, so the last landing product is g^sentinel
-(`exit_forced`, via the hash-free exit table). The free seed `initialProduct(82, s)` and the
-group products (`C_(cost − 1)` on the four shifted units, which have positive cost) therefore
+(`exit_forced`, via the hash-free exit table). The free seed `initialProduct(81, s)` and the
+group products (`C_(cost − 1)` on the five shifted units, which have positive cost) therefore
 imply C_(s+sum costs)=C_86. Raising to the sixteenth power proves equality of the small integer
 totals, so every completing path has exactly 86 chain hashes.
 
-There are 107 non-hash block instructions, 18 non-hash prologue instructions and the exit, one
-index hash, and one root hash. Every completing run has 214 instructions and costs 1006 before
+There are 107 non-hash block instructions, 17 non-hash prologue instructions and the exit, one
+index hash, and one root hash. Every completing run has 213 instructions and costs 1005 before
 the 120-cycle boundary charge. The bound covers every admitted memory size and step count.
 -/
 
@@ -72,9 +72,9 @@ theorem cF_sum (T : Tab) (xs : ℕ → ℕ) :
   unfold gsum
   congr 1
 
-/-- On the layer, every path costs `1006` cycles. -/
+/-- On the layer, every path costs `1005` cycles. -/
 theorem totalCost_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 + gsum T xs = 86) :
-    totalCost T xs = 1006 := by
+    totalCost T xs = 1005 := by
   unfold totalCost
   have : ∀ f ∈ Finset.range 14, 2 + lcost (bodyF T (frU (xs 0) f) (xs f)) =
       gcuF f + 10 * cF T f (xs f) + 10 * hmF f := fun f hf => by
@@ -87,9 +87,9 @@ theorem totalCost_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 +
     ← Finset.mul_sum, gcuF_sum, hmF_sum, cF_sum, h]
   norm_num
 
-/-- On the layer, every path executes `214` instructions. -/
+/-- On the layer, every path executes `213` instructions. -/
 theorem totalSteps_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 + gsum T xs = 86) :
-    totalSteps T xs = 214 := by
+    totalSteps T xs = 213 := by
   unfold totalSteps
   have : ∀ f ∈ Finset.range 14, 2 + (bodyF T (frU (xs 0) f) (xs f)).length =
       gcuF f + cF T f (xs f) + hmF f := fun f hf => by
@@ -102,15 +102,15 @@ theorem totalSteps_eq (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) (h : xs 0 
     hmF_sum, cF_sum, h]
   norm_num
 
-/-- The claim: `boundaryCycles + 1006`. -/
-def claim : ℕ := 1126
+/-- The claim: `boundaryCycles + 1005`. -/
+def claim : ℕ := 1125
 
 theorem boundary_eq : LeanIsa.boundaryCycles = 120 := by decide
 
 /-! ## The certificate clauses -/
 
 /-- **Cycles.** Every completing execution of the bytecode, under every admissible memory size,
-every committed image and every step count, costs exactly `1006` plus the boundary. -/
+every committed image and every step count, costs exactly `1005` plus the boundary. -/
 theorem cycles (hT : T.Hyp) (S : LeanIsa.Submission) (hS : S.program = program T) :
     S.CyclesAtMost claim := by
   intro pk m σ κ h16 hκ L n cost h

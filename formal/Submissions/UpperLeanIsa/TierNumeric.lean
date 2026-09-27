@@ -84,7 +84,6 @@ def kpost : ℚ := 1 / 2 ^ 128 + S.Pos / 2
 
 /-- The exact conditions (tier-proof.md §10 with `I = 2 ^ 127`, `CR = 1/2`). -/
 structure Valid : Prop where
-  K_le : S.K ≤ 256
   T_le : S.T ≤ 2 ^ 64
   a_pos : ∀ t < S.T, 0 < S.a t
   a_lt : ∀ s t, s < t → t < S.T → S.a s < S.a t
@@ -96,7 +95,6 @@ structure Valid : Prop where
   hp_ge : S.Hprime ≤ S.hp
   k1_post : S.kpost ≤ S.k1
   k1_sc : S.SCf ≤ 2 * 2 ^ 19 * S.k1
-  b0_pos : 1 ≤ S.b0
   b0_le : S.hp * ((S.b0 : ℚ) - 1) ≤ 2 ^ 127 * (2 * S.k1 - S.hp)
   kmax_le : S.k1 + S.hp / (4 * 2 ^ 127) * ((2 ^ 127 - S.b0 : ℕ) : ℚ) ^ 2 / 2 ^ 127 ≤
     1 / 2 ^ 127

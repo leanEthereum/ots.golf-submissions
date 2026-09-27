@@ -69,8 +69,8 @@ theorem CInstr.relNH_of_relB {B : BlakeRel} {v : ℕ → E} {ci : CInstr} (h : c
   cases ci
   all_goals first | exact h | trivial
 
-/-- The constants every jump relies on: `ONE` and the 15 frames. -/
-def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 15, v (fCell k) = frameV k
+/-- The constants every jump relies on: `ONE` and the 14 frames. -/
+def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 14, v (fCell k) = frameV k
 
 /-- The loader's capped length, including every oversized raw signature. -/
 def LengthDomain (v : ℕ → E) : Prop := ∃ n ≤ 5505, v lenCell = natV n
@@ -177,8 +177,6 @@ theorem guard_some {p : Prop} [Decidable p] (r : Regs K) :
   · rw [if_pos hp, show (guard p : Option Unit) = some () from if_pos hp]; rfl
   · rw [if_neg hp, show (guard p : Option Unit) = none from if_neg hp]; rfl
 
-theorem limb_oneV : oneV.limb 0 = 1 := limb_ofK_zero 1
-
 section Normal
 
 variable {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 32) (L : MemImage κ) (pc : K)
@@ -264,7 +262,7 @@ theorem exec_blake {m0 m1 m2 m3 cv out md : ℕ} (hb : (CInstr.blake m0 m1 m2 m3
   rfl
 
 /-- The dispatch `JUMP(ONE, H_k, F_k)` in frame `1`. -/
-theorem exec_dispatch {k : ℕ} (hk : k < 15) (hpin : Pinned (Lx L)) :
+theorem exec_dispatch {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
     LeanIsa.execute L ⟨pc, 1⟩ (CInstr.dispatch k).toInstr =
       pure (if IsInK (Lx L (hCell k)) then some ⟨(Lx L (hCell k)).limb 0, frame k⟩ else none) := by
   show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
@@ -418,7 +416,7 @@ theorem runCost_dispatch (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
       if (CInstr.dispatch k).RelNH (Lx L) then
         Option.map (2 + ·) <$> LeanIsa.runCost (program T) L n ⟨(Lx L (h1Cell k)).limb 0, 1⟩
       else pure none := by
-  have hk : k < 15 := by have := cinstrAt_bounded hT s; rw [hci] at this; exact this
+  have hk : k < 14 := by have := cinstrAt_bounded hT s; rw [hci] at this; exact this
   rw [runCost_slot L (n + 1) hs, hci, exec_dispatch h16 hκ L _ hk hpin]
   by_cases hH : IsInK (Lx L (hCell k))
   · rw [if_pos hH, pure_bind, Option.elim_some]
@@ -441,11 +439,11 @@ theorem runCost_dispatch (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
 theorem runCost_dispatch_one (hpin : Pinned (Lx L)) {s k : ℕ} (hs : s < sentinel)
     (hci : cinstrAt T s = .dispatch k) :
     LeanIsa.runCost (program T) L 1 ⟨gpow s, 1⟩ = pure none := by
-  have hk : k < 15 := by have := cinstrAt_bounded hT s; rw [hci] at this; exact this
+  have hk : k < 14 := by have := cinstrAt_bounded hT s; rw [hci] at this; exact this
   rw [runCost_slot L 0 hs, hci, exec_dispatch h16 hκ L _ hk hpin]
   split_ifs
   · rw [pure_bind, Option.elim_some, LeanIsa.runCost.eq_1,
-      if_neg (fun hc => frame_ne_one hk hc.2), map_pure]; rfl
+      if_neg (fun hc => frame_ne_one (by omega : k < 15) hc.2), map_pure]; rfl
   · rw [pure_bind, Option.elim_none]
 
 omit hT in

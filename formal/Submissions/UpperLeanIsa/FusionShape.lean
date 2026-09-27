@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.Records
 
-/-! The fixed one-root dependency graph of the 1126-cycle research candidate.
+/-! The fixed one-root dependency graph of the 1125-cycle construction.
 The closure theorem is conditional on actual query equalities or a charged bad event.
 It is not a complete security or machine certificate. -/
 namespace OptimalOTS.LeanIsaBaseline.Layer.Fusion
@@ -113,58 +113,12 @@ theorem fusion_binds_children (t t' : ℕ → Word) {u : ℕ} (hu : u < 5) (x x'
 /-- The children of group `u` agree under two top assignments. -/
 def GroupBinds (t t' : ℕ → Word) (u : ℕ) : Prop := ∀ k ∈ children u, t k = t' k
 
-/-- Group bindings at active, already-bound parents propagate through the binding order.
-The probability of failing those bindings is deliberately a hypothesis. -/
-theorem reconstruction_binding (t t' : ℕ → Word) (tag tag' : Word)
-    (d : ℕ → ℕ) (Bad : Prop)
-    (hr : packet (rootWords t tag) = packet (rootWords t' tag'))
-    (ha : ∀ u < 9, 0 < ∑ k ∈ parents u, d k)
-    (hf : ∀ u < 9, ∀ k ∈ parents u, 0 < d k → t k = t' k → Bad ∨ GroupBinds t t' u) :
-    Bad ∨ ∀ k < 42, t k = t' k := by
-  classical
-  by_cases hb : Bad
-  · exact Or.inl hb
-  right
-  have active : ∀ u < 9, ∃ k ∈ parents u, 0 < d k := by
-    intro u hu
-    by_contra hn
-    have hz : ∑ k ∈ parents u, d k = 0 := by
-      apply Finset.sum_eq_zero
-      intro k hk
-      have : ¬ 0 < d k := fun hd => hn ⟨k,hk,hd⟩
-      omega
-    have := ha u hu
-    omega
-  have hclosed : ∀ n ≤ 9, ∀ k ∈ closure n, t k = t' k := by
-    intro n
-    induction n with
-    | zero => intro _; exact root_binds t t' tag tag' hr
-    | succ n ih =>
-      intro hn k hk
-      rcases Finset.mem_union.mp hk with hprev | hnew
-      · exact ih (by omega) k hprev
-      · have hu := bindOrder_lt n (by omega)
-        obtain ⟨b,hmem,hpos⟩ := active _ hu
-        have hbnd := ih (by omega) b (schedule n (by omega) hmem)
-        rcases hf _ hu b hmem hpos hbnd with hbad | hg
-        · exact (hb hbad).elim
-        · exact hg k (List.mem_toFinset.mp hnew)
-  intro k hk
-  exact hclosed 9 le_rfl k (full_coverage (Finset.mem_range.mpr hk))
-
 /-- Key generation computes every dependency before its consumers. -/
 def evaluationOrder : List ℕ := [0, 12, 13, 17, 18, 22, 23, 27, 28, 32, 33, 37, 38, 24, 25, 26, 29, 30, 31, 34, 35, 36, 39, 40, 41, 14, 15, 16, 19, 20, 21, 1, 2, 7, 8, 9, 10, 11, 3, 4, 5, 6]
 
 def evaluationRank (k : ℕ) : ℕ := evaluationOrder.idxOf k
 
-theorem evaluationOrder_permutation : evaluationOrder.Perm (List.range 42) := by decide
-
 theorem dependency_precedes : ∀ u < 9, ∀ k ∈ parents u, ∀ d ∈ children u,
     evaluationRank d < evaluationRank k := by decide
-
-/-- A five-dep input has five dependency words and its current chain word. -/
-theorem fusion_current_injective (t t' : ℕ → Word) (u : ℕ) (x x' a a' : Word)
-    (h : packet (fusionWords t u x a) = packet (fusionWords t' u x' a')) : x = x' := by
-  exact congrFun (packet_injective h) 2
 
 end OptimalOTS.LeanIsaBaseline.Layer.Fusion

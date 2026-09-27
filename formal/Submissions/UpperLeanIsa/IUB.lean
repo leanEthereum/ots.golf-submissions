@@ -27,8 +27,6 @@ open scoped Classical
 
 namespace OptimalOTS.LeanIsaBaseline
 
-
-
 /-- Expected value of `g` over a probabilistic computation. -/
 abbrev E {α : Type} (p : ProbComp α) (g : α → ℝ≥0∞) : ℝ≥0∞ := expectedValue p g
 
@@ -49,9 +47,6 @@ theorem E_mono {α : Type} (p : ProbComp α) {g h : α → ℝ≥0∞} (hgh : �
 theorem E_map {α β : Type} (p : ProbComp α) (f : α → β) (g : β → ℝ≥0∞) :
     E (f <$> p) g = E p fun x => g (f x) :=
   expectedValue_map p f g
-
-theorem E_const_le {α : Type} (p : ProbComp α) (c : ℝ≥0∞) : E p (fun _ => c) ≤ c :=
-  expectedValue_le_of_le p fun _ => le_rfl
 
 theorem E_uniform (n : ℕ) (g : BitVec n → ℝ≥0∞) :
     E ($ᵗ BitVec n) g = ∑ x, (Fintype.card (BitVec n) : ℝ≥0∞)⁻¹ * g x := by

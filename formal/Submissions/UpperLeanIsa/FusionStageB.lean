@@ -74,10 +74,6 @@ def κ : ℝ≥0∞ := ((2 : ℝ≥0∞) ^ 127)⁻¹
 
 theorem κ_eq : κ = ((2 : ℝ≥0∞) ^ 127)⁻¹ := rfl
 
-theorem two_rate_le_κ : 2 * rate ≤ κ := by
-  rw [mul_comm, rate_two, κ_eq]
-  exact ENNReal.inv_le_inv.mpr (by norm_num)
-
 /-- A potential charged at every fresh query bounds every adaptive computation. -/
 theorem potential_bound {α : Type} (Φ : Cache → ℝ≥0∞) (κ' : ℝ≥0∞)
     (hΦ : ∀ c q, c q = none →
@@ -151,16 +147,6 @@ theorem EncExt.none_of {d d' : Cache} (h : P.EncExt d d') {q : Query}
   · rfl
   · obtain ⟨u', hu'⟩ := h.2 q u hd h'
     exact absurd hu' (hq u')
-
-theorem EncExt.not_hits {d d' : Cache} (h : P.EncExt d d') {f : Cache}
-    (hf : ∀ u, f (P.codec.encQuery u) = none) (hh : ¬ Cache.Hits d f) : ¬ Cache.Hits d' f := by
-  rintro ⟨q, hfq, hdq⟩
-  rcases hd : d q with _ | u
-  · obtain ⟨v, hv⟩ := Option.isSome_iff_exists.1 hdq
-    obtain ⟨u', rfl⟩ := h.2 q v hd hv
-    rw [hf u'] at hfq
-    exact absurd hfq (by simp)
-  · exact hh ⟨q, hfq, by simp [hd]⟩
 
 theorem EncExt.targetHit {d d' : Cache} (h : P.EncExt d d')
     {targets : Query → Finset (BitVec hashBits)} (ht : ∀ u, targets (P.codec.encQuery u) = ∅)

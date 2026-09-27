@@ -103,12 +103,5 @@ theorem concrete_ordered : params.locationOrder.Pairwise Earlier := by
 
 theorem concrete_location_count : params.locationOrder.length = 626 := by decide +kernel
 
-/-- Coherence of every key-generation output for any fixed oracle, with no good-event assumption. -/
-theorem concrete_coherent (f : HashTable) (seeds : Fin 42 → Word) :
-    let y := params.evalLocationsValue f seeds params.locationOrder (fun _ => 0)
-    ∀ a : Loc params, y a = f ⟨896,Record.input (seeds,y) a⟩ := by
-  intro y a
-  exact params.evalLocationsValue_coherent f seeds _ concrete_ordered _ a (params.locationOrder_mem a)
-
 end
 end OptimalOTS.LeanIsaBaseline.Layer.Fusion
