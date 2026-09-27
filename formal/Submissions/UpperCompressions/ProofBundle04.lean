@@ -473,7 +473,7 @@ theorem typed_admissible : forestScheme.toAlgorithm.Admissible (1/2^128) where
 
 theorem admissible : WideWire.scheme.Admissible :=
   WireAdapter.admissible WideWire.typed WideWire.decode WideWire.decode_encode
-    WideWire.canonical typed_admissible
+    WideWire.canonical typed_admissible WideForest.typed_cost (by norm_num [verifyBudget])
 
 #print axioms uniform_miss
 #print axioms signing_failure_half

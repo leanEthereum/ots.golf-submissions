@@ -2,13 +2,14 @@ import Submissions.UpperCompressions.LongChain91Dag
 import Submissions.UpperCompressions.ProofBundle03
 
 /-!
-# Concrete cut bridge for the cost-90 long-chain graph
+# Concrete cut bridge for the cost-89 fused shared-DAG graph
 
-This module connects the combinatorial cuts in `LongChain91Geometry` to the
-protected `Dag.Graph` interface.  The cost proof uses a direct charging
-argument: every evaluated chain hash belongs to the suffix selected by its
-chain position, every evaluated lower or upper hash is charged to the
-corresponding expanded frontier node, and the root costs three compressions.
+This module connects the combinatorial cuts of `LongChain91Geometry` to the
+protected `Dag.Graph` interface.  The visited set of a supported cut is
+characterized by name (`VisN`): a block's needed hash values, its expanded
+triples, and each needed chain from its disclosure position upward.  From it we
+read off the exact reconstruction cost 89, the disclosure size, injectivity of
+the codec, the binding rule, and the equal-cost cross-cut witness.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -42,431 +43,229 @@ def fins (A : Finset Name) : Finset (Fin graph.size) :=
     nameEmbedding n ∈ fins A ↔ n ∈ A :=
   Finset.mem_map' nameEmbedding
 
-/-- Graph parent membership is exactly the concrete one-child relation. -/
+@[simp] theorem mem_fins_fin (A : Finset Name) (n : Name) :
+    n.fin ∈ fins A ↔ n ∈ A :=
+  Finset.mem_map' nameEmbedding
+
+/-- Graph parent membership is exactly the concrete input relation. -/
 theorem mem_graph_parents_iff (m n : Name) :
-    m.fin ∈ (graph.kind n.fin).parents ↔ child m = some n := by
+    m.fin ∈ (graph.kind n.fin).parents ↔ m ∈ parents n := by
   rw [graph_parents_fin]
-  exact (Finset.mem_map' _).trans (Name.mem_parents_iff m n)
+  exact Finset.mem_map' _
 
-/-! ## The one-child ancestry relation -/
+/-! ## A generic visited characterization -/
 
-/-- `Above m n` means that following `child` from `n` reaches `m` after at
-least one step. -/
-inductive Above : Name → Name → Prop
-  | child {m n : Name} : child n = some m → Above m n
-  | step {m n p : Name} : child n = some p → Above m p → Above m n
+theorem kind_parents_lt (G : Graph) {w v : Fin G.size}
+    (h : v ∈ (G.kind w).parents) : v < w := by
+  generalize G.kind w = k at h
+  cases k with
+  | source => simp [NodeKind.parents] at h
+  | det ps hlt _ _ => exact hlt v h
+  | hash p hp _ =>
+      simp only [NodeKind.parents, Finset.mem_singleton] at h
+      subst h
+      exact hp
 
-theorem Above.trans {a b c : Name} (h₁ : Above a b) (h₂ : Above b c) : Above a c := by
-  revert h₁
-  induction h₂ with
-  | child h => intro h₁; exact Above.step h h₁
-  | step h _ ih => intro h₁; exact Above.step h (ih h₁)
-
-theorem above_of_child {m n p : Name} (h : child n = some p) :
-    Above m n ↔ m = p ∨ Above m p := by
+/-- A predicate containing the root, closed under reading the inputs of an
+unrevealed node, and supported from above is exactly `Visited`. -/
+theorem visited_iff_of_closed (G : Graph) (A : Finset (Fin G.size))
+    (P : Fin G.size → Prop) (hroot : P G.root)
+    (hclosed : ∀ w v, P w → w ∉ A → v ∈ (G.kind w).parents → P v)
+    (hsupp : ∀ v, P v → v ≠ G.root → ∃ w, P w ∧ w ∉ A ∧ v ∈ (G.kind w).parents)
+    (v : Fin G.size) : G.Visited A v ↔ P v := by
   constructor
-  · intro ha
-    cases ha with
-    | child h' => rw [h, Option.some.injEq] at h'; exact Or.inl h'.symm
-    | step h' ha' => rw [h, Option.some.injEq] at h'; subst h'; exact Or.inr ha'
-  · rintro (rfl | ha)
-    · exact Above.child h
-    · exact Above.step h ha
+  · intro h
+    induction h with
+    | root => exact hroot
+    | parent _ hwA hv ih => exact hclosed _ _ ih hwA hv
+  · suffices ∀ n, ∀ v : Fin G.size, G.size - v.val = n → P v → G.Visited A v from
+      this _ v rfl
+    intro n
+    induction n using Nat.strong_induction_on with
+    | _ n ih =>
+        intro v hn hv
+        by_cases hr : v = G.root
+        · subst hr
+          exact Graph.Visited.root
+        · obtain ⟨w, hw, hwA, hvw⟩ := hsupp v hv hr
+          have hlt : v < w := kind_parents_lt G hvw
+          have hwlt : w.val < G.size := w.isLt
+          have hlt' : v.val < w.val := hlt
+          exact Graph.Visited.parent (ih (G.size - w.val) (by omega) w rfl hw) hwA hvw
 
-theorem not_above_rh (m : Name) : ¬ Above m .rh := by
-  intro h
-  cases h with
-  | child h' => simp [Name.child] at h'
-  | step h' _ => simp [Name.child] at h'
+/-! ## The visited set of a cut -/
 
-/-- A visited node has no strictly higher disclosed ancestor.  This is the
-only direction of the generic tree characterization needed for the upper
-bound and source-coverage obligations. -/
-theorem visited_no_above (A : Finset Name) {n : Name}
-    (hv : graph.Visited (fins A) (nameEmbedding n)) : ∀ m, Above m n → m ∉ A := by
-  have hv' : graph.Visited (fins A) n.fin := by
-    simpa only [nameEmbedding_apply] using hv
-  have key : ∀ v, graph.Visited (fins A) v →
-      ∀ n : Name, n.fin = v → ∀ m, Above m n → m ∉ A := by
-    intro v hv
-    induction hv with
-    | root =>
-        intro n hn m hm
-        have hr : n = .rh := Name.fin_injective hn
-        subst hr
-        exact absurd hm (not_above_rh m)
-    | parent hw hwA hv ih =>
-        rename_i w v
-        intro n hn m hm hmA
-        subst hn
-        obtain ⟨w', rfl⟩ : ∃ w' : Name, w'.fin = w :=
-          ⟨Name.ofFin w, Name.fin_ofFin w⟩
-        have hc : child n = some w' := (mem_graph_parents_iff n w').mp hv
-        rw [above_of_child hc] at hm
-        rcases hm with rfl | hm
-        · exact hwA (by
-            simpa only [nameEmbedding_apply] using
-              (mem_fins_embedding A m).mpr hmA)
-        · exact ih w' rfl m hm hmA
-  exact key _ hv' n rfl
+/-- Nodes visited when reconstructing from `cutOf c`, by name. -/
+def VisN (c : Choice) : Name → Prop
+  | .src b k => k ∈ neededC (c b).1 ∧ ((c b).2 k).val = 0
+  | .ci b k t => k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val
+  | .ch b k t => k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val
+  | .cv b k t => k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val + 1
+  | .hc b j => j ∈ (c b).1
+  | .hh b j => j ∈ (c b).1
+  | .hv b j => j ∈ neededH (c b).1
+  | .rc => True
+  | .rh => True
 
-/-! ## Explicit path witnesses -/
+theorem cv_eq_chainNode (b : Fin 7) (k : Fin 8) (t : Fin 18) :
+    Name.cv b k t = chainNode b k t.succ := by
+  simp [chainNode]
 
-/-- Reflexive ancestry, convenient when advancing through a chain. -/
-def AtOrAbove (m n : Name) : Prop := m = n ∨ Above m n
+theorem src_eq_chainNode (b : Fin 7) (k : Fin 8) :
+    Name.src b k = chainNode b k 0 := by
+  simp [chainNode]
 
-theorem AtOrAbove.refl (n : Name) : AtOrAbove n n := Or.inl rfl
+theorem visN_chainNode (c : Choice) (b : Fin 7) (k : Fin 8) (p : Fin 19) :
+    VisN c (chainNode b k p) ↔ k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ p.val := by
+  unfold chainNode
+  split_ifs with hp
+  · simp only [VisN, hp]
+    constructor <;> rintro ⟨h1, h2⟩ <;> exact ⟨h1, by omega⟩
+  · simp only [VisN]
+    constructor <;> rintro ⟨h1, h2⟩ <;> exact ⟨h1, by omega⟩
 
-theorem AtOrAbove.ofAbove {m n : Name} (h : Above m n) : AtOrAbove m n := Or.inr h
+theorem visN_kid_name (c : Choice) (b : Fin 7) (x : Kid) :
+    VisN c (x.name b) ↔ Needed (c b).1 x := by
+  cases x with
+  | c k =>
+      simp only [Kid.name, VisN, mem_neededC]
+      have := ((c b).2 k).isLt
+      constructor
+      · exact fun h => h.1
+      · intro h
+        refine ⟨h, ?_⟩
+        have h17 : ((17 : Fin 18) : ℕ) = 17 := rfl
+        omega
+  | h j => simp [Kid.name, VisN]
 
-theorem AtOrAbove.trans {a b c : Name} (h₁ : AtOrAbove a b)
-    (h₂ : AtOrAbove b c) : AtOrAbove a c := by
-  rcases h₁ with rfl | h₁
-  · exact h₂
-  rcases h₂ with rfl | h₂
-  · exact Or.inr h₁
-  · exact Or.inr (h₁.trans h₂)
+theorem not_mem_cutOf_of_len {c : Choice} {n : Name} (h : n.len ≠ 129) : n ∉ cutOf c :=
+  fun hn => h (cutOf_values c n hn)
 
-theorem above_cv_succ (k : Fin 66) (t : Fin 18) (ht : t.val < 17) :
-    Above (.cv k ⟨t.val + 1, by omega⟩) (.cv k t) := by
-  have h₁ : child (.cv k t) = some (.ci k ⟨t.val + 1, by omega⟩) := by
-    simp only [Name.child]
-    rw [dif_neg (by omega)]
-  have h₂ : Above (.ch k ⟨t.val + 1, by omega⟩)
-      (.ci k ⟨t.val + 1, by omega⟩) := Above.child rfl
-  have h₃ : Above (.cv k ⟨t.val + 1, by omega⟩)
-      (.ch k ⟨t.val + 1, by omega⟩) := Above.child rfl
-  exact h₃.trans (h₂.trans (Above.child h₁))
+theorem cv_mem_cutOf (c : Choice) (b : Fin 7) (k : Fin 8) (t : Fin 18) :
+    Name.cv b k t ∈ cutOf c ↔ k ∈ neededC (c b).1 ∧ ((c b).2 k).val = t.val + 1 := by
+  rw [cv_eq_chainNode, chainNode_mem_cutOf, Fin.ext_iff, Fin.val_succ]
 
-/-- Later chain values are at or above earlier chain values. -/
-theorem atOrAbove_cv_of_le (k : Fin 66) (t s : Fin 18) (h : t.val ≤ s.val) :
-    AtOrAbove (.cv k s) (.cv k t) := by
-  by_cases heq : t = s
-  · subst s
-    exact AtOrAbove.refl _
-  · have hlt : t.val < s.val := by
-      have hne : t.val ≠ s.val := fun hv => heq (Fin.ext hv)
+theorem prev_succ (b : Fin 7) (k : Fin 8) (t : Fin 18) (ht : t.val < 17) :
+    prev b k ⟨t.val + 1, by omega⟩ = Name.cv b k t := by
+  simp [prev]
+
+theorem visN_closed (c : Choice) (w v : Name) (hw : VisN c w) (hwA : w ∉ cutOf c)
+    (hv : v ∈ parents w) : VisN c v := by
+  cases w with
+  | src b k => simp [parents] at hv
+  | ci b k t =>
+      rw [parents, Finset.mem_singleton] at hv
+      subst hv
+      rw [prev_eq_chainNode, visN_chainNode]
+      exact hw
+  | ch b k t =>
+      rw [parents, Finset.mem_singleton] at hv
+      subst hv
+      exact hw
+  | cv b k t =>
+      rw [parents, Finset.mem_singleton] at hv
+      subst hv
+      rw [cv_mem_cutOf] at hwA
+      refine ⟨hw.1, ?_⟩
+      have := hw.2
+      have hne : ¬ ((c b).2 k).val = t.val + 1 := fun h => hwA ⟨hw.1, h⟩
       omega
-    let t' : Fin 18 := ⟨t.val + 1, by omega⟩
-    have hr : AtOrAbove (.cv k s) (.cv k t') :=
-      atOrAbove_cv_of_le k t' s (by dsimp [t']; omega)
-    exact hr.trans (AtOrAbove.ofAbove (above_cv_succ k t (by omega)))
-termination_by s.val - t.val
-decreasing_by omega
+  | hc b j =>
+      obtain ⟨i, rfl⟩ := (mem_parents_hc v b j).1 hv
+      exact (visN_kid_name c b _).2 (needed_kid hw i)
+  | hh b j =>
+      rw [parents, Finset.mem_singleton] at hv
+      subst hv
+      exact hw
+  | hv b j =>
+      rw [parents, Finset.mem_singleton] at hv
+      subst hv
+      rw [hv_mem_cutOf] at hwA
+      by_contra hj
+      exact hwA ⟨hw, hj⟩
+  | rc =>
+      obtain ⟨b, rfl⟩ := (mem_parents_rc v).1 hv
+      exact top_mem_neededH _
+  | rh =>
+      rw [parents, Finset.mem_singleton] at hv
+      subst hv
+      trivial
 
-theorem above_mc_cv_last (k : Fin 66) :
-    Above (.mc (upperOfChain k)) (.cv k 17) := by
-  cases hl : lowerOfChain k with
-  | none =>
-      exact Above.child (by simp [Name.child, hl])
-  | some j =>
-      have hu : upperOfChain k = upperOfLower j := upperOfChain_eq_upperOfLower hl
-      have h₁ : Above (.sc j) (.cv k 17) := Above.child (by simp [Name.child, hl])
-      have h₂ : Above (.sh j) (.sc j) := Above.child rfl
-      have h₃ : Above (.sv j) (.sh j) := Above.child rfl
-      have h₄ : Above (.mc (upperOfLower j)) (.sv j) := Above.child rfl
-      rw [hu]
-      exact h₄.trans (h₃.trans (h₂.trans h₁))
-
-theorem above_mv_mc (u : Fin 10) : Above (.mv u) (.mc u) := by
-  exact (Above.child (show child (.mh u) = some (.mv u) by rfl)).trans
-    (Above.child (show child (.mc u) = some (.mh u) by rfl))
-
-theorem above_mv_cv (k : Fin 66) (t : Fin 18) :
-    Above (.mv (upperOfChain k)) (.cv k t) := by
-  have hlast : Above (.mv (upperOfChain k)) (.cv k 17) :=
-    (above_mv_mc _).trans (above_mc_cv_last k)
-  have hr := atOrAbove_cv_of_le k t (17 : Fin 18) (by omega)
-  rcases hr with h | h
-  · simpa only [h] using hlast
-  · exact hlast.trans h
-
-theorem above_mv_ch (k : Fin 66) (t : Fin 18) :
-    Above (.mv (upperOfChain k)) (.ch k t) :=
-  (above_mv_cv k t).trans (Above.child rfl)
-
-theorem above_sv_cv_last {k : Fin 66} {j : Fin 18}
-    (hl : lowerOfChain k = some j) : Above (.sv j) (.cv k 17) := by
-  have h₁ : Above (.sc j) (.cv k 17) := Above.child (by simp [Name.child, hl])
-  have h₂ : Above (.sh j) (.sc j) := Above.child rfl
-  have h₃ : Above (.sv j) (.sh j) := Above.child rfl
-  exact h₃.trans (h₂.trans h₁)
-
-theorem above_sv_ch {k : Fin 66} {j : Fin 18} (t : Fin 18)
-    (hl : lowerOfChain k = some j) : Above (.sv j) (.ch k t) := by
-  have hlast := above_sv_cv_last hl
-  have hr := atOrAbove_cv_of_le k t (17 : Fin 18) (by omega)
-  have hcv : Above (.cv k t) (.ch k t) := Above.child rfl
-  rcases hr with h | h
-  · have ht : Above (.sv j) (.cv k t) := by simpa only [h] using hlast
-    exact ht.trans hcv
-  · exact hlast.trans (h.trans hcv)
-
-theorem above_chainNode_ch {k : Fin 66} {p : Fin 19} (t : Fin 18)
-    (hpt : t.val < p.val) : Above (chainNode k p) (.ch k t) := by
-  have hp0 : p.val ≠ 0 := by omega
-  let s : Fin 18 := ⟨p.val - 1, by omega⟩
-  have hr : AtOrAbove (.cv k s) (.cv k t) :=
-    atOrAbove_cv_of_le k t s (by dsimp [s]; omega)
-  have hcv : Above (.cv k t) (.ch k t) := Above.child rfl
-  have hout : Above (.cv k s) (.ch k t) := by
-    rcases hr with h | h
-    · rw [h]
-      exact hcv
-    · exact h.trans hcv
-  simpa [chainNode, hp0, s] using hout
-
-theorem above_cv_src (k : Fin 66) (t : Fin 18) : Above (.cv k t) (.src k) := by
-  have hzero : Above (.cv k 0) (.src k) := by
-    exact (Above.child (show child (.ch k 0) = some (.cv k 0) by rfl)).trans
-      ((Above.child (show child (.ci k 0) = some (.ch k 0) by rfl)).trans
-        (Above.child (show child (.src k) = some (.ci k 0) by rfl)))
-  have hr := atOrAbove_cv_of_le k 0 t (by omega)
-  rcases hr with h | h
-  · rw [h]
-    exact hzero
-  · exact h.trans hzero
-
-theorem above_sv_src {k : Fin 66} {j : Fin 18} (hl : lowerOfChain k = some j) :
-    Above (.sv j) (.src k) :=
-  (above_sv_cv_last hl).trans (above_cv_src k 17)
-
-theorem above_mv_src (k : Fin 66) : Above (.mv (upperOfChain k)) (.src k) :=
-  (above_mv_cv k 0).trans
-    ((Above.child (show child (.ch k 0) = some (.cv k 0) by rfl)).trans
-      ((Above.child (show child (.ci k 0) = some (.ch k 0) by rfl)).trans
-        (Above.child (show child (.src k) = some (.ci k 0) by rfl))))
-
-theorem onPath_eq_source_or_above {k : Fin 66} {n : Name} (h : OnPath k n) :
-    n = .src k ∨ Above n (.src k) := by
-  rcases h with rfl | ⟨t, rfl⟩ | ⟨j, hl, rfl⟩ | rfl
-  · exact Or.inl rfl
-  · exact Or.inr (above_cv_src k t)
-  · exact Or.inr (above_sv_src hl)
-  · exact Or.inr (above_mv_src k)
-
-theorem cutOf_covers_sources (c : Choice) (k : Fin 66) :
-    .src k ∈ cutOf c ∨ ∃ m ∈ cutOf c, Above m (.src k) := by
-  have hm := selected_mem_cutOf c k
-  rcases onPath_eq_source_or_above (selected_onPath c k) with h | h
-  · exact Or.inl (h ▸ hm)
-  · exact Or.inr ⟨selected c k, hm, h⟩
-
-/-! ## Graph obligations -/
-
-theorem root_not_mem_cutOf (c : Choice) : graph.root ∉ fins (cutOf c) := by
-  have hroot : graph.root = nameEmbedding Name.rh := by
-    change Name.rh.fin = nameEmbedding Name.rh
-    exact (nameEmbedding_apply _).symm
-  rw [hroot, mem_fins_embedding]
-  intro hr
-  have hv := cutOf_values c .rh hr
-  simp [Name.len] at hv
-
-theorem no_hidden_source_cutOf (c : Choice) :
-    ∀ v, graph.Visited (fins (cutOf c)) v → v ∉ fins (cutOf c) →
-      ¬ (graph.kind v).IsSource := by
-  intro v hv hvA hs
-  obtain ⟨n, rfl⟩ : ∃ n : Name, n.fin = v := ⟨Name.ofFin v, Name.fin_ofFin v⟩
-  obtain ⟨k, rfl⟩ := (graph_isSource_fin n).mp hs
-  rcases cutOf_covers_sources c k with hs | ⟨m, hm, ha⟩
-  · exact hvA (by
-      simpa only [nameEmbedding_apply] using
-        (mem_fins_embedding (cutOf c) (.src k)).mpr hs)
-  · exact (visited_no_above (cutOf c) hv m ha) hm
-
-/-! ## Disclosure size -/
-
-/-- The A and B parts of an arbitrary set of upper vertices. -/
-def splitA (U : Finset (Fin 10)) : Finset (Fin 8) :=
-  Finset.univ.filter fun i => aNode i ∈ U
-
-def splitB (U : Finset (Fin 10)) : Finset (Fin 2) :=
-  Finset.univ.filter fun i => bNode i ∈ U
-
-@[simp] theorem mem_splitA (U : Finset (Fin 10)) (i : Fin 8) :
-    i ∈ splitA U ↔ aNode i ∈ U := by simp [splitA]
-
-@[simp] theorem mem_splitB (U : Finset (Fin 10)) (i : Fin 2) :
-    i ∈ splitB U ↔ bNode i ∈ U := by simp [splitB]
-
-theorem upperFrom_split (U : Finset (Fin 10)) :
-    upperFrom (splitA U) (splitB U) = U := by
-  ext u
-  by_cases hu : u.val < 8
-  · let i : Fin 8 := ⟨u.val, hu⟩
-    have hui : aNode i = u := by apply Fin.ext; rfl
-    rw [← hui, aNode_mem_upperFrom]
-    simp
-  · let i : Fin 2 := ⟨u.val - 8, by omega⟩
-    have hui : bNode i = u := by
-      apply Fin.ext
-      simp [bNode, i]
+theorem visN_supported (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (v : Name)
+    (hv : VisN c v) (hr : v ≠ .rh) : ∃ w, VisN c w ∧ w ∉ cutOf c ∧ v ∈ parents w := by
+  cases v with
+  | src b k =>
+      have h2 := hv.2
+      refine ⟨.ci b k 0, ⟨hv.1, show _ ≤ (0 : ℕ) by omega⟩,
+        not_mem_cutOf_of_len (by simp [Name.len]), ?_⟩
+      simp [parents, prev]
+  | ci b k t =>
+      exact ⟨.ch b k t, hv, not_mem_cutOf_of_len (by simp [Name.len]),
+        Finset.mem_singleton_self _⟩
+  | ch b k t =>
+      refine ⟨.cv b k t, ⟨hv.1, by have := hv.2; omega⟩, ?_, Finset.mem_singleton_self _⟩
+      rw [cv_mem_cutOf]
+      have := hv.2
       omega
-    rw [← hui, bNode_mem_upperFrom]
-    simp
+  | cv b k t =>
+      by_cases ht : t.val = 17
+      · have hn := (mem_neededC _ _).1 hv.1
+        rcases hn with h | ⟨e, he, i, hi⟩
+        · cases h
+        · refine ⟨.hc b e, he, not_mem_cutOf_of_len (by simp [Name.len]), ?_⟩
+          rw [mem_parents_hc]
+          refine ⟨i, ?_⟩
+          rw [hi]
+          simp only [Kid.name]
+          congr 1
+          exact Fin.ext (by simp [ht])
+      · refine ⟨.ci b k ⟨t.val + 1, by omega⟩, ⟨hv.1, hv.2⟩,
+          not_mem_cutOf_of_len (by simp [Name.len]), ?_⟩
+        rw [parents, Finset.mem_singleton, prev_succ b k t (by omega)]
+  | hc b j =>
+      exact ⟨.hh b j, hv, not_mem_cutOf_of_len (by simp [Name.len]),
+        Finset.mem_singleton_self _⟩
+  | hh b j =>
+      refine ⟨.hv b j, hvalid b hv, ?_, Finset.mem_singleton_self _⟩
+      rw [hv_mem_cutOf]
+      exact fun h => h.2 hv
+  | hv b j =>
+      rcases (mem_neededH _ _).1 hv with h | ⟨e, he, i, hi⟩
+      · cases h
+        exact ⟨.rc, trivial, not_mem_cutOf_of_len (by simp [Name.len]),
+          (mem_parents_rc _).2 ⟨b, rfl⟩⟩
+      · refine ⟨.hc b e, he, not_mem_cutOf_of_len (by simp [Name.len]), ?_⟩
+        rw [mem_parents_hc]
+        exact ⟨i, by rw [hi]; rfl⟩
+  | rc =>
+      exact ⟨.rh, trivial, not_mem_cutOf_of_len (by simp [Name.len]),
+        Finset.mem_singleton_self _⟩
+  | rh => exact absurd rfl hr
 
-@[simp] theorem lowerA_mem_lowerAvail (A : Finset (Fin 8))
-    (B : Finset (Fin 2)) (x : Fin 8 × Fin 2) :
-    lowerA x ∈ lowerAvail A B ↔ x.1 ∈ A := by
-  simp only [lowerAvail, Finset.mem_union, Finset.mem_image]
-  constructor
-  · rintro (⟨y, hy, heq⟩ | ⟨i, hi, heq⟩)
-    · have hxy : y = x := lowerA_injective heq
-      subst y
-      exact (Finset.mem_product.mp hy).1
-    · have hv := congrArg Fin.val heq
-      simp [lowerA, lowerB] at hv
-      omega
-  · intro hx
-    exact Or.inl ⟨x, Finset.mem_product.mpr ⟨hx, Finset.mem_univ _⟩, rfl⟩
+/-- Exact visited set of a cut with valid block shapes. -/
+theorem visited_cutOf_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (n : Name) :
+    graph.Visited (fins (cutOf c)) n.fin ↔ VisN c n := by
+  have key := visited_iff_of_closed graph (fins (cutOf c))
+    (fun v => VisN c (Name.ofFin v)) ?_ ?_ ?_ n.fin
+  · simpa only [Name.ofFin_fin] using key
+  · show VisN c (Name.ofFin Name.rh.fin)
+    rw [Name.ofFin_fin]
+    trivial
+  · intro w v hw hwA hvw
+    obtain ⟨w', rfl⟩ : ∃ w' : Name, w'.fin = w := ⟨_, Name.fin_ofFin w⟩
+    obtain ⟨v', rfl⟩ : ∃ v' : Name, v'.fin = v := ⟨_, Name.fin_ofFin v⟩
+    simp only [Name.ofFin_fin] at hw ⊢
+    exact visN_closed c w' v' hw ((mem_fins_fin _ _).not.1 hwA)
+      ((mem_graph_parents_iff v' w').1 hvw)
+  · intro v hv hr
+    obtain ⟨v', rfl⟩ : ∃ v' : Name, v'.fin = v := ⟨_, Name.fin_ofFin v⟩
+    simp only [Name.ofFin_fin] at hv
+    have hr' : v' ≠ .rh := fun h => hr (by subst h; rfl)
+    obtain ⟨w, hw, hwA, hvw⟩ := visN_supported c hvalid v' hv hr'
+    exact ⟨w.fin, by simpa only [Name.ofFin_fin] using hw,
+      (mem_fins_fin _ _).not.2 hwA, (mem_graph_parents_iff v' w).2 hvw⟩
 
-@[simp] theorem lowerB_mem_lowerAvail (A : Finset (Fin 8))
-    (B : Finset (Fin 2)) (i : Fin 2) :
-    lowerB i ∈ lowerAvail A B ↔ i ∈ B := by
-  simp only [lowerAvail, Finset.mem_union, Finset.mem_image]
-  constructor
-  · rintro (⟨x, hx, heq⟩ | ⟨j, hj, heq⟩)
-    · have hv := congrArg Fin.val heq
-      simp [lowerA, lowerB] at hv
-      omega
-    · exact lowerB_injective heq ▸ hj
-  · intro hi
-    exact Or.inr ⟨i, hi, rfl⟩
-
-@[simp] theorem upperOfLower_lowerA (x : Fin 8 × Fin 2) :
-    upperOfLower (lowerA x) = aNode x.1 := by
-  apply Fin.ext
-  unfold upperOfLower
-  rw [dif_pos (by simp [lowerA]; omega)]
-  simp [lowerA, aNode]
-  omega
-
-@[simp] theorem upperOfLower_lowerB (i : Fin 2) :
-    upperOfLower (lowerB i) = bNode i := by
-  apply Fin.ext
-  simp [upperOfLower, lowerB, bNode]
-  omega
-
-theorem lowerAvail_split (U : Finset (Fin 10)) :
-    lowerAvail (splitA U) (splitB U) = availableLower U := by
-  ext j
-  by_cases hj : j.val < 16
-  · let i : Fin 8 := ⟨j.val / 2, by omega⟩
-    let r : Fin 2 := ⟨j.val % 2, by omega⟩
-    have heq : lowerA (i, r) = j := by
-      apply Fin.ext
-      simp [lowerA, i, r]
-      omega
-    rw [← heq, lowerA_mem_lowerAvail, mem_availableLower,
-      upperOfLower_lowerA, mem_splitA]
-  · let i : Fin 2 := ⟨j.val - 16, by omega⟩
-    have heq : lowerB i = j := by
-      apply Fin.ext
-      simp [lowerB, i]
-      omega
-    rw [← heq, lowerB_mem_lowerAvail, mem_availableLower,
-      upperOfLower_lowerB, mem_splitB]
-
-/-- Cardinality of the cut, before inserting the frontier arithmetic. -/
-theorem card_cutOf_parts (c : Choice) :
-    (cutOf c).card = (upperStops c.frontier).card +
-      (lowerStops c.frontier).card + (active c.frontier).card := by
-  have huv : Disjoint
-      ((upperStops c.frontier).image Name.mv)
-      ((lowerStops c.frontier).image Name.sv) := by
-    apply Finset.disjoint_left.mpr
-    intro n hnU hnL
-    obtain ⟨u, _, rfl⟩ := Finset.mem_image.mp hnU
-    obtain ⟨j, _, h⟩ := Finset.mem_image.mp hnL
-    contradiction
-  have huc : Disjoint
-      ((upperStops c.frontier).image Name.mv)
-      ((active c.frontier).image fun k => chainNode k (c.position k)) := by
-    apply Finset.disjoint_left.mpr
-    intro n hnU hnC
-    obtain ⟨u, _, rfl⟩ := Finset.mem_image.mp hnU
-    obtain ⟨k, _, h⟩ := Finset.mem_image.mp hnC
-    unfold chainNode at h
-    split_ifs at h
-  have hlc : Disjoint
-      ((lowerStops c.frontier).image Name.sv)
-      ((active c.frontier).image fun k => chainNode k (c.position k)) := by
-    apply Finset.disjoint_left.mpr
-    intro n hnL hnC
-    obtain ⟨j, _, rfl⟩ := Finset.mem_image.mp hnL
-    obtain ⟨k, _, h⟩ := Finset.mem_image.mp hnC
-    unfold chainNode at h
-    split_ifs at h
-  rw [cutOf, Finset.card_union_of_disjoint
-      (Finset.disjoint_union_left.mpr ⟨huc, hlc⟩),
-    Finset.card_union_of_disjoint huv,
-    Finset.card_image_of_injective _ (fun _ _ h => Name.mv.inj h),
-    Finset.card_image_of_injective _ (fun _ _ h => Name.sv.inj h),
-    Finset.card_image_of_injective _ (chainNode_injective c.position)]
-
-/-- A well-formed structural frontier has exactly its advertised number of
-129-bit disclosure words. -/
-theorem card_cutOf (c : Choice) (hw : c.frontier.WellFormed) :
-    (cutOf c).card = c.frontier.words := by
-  let A := splitA c.frontier.upper
-  let B := splitB c.frontier.upper
-  have hupper : upperFrom A B = c.frontier.upper := upperFrom_split _
-  have hlower : lowerAvail A B = availableLower c.frontier.upper := lowerAvail_split _
-  have hL : c.frontier.lower ⊆ lowerAvail A B := by
-    rw [hlower]
-    exact hw
-  have hactive : (active c.frontier).card =
-      3 * c.frontier.lower.card + A.card + 2 * B.card := by
-    have heq := rawActive_eq_active A B c.frontier.lower hL
-    rw [hupper] at heq
-    rw [← heq, card_rawActive]
-  have hU : c.frontier.upper.card = A.card + B.card := by
-    rw [← hupper, card_upperFrom]
-  have hAvail : (availableLower c.frontier.upper).card = 2 * A.card + B.card := by
-    rw [← hlower, card_lowerAvail]
-  have hUpperStops : (upperStops c.frontier).card = 10 - c.frontier.upper.card := by
-    rw [upperStops, Finset.card_sdiff_of_subset (Finset.subset_univ _), Finset.card_univ,
-      Fintype.card_fin]
-  have hLowerStops : (lowerStops c.frontier).card =
-      (availableLower c.frontier.upper).card - c.frontier.lower.card := by
-    rw [lowerStops, Finset.card_sdiff_of_subset hw]
-  rw [card_cutOf_parts, hUpperStops, hLowerStops, hactive,
-    hU, hAvail]
-  unfold Frontier.words Frontier.expanded
-  have hAc := Finset.card_le_card hL
-  rw [card_lowerAvail] at hAc
-  have hUle : A.card + B.card ≤ 10 := by
-    rw [← hU]
-    exact Finset.card_le_univ _
-  rw [hU]
-  omega
-
-theorem revealBits_fins (A : Finset Name) :
-    graph.revealBits (fins A) = ∑ n ∈ A, n.len := by
-  unfold Graph.revealBits
-  refine (Finset.sum_map A nameEmbedding graph.len).trans ?_
-  exact Finset.sum_congr rfl fun n _ => by
-    rw [nameEmbedding_apply, graph_len_fin]
-
-theorem revealBits_cutOf {c : Choice} (hc : c ∈ shapes) :
-    graph.revealBits (fins (cutOf c)) ≤ 42 * 129 := by
-  have hv := valid_of_mem_shapes hc
-  rw [revealBits_fins]
-  calc
-    ∑ n ∈ cutOf c, n.len = ∑ _n ∈ cutOf c, 129 :=
-      Finset.sum_congr rfl fun n hn => cutOf_values c n hn
-    _ = (cutOf c).card * 129 := by rw [Finset.sum_const, smul_eq_mul]
-    _ = c.frontier.words * 129 := by rw [card_cutOf c hv.1]
-    _ ≤ 42 * 129 := Nat.mul_le_mul_right 129 (Choice.words_le hv)
-
-theorem disclosure_and_nonce_le {c : Choice} (hc : c ∈ shapes) :
-    graph.revealBits (fins (cutOf c)) + 86 ≤ 5504 := by
-  have h := revealBits_cutOf hc
-  norm_num at h ⊢
-  omega
-
-/-! ## Reconstruction charges -/
+/-! ## Evaluated nodes and cost -/
 
 /-- A concrete name is evaluated exactly when the generic reconstruction
 visits it and it is not itself disclosed. -/
@@ -489,140 +288,82 @@ theorem evaluated_eq_fins (A : Finset Name) :
   rw [mem_evaluated_iff, mem_fins_embedding]
   simp [evaluatedNames]
 
-theorem evaluated_mh_implies_upper (c : Choice) (u : Fin 10)
-    (h : Evaluated (cutOf c) (.mh u)) : u ∈ c.frontier.upper := by
-  by_contra hu
-  have hm : Name.mv u ∈ cutOf c := by
-    rw [mv_mem_cutOf_iff]
-    simp [upperStops, hu]
-  exact (visited_no_above (cutOf c) h.1 (.mv u) (Above.child rfl)) hm
+theorem evaluated_cutOf_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (n : Name) :
+    Evaluated (cutOf c) n ↔ VisN c n ∧ n ∉ cutOf c := by
+  rw [Evaluated, nameEmbedding_apply, visited_cutOf_iff c hvalid]
 
-theorem above_mv_sh (j : Fin 18) :
-    Above (.mv (upperOfLower j)) (.sh j) := by
-  exact (above_mv_mc _).trans
-    ((Above.child (show child (.sv j) = some (.mc (upperOfLower j)) by rfl)).trans
-      (Above.child (show child (.sh j) = some (.sv j) by rfl)))
+theorem evaluated_hh_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
+    (b : Fin 7) (j : Fin 11) : Evaluated (cutOf c) (.hh b j) ↔ j ∈ (c b).1 := by
+  rw [evaluated_cutOf_iff c hvalid]
+  exact ⟨fun h => h.1, fun h => ⟨h, not_mem_cutOf_of_len (by simp [Name.len])⟩⟩
 
-theorem evaluated_sh_implies_lower (c : Choice) (j : Fin 18)
-    (h : Evaluated (cutOf c) (.sh j)) : j ∈ c.frontier.lower := by
-  have hu : upperOfLower j ∈ c.frontier.upper := by
-    by_contra hu
-    have hm : Name.mv (upperOfLower j) ∈ cutOf c := by
-      rw [mv_mem_cutOf_iff]
-      simp [upperStops, hu]
-    exact (visited_no_above (cutOf c) h.1 _ (above_mv_sh j)) hm
-  by_contra hj
-  have hs : Name.sv j ∈ cutOf c := by
-    rw [sv_mem_cutOf_iff]
-    simp [lowerStops, mem_availableLower, hu, hj]
-  exact (visited_no_above (cutOf c) h.1 _ (Above.child rfl)) hs
+theorem evaluated_ch_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
+    (b : Fin 7) (k : Fin 8) (t : Fin 18) : Evaluated (cutOf c) (.ch b k t) ↔
+      k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val := by
+  rw [evaluated_cutOf_iff c hvalid]
+  exact ⟨fun h => h.1, fun h => ⟨h, not_mem_cutOf_of_len (by simp [Name.len])⟩⟩
 
-theorem evaluated_ch_implies (c : Choice) (k : Fin 66) (t : Fin 18)
-    (h : Evaluated (cutOf c) (.ch k t)) :
-    k ∈ active c.frontier ∧ (c.position k).val ≤ t.val := by
-  have hu : upperOfChain k ∈ c.frontier.upper := by
-    by_contra hu
-    have hm : Name.mv (upperOfChain k) ∈ cutOf c := by
-      rw [mv_mem_cutOf_iff]
-      simp [upperStops, hu]
-    exact (visited_no_above (cutOf c) h.1 _ (above_mv_ch k t)) hm
-  have hk : k ∈ active c.frontier := by
-    rw [mem_active]
-    refine ⟨hu, ?_⟩
-    cases hl : lowerOfChain k with
-    | none => trivial
-    | some j =>
-        by_contra hj
-        have hs : Name.sv j ∈ cutOf c := by
-          rw [sv_mem_cutOf_iff]
-          have hua : upperOfLower j ∈ c.frontier.upper := by
-            rw [← upperOfChain_eq_upperOfLower hl]
-            exact hu
-          simp [lowerStops, mem_availableLower, hua, hj]
-        exact (visited_no_above (cutOf c) h.1 _ (above_sv_ch t hl)) hs
-  refine ⟨hk, ?_⟩
-  by_contra hp
-  have hc : chainNode k (c.position k) ∈ cutOf c :=
-    (chainNode_mem_cutOf_iff c k _).2 ⟨hk, rfl⟩
-  exact (visited_no_above (cutOf c) h.1 _
-    (above_chainNode_ch t (by omega))) hc
+theorem evaluated_rh (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) :
+    Evaluated (cutOf c) .rh :=
+  (evaluated_cutOf_iff c hvalid _).2 ⟨trivial, not_mem_cutOf_of_len (by simp [Name.len])⟩
 
-/-- The structural charge assigned to each possible evaluated node. -/
+/-- The compression charge of each evaluated node. -/
 def charge (c : Choice) : Name → ℕ
-  | .ch k t => if k ∈ active c.frontier ∧ (c.position k).val ≤ t.val then 1 else 0
-  | .sh j => if j ∈ c.frontier.lower then 1 else 0
-  | .mh u => if u ∈ c.frontier.upper then 1 else 0
-  | .rh => 3
+  | .ch b k t => if k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val then 1 else 0
+  | .hh b j => if j ∈ (c b).1 then 1 else 0
+  | .rh => 2
   | _ => 0
 
-theorem evaluated_cost_le_charge (c : Choice) (n : Name) :
-    (if Evaluated (cutOf c) n then n.cost else 0) ≤ charge c n := by
+theorem evaluated_cost_eq_charge (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
+    (n : Name) : (if Evaluated (cutOf c) n then n.cost else 0) = charge c n := by
   cases n with
-  | ch k t =>
-      by_cases h : Evaluated (cutOf c) (.ch k t)
-      · simp [h, charge, Name.cost, evaluated_ch_implies c k t h]
-      · simp [h]
-  | sh j =>
-      by_cases h : Evaluated (cutOf c) (.sh j)
-      · simp [h, charge, Name.cost, evaluated_sh_implies_lower c j h]
-      · simp [h]
-  | mh u =>
-      by_cases h : Evaluated (cutOf c) (.mh u)
-      · simp [h, charge, Name.cost, evaluated_mh_implies_upper c u h]
-      · simp [h]
-  | rh =>
-      by_cases h : Evaluated (cutOf c) .rh <;> simp [h, charge, Name.cost]
-  | src k | ci k t | cv k t | sc k | sv k | mc k | mv k | rc =>
-      simp [charge, Name.cost]
+  | ch b k t => simp only [evaluated_ch_iff c hvalid, charge, Name.cost]
+  | hh b j => simp only [evaluated_hh_iff c hvalid, charge, Name.cost]
+  | rh => simp [evaluated_rh c hvalid, charge, Name.cost]
+  | src _ _ | ci _ _ _ | cv _ _ _ | hc _ _ | hv _ _ | rc => simp [charge, Name.cost]
 
 /-! Splitting sums over `Name` by constructor. -/
 
 abbrev NameSum :=
-  Fin 66 ⊕ (Fin 66 × Fin 18) ⊕ (Fin 66 × Fin 18) ⊕
-    (Fin 66 × Fin 18) ⊕ Fin 18 ⊕ Fin 18 ⊕ Fin 18 ⊕
-      Fin 10 ⊕ Fin 10 ⊕ Fin 10 ⊕ Unit ⊕ Unit
-
-def Name.toSum : Name → NameSum
-  | .src k => .inl k
-  | .ci k t => .inr (.inl (k, t))
-  | .ch k t => .inr (.inr (.inl (k, t)))
-  | .cv k t => .inr (.inr (.inr (.inl (k, t))))
-  | .sc j => .inr (.inr (.inr (.inr (.inl j))))
-  | .sh j => .inr (.inr (.inr (.inr (.inr (.inl j)))))
-  | .sv j => .inr (.inr (.inr (.inr (.inr (.inr (.inl j))))))
-  | .mc u => .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl u)))))))
-  | .mh u => .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl u))))))))
-  | .mv u => .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl u)))))))))
-  | .rc => .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ()))))))))))
-  | .rh => .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (())))))))))))
+  (Fin 7 × Fin 8) ⊕ (Fin 7 × Fin 8 × Fin 18) ⊕ (Fin 7 × Fin 8 × Fin 18) ⊕
+    (Fin 7 × Fin 8 × Fin 18) ⊕ (Fin 7 × Fin 11) ⊕ (Fin 7 × Fin 11) ⊕
+      (Fin 7 × Fin 11) ⊕ Unit ⊕ Unit
 
 def Name.ofSum : NameSum → Name
-  | .inl k => .src k
-  | .inr (.inl (k, t)) => .ci k t
-  | .inr (.inr (.inl (k, t))) => .ch k t
-  | .inr (.inr (.inr (.inl (k, t)))) => .cv k t
-  | .inr (.inr (.inr (.inr (.inl j)))) => .sc j
-  | .inr (.inr (.inr (.inr (.inr (.inl j))))) => .sh j
-  | .inr (.inr (.inr (.inr (.inr (.inr (.inl j)))))) => .sv j
-  | .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl u))))))) => .mc u
-  | .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl u)))))))) => .mh u
-  | .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl u))))))))) => .mv u
-  | .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ())))))))))) => .rc
-  | .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr (()))))))))))) => .rh
+  | .inl (b, k) => .src b k
+  | .inr (.inl (b, k, t)) => .ci b k t
+  | .inr (.inr (.inl (b, k, t))) => .ch b k t
+  | .inr (.inr (.inr (.inl (b, k, t)))) => .cv b k t
+  | .inr (.inr (.inr (.inr (.inl (b, j))))) => .hc b j
+  | .inr (.inr (.inr (.inr (.inr (.inl (b, j)))))) => .hh b j
+  | .inr (.inr (.inr (.inr (.inr (.inr (.inl (b, j))))))) => .hv b j
+  | .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ()))))))) => .rc
+  | .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr ()))))))) => .rh
+
+def Name.toSum : Name → NameSum
+  | .src b k => .inl (b, k)
+  | .ci b k t => .inr (.inl (b, k, t))
+  | .ch b k t => .inr (.inr (.inl (b, k, t)))
+  | .cv b k t => .inr (.inr (.inr (.inl (b, k, t))))
+  | .hc b j => .inr (.inr (.inr (.inr (.inl (b, j)))))
+  | .hh b j => .inr (.inr (.inr (.inr (.inr (.inl (b, j))))))
+  | .hv b j => .inr (.inr (.inr (.inr (.inr (.inr (.inl (b, j)))))))
+  | .rc => .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ())))))))
+  | .rh => .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inr ())))))))
 
 def Name.sumEquiv : Name ≃ NameSum where
   toFun := Name.toSum
   invFun := Name.ofSum
   left_inv n := by cases n <;> rfl
   right_inv s := by
-    rcases s with k | ⟨k,t⟩ | ⟨k,t⟩ | ⟨k,t⟩ | j | j | j | u | u | u | ⟨⟩ | ⟨⟩ <;> rfl
+    rcases s with ⟨b, k⟩ | ⟨b, k, t⟩ | ⟨b, k, t⟩ | ⟨b, k, t⟩ | ⟨b, j⟩ | ⟨b, j⟩ | ⟨b, j⟩ |
+      ⟨⟩ | ⟨⟩ <;> rfl
 
 theorem sum_names {M : Type} [AddCommMonoid M] (f : Name → M) :
     ∑ n, f n =
-      (∑ k, f (.src k)) + (∑ k, ∑ t, f (.ci k t)) +
-      (∑ k, ∑ t, f (.ch k t)) + (∑ k, ∑ t, f (.cv k t)) +
-      (∑ j, f (.sc j)) + (∑ j, f (.sh j)) + (∑ j, f (.sv j)) +
-      (∑ u, f (.mc u)) + (∑ u, f (.mh u)) + (∑ u, f (.mv u)) +
+      (∑ b, ∑ k, f (.src b k)) + (∑ b, ∑ k, ∑ t, f (.ci b k t)) +
+      (∑ b, ∑ k, ∑ t, f (.ch b k t)) + (∑ b, ∑ k, ∑ t, f (.cv b k t)) +
+      (∑ b, ∑ j, f (.hc b j)) + (∑ b, ∑ j, f (.hh b j)) + (∑ b, ∑ j, f (.hv b j)) +
       f .rc + f .rh := by
   rw [← Fintype.sum_equiv Name.sumEquiv.symm (fun s => f (Name.ofSum s)) f
     (fun _ => rfl)]
@@ -639,31 +380,32 @@ theorem sum_fin18_ge (v : ℕ) :
     omega
   rw [h, Nat.card_Ico]
 
-theorem sum_charge (c : Choice) : ∑ n, charge c n = c.reconstructionCost := by
+theorem sum_charge (c : Choice) : ∑ n, charge c n = reconstructionCost c := by
   rw [sum_names]
   simp only [charge, Finset.sum_const_zero, zero_add, add_zero]
-  have hchain :
-      ∑ k : Fin 66, ∑ t : Fin 18,
-          (if k ∈ active c.frontier ∧ (c.position k).val ≤ t.val then 1 else 0) =
-        c.chainCost := by
-    simp only [Choice.chainCost]
-    have hinner : ∀ k : Fin 66,
+  have hchain : ∀ b, (∑ k : Fin 8, ∑ t : Fin 18,
+      (if k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val then 1 else 0)) =
+        localChainCost (c b) := by
+    intro b
+    have hinner : ∀ k : Fin 8,
         (∑ t : Fin 18,
-          (if k ∈ active c.frontier ∧ (c.position k).val ≤ t.val then 1 else 0)) =
-          if k ∈ active c.frontier then 18 - (c.position k).val else 0 := by
+          (if k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val then 1 else 0)) =
+          if k ∈ neededC (c b).1 then 18 - ((c b).2 k).val else 0 := by
       intro k
-      by_cases hk : k ∈ active c.frontier
+      by_cases hk : k ∈ neededC (c b).1
       · simp only [hk, true_and, if_true]
         exact sum_fin18_ge _
       · simp [hk]
-    simp only [hinner]
+    simp only [hinner, localChainCost]
     rw [Finset.sum_ite_mem, Finset.univ_inter]
-  rw [hchain]
-  rw [Finset.sum_ite_mem, Finset.univ_inter,
-    Finset.sum_ite_mem, Finset.univ_inter]
-  simp only [Finset.sum_const, smul_eq_mul]
-  unfold Choice.reconstructionCost Frontier.fixedCost Frontier.expanded
-  omega
+  have hhash : ∀ b, (∑ j : Fin 11, (if j ∈ (c b).1 then 1 else 0)) = (c b).1.card := by
+    intro b
+    rw [Finset.sum_boole]
+    simp
+  simp only [hchain, hhash]
+  rw [reconstructionCost, choiceCost]
+  simp only [localCost, Finset.sum_add_distrib]
+  ring
 
 theorem reconstructCost_as_sum (A : Finset Name) :
     graph.reconstructCost (fins A) =
@@ -676,52 +418,279 @@ theorem reconstructCost_as_sum (A : Finset Name) :
   exact Finset.sum_congr rfl fun n _ => by
     rw [nameEmbedding_apply, graph_nodeCost_fin]
 
-theorem reconstructCost_le (c : Choice) :
-    graph.reconstructCost (fins (cutOf c)) ≤ c.reconstructionCost := by
+theorem reconstructCost_cutOf_eq (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) :
+    graph.reconstructCost (fins (cutOf c)) = reconstructionCost c := by
   rw [reconstructCost_as_sum, ← sum_charge]
-  exact Finset.sum_le_sum fun n _ => evaluated_cost_le_charge c n
+  exact Finset.sum_congr rfl fun n _ => evaluated_cost_eq_charge c hvalid n
 
-theorem reconstructCost_cutOf {c : Choice} (hc : c ∈ shapes) :
-    graph.reconstructCost (fins (cutOf c)) ≤ 90 := by
-  exact (reconstructCost_le c).trans_eq
-    (Choice.reconstructionCost_eq (valid_of_mem_shapes hc))
+theorem reconstructCost_supported {c : Choice} (hc : c ∈ supportedChoices) :
+    graph.reconstructCost (fins (cutOf c)) = 89 :=
+  (reconstructCost_cutOf_eq c (shapeValid_of_supported hc)).trans (reconstructionCost_eq hc)
 
-/- Family-level statements consumed by the eventual scheme. -/
+theorem evaluatedNames_cost_eq_reconstructCost (A : Finset Name) :
+    (∑ n ∈ evaluatedNames A, n.cost) = graph.reconstructCost (fins A) := by
+  rw [reconstructCost_as_sum, evaluatedNames, Finset.sum_filter]
+
+/-! ## Disclosure size -/
+
+theorem revealBits_fins (A : Finset Name) :
+    graph.revealBits (fins A) = ∑ n ∈ A, n.len := by
+  unfold Graph.revealBits
+  refine (Finset.sum_map A nameEmbedding graph.len).trans ?_
+  exact Finset.sum_congr rfl fun n _ => by
+    rw [nameEmbedding_apply, graph_len_fin]
+
+theorem revealBits_cutOf (c : Choice) :
+    graph.revealBits (fins (cutOf c)) = 129 * choiceWords c := by
+  rw [revealBits_fins, Finset.sum_congr rfl (cutOf_values c), Finset.sum_const,
+    smul_eq_mul, card_cutOf, mul_comm]
+
+/-! ## Codec injectivity -/
+
+theorem cutOf_injOn : Set.InjOn cutOf (supportedChoices : Set Choice) := by
+  intro c hc d hd hcut
+  have hvc := shapeValid_of_supported hc
+  have hvd := shapeValid_of_supported hd
+  have hE : ∀ b, (c b).1 = (d b).1 := by
+    intro b
+    ext j
+    rw [← evaluated_hh_iff c hvc, ← evaluated_hh_iff d hvd, hcut]
+  funext b
+  refine Prod.ext (hE b) (funext fun k => ?_)
+  by_cases hk : k ∈ neededC (c b).1
+  · have hm : chainNode b k ((c b).2 k) ∈ cutOf d := by
+      rw [← hcut]
+      exact (chainNode_mem_cutOf c b k _).2 ⟨hk, rfl⟩
+    exact ((chainNode_mem_cutOf d b k _).1 hm).2.symm
+  · rw [canonical_of_supported hc b k hk,
+      canonical_of_supported hd b k (by rwa [← hE b])]
+
+/-! ## Cut families -/
+
+/-- All supported cuts. -/
+def fullFamily : Finset (Finset Name) := supportedChoices.image cutOf
+
+theorem card_fullFamily : fullFamily.card = supportedChoices.card :=
+  Finset.card_image_of_injOn cutOf_injOn
+
+theorem K91_le_card_fullFamily : K91 ≤ fullFamily.card := by
+  rw [card_fullFamily]
+  exact K91_le_card_supportedChoices
+
+/-- The scheme family: the first `K91` supported cuts. -/
+def family : Finset (Finset Name) :=
+  Finset.univ.map ⟨selectCut K91_le_card_fullFamily, selectCut_injective _⟩
+
+theorem card_family_exact :
+    family.card = 676013856769711926075368867014708 := by
+  rw [family, Finset.card_map, Finset.card_univ, Fintype.card_fin, K91]
+
+theorem classCapacity_le_family :
+    676013856769711926075368867014708 ≤ family.card := by
+  rw [card_family_exact]
+
+theorem family_subset_fullFamily : family ⊆ fullFamily := by
+  intro A hA
+  obtain ⟨i, _, rfl⟩ := Finset.mem_map.1 hA
+  exact selectCut_mem _ i
+
+theorem exists_choice_of_mem_family {A : Finset Name} (hA : A ∈ family) :
+    ∃ c ∈ supportedChoices, cutOf c = A :=
+  Finset.mem_image.1 (family_subset_fullFamily hA)
+
+/-- Semantic cut interface: a supported codec cut. -/
+def IsCut (A : Finset Name) : Prop := ∃ c ∈ supportedChoices, cutOf c = A
+
+theorem isCut_of_mem_family {A : Finset Name} (hA : A ∈ family) : IsCut A :=
+  exists_choice_of_mem_family hA
+
+theorem IsCut.values {A : Finset Name} (hA : IsCut A) : ∀ n ∈ A, n.len = 129 := by
+  obtain ⟨c, _, rfl⟩ := hA
+  exact cutOf_values c
+
+theorem visited_of_mem_cutOf (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
+    {n : Name} (hn : n ∈ cutOf c) : graph.Visited (fins (cutOf c)) n.fin := by
+  rw [visited_cutOf_iff c hvalid]
+  rcases (mem_cutOf c n).1 hn with ⟨b, j, hj, _, rfl⟩ | ⟨b, k, hk, rfl⟩
+  · exact hj
+  · exact (visN_chainNode c b k _).2 ⟨hk, le_rfl⟩
+
+/-- Every disclosed value is needed by the reconstruction. -/
+theorem IsCut.visited_of_mem {A : Finset Name} (hA : IsCut A) {n : Name} (hn : n ∈ A) :
+    graph.Visited (fins A) n.fin := by
+  obtain ⟨c, hc, rfl⟩ := hA
+  exact visited_of_mem_cutOf c (shapeValid_of_supported hc) hn
+
+/-- A visited source is disclosed. -/
+theorem IsCut.src_mem_of_visited {A : Finset Name} (hA : IsCut A) {b : Fin 7} {k : Fin 8}
+    (hv : graph.Visited (fins A) (Name.src b k).fin) : Name.src b k ∈ A := by
+  obtain ⟨c, hc, rfl⟩ := hA
+  have h := (visited_cutOf_iff c (shapeValid_of_supported hc) _).1 hv
+  rw [src_eq_chainNode, chainNode_mem_cutOf]
+  exact ⟨h.1, Fin.ext h.2⟩
+
+/-! ## Family-level statements consumed by the scheme -/
 
 theorem family_root_not_mem {A : Finset Name} (hA : A ∈ family) :
     graph.root ∉ fins A := by
-  obtain ⟨c, _, rfl⟩ := (mem_family_iff A).1 hA
-  exact root_not_mem_cutOf c
+  obtain ⟨c, _, rfl⟩ := exists_choice_of_mem_family hA
+  change Name.rh.fin ∉ fins (cutOf c)
+  rw [mem_fins_fin]
+  exact not_mem_cutOf_of_len (by simp [Name.len])
 
 theorem family_no_hidden_source {A : Finset Name} (hA : A ∈ family) :
     ∀ v, graph.Visited (fins A) v → v ∉ fins A →
       ¬ (graph.kind v).IsSource := by
-  obtain ⟨c, _, rfl⟩ := (mem_family_iff A).1 hA
-  exact no_hidden_source_cutOf c
+  intro v hv hvA hs
+  obtain ⟨n, rfl⟩ : ∃ n : Name, n.fin = v := ⟨Name.ofFin v, Name.fin_ofFin v⟩
+  obtain ⟨b, k, rfl⟩ := (graph_isSource_fin n).mp hs
+  exact hvA ((mem_fins_fin _ _).2 ((isCut_of_mem_family hA).src_mem_of_visited hv))
+
+theorem family_reconstructCost_eq {A : Finset Name} (hA : A ∈ family) :
+    graph.reconstructCost (fins A) = 89 := by
+  obtain ⟨c, hc, rfl⟩ := exists_choice_of_mem_family hA
+  exact reconstructCost_supported hc
 
 theorem family_reconstructCost {A : Finset Name} (hA : A ∈ family) :
-    graph.reconstructCost (fins A) ≤ 90 := by
-  obtain ⟨c, hc, rfl⟩ := (mem_family_iff A).1 hA
-  exact (reconstructCost_le c).trans_eq
-    (Choice.reconstructionCost_eq (valid_of_mem_supportedShapes hc))
+    graph.reconstructCost (fins A) ≤ 89 :=
+  (family_reconstructCost_eq hA).le
+
+theorem family_evaluatedNames_cost_eq {A : Finset Name} (hA : A ∈ family) :
+    (∑ n ∈ evaluatedNames A, n.cost) = 89 :=
+  (evaluatedNames_cost_eq_reconstructCost A).trans (family_reconstructCost_eq hA)
 
 theorem family_disclosure_and_nonce {A : Finset Name} (hA : A ∈ family) :
     graph.revealBits (fins A) + 86 ≤ 5504 := by
-  obtain ⟨c, hc, rfl⟩ := (mem_family_iff A).1 hA
-  have hv := valid_of_mem_supportedShapes hc
-  rw [revealBits_fins]
-  have hr : ∑ n ∈ cutOf c, n.len = (cutOf c).card * 129 := by
-    calc
-      ∑ n ∈ cutOf c, n.len = ∑ _n ∈ cutOf c, 129 :=
-        Finset.sum_congr rfl fun n hn => cutOf_values c n hn
-      _ = (cutOf c).card * 129 := by rw [Finset.sum_const, smul_eq_mul]
-  rw [hr, card_cutOf c hv.1]
-  have hw := Choice.words_le hv
+  obtain ⟨c, hc, rfl⟩ := exists_choice_of_mem_family hA
+  rw [revealBits_cutOf]
+  have := choiceWords_le hc
   omega
+
+theorem family_revealBits_pos {A : Finset Name} (hA : A ∈ family) :
+    0 < graph.revealBits (fins A) := by
+  obtain ⟨c, hc, rfl⟩ := exists_choice_of_mem_family hA
+  rw [revealBits_cutOf]
+  have h0 : 1 ≤ localWords (c 0) :=
+    shapeWords_pos _ ((mem_validShapes _).2 (shapeValid_of_supported hc 0))
+  have : localWords (c 0) ≤ choiceWords c :=
+    Finset.single_le_sum (f := fun b => localWords (c b)) (fun _ _ => Nat.zero_le _)
+      (Finset.mem_univ 0)
+  omega
+
+/-! ## Binding rule and equal-cost cross-cut witness -/
+
+/-- Binding rule: the exclusive (slot-2) kid of every unexpanded hash node is
+outside the needed set, hence neither visited nor disclosed. -/
+theorem binding_rule (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (b : Fin 7)
+    (j : Fin 11) (hj : j ∉ (c b).1) :
+    ¬ graph.Visited (fins (cutOf c)) ((kid j 2).name b).fin ∧
+      (kid j 2).name b ∉ cutOf c := by
+  have hnv : ¬ graph.Visited (fins (cutOf c)) ((kid j 2).name b).fin := by
+    rw [visited_cutOf_iff c hvalid, visN_kid_name, needed_kid_two_iff]
+    exact hj
+  exact ⟨hnv, fun hm => hnv (visited_of_mem_cutOf c hvalid hm)⟩
+
+/-- Equal cost forces incomparability: distinct supported cuts have a hash node
+evaluated under the second but not the first, whose 129-bit input value is not
+visited (so hidden) under the first. -/
+theorem exists_hidden_of_ne {c d : Choice} (hc : c ∈ supportedChoices)
+    (hd : d ∈ supportedChoices) (hne : cutOf c ≠ cutOf d) :
+    ∃ u, Evaluated (cutOf d) u ∧ ¬ Evaluated (cutOf c) u ∧ u.cost ≠ 0 ∧
+      ∃ q ∈ parents u, ∃ w ∈ parents q, w.len = 129 ∧
+        ¬ graph.Visited (fins (cutOf c)) w.fin := by
+  have hvc := shapeValid_of_supported hc
+  have hvd := shapeValid_of_supported hd
+  obtain ⟨u, hud, huc, hu⟩ : ∃ u, Evaluated (cutOf d) u ∧ ¬ Evaluated (cutOf c) u ∧
+      u.cost ≠ 0 := by
+    by_contra hcon
+    push Not at hcon
+    let f : Choice → Name → ℕ := fun x n => if Evaluated (cutOf x) n then n.cost else 0
+    have hle : ∀ n ∈ (Finset.univ : Finset Name), f d n ≤ f c n := by
+      intro n _
+      simp only [f]
+      by_cases h : Evaluated (cutOf d) n
+      · by_cases hcn : Evaluated (cutOf c) n
+        · rw [if_pos h, if_pos hcn]
+        · rw [if_pos h, if_neg hcn, hcon n h hcn]
+      · rw [if_neg h]
+        exact Nat.zero_le _
+    have hsum : ∑ n, f d n = ∑ n, f c n := by
+      simp only [f]
+      rw [← reconstructCost_as_sum, ← reconstructCost_as_sum,
+        reconstructCost_supported hc, reconstructCost_supported hd]
+    have heq := (Finset.sum_eq_sum_iff_of_le hle).1 hsum
+    have hiff : ∀ n, n.cost ≠ 0 → (Evaluated (cutOf d) n ↔ Evaluated (cutOf c) n) := by
+      intro n h0
+      have := heq n (Finset.mem_univ _)
+      simp only [f] at this
+      constructor
+      · intro hdn
+        by_contra hcn
+        rw [if_pos hdn, if_neg hcn] at this
+        exact h0 this
+      · intro hcn
+        by_contra hdn
+        rw [if_neg hdn, if_pos hcn] at this
+        exact h0 this.symm
+    have hE : ∀ b, (d b).1 = (c b).1 := by
+      intro b
+      ext j
+      rw [← evaluated_hh_iff d hvd, ← evaluated_hh_iff c hvc]
+      exact hiff _ (by simp [Name.cost])
+    have hpos : ∀ b k, (d b).2 k = (c b).2 k := by
+      intro b k
+      by_cases hk : k ∈ neededC (c b).1
+      · have hkd : k ∈ neededC (d b).1 := by rwa [hE b]
+        have ht : ∀ t : Fin 18, ((d b).2 k).val ≤ t.val ↔ ((c b).2 k).val ≤ t.val := by
+          intro t
+          have h := hiff (.ch b k t) (by simp [Name.cost])
+          rw [evaluated_ch_iff d hvd, evaluated_ch_iff c hvc] at h
+          constructor
+          · intro hle
+            exact (h.1 ⟨hkd, hle⟩).2
+          · intro hle
+            exact (h.2 ⟨hk, hle⟩).2
+        apply Fin.ext
+        by_contra hpq
+        rcases Nat.lt_or_gt_of_ne hpq with h | h
+        · have h19 := ((c b).2 k).isLt
+          have := (ht ⟨((d b).2 k).val, by omega⟩).1 le_rfl
+          exact absurd this (by show ¬ ((c b).2 k).val ≤ ((d b).2 k).val; omega)
+        · have h19 := ((d b).2 k).isLt
+          have := (ht ⟨((c b).2 k).val, by omega⟩).2 le_rfl
+          exact absurd this (by show ¬ ((d b).2 k).val ≤ ((c b).2 k).val; omega)
+      · rw [canonical_of_supported hc b k hk,
+          canonical_of_supported hd b k (by rwa [hE b])]
+    have hcd : d = c := by
+      funext b
+      exact Prod.ext (hE b) (funext fun k => hpos b k)
+    exact hne (by rw [hcd])
+  refine ⟨u, hud, huc, hu, ?_⟩
+  cases u with
+  | hh b j =>
+      have hjd := (evaluated_hh_iff d hvd b j).1 hud
+      have hjc : j ∉ (c b).1 := fun h => huc ((evaluated_hh_iff c hvc b j).2 h)
+      refine ⟨.hc b j, Finset.mem_singleton_self _, (kid j 2).name b,
+        (mem_parents_hc _ b j).2 ⟨2, rfl⟩, ?_, (binding_rule c hvc b j hjc).1⟩
+      cases kid j 2 <;> rfl
+  | ch b k t =>
+      have hcn : ¬ (k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val) :=
+        fun h => huc ((evaluated_ch_iff c hvc b k t).2 h)
+      refine ⟨.ci b k t, Finset.mem_singleton_self _, prev b k t,
+        Finset.mem_singleton_self _, ?_, ?_⟩
+      · rw [prev_eq_chainNode]
+        exact chainNode_len _ _ _
+      · rw [visited_cutOf_iff c hvc, prev_eq_chainNode, visN_chainNode]
+        simpa using hcn
+  | rh => exact absurd (evaluated_rh c hvc) huc
+  | src _ _ | ci _ _ _ | cv _ _ _ | hc _ _ | hv _ _ | rc => simp [Name.cost] at hu
 
 #print axioms family_root_not_mem
 #print axioms family_no_hidden_source
 #print axioms family_reconstructCost
 #print axioms family_disclosure_and_nonce
+#print axioms card_family_exact
+#print axioms exists_hidden_of_ne
+#print axioms binding_rule
 
 end OptimalOTS.WeightedConstruction.LongChain91

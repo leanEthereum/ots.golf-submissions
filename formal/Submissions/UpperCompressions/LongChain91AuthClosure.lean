@@ -1,12 +1,13 @@
 import Submissions.UpperCompressions.LongChain91Auth
 
 /-!
-# Authentication-event closure for the cost-91 long-chain graph
+# Authentication-event closure for the cost-90 shared-DAG graph
 
-This module follows a differing reconstructed value upward through the two
-ternary aggregation layers.  At a hash node the walk either obtains the
-spurious binding event `Spr`, or the differing low 129 bits propagate to the
-next value node.  The public root uses its exact low-128-bit endpoint.
+An accepting reconstruction is followed downward from the public root along
+reconstructed nodes.  At each hash node the forged input either differs from
+the honest one, which is a spurious binding `Spr`, or equals it, so every
+input of that node is honest again.  The walk needs only the parent sets of
+the DAG, not a unique consumer per node.
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -21,117 +22,73 @@ namespace OptimalOTS.WeightedConstruction.LongChain91
 open OptimalOTS.Dag
 open Name
 
-/-! ## Distance to the root and visited nodes -/
+/-! ## Visited nodes of the DAG -/
 
-def chainBase (k : Fin 66) : ℕ :=
-  if (lowerOfChain k).isSome then 8 else 5
+theorem evaluated_iff {A : Finset Name} {n : Name} :
+    Evaluated A n ↔ graph.Visited (fins A) n.fin ∧ n ∉ A := Iff.rfl
 
-def height : Name → ℕ
-  | Name.src k => chainBase k + 54
-  | Name.ci k t => chainBase k + 2 + 3 * (17 - t.val)
-  | Name.ch k t => chainBase k + 1 + 3 * (17 - t.val)
-  | Name.cv k t => chainBase k + 3 * (17 - t.val)
-  | Name.sc _ => 7
-  | Name.sh _ => 6
-  | Name.sv _ => 5
-  | Name.mc _ => 4
-  | Name.mh _ => 3
-  | Name.mv _ => 2
-  | Name.rc => 1
-  | Name.rh => 0
+theorem visited_of_mem_parents {A : Finset Name} {m n : Name}
+    (hm : Evaluated A m) (hn : n ∈ parents m) : graph.Visited (fins A) n.fin :=
+  Graph.Visited.parent hm.1 (fun h => hm.2 ((mem_fins_embedding A m).1 h))
+    ((mem_graph_parents_iff n m).2 hn)
 
-theorem height_child {m n : Name} (h : child n = some m) :
-    height m + 1 = height n := by
-  cases n with
-  | src k =>
-      simp only [Name.child, Option.some.injEq] at h
-      subst m
-      simp [height]
-  | ci k t =>
-      simp only [Name.child, Option.some.injEq] at h
-      subst m
-      simp [height]
-      omega
-  | ch k t =>
-      simp only [Name.child, Option.some.injEq] at h
-      subst m
-      simp [height]
-      omega
-  | cv k t =>
-      simp only [Name.child] at h
-      split_ifs at h with ht
-      · cases hl : lowerOfChain k with
-        | none =>
-            simp only [hl, Option.some.injEq] at h
-            subst m
-            simp [height, chainBase, hl]
-            omega
-        | some j =>
-            simp only [hl, Option.some.injEq] at h
-            subst m
-            simp [height, chainBase, hl]
-            omega
-      · simp only [Option.some.injEq] at h
-        subst m
-        simp [height]
-        omega
-  | sc j | sh j | sv j =>
-      simp only [Name.child, Option.some.injEq] at h
-      subst m
-      simp [height]
-  | mc u | mh u | mv u =>
-      simp only [Name.child, Option.some.injEq] at h
-      subst m
-      simp [height]
-  | rc =>
-      simp only [Name.child, Option.some.injEq] at h
-      subst m
-      simp [height]
-  | rh => simp [Name.child] at h
+theorem evaluated_of_mem_parents {A : Finset Name} {m n : Name}
+    (hm : Evaluated A m) (hn : n ∈ parents m) (hnA : n ∉ A) : Evaluated A n :=
+  ⟨visited_of_mem_parents hm hn, hnA⟩
 
-theorem child_eq_none {n : Name} (h : child n = none) : n = Name.rh := by
-  cases n <;> simp only [Name.child, reduceCtorEq] at h
-  case cv k t => split_ifs at h <;> split at h <;> contradiction
-  case rh => rfl
+theorem evaluated_or_mem_of_mem_parents {A : Finset Name} {m n : Name}
+    (hm : Evaluated A m) (hn : n ∈ parents m) : Evaluated A n ∨ n ∈ A := by
+  by_cases hnA : n ∈ A
+  · exact Or.inr hnA
+  · exact Or.inl (evaluated_of_mem_parents hm hn hnA)
 
-/-- The concrete one-child graph characterization of reconstruction visits. -/
-theorem visited_iff_clear (A : Finset Name) (n : Name) :
-    graph.Visited (fins A) n.fin ↔ ∀ m, Above m n → m ∉ A := by
+/-- A visited node is the root or an input of an evaluated node. -/
+theorem visited_cases {A : Finset Name} {n : Name}
+    (hv : graph.Visited (fins A) n.fin) :
+    n = Name.rh ∨ ∃ m, n ∈ parents m ∧ Evaluated A m := by
+  have key : ∀ x : Fin graph.size, graph.Visited (fins A) x → x = n.fin →
+      n = Name.rh ∨ ∃ m, n ∈ parents m ∧ Evaluated A m := by
+    intro x hx e
+    cases hx with
+    | root => exact Or.inl (Name.fin_injective e.symm)
+    | parent hw hwA hmem =>
+        rename_i w
+        obtain ⟨m, rfl⟩ : ∃ m : Name, m.fin = w := ⟨_, Name.fin_ofFin w⟩
+        subst e
+        exact Or.inr ⟨m, (mem_graph_parents_iff n m).1 hmem,
+          hw, fun h => hwA ((mem_fins_embedding A m).2 h)⟩
+  exact key _ hv rfl
+
+theorem not_mem_of_cut_len_ne {A : Finset Name} (hA : IsCut A)
+    {n : Name} (hn : n.len ≠ 129) : n ∉ A :=
+  fun hm => hn (hA.values n hm)
+
+theorem evaluated_rh_of_isCut {A : Finset Name} (hA : IsCut A) : Evaluated A Name.rh :=
+  ⟨Graph.Visited.root, not_mem_of_cut_len_ne hA (by simp [Name.len])⟩
+
+/-- A hash node is visited exactly when its value node is evaluated. -/
+theorem visited_hash_iff {A : Finset Name} {v h : Name} (hh : hashOf v = some h) :
+    graph.Visited (fins A) h.fin ↔ Evaluated A v := by
   constructor
-  · exact visited_no_above A
-  · suffices ∀ k, ∀ n, height n = k →
-        (∀ m, Above m n → m ∉ A) → graph.Visited (fins A) n.fin from
-      this _ n rfl
-    intro k
-    induction k using Nat.strong_induction_on with
-    | _ k ih =>
-      intro n hn hA
-      rcases hc : child n with _ | p
-      · rw [child_eq_none hc]
-        exact Graph.Visited.root
-      · have hp : p ∉ A := hA p (Above.child hc)
-        have hvp : graph.Visited (fins A) p.fin :=
-          ih (height p) (by rw [← hn, ← height_child hc]; omega)
-            p rfl (fun m hm => hA m (Above.step hc hm))
-        exact Graph.Visited.parent hvp
-          (fun h => hp ((mem_fins_embedding A p).mp h))
-          ((mem_graph_parents_iff n p).mpr hc)
+  · intro hv
+    rcases visited_cases hv with e | ⟨m, hm, hmE⟩
+    · exact absurd e (ne_rh_of_hashOf hh)
+    · rwa [consumer_of_hashOf hh hm] at hmE
+  · intro hv
+    exact visited_of_mem_parents hv (mem_parents_hashOf hh)
 
-def ClearEvaluated (A : Finset Name) (n : Name) : Prop :=
-  n ∉ A ∧ ∀ m, Above m n → m ∉ A
-
-theorem clearEvaluated_iff (A : Finset Name) (n : Name) :
-    ClearEvaluated A n ↔ Evaluated A n := by
-  unfold ClearEvaluated Evaluated
-  rw [nameEmbedding_apply]
-  rw [visited_iff_clear]
-  tauto
-
-theorem clearEvaluated_child {A : Finset Name} {n p : Name}
-    (hn : ClearEvaluated A n) (hc : child n = some p) :
-    ClearEvaluated A p := by
-  refine ⟨hn.2 p (Above.child hc), fun m hm => ?_⟩
-  exact hn.2 m (Above.step hc hm)
+/-- A compression input is visited exactly when its hash node is evaluated. -/
+theorem visited_compress_iff {A : Finset Name} {h p : Name}
+    (hp : hashParent h = some p) :
+    graph.Visited (fins A) p.fin ↔ Evaluated A h := by
+  constructor
+  · intro hv
+    rcases visited_cases hv with e | ⟨m, hm, hmE⟩
+    · subst e
+      cases h <;> simp [hashParent] at hp
+    · rwa [consumer_of_hashParent hp hm] at hmE
+  · intro hv
+    exact visited_of_mem_parents hv (mem_parents_hashParent hp)
 
 /-! ## Reconstruction equations by concrete name -/
 
@@ -153,62 +110,17 @@ theorem lowWord_cast_eq {a b : ℕ} (h : a = b) (x : BitVec a) :
   subst h
   rfl
 
-theorem lowWord_129 (x : BitVec 129) : lowWord x = x := BitVec.setWidth_eq x
+theorem setWidth_cast_eq {a b : ℕ} (h : a = b) (x : BitVec a) (k : ℕ) :
+    (x.cast h).setWidth k = x.setWidth k := by
+  subst h
+  rfl
 
-theorem eq_of_lowWord_eq {n : ℕ} (hn : n = 129) {x y : BitVec n}
-    (h : lowWord x = lowWord y) : x = y := by
-  subst n
-  simpa only [lowWord_eq_self] using h
+theorem lowWord_129 (x : BitVec 129) : lowWord x = x := BitVec.setWidth_eq x
 
 theorem lowWord_eq_cast {m : ℕ} (h : m = 129) (x : BitVec m) :
     lowWord x = x.cast h := by
   subst h
   exact BitVec.setWidth_eq x
-
-theorem cast_injective {n m : ℕ} (h : n = m) {x y : BitVec n}
-    (e : x.cast h = y.cast h) : x = y := by
-  subst h
-  simpa using e
-
-theorem bv_append_inj {n m : ℕ} {x x' : BitVec n} {y y' : BitVec m}
-    (h : x ++ y = x' ++ y') : x = x' ∧ y = y' := by
-  have key : ∀ i, (x ++ y).getLsbD i = (x' ++ y').getLsbD i :=
-    fun i => by rw [h]
-  simp only [BitVec.getLsbD_append] at key
-  constructor
-  · apply BitVec.eq_of_getLsbD_eq
-    intro i hi
-    have hh := key (i + m)
-    simp only [show ¬ (i + m < m) by omega, if_false,
-      Nat.add_sub_cancel] at hh
-    exact hh
-  · apply BitVec.eq_of_getLsbD_eq
-    intro i hi
-    have hh := key i
-    simpa [hi] using hh
-
-theorem cat3_inj {a b c a' b' c' : BitVec 129}
-    (h : cat3 a b c = cat3 a' b' c') :
-    a = a' ∧ b = b' ∧ c = c' := by
-  unfold cat3 at h
-  obtain ⟨h12, h3⟩ := bv_append_inj (cast_injective _ h)
-  obtain ⟨h1, h2⟩ := bv_append_inj h12
-  exact ⟨h1, h2, h3⟩
-
-theorem cat10_inj {a b : Fin 10 → BitVec 129} (h : cat10 a = cat10 b) :
-    a = b := by
-  unfold cat10 at h
-  obtain ⟨hprefix8, h9⟩ := bv_append_inj (cast_injective _ h)
-  obtain ⟨hprefix7, h8⟩ := bv_append_inj hprefix8
-  obtain ⟨hprefix6, h7⟩ := bv_append_inj hprefix7
-  obtain ⟨hprefix5, h6⟩ := bv_append_inj hprefix6
-  obtain ⟨hprefix4, h5⟩ := bv_append_inj hprefix5
-  obtain ⟨hprefix3, h4⟩ := bv_append_inj hprefix4
-  obtain ⟨hprefix2, h3⟩ := bv_append_inj hprefix3
-  obtain ⟨hprefix1, h2⟩ := bv_append_inj hprefix2
-  obtain ⟨h0, h1⟩ := bv_append_inj hprefix1
-  funext u
-  fin_cases u <;> assumption
 
 theorem graph_kind_hash {h p : Name} (hp : hashParent h = some p) :
     ∃ (hlt : p.fin < h.fin) (hl : graph.len h.fin = hashBits),
@@ -218,14 +130,16 @@ theorem graph_kind_hash {h p : Name} (hp : hashParent h = some p) :
     subst hp <;> exact ⟨_, _, rfl⟩
 
 theorem graph_kind_det {n : Name} (hc : n.cost = 0)
-    (hs : ∀ k, n ≠ Name.src k) :
+    (hs : ∀ b k, n ≠ Name.src b k) :
     ∃ hlt hf, graph.kind n.fin =
       .det (Name.parentFins n) hlt
         (fun x => (detVal n x).cast (graph_len_fin n).symm) hf := by
   rw [graph_kind_fin]
   cases n
-  · exact absurd rfl (hs _)
-  all_goals first | exact ⟨_, _, rfl⟩ | (simp [Name.cost] at hc)
+  all_goals first
+    | exact (hs _ _ rfl).elim
+    | exact ⟨_, _, rfl⟩
+    | (exfalso; simp [Name.cost] at hc)
 
 section Recon
 
@@ -246,430 +160,180 @@ theorem recon_evaluated (hy : graph.ReconEqs d (fins A) given y)
   exact (hy n.fin).2.2
     (fun h => he.2 ((mem_fins_embedding A n).mp h)) he.1
 
+/-- The cached answer at the reconstructed input of an evaluated hash node. -/
+theorem yv_hash_setWidth (hy : graph.ReconEqs d (fins A) given y)
+    {h p : Name} (hp : hashParent h = some p) (he : Evaluated A h) :
+    ∃ w, d ⟨p.len, yv y p⟩ = some w ∧
+      ∀ k, (yv y h).setWidth k = w.setWidth k := by
+  obtain ⟨hlt, hl, hk⟩ := graph_kind_hash hp
+  obtain ⟨w, hw, hyw⟩ := (recon_evaluated hy he).1 _ _ _ hk
+  refine ⟨w, ?_, fun k => ?_⟩
+  · rw [sigma_cast (graph_len_fin p) (y p.fin)] at hw
+    exact hw
+  · unfold yv
+    rw [setWidth_cast_eq, hyw, setWidth_cast_eq]
+
 theorem yv_hash (hy : graph.ReconEqs d (fins A) given y)
     {h p : Name} (hp : hashParent h = some p) (he : Evaluated A h) :
     ∃ w, d ⟨p.len, yv y p⟩ = some w ∧
       lowWord w = lowWord (yv y h) := by
-  obtain ⟨hlt, hl, hk⟩ := graph_kind_hash hp
-  obtain ⟨w, hw, hyw⟩ := (recon_evaluated hy he).1 _ _ _ hk
-  refine ⟨w, ?_, ?_⟩
-  · rw [sigma_cast (graph_len_fin p) (y p.fin)] at hw
-    exact hw
-  · unfold yv
-    rw [lowWord_cast_eq, hyw, lowWord_cast_eq]
-
-theorem yv_hash_lowPk (hy : graph.ReconEqs d (fins A) given y)
-    {h p : Name} (hp : hashParent h = some p) (he : Evaluated A h) :
-    ∃ w, d ⟨p.len, yv y p⟩ = some w ∧ lowPk w = lowPk (yv y h) := by
-  obtain ⟨hlt, hl, hk⟩ := graph_kind_hash hp
-  obtain ⟨w, hw, hyw⟩ := (recon_evaluated hy he).1 _ _ _ hk
-  refine ⟨w, ?_, ?_⟩
-  · rw [sigma_cast (graph_len_fin p) (y p.fin)] at hw
-    exact hw
-  · unfold yv
-    rw [lowPk_cast_eq, hyw, lowPk_cast_eq]
+  obtain ⟨w, hw, hk⟩ := yv_hash_setWidth hy hp he
+  exact ⟨w, hw, (hk 129).symm⟩
 
 theorem yv_det (hy : graph.ReconEqs d (fins A) given y)
     {n : Name} (he : Evaluated A n) (hc : n.cost = 0)
-    (hs : ∀ k, n ≠ Name.src k) : yv y n = detVal n y := by
+    (hs : ∀ b k, n ≠ Name.src b k) : yv y n = detVal n y := by
   obtain ⟨hlt, hf, hk⟩ := graph_kind_det hc hs
   have hv := (recon_evaluated hy he).2.1 _ _ _ _ hk
   unfold yv
   rw [hv]
   exact cast_cast_eq _ _ _
 
-theorem yv_cv (hy : graph.ReconEqs d (fins A) given y)
-    {k : Fin 66} {t : Fin 18} (he : Evaluated A (Name.cv k t)) :
-    yv y (Name.cv k t) = lowWord (yv y (Name.ch k t)) := by
-  rw [yv_det hy he rfl (by simp)]
-  show lowWord (y _) = _
-  unfold yv
-  rw [lowWord_cast_eq]
+theorem yv_compress (hy : graph.ReconEqs d (fins A) given y)
+    {h p : Name} (hp : hashParent h = some p) (he : Evaluated A p) :
+    yv y p = detVal p y :=
+  yv_det hy he (cost_hashParent hp) (hashParent_ne_src hp)
 
-theorem yv_sv (hy : graph.ReconEqs d (fins A) given y)
-    {j : Fin 18} (he : Evaluated A (Name.sv j)) :
-    yv y (Name.sv j) = lowWord (yv y (Name.sh j)) := by
-  rw [yv_det hy he rfl (by simp)]
-  show lowWord (y _) = _
-  unfold yv
-  rw [lowWord_cast_eq]
-
-theorem yv_mv (hy : graph.ReconEqs d (fins A) given y)
-    {u : Fin 10} (he : Evaluated A (Name.mv u)) :
-    yv y (Name.mv u) = lowWord (yv y (Name.mh u)) := by
-  rw [yv_det hy he rfl (by simp)]
-  show lowWord (y _) = _
-  unfold yv
-  rw [lowWord_cast_eq]
-
-theorem yv_ci (hy : graph.ReconEqs d (fins A) given y)
-    {k : Fin 66} {t : Fin 18} (he : Evaluated A (Name.ci k t)) :
-    yv y (Name.ci k t) =
-      tw (Name.ch k t) ++ lowWord (yv y (prev k t)) := by
-  rw [yv_det hy he rfl (by simp)]
-  show tw (Name.ch k t) ++ lowWord (y (prev k t).fin) = _
-  unfold yv
-  rw [lowWord_cast_eq]
-
-theorem yv_sc (hy : graph.ReconEqs d (fins A) given y)
-    {j : Fin 18} (he : Evaluated A (Name.sc j)) :
-    yv y (Name.sc j) = tw (Name.sh j) ++ cat3
-      (yv y (Name.cv (Name.lowerChain j 0) 17))
-      (yv y (Name.cv (Name.lowerChain j 1) 17))
-      (yv y (Name.cv (Name.lowerChain j 2) 17)) := by
-  rw [yv_det hy he rfl (by simp)]
-  show tw (Name.sh j) ++ cat3 (lowWord (y _)) (lowWord (y _))
-      (lowWord (y _)) = _
-  refine congrArg (fun z => tw (Name.sh j) ++ z) ?_
-  congr 1 <;> exact lowWord_eq_cast (graph_len_fin _) _
-
-theorem yv_mc (hy : graph.ReconEqs d (fins A) given y)
-    {u : Fin 10} (he : Evaluated A (Name.mc u)) :
-    yv y (Name.mc u) = tw (Name.mh u) ++ cat3
-      (lowWord (yv y (midChild u 0))) (lowWord (yv y (midChild u 1)))
-      (lowWord (yv y (midChild u 2))) := by
-  rw [yv_det hy he rfl (by simp)]
-  show tw (Name.mh u) ++ cat3 (lowWord (y _)) (lowWord (y _))
-      (lowWord (y _)) = _
-  refine congrArg (fun z => tw (Name.mh u) ++ z) ?_
-  congr 1 <;> (unfold yv; rw [lowWord_cast_eq])
-
-theorem yv_rc (hy : graph.ReconEqs d (fins A) given y)
-    (he : Evaluated A Name.rc) :
-    yv y Name.rc = tw Name.rh ++ cat10 fun u => yv y (Name.mv u) := by
-  rw [yv_det hy he rfl (by simp)]
-  show tw Name.rh ++ cat10 (fun u => lowWord (y (Name.mv u).fin)) = _
-  exact congrArg (fun z => tw Name.rh ++ cat10 z)
-    (funext fun u => lowWord_eq_cast (graph_len_fin (Name.mv u)) _)
+theorem lowWord_yv_value (hy : graph.ReconEqs d (fins A) given y)
+    {v h : Name} (hh : hashOf v = some h) (he : Evaluated A v) :
+    lowWord (yv y v) = lowWord (y h.fin) := by
+  rw [yv_det hy he (cost_of_hashOf hh) (not_src_of_hashOf hh)]
+  exact lowWord_detVal_value hh y
 
 end Recon
-
-/-! ## Value propagation through the two ternary layers -/
-
-theorem cost_hashParent {h p : Name} (hp : hashParent h = some p) :
-    p.cost = 0 := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
-    subst hp <;> rfl
-
-theorem hashParent_ne_src {h p : Name} (hp : hashParent h = some p)
-    (k : Fin 66) : p ≠ Name.src k := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
-    subst hp <;> intro e <;> nomatch e
-
-theorem bindingValue_ch (k : Fin 66) (t : Fin 18) (w : BitVec 256) :
-    bindingValue (Name.ch k t) w = lowWord w := by
-  simp [bindingValue, bindingWidth, lowWord]
-
-theorem bindingValue_sh (j : Fin 18) (w : BitVec 256) :
-    bindingValue (Name.sh j) w = lowWord w := by
-  simp [bindingValue, bindingWidth, lowWord]
-
-theorem bindingValue_mh (u : Fin 10) (w : BitVec 256) :
-    bindingValue (Name.mh u) w = lowWord w := by
-  simp [bindingValue, bindingWidth, lowWord]
-
-theorem transport_lowWord_eq {ξ : Rec} {y : graph.Assignment} {a b : Name}
-    (hab : a = b)
-    (h : lowWord (yv y a) = lowWord (val ξ a)) :
-    lowWord (yv y b) = lowWord (val ξ b) := by
-  subst b
-  exact h
 
 theorem tagNat_yv {A : Finset Name} {d : Cache}
     {given y : graph.Assignment} (hy : graph.ReconEqs d (fins A) given y)
     {h p : Name} (hp : hashParent h = some p) (he : Evaluated A p) :
     tagNat ⟨p.len, yv y p⟩ = h.idx := by
-  rw [yv_det hy he (cost_hashParent hp) (hashParent_ne_src hp)]
+  rw [yv_compress hy hp he]
   exact tagNat_detVal_of_hashParent hp y
 
-theorem val_sc' (ξ : Rec) (j : Fin 18) :
-    val ξ (Name.sc j) = tw (Name.sh j) ++ cat3
-      (val ξ (Name.cv (Name.lowerChain j 0) 17))
-      (val ξ (Name.cv (Name.lowerChain j 1) 17))
-      (val ξ (Name.cv (Name.lowerChain j 2) 17)) := by
-  rw [val_sc, val_cv, val_cv, val_cv]
+/-! ## The descent from the root -/
 
-theorem val_rc' (ξ : Rec) :
-    val ξ Name.rc = tw Name.rh ++ cat10 (fun u => val ξ (Name.mv u)) := by
-  rw [val_rc]
-  exact congrArg (fun z => tw Name.rh ++ cat10 z)
-    (funext fun u => (val_mv ξ u).symm)
+/-- Honest agreement at a reconstructed node: the binding bits at a hash node,
+the full value elsewhere. -/
+def Good (y : graph.Assignment) (ξ : Rec) (n : Name) : Prop :=
+  if (hashParent n).isSome then
+    (yv y n).setWidth (bindingWidth n) = bindingValue n (ξ.2 n.fin)
+  else yv y n = val ξ n
 
-theorem prev_succ (k : Fin 66) (t : Fin 18) (ht : t.val < 17) :
-    prev k ⟨t.val + 1, by omega⟩ = Name.cv k t := by
-  simp [prev]
+theorem good_of_not_hash {y : graph.Assignment} {ξ : Rec} {n : Name}
+    (hn : hashParent n = none) : Good y ξ n ↔ yv y n = val ξ n := by
+  simp [Good, hn]
 
-theorem lowerChain_witness {k : Fin 66} {j : Fin 18}
-    (h : lowerOfChain k = some j) :
-    ∃ a : Fin 3, Name.lowerChain j a = k := by
-  revert k j
-  decide +kernel
+theorem good_of_hash {y : graph.Assignment} {ξ : Rec} {h p : Name}
+    (hp : hashParent h = some p) :
+    Good y ξ h ↔ (yv y h).setWidth (bindingWidth h) = bindingValue h (ξ.2 h.fin) := by
+  simp [Good, hp]
 
-theorem direct_midChild_witness {k : Fin 66}
-    (h : lowerOfChain k = none) :
-    ∃ a : Fin 3, midChild (upperOfChain k) a = Name.cv k 17 := by
-  revert k
-  decide +kernel
+theorem hashParent_eq_none_of_len {n : Name} (hn : n.len = 129) :
+    hashParent n = none := by
+  rcases hp : hashParent n with _ | p
+  · rfl
+  · rw [len_of_hashParent hp] at hn
+    omega
 
-theorem lower_midChild_witness (j : Fin 18) :
-    ∃ a : Fin 3, midChild (upperOfLower j) a = Name.sv j := by
-  revert j
-  decide +kernel
+theorem eq_of_lowWord_yv_val {y : graph.Assignment} {ξ : Rec} {n : Name}
+    (hn : n.len = 129) (h : lowWord (y n.fin) = lowWord (graph.evalRec ξ n.fin)) :
+    yv y n = val ξ n := by
+  apply eq_of_lowWord_eq hn
+  unfold yv val
+  rw [lowWord_cast_eq, lowWord_cast_eq]
+  exact h
 
-/-! ## The authentication walk -/
-
-/-- A differing deterministic value on the live reconstruction path forces a
-spurious graph binding.  The proof traverses both ternary levels explicitly. -/
-theorem up {A : Finset Name} {ξ : Rec} {d : Cache}
+/-- One step of the descent: honest agreement passes from an evaluated node
+to its inputs, unless a spurious binding occurs. -/
+theorem good_step {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
     {given y : graph.Assignment} (hy : graph.ReconEqs d (fins A) given y)
-    (hacc : lowPk (yv y Name.rh) = pkOf ξ) {v : Name}
-    (hv : ClearEvaluated A v) (hcost : v.cost = 0)
-    (hne : yv y v ≠ val ξ v) : Spr d ξ := by
-  suffices ∀ n, ∀ v, height v = n → ClearEvaluated A v → v.cost = 0 →
-      yv y v ≠ val ξ v → Spr d ξ from this _ v rfl hv hcost hne
-  intro n
-  induction n using Nat.strong_induction_on with
-  | _ n ih =>
-    intro v hn hv hcost hne
-    have ih' : ∀ v', height v' < height v → ClearEvaluated A v' →
-        v'.cost = 0 → yv y v' ≠ val ξ v' → Spr d ξ :=
-      fun v' hlt => ih (height v') (by omega) v' rfl
-    have hashStep {h p : Name} (hp : hashParent h = some p)
-        (hc : child p = some h) (hpv : p = v) : Spr d ξ := by
-      subst p
-      have hhC : ClearEvaluated A h := clearEvaluated_child hv hc
-      have hhE : Evaluated A h := (clearEvaluated_iff A h).1 hhC
-      have hvE : Evaluated A v := (clearEvaluated_iff A v).1 hv
-      have htag : tagNat ⟨v.len, yv y v⟩ = h.idx := tagNat_yv hy hp hvE
-      cases h with
-      | ch k t =>
-          simp only [hashParent, Option.some.injEq] at hp
-          subst v
-          have hp₀ : hashParent (Name.ch k t) = some (Name.ci k t) := rfl
-          obtain ⟨w, hd, hw⟩ := yv_hash hy hp₀ hhE
-          by_cases hsp : lowWord w = lowWord (ξ.2 (Name.ch k t).fin)
-          · exact ⟨Name.ch k t, Name.ci k t, hp₀,
-              yv y (Name.ci k t), hne, htag, w, hd,
-              (bindingValue_ch k t w).trans
-                (hsp.trans (bindingValue_ch k t _).symm)⟩
-          · have hzC : ClearEvaluated A (Name.cv k t) :=
-              clearEvaluated_child hhC rfl
-            have hzE : Evaluated A (Name.cv k t) :=
-              (clearEvaluated_iff A _).1 hzC
-            refine ih' (Name.cv k t) ?_ hzC rfl ?_
-            · have h₁ := height_child hc
-              have h₂ := height_child
-                (show child (Name.ch k t) = some (Name.cv k t) by rfl)
-              omega
-            · intro heq
-              apply hsp
-              exact hw.trans ((yv_cv hy hzE).symm.trans
-                (heq.trans (val_cv ξ k t)))
-      | sh j =>
-          simp only [hashParent, Option.some.injEq] at hp
-          subst v
-          have hp₀ : hashParent (Name.sh j) = some (Name.sc j) := rfl
-          obtain ⟨w, hd, hw⟩ := yv_hash hy hp₀ hhE
-          by_cases hsp : lowWord w = lowWord (ξ.2 (Name.sh j).fin)
-          · exact ⟨Name.sh j, Name.sc j, hp₀, yv y (Name.sc j),
-              hne, htag, w, hd, (bindingValue_sh j w).trans
-                (hsp.trans (bindingValue_sh j _).symm)⟩
-          · have hzC : ClearEvaluated A (Name.sv j) :=
-              clearEvaluated_child hhC rfl
-            have hzE : Evaluated A (Name.sv j) :=
-              (clearEvaluated_iff A _).1 hzC
-            refine ih' (Name.sv j) ?_ hzC rfl ?_
-            · have h₁ := height_child hc
-              have h₂ := height_child
-                (show child (Name.sh j) = some (Name.sv j) by rfl)
-              omega
-            · intro heq
-              apply hsp
-              exact hw.trans ((yv_sv hy hzE).symm.trans
-                (heq.trans (val_sv ξ j)))
-      | mh u =>
-          simp only [hashParent, Option.some.injEq] at hp
-          subst v
-          have hp₀ : hashParent (Name.mh u) = some (Name.mc u) := rfl
-          obtain ⟨w, hd, hw⟩ := yv_hash hy hp₀ hhE
-          by_cases hsp : lowWord w = lowWord (ξ.2 (Name.mh u).fin)
-          · exact ⟨Name.mh u, Name.mc u, hp₀, yv y (Name.mc u),
-              hne, htag, w, hd, (bindingValue_mh u w).trans
-                (hsp.trans (bindingValue_mh u _).symm)⟩
-          · have hzC : ClearEvaluated A (Name.mv u) :=
-              clearEvaluated_child hhC rfl
-            have hzE : Evaluated A (Name.mv u) :=
-              (clearEvaluated_iff A _).1 hzC
-            refine ih' (Name.mv u) ?_ hzC rfl ?_
-            · have h₁ := height_child hc
-              have h₂ := height_child
-                (show child (Name.mh u) = some (Name.mv u) by rfl)
-              omega
-            · intro heq
-              apply hsp
-              exact hw.trans ((yv_mv hy hzE).symm.trans
-                (heq.trans (val_mv ξ u)))
-      | rh =>
-          simp only [hashParent, Option.some.injEq] at hp
-          subst v
-          have hp₀ : hashParent Name.rh = some Name.rc := rfl
-          obtain ⟨w, hd, hw⟩ := yv_hash_lowPk hy hp₀ hhE
-          refine ⟨Name.rh, Name.rc, hp₀, yv y Name.rc, hne, htag,
-            w, hd, ?_⟩
-          change lowPk w = pkOf ξ
-          exact hw.trans hacc
-      | src k => simp [hashParent] at hp
-      | ci k t => simp [hashParent] at hp
-      | cv k t => simp [hashParent] at hp
-      | sc j => simp [hashParent] at hp
-      | sv j => simp [hashParent] at hp
-      | mc u => simp [hashParent] at hp
-      | mv u => simp [hashParent] at hp
-      | rc => simp [hashParent] at hp
-    cases v with
-    | src k =>
-        have hc : child (Name.src k) = some (Name.ci k 0) := rfl
-        have hcC := clearEvaluated_child hv hc
-        have hcE := (clearEvaluated_iff A _).1 hcC
-        refine ih' (Name.ci k 0) (by have hh := height_child hc; omega)
-          hcC rfl ?_
-        intro heq
-        rw [yv_ci hy hcE, val_ci] at heq
-        have hp := (bv_append_inj heq).2
-        apply hne
-        exact eq_of_lowWord_eq (show (Name.src k).len = 129 by rfl) hp
-    | ci k t => exact hashStep rfl rfl rfl
-    | ch k t => exact absurd hcost (by simp [Name.cost])
-    | cv k t =>
-        by_cases ht : t.val = 17
-        · have ht' : t = 17 := Fin.ext ht
-          subst t
-          cases hl : lowerOfChain k with
-          | some j =>
-              have hc : child (Name.cv k 17) = some (Name.sc j) := by
-                simp [Name.child, hl]
-              have hcC := clearEvaluated_child hv hc
-              have hcE := (clearEvaluated_iff A _).1 hcC
-              obtain ⟨a, ha⟩ := lowerChain_witness hl
-              refine ih' (Name.sc j) (by have hh := height_child hc; omega)
-                hcC rfl ?_
-              intro heq
-              rw [yv_sc hy hcE, val_sc'] at heq
-              obtain ⟨h0, h1, h2⟩ := cat3_inj (bv_append_inj heq).2
-              fin_cases a
-              · subst k
-                apply hne
-                have hz : ((fun i : Fin 3 => i) ⟨0, by omega⟩) =
-                    (0 : Fin 3) := by
-                  apply Fin.ext
-                  rfl
-                rw [hz]
-                exact h0
-              · subst k
-                apply hne
-                have ho : ((fun i : Fin 3 => i) ⟨1, by omega⟩) =
-                    (1 : Fin 3) := by
-                  apply Fin.ext
-                  rfl
-                rw [ho]
-                exact h1
-              · subst k
-                apply hne
-                have ht : ((fun i : Fin 3 => i) ⟨2, by omega⟩) =
-                    (2 : Fin 3) := by
-                  apply Fin.ext
-                  rfl
-                rw [ht]
-                exact h2
-          | none =>
-              have hc : child (Name.cv k 17) = some (Name.mc (upperOfChain k)) := by
-                simp [Name.child, hl]
-              have hcC := clearEvaluated_child hv hc
-              have hcE := (clearEvaluated_iff A _).1 hcC
-              obtain ⟨a, ha⟩ := direct_midChild_witness hl
-              refine ih' (Name.mc (upperOfChain k))
-                (by have hh := height_child hc; omega) hcC rfl ?_
-              intro heq
-              rw [yv_mc hy hcE, val_mc] at heq
-              obtain ⟨h0, h1, h2⟩ := cat3_inj (bv_append_inj heq).2
-              fin_cases a
-              · apply hne
-                apply eq_of_lowWord_eq
-                  (show (Name.cv k 17).len = 129 by rfl)
-                have ha' : midChild (upperOfChain k) 0 = Name.cv k 17 := by
-                  simpa using ha
-                exact transport_lowWord_eq ha' h0
-              · apply hne
-                apply eq_of_lowWord_eq
-                  (show (Name.cv k 17).len = 129 by rfl)
-                have ha' : midChild (upperOfChain k) 1 = Name.cv k 17 := by
-                  simpa using ha
-                exact transport_lowWord_eq ha' h1
-              · apply hne
-                apply eq_of_lowWord_eq
-                  (show (Name.cv k 17).len = 129 by rfl)
-                have ha' : midChild (upperOfChain k) 2 = Name.cv k 17 := by
-                  simpa using ha
-                exact transport_lowWord_eq ha' h2
-        · have hc : child (Name.cv k t) =
-              some (Name.ci k ⟨t.val + 1, by omega⟩) := by
-            simp [Name.child, ht]
-          have hcC := clearEvaluated_child hv hc
-          have hcE := (clearEvaluated_iff A _).1 hcC
-          refine ih' _ (by have hh := height_child hc; omega) hcC rfl ?_
-          intro heq
-          rw [yv_ci hy hcE, val_ci] at heq
-          have hp := (bv_append_inj heq).2
-          apply hne
-          rw [prev_succ k t (by omega)] at hp
-          exact eq_of_lowWord_eq (show (Name.cv k t).len = 129 by rfl) hp
-    | sc j => exact hashStep rfl rfl rfl
-    | sh j => exact absurd hcost (by simp [Name.cost])
-    | sv j =>
-        have hc : child (Name.sv j) = some (Name.mc (upperOfLower j)) := rfl
-        have hcC := clearEvaluated_child hv hc
-        have hcE := (clearEvaluated_iff A _).1 hcC
-        obtain ⟨a, ha⟩ := lower_midChild_witness j
-        refine ih' _ (by have hh := height_child hc; omega) hcC rfl ?_
-        intro heq
-        rw [yv_mc hy hcE, val_mc] at heq
-        obtain ⟨h0, h1, h2⟩ := cat3_inj (bv_append_inj heq).2
-        fin_cases a
-        · apply hne
-          apply eq_of_lowWord_eq (show (Name.sv j).len = 129 by rfl)
-          have ha' : midChild (upperOfLower j) 0 = Name.sv j := by
-            simpa using ha
-          exact transport_lowWord_eq ha' h0
-        · apply hne
-          apply eq_of_lowWord_eq (show (Name.sv j).len = 129 by rfl)
-          have ha' : midChild (upperOfLower j) 1 = Name.sv j := by
-            simpa using ha
-          exact transport_lowWord_eq ha' h1
-        · apply hne
-          apply eq_of_lowWord_eq (show (Name.sv j).len = 129 by rfl)
-          have ha' : midChild (upperOfLower j) 2 = Name.sv j := by
-            simpa using ha
-          exact transport_lowWord_eq ha' h2
-    | mc u => exact hashStep rfl rfl rfl
-    | mh u => exact absurd hcost (by simp [Name.cost])
-    | mv u =>
-        have hc : child (Name.mv u) = some Name.rc := rfl
-        have hcC := clearEvaluated_child hv hc
-        have hcE := (clearEvaluated_iff A _).1 hcC
-        refine ih' Name.rc (by have hh := height_child hc; omega)
-          hcC rfl ?_
-        intro heq
-        rw [yv_rc hy hcE, val_rc'] at heq
-        exact hne (congrFun (cat10_inj (bv_append_inj heq).2) u)
-    | rc => exact hashStep rfl rfl rfl
-    | rh => exact absurd hcost (by simp [Name.cost])
+    {m n : Name} (hmE : Evaluated A m) (hg : Good y ξ m) (hn : n ∈ parents m) :
+    Spr d ξ ∨ Good y ξ n := by
+  rcases mem_parents_cases hn with ⟨p, hp, rfl⟩ | hv | ⟨h, hp, hkind⟩
+  · rw [good_of_hash hp] at hg
+    have hpE : Evaluated A n :=
+      evaluated_of_mem_parents hmE hn
+        (not_mem_of_cut_len_ne hA (len_hashParent_ne_129 hp))
+    obtain ⟨w, hd, hw⟩ := yv_hash_setWidth hy hp hmE
+    by_cases e : yv y n = val ξ n
+    · exact Or.inr ((good_of_not_hash (hashParent_hashParent hp)).2 e)
+    · exact Or.inl ⟨m, n, hp, yv y n, e, tagNat_yv hy hp hpE, w, hd,
+        (hw _).symm.trans hg⟩
+  · rw [good_of_not_hash (hashParent_value hv)] at hg
+    obtain ⟨p, hp⟩ := hashParent_of_hashOf hv
+    right
+    rw [good_of_hash hp]
+    have hbw : bindingWidth n = 129 := if_neg (ne_rh_of_hashOf hv)
+    show (yv y n).setWidth (bindingWidth n) = (ξ.2 n.fin).setWidth (bindingWidth n)
+    rw [hbw]
+    change lowWord (yv y n) = lowWord (ξ.2 n.fin)
+    unfold yv
+    rw [lowWord_cast_eq, ← lowWord_yv_value hy hv hmE, hg,
+      lowWord_val_value hv]
+  · rw [good_of_not_hash (hashParent_hashParent hp)] at hg
+    have hnlen := len_of_mem_parents_compress hp hn
+    right
+    rw [good_of_not_hash (hashParent_eq_none_of_len hnlen)]
+    rw [yv_compress hy hp hmE, val_hashParent hp] at hg
+    exact eq_of_lowWord_yv_val hnlen (compress_inj hp hg hn)
+
+/-- Every visited node of an accepting reconstruction is honest, unless a
+spurious binding occurs. -/
+theorem descent {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
+    {given y : graph.Assignment} (hy : graph.ReconEqs d (fins A) given y)
+    (hacc : lowPk (yv y Name.rh) = pkOf ξ) {n : Name}
+    (hv : graph.Visited (fins A) n.fin) : Spr d ξ ∨ Good y ξ n := by
+  suffices key : ∀ x, graph.Visited (fins A) x →
+      Spr d ξ ∨ Good y ξ (Name.ofFin x) by
+    simpa only [Name.ofFin_fin] using key n.fin hv
+  intro x hx
+  induction hx with
+  | root =>
+      right
+      change Good y ξ (Name.ofFin Name.rh.fin)
+      rw [Name.ofFin_fin, good_of_hash (p := Name.rc) rfl]
+      have hbw : bindingWidth Name.rh = 128 := if_pos rfl
+      show (yv y Name.rh).setWidth (bindingWidth Name.rh) =
+        (ξ.2 Name.rh.fin).setWidth (bindingWidth Name.rh)
+      rw [hbw]
+      exact hacc
+  | parent hw hwA hmem ih =>
+      rename_i w v
+      rcases ih with hs | hg
+      · exact Or.inl hs
+      obtain ⟨m, rfl⟩ : ∃ m : Name, m.fin = w := ⟨_, Name.fin_ofFin w⟩
+      obtain ⟨n, rfl⟩ : ∃ n : Name, n.fin = v := ⟨_, Name.fin_ofFin v⟩
+      rw [Name.ofFin_fin] at hg ⊢
+      exact good_step hA hy ⟨hw, fun h => hwA ((mem_fins_embedding A m).2 h)⟩
+        hg ((mem_graph_parents_iff n m).1 hmem)
+
+/-- A disclosed value of an accepting reconstruction is honest, unless a
+spurious binding occurs. -/
+theorem descent_mem {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
+    {given y : graph.Assignment} (hy : graph.ReconEqs d (fins A) given y)
+    (hacc : lowPk (yv y Name.rh) = pkOf ξ) {a : Name} (ha : a ∈ A) :
+    Spr d ξ ∨ yv y a = val ξ a := by
+  rcases descent hA hy hacc (hA.visited_of_mem ha) with hs | hg
+  · exact Or.inl hs
+  · exact Or.inr ((good_of_not_hash (hashParent_eq_none_of_len (hA.values a ha))).1 hg)
+
+/-- The honest input of an evaluated hash node is queried, unless a spurious
+binding occurs. -/
+theorem descent_query {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
+    {given y : graph.Assignment} (hy : graph.ReconEqs d (fins A) given y)
+    (hacc : lowPk (yv y Name.rh) = pkOf ξ) {h p : Name}
+    (hp : hashParent h = some p) (he : Evaluated A h) :
+    Spr d ξ ∨ (d (pointOf ξ h p)).isSome := by
+  rcases descent hA hy hacc (visited_of_mem_parents he (mem_parents_hashParent hp))
+    with hs | hg
+  · exact Or.inl hs
+  · right
+    rw [good_of_not_hash (hashParent_hashParent hp)] at hg
+    obtain ⟨w, hd, -⟩ := yv_hash hy hp he
+    unfold pointOf
+    rw [← hg, hd]
+    rfl
 
 /-! ## Terminal no-signature authentication event -/
-
-theorem not_mem_of_cut_len_ne {A : Finset Name} (hA : IsCut A)
-    {n : Name} (hn : n.len ≠ 129) : n ∉ A := by
-  intro hm
-  exact hn (hA.values n hm)
 
 /-- If no disclosure set has been fixed, every accepting reconstruction either
 uses a spurious hash image or queries the honest root-hash input. -/
@@ -677,26 +341,13 @@ theorem events_none {A : Finset Name} (hA : IsCut A) {ξ : Rec} {d : Cache}
     {given y : graph.Assignment} (hy : graph.ReconEqs d (fins A) given y)
     (hacc : lowPk (yv y Name.rh) = pkOf ξ) :
     Spr d ξ ∨ Cache.Hits d (kc ξ) := by
-  have hrA : Name.rh ∉ A :=
-    not_mem_of_cut_len_ne hA (by simp [Name.len])
-  have hrcA : Name.rc ∉ A :=
-    not_mem_of_cut_len_ne hA (by simp [Name.len])
-  have hrC : ClearEvaluated A Name.rh :=
-    ⟨hrA, fun m hm => absurd hm (not_above_rh m)⟩
-  have hrE : Evaluated A Name.rh := (clearEvaluated_iff A Name.rh).1 hrC
-  obtain ⟨w, hd, -⟩ := yv_hash hy (h := Name.rh) (p := Name.rc) rfl hrE
-  by_cases hne : yv y Name.rc = val ξ Name.rc
+  rcases descent_query hA hy hacc (h := Name.rh) (p := Name.rc) rfl
+      (evaluated_rh_of_isCut hA) with hs | hq
+  · exact Or.inl hs
   · right
-    refine ⟨⟨Name.rc.len, yv y Name.rc⟩, ?_, by rw [hd]; rfl⟩
+    refine ⟨pointOf ξ Name.rh Name.rc, ?_, hq⟩
     rw [kc_isSome_iff]
-    exact ⟨Name.rh, Name.rc, rfl, by rw [hne]; rfl⟩
-  · left
-    apply up hy hacc (v := Name.rc) ?_ rfl hne
-    refine ⟨hrcA, fun m hm => ?_⟩
-    rw [above_of_child (show child Name.rc = some Name.rh by rfl)] at hm
-    rcases hm with rfl | hm
-    · exact hrA
-    · exact absurd hm (not_above_rh m)
+    exact ⟨Name.rh, Name.rc, rfl, rfl⟩
 
 /-- The concrete verifier's public-key check is the low 128-bit endpoint of
 the reconstructed root value. -/
@@ -744,9 +395,9 @@ theorem accepted_none_expected (ξ : Rec) (m : Message)
   · simp
   · exact accepted_none_indicator ξ m σ c d hd
 
-#print axioms visited_iff_clear
-#print axioms yv_hash
-#print axioms up
+#print axioms visited_cases
+#print axioms descent
+#print axioms events_none
 #print axioms accepted_none_event
 #print axioms accepted_none_expected
 

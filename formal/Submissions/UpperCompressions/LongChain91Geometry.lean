@@ -1,63 +1,60 @@
 import Submissions.UpperCompressions.ProofBundle00
 
 /-!
-# Cost-90 row-4719 geometry
+# Cost-89 fused shared-DAG geometry
 
-This module isolates the new combinatorial geometry from the probability and
-game proofs.  The graph has 66 length-18 chains, eighteen lower ternary nodes,
-ten upper ternary nodes, and a ten-input root.  A frontier is described by the
-expanded upper and lower nodes and by one position on each active chain.
+Seven identical blocks feed a seven-input root.  A block has eight length-18
+chains and eleven ternary hash nodes; hubs are shared by several hash nodes, and
+every hash node has an exclusive kid in its last input slot.  A cut chooses, per
+block, the expanded hash nodes `E` and one disclosure position on each needed
+chain.
 
-The schedule deliberately does not depend on a research-script frontier
-ranking.  Once the finite cut family has the certified cardinality, its
-`Finset.equivFin` supplies an arbitrary stable class numbering.
+The family count never enumerates block tuples.  The generating number
+`blockGen = ∑ B ^ code` of one block is raised to the seventh power, which is the
+seven-fold convolution by `Finset.prod_univ_sum`; base-`B` digits of the power
+then count the cut tuples of each total cost and word count.
 -/
 
-open scoped BigOperators Classical
+open scoped BigOperators
 
 noncomputable section
 
-namespace OptimalOTS.WeightedConstruction.LongChain91
+set_option maxRecDepth 100000
 
-open OptimalOTS.ShallowResearch
+namespace OptimalOTS.WeightedConstruction.LongChain91
 
 /-! ## Graph names and static costs -/
 
-/-- Names for the two-level row-4719 tree. -/
+/-- Graph names: chain sources and stages, ternary compress/hash/value triples,
+and the root input and hash. -/
 inductive Name where
-  | src (k : Fin 66)
-  | ci (k : Fin 66) (t : Fin 18)
-  | ch (k : Fin 66) (t : Fin 18)
-  | cv (k : Fin 66) (t : Fin 18)
-  | sc (j : Fin 18)
-  | sh (j : Fin 18)
-  | sv (j : Fin 18)
-  | mc (j : Fin 10)
-  | mh (j : Fin 10)
-  | mv (j : Fin 10)
+  | src (b : Fin 7) (k : Fin 8)
+  | ci (b : Fin 7) (k : Fin 8) (t : Fin 18)
+  | ch (b : Fin 7) (k : Fin 8) (t : Fin 18)
+  | cv (b : Fin 7) (k : Fin 8) (t : Fin 18)
+  | hc (b : Fin 7) (j : Fin 11)
+  | hh (b : Fin 7) (j : Fin 11)
+  | hv (b : Fin 7) (j : Fin 11)
   | rc
   | rh
   deriving DecidableEq, Fintype
 
 /-- Number of graph nodes. -/
-def nodeCount : ℕ := 3716
+def nodeCount : ℕ := 3313
 
 namespace Name
 
 /-- A compact topological numbering. -/
 def idx : Name → ℕ
-  | src k => k
-  | ci k t => 66 + 198 * t + k
-  | ch k t => 132 + 198 * t + k
-  | cv k t => 198 + 198 * t + k
-  | sc j => 3630 + j
-  | sh j => 3648 + j
-  | sv j => 3666 + j
-  | mc j => 3684 + j
-  | mh j => 3694 + j
-  | mv j => 3704 + j
-  | rc => 3714
-  | rh => 3715
+  | src b k => 8 * b + k
+  | ci b k t => 56 + 168 * t + 8 * b + k
+  | ch b k t => 112 + 168 * t + 8 * b + k
+  | cv b k t => 168 + 168 * t + 8 * b + k
+  | hc b j => 3080 + 33 * b + 3 * j
+  | hh b j => 3081 + 33 * b + 3 * j
+  | hv b j => 3082 + 33 * b + 3 * j
+  | rc => 3311
+  | rh => 3312
 
 theorem idx_lt (n : Name) : n.idx < nodeCount := by
   cases n <;> simp only [idx, nodeCount] <;> omega
@@ -75,97 +72,59 @@ theorem fin_injective : Function.Injective fin := by
 
 /-- Bit length of the value stored at a node. -/
 def len : Name → ℕ
-  | src _ => 129
-  | ci _ _ => 145
-  | ch _ _ => 256
-  | cv _ _ => 129
-  | sc _ => 403
-  | sh _ => 256
-  | sv _ => 129
-  | mc _ => 403
-  | mh _ => 256
-  | mv _ => 129
-  | rc => 1306
+  | src _ _ => 129
+  | ci _ _ _ => 145
+  | ch _ _ _ => 256
+  | cv _ _ _ => 129
+  | hc _ _ => 403
+  | hh _ _ => 256
+  | hv _ _ => 129
+  | rc => 919
   | rh => 256
 
 /-- SHA-256 compression cost at each hash-output node. -/
 def cost : Name → ℕ
-  | ch _ _ => 1
-  | sh _ => 1
-  | mh _ => 1
-  | rh => 3
+  | ch _ _ _ => 1
+  | hh _ _ => 1
+  | rh => 2
   | _ => 0
 
 end Name
 
-/-- The lower ternary node containing one of the first 54 chains. -/
-def lowerOfChain (k : Fin 66) : Option (Fin 18) :=
-  if h : k.val < 54 then some ⟨k.val / 3, by omega⟩ else none
-
-/-- Parent upper node of a lower ternary node. -/
-def upperOfLower (j : Fin 18) : Fin 10 :=
-  if h : j.val < 16 then ⟨j.val / 2, by omega⟩ else ⟨j.val - 8, by omega⟩
-
-/-- Parent upper node of a chain.  Chains 54--61 are the direct leaf of an A
-node; 62--65 are the two direct leaves of the B nodes. -/
-def upperOfChain (k : Fin 66) : Fin 10 :=
-  if h₀ : k.val < 54 then upperOfLower ⟨k.val / 3, by omega⟩
-  else if h₁ : k.val < 62 then ⟨k.val - 54, by omega⟩
-  else if h₂ : k.val < 64 then 8
-  else 9
-
-/-- Every node except the root feeds exactly one node. -/
-def Name.child : Name → Option Name
-  | .src k => some (.ci k 0)
-  | .ci k t => some (.ch k t)
-  | .ch k t => some (.cv k t)
-  | .cv k t =>
-      if ht : t.val = 17 then
-        match lowerOfChain k with
-        | some j => some (.sc j)
-        | none => some (.mc (upperOfChain k))
-      else some (.ci k ⟨t.val + 1, by omega⟩)
-  | .sc j => some (.sh j)
-  | .sh j => some (.sv j)
-  | .sv j => some (.mc (upperOfLower j))
-  | .mc j => some (.mh j)
-  | .mh j => some (.mv j)
-  | .mv _ => some .rc
-  | .rc => some .rh
-  | .rh => none
-
-theorem Name.idx_lt_of_child {m n : Name} (h : m.child = some n) : m.idx < n.idx := by
-  cases m <;> simp only [Name.child, Option.some.injEq, reduceCtorEq] at h <;>
-    (try split_ifs at h) <;>
-    (try split at h) <;>
-    (try simp only [Option.some.injEq] at h) <;>
-    subst h <;> simp only [Name.idx, lowerOfChain, upperOfLower, upperOfChain] <;>
-    (try split_ifs) <;> omega
-
 /-- The value node feeding chain stage `t`. -/
-def prev (k : Fin 66) (t : Fin 18) : Name :=
-  if h : t.val = 0 then .src k else .cv k ⟨t.val - 1, by omega⟩
+def prev (b : Fin 7) (k : Fin 8) (t : Fin 18) : Name :=
+  if h : t.val = 0 then .src b k else .cv b k ⟨t.val - 1, by omega⟩
 
 /-- Position zero discloses a source; positive position `p` discloses the
 output of chain hash `p-1`. -/
-def chainNode (k : Fin 66) (p : Fin 19) : Name :=
-  if h : p.val = 0 then .src k else .cv k ⟨p.val - 1, by omega⟩
+def chainNode (b : Fin 7) (k : Fin 8) (p : Fin 19) : Name :=
+  if h : p.val = 0 then .src b k else .cv b k ⟨p.val - 1, by omega⟩
 
-@[simp] theorem chainNode_len (k : Fin 66) (p : Fin 19) : (chainNode k p).len = 129 := by
+theorem prev_eq_chainNode (b : Fin 7) (k : Fin 8) (t : Fin 18) :
+    prev b k t = chainNode b k t.castSucc := by
+  unfold prev chainNode
+  split_ifs <;> simp_all
+
+@[simp] theorem chainNode_len (b : Fin 7) (k : Fin 8) (p : Fin 19) :
+    (chainNode b k p).len = 129 := by
   unfold chainNode
   split_ifs <;> rfl
 
-/-- All internal hash inputs are length-separated from the 342-bit
-message/nonce index input. -/
-theorem hash_input_length_ne_index (n : Name)
-    (h : n.len = 145 ∨ n.len = 403 ∨ n.len = 1306) : n.len ≠ 342 := by
-  omega
+theorem chainNode_pair_injective {b b' : Fin 7} {k k' : Fin 8} {p p' : Fin 19}
+    (h : chainNode b k p = chainNode b' k' p') : b = b' ∧ k = k' ∧ p = p' := by
+  unfold chainNode at h
+  split_ifs at h with hp hp'
+  · obtain ⟨hb, hk⟩ := Name.src.inj h
+    exact ⟨hb, hk, Fin.ext (by omega)⟩
+  · obtain ⟨hb, hk, ht⟩ := Name.cv.inj h
+    have := congrArg Fin.val ht
+    simp only at this
+    exact ⟨hb, hk, Fin.ext (by omega)⟩
 
-/-- Static key-generation cost.  This is the arithmetic target for the later
-`Dag.Graph.keygenCost` bridge. -/
-def keygenCost : ℕ := 66 * 18 + 18 + 10 + 3
+/-- Static key-generation cost. -/
+def keygenCost : ℕ := 7 * (8 * 18 + 11) + 2
 
-theorem keygenCost_eq : keygenCost = 1219 := by norm_num [keygenCost]
+theorem keygenCost_eq : keygenCost = 1087 := by norm_num [keygenCost]
 
 theorem keygenCost_le : keygenCost ≤ 2 ^ 20 := by norm_num [keygenCost]
 
@@ -173,1155 +132,520 @@ theorem card_name : Fintype.card Name = nodeCount := by decide +kernel
 
 theorem sum_name_cost : (∑ n : Name, n.cost) = keygenCost := by decide +kernel
 
-/-! ## Structural frontiers -/
+/-! ## Block structure -/
 
-/-- A structural frontier records exactly the internal nodes which are
-expanded.  `lower` must be a subset of the lower children made available by
-the expanded upper nodes. -/
-structure Frontier where
-  upper : Finset (Fin 10)
-  lower : Finset (Fin 18)
-  deriving DecidableEq, Fintype
-
-@[ext] theorem Frontier.ext {f g : Frontier} (hu : f.upper = g.upper)
-    (hl : f.lower = g.lower) : f = g := by
-  cases f
-  cases g
-  simp only [Frontier.mk.injEq] at hu hl ⊢
-  exact ⟨hu, hl⟩
-
-/-- Lower nodes exposed by the chosen expanded upper nodes. -/
-def availableLower (U : Finset (Fin 10)) : Finset (Fin 18) :=
-  Finset.univ.filter fun j => upperOfLower j ∈ U
-
-@[simp] theorem mem_availableLower (U : Finset (Fin 10)) (j : Fin 18) :
-    j ∈ availableLower U ↔ upperOfLower j ∈ U := by
-  simp [availableLower]
-
-/-- Active chains below a structural frontier. -/
-def active (f : Frontier) : Finset (Fin 66) :=
-  Finset.univ.filter fun k =>
-    upperOfChain k ∈ f.upper ∧
-      match lowerOfChain k with
-      | none => True
-      | some j => j ∈ f.lower
-
-@[simp] theorem mem_active (f : Frontier) (k : Fin 66) :
-    k ∈ active f ↔ upperOfChain k ∈ f.upper ∧
-      match lowerOfChain k with
-      | none => True
-      | some j => j ∈ f.lower := by
-  simp [active]
-
-theorem upperOfChain_eq_upperOfLower {k : Fin 66} {j : Fin 18}
-    (h : lowerOfChain k = some j) : upperOfChain k = upperOfLower j := by
-  unfold lowerOfChain at h
-  split_ifs at h with hk
-  · simp only [Option.some.injEq] at h
-    subst j
-    simp [upperOfChain, hk]
-
-/-! The ten upper nodes split as eight `A` nodes, each with two lower
-children and one direct chain, and two `B` nodes, each with one lower child
-and two direct chains.  These explicit embeddings let us count a supported
-family without enumerating all `2^28` structural frontiers. -/
-
-def aNode (i : Fin 8) : Fin 10 := ⟨i, by omega⟩
-
-def bNode (i : Fin 2) : Fin 10 := ⟨8 + i, by omega⟩
-
-def upperFrom (A : Finset (Fin 8)) (B : Finset (Fin 2)) : Finset (Fin 10) :=
-  A.image aNode ∪ B.image bNode
-
-theorem aNode_injective : Function.Injective aNode := by
-  intro i j h
-  apply Fin.ext
-  change (aNode i).val = (aNode j).val
-  exact congrArg Fin.val h
-
-theorem bNode_injective : Function.Injective bNode := by
-  intro i j h
-  apply Fin.ext
-  have hv := congrArg Fin.val h
-  simp only [bNode] at hv
-  omega
-
-theorem upperFrom_disjoint (A : Finset (Fin 8)) (B : Finset (Fin 2)) :
-    Disjoint (A.image aNode) (B.image bNode) := by
-  apply Finset.disjoint_left.mpr
-  intro u huA huB
-  obtain ⟨i, hi, rfl⟩ := Finset.mem_image.mp huA
-  obtain ⟨j, hj, h⟩ := Finset.mem_image.mp huB
-  have hv := congrArg Fin.val h
-  simp [aNode, bNode] at hv
-  omega
-
-theorem card_upperFrom (A : Finset (Fin 8)) (B : Finset (Fin 2)) :
-    (upperFrom A B).card = A.card + B.card := by
-  rw [upperFrom, Finset.card_union_of_disjoint (upperFrom_disjoint A B),
-    Finset.card_image_of_injective _ aNode_injective,
-    Finset.card_image_of_injective _ bNode_injective]
-
-@[simp] theorem aNode_mem_upperFrom (A : Finset (Fin 8)) (B : Finset (Fin 2))
-    (i : Fin 8) : aNode i ∈ upperFrom A B ↔ i ∈ A := by
-  simp only [upperFrom, Finset.mem_union, Finset.mem_image]
-  constructor
-  · rintro (⟨j, hj, h⟩ | ⟨j, hj, h⟩)
-    · exact aNode_injective h ▸ hj
-    · have hv := congrArg Fin.val h
-      simp [aNode, bNode] at hv
-      omega
-  · intro hi
-    exact Or.inl ⟨i, hi, rfl⟩
-
-@[simp] theorem bNode_mem_upperFrom (A : Finset (Fin 8)) (B : Finset (Fin 2))
-    (i : Fin 2) : bNode i ∈ upperFrom A B ↔ i ∈ B := by
-  simp only [upperFrom, Finset.mem_union, Finset.mem_image]
-  constructor
-  · rintro (⟨j, hj, h⟩ | ⟨j, hj, h⟩)
-    · have hv := congrArg Fin.val h
-      simp [aNode, bNode] at hv
-      omega
-    · exact bNode_injective h ▸ hj
-  · intro hi
-    exact Or.inr ⟨i, hi, rfl⟩
-
-def lowerA (x : Fin 8 × Fin 2) : Fin 18 := ⟨2 * x.1 + x.2, by omega⟩
-
-def lowerB (i : Fin 2) : Fin 18 := ⟨16 + i, by omega⟩
-
-def lowerAvail (A : Finset (Fin 8)) (B : Finset (Fin 2)) : Finset (Fin 18) :=
-  (A ×ˢ (Finset.univ : Finset (Fin 2))).image lowerA ∪ B.image lowerB
-
-theorem lowerA_injective : Function.Injective lowerA := by
-  rintro ⟨i, r⟩ ⟨j, s⟩ h
-  have hv := congrArg Fin.val h
-  simp only [lowerA] at hv
-  have hi : i = j := Fin.ext (by omega)
-  have hr : r = s := Fin.ext (by omega)
-  exact Prod.ext hi hr
-
-theorem lowerB_injective : Function.Injective lowerB := by
-  intro i j h
-  apply Fin.ext
-  have hv := congrArg Fin.val h
-  simp only [lowerB] at hv
-  omega
-
-theorem lowerAvail_disjoint (A : Finset (Fin 8)) (B : Finset (Fin 2)) :
-    Disjoint ((A ×ˢ (Finset.univ : Finset (Fin 2))).image lowerA)
-      (B.image lowerB) := by
-  apply Finset.disjoint_left.mpr
-  intro j hjA hjB
-  obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hjA
-  obtain ⟨i, hi, h⟩ := Finset.mem_image.mp hjB
-  have hv := congrArg Fin.val h
-  simp [lowerA, lowerB] at hv
-  omega
-
-theorem card_lowerAvail (A : Finset (Fin 8)) (B : Finset (Fin 2)) :
-    (lowerAvail A B).card = 2 * A.card + B.card := by
-  rw [lowerAvail, Finset.card_union_of_disjoint (lowerAvail_disjoint A B),
-    Finset.card_image_of_injective _ lowerA_injective,
-    Finset.card_image_of_injective _ lowerB_injective,
-    Finset.card_product, Finset.card_univ, Fintype.card_fin]
-  omega
-
-theorem lowerAvail_subset_availableLower (A : Finset (Fin 8))
-    (B : Finset (Fin 2)) : lowerAvail A B ⊆ availableLower (upperFrom A B) := by
-  intro j hj
-  simp only [lowerAvail, Finset.mem_union, Finset.mem_image] at hj
-  rw [mem_availableLower]
-  rcases hj with ⟨x, hx, rfl⟩ | ⟨i, hi, rfl⟩
-  · have hA : x.1 ∈ A := (Finset.mem_product.mp hx).1
-    have hu : aNode x.1 ∈ upperFrom A B := (aNode_mem_upperFrom _ _ _).2 hA
-    convert hu using 1
-    apply Fin.ext
-    have h16 : (lowerA x).val < 16 := by simp [lowerA]; omega
-    rw [upperOfLower, dif_pos h16]
-    simp [lowerA, aNode]
-    omega
-  · have hu : bNode i ∈ upperFrom A B := (bNode_mem_upperFrom _ _ _).2 hi
-    convert hu using 1
-    apply Fin.ext
-    have h16 : ¬ (lowerB i).val < 16 := by simp [lowerB]
-    rw [upperOfLower, dif_neg h16]
-    simp [lowerB, bNode]
-    omega
-
-abbrev RawStructure :=
-  (Finset (Fin 8) × Finset (Fin 2)) × Finset (Fin 18)
-
-def abPairs (a b : ℕ) : Finset (Finset (Fin 8) × Finset (Fin 2)) :=
-  Finset.powersetCard a Finset.univ ×ˢ Finset.powersetCard b Finset.univ
-
-def rawStructures (a b g : ℕ) : Finset RawStructure :=
-  ((abPairs a b).sigma fun x =>
-    Finset.powersetCard g (lowerAvail x.1 x.2)).image fun x => (x.1, x.2)
-
-theorem rawStructure_mk_injective : Function.Injective
-    (fun x : (ab : Finset (Fin 8) × Finset (Fin 2)) × Finset (Fin 18) =>
-      ((x.1, x.2) : RawStructure)) := by
-  rintro ⟨ab, L⟩ ⟨ab', L'⟩ h
-  simp only [Prod.mk.injEq] at h
-  obtain ⟨rfl, rfl⟩ := h
-  rfl
-
-theorem card_abPairs (a b : ℕ) :
-    (abPairs a b).card = Nat.choose 8 a * Nat.choose 2 b := by
-  rw [abPairs, Finset.card_product, Finset.card_powersetCard,
-    Finset.card_powersetCard, Finset.card_univ, Fintype.card_fin,
-    Finset.card_univ, Fintype.card_fin]
-
-theorem card_rawStructures (a b g : ℕ) :
-    (rawStructures a b g).card =
-      Nat.choose 8 a * Nat.choose 2 b * Nat.choose (2 * a + b) g := by
-  rw [rawStructures,
-    Finset.card_image_of_injective _ rawStructure_mk_injective,
-    Finset.card_sigma]
-  have hinner : ∀ ab ∈ abPairs a b,
-      (Finset.powersetCard g (lowerAvail ab.1 ab.2)).card =
-        Nat.choose (2 * a + b) g := by
-    intro ab hab
-    unfold abPairs at hab
-    rw [Finset.mem_product, Finset.mem_powersetCard,
-      Finset.mem_powersetCard] at hab
-    rw [Finset.card_powersetCard, card_lowerAvail, hab.1.2, hab.2.2]
-  rw [Finset.sum_congr rfl hinner, Finset.sum_const, smul_eq_mul,
-    card_abPairs]
-
-theorem mem_rawStructures (a b g : ℕ) (r : RawStructure) :
-    r ∈ rawStructures a b g ↔
-      r.1.1.card = a ∧ r.1.2.card = b ∧ r.2.card = g ∧
-        r.2 ⊆ lowerAvail r.1.1 r.1.2 := by
-  simp only [rawStructures, Finset.mem_image, Finset.mem_sigma,
-    abPairs, Finset.mem_product, Finset.mem_powersetCard]
-  constructor
-  · rintro ⟨x, ⟨⟨hA, hB⟩, hL⟩, rfl⟩
-    exact ⟨hA.2, hB.2, hL.2, hL.1⟩
-  · rintro ⟨hA, hB, hLcard, hL⟩
-    exact ⟨⟨r.1, r.2⟩,
-      ⟨⟨⟨Finset.subset_univ _, hA⟩, ⟨Finset.subset_univ _, hB⟩⟩,
-        ⟨hL, hLcard⟩⟩, rfl⟩
-
-def lowerChain (x : Fin 18 × Fin 3) : Fin 66 := ⟨3 * x.1 + x.2, by omega⟩
-
-def directA (i : Fin 8) : Fin 66 := ⟨54 + i, by omega⟩
-
-def directB (x : Fin 2 × Fin 2) : Fin 66 := ⟨62 + 2 * x.1 + x.2, by omega⟩
-
-def rawActive (A : Finset (Fin 8)) (B : Finset (Fin 2))
-    (L : Finset (Fin 18)) : Finset (Fin 66) :=
-  (L ×ˢ (Finset.univ : Finset (Fin 3))).image lowerChain ∪
-    A.image directA ∪
-      (B ×ˢ (Finset.univ : Finset (Fin 2))).image directB
-
-theorem lowerChain_injective : Function.Injective lowerChain := by
-  rintro ⟨i, r⟩ ⟨j, s⟩ h
-  have hv := congrArg Fin.val h
-  simp only [lowerChain] at hv
-  have hi : i = j := Fin.ext (by omega)
-  have hr : r = s := Fin.ext (by omega)
-  exact Prod.ext hi hr
-
-theorem directA_injective : Function.Injective directA := by
-  intro i j h
-  apply Fin.ext
-  have hv := congrArg Fin.val h
-  simp only [directA] at hv
-  omega
-
-theorem directB_injective : Function.Injective directB := by
-  rintro ⟨i, r⟩ ⟨j, s⟩ h
-  have hv := congrArg Fin.val h
-  simp only [directB] at hv
-  have hi : i = j := Fin.ext (by omega)
-  have hr : r = s := Fin.ext (by omega)
-  exact Prod.ext hi hr
-
-theorem rawActive_lower_directA_disjoint (A : Finset (Fin 8))
-    (L : Finset (Fin 18)) :
-    Disjoint ((L ×ˢ (Finset.univ : Finset (Fin 3))).image lowerChain)
-      (A.image directA) := by
-  apply Finset.disjoint_left.mpr
-  intro k hkL hkA
-  obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hkL
-  obtain ⟨i, hi, h⟩ := Finset.mem_image.mp hkA
-  have hv := congrArg Fin.val h
-  simp [lowerChain, directA] at hv
-  omega
-
-theorem rawActive_lower_directB_disjoint (B : Finset (Fin 2))
-    (L : Finset (Fin 18)) :
-    Disjoint ((L ×ˢ (Finset.univ : Finset (Fin 3))).image lowerChain)
-      ((B ×ˢ (Finset.univ : Finset (Fin 2))).image directB) := by
-  apply Finset.disjoint_left.mpr
-  intro k hkL hkB
-  obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hkL
-  obtain ⟨y, hy, h⟩ := Finset.mem_image.mp hkB
-  have hv := congrArg Fin.val h
-  simp [lowerChain, directB] at hv
-  omega
-
-theorem rawActive_direct_disjoint (A : Finset (Fin 8))
-    (B : Finset (Fin 2)) :
-    Disjoint (A.image directA)
-      ((B ×ˢ (Finset.univ : Finset (Fin 2))).image directB) := by
-  apply Finset.disjoint_left.mpr
-  intro k hkA hkB
-  obtain ⟨i, hi, rfl⟩ := Finset.mem_image.mp hkA
-  obtain ⟨y, hy, h⟩ := Finset.mem_image.mp hkB
-  have hv := congrArg Fin.val h
-  simp [directA, directB] at hv
-  omega
-
-theorem card_rawActive (A : Finset (Fin 8)) (B : Finset (Fin 2))
-    (L : Finset (Fin 18)) :
-    (rawActive A B L).card = 3 * L.card + A.card + 2 * B.card := by
-  unfold rawActive
-  have hlast : Disjoint
-      ((L ×ˢ (Finset.univ : Finset (Fin 3))).image lowerChain ∪
-        A.image directA)
-      ((B ×ˢ (Finset.univ : Finset (Fin 2))).image directB) :=
-    Finset.disjoint_union_left.mpr
-      ⟨rawActive_lower_directB_disjoint B L,
-        rawActive_direct_disjoint A B⟩
-  rw [Finset.card_union_of_disjoint hlast,
-    Finset.card_union_of_disjoint (rawActive_lower_directA_disjoint A L),
-    Finset.card_image_of_injective _ lowerChain_injective,
-    Finset.card_image_of_injective _ directA_injective,
-    Finset.card_image_of_injective _ directB_injective,
-    Finset.card_product, Finset.card_product,
-    Finset.card_univ, Fintype.card_fin, Finset.card_univ, Fintype.card_fin]
-  omega
-
-theorem lowerOfChain_lowerChain (j : Fin 18) (r : Fin 3) :
-    lowerOfChain (lowerChain (j, r)) = some j := by
-  unfold lowerOfChain
-  rw [dif_pos (by simp [lowerChain]; omega)]
-  congr 2
-  simp [lowerChain]
-  omega
-
-theorem upperOfChain_lowerChain (j : Fin 18) (r : Fin 3) :
-    upperOfChain (lowerChain (j, r)) = upperOfLower j := by
-  unfold upperOfChain
-  rw [dif_pos (by simp [lowerChain]; omega)]
-  congr 1
-  apply Fin.ext
-  simp [lowerChain]
-  omega
-
-theorem lowerOfChain_directA (i : Fin 8) :
-    lowerOfChain (directA i) = none := by
-  simp [lowerOfChain, directA]
-
-theorem upperOfChain_directA (i : Fin 8) :
-    upperOfChain (directA i) = aNode i := by
-  unfold upperOfChain
-  rw [dif_neg (by simp [directA]), dif_pos (by simp [directA]; omega)]
-  apply Fin.ext
-  simp [directA, aNode]
-
-theorem lowerOfChain_directB (i : Fin 2) (r : Fin 2) :
-    lowerOfChain (directB (i, r)) = none := by
-  unfold lowerOfChain
-  rw [dif_neg (by simp [directB]; omega)]
-
-theorem upperOfChain_directB (i : Fin 2) (r : Fin 2) :
-    upperOfChain (directB (i, r)) = bNode i := by
-  unfold upperOfChain
-  rw [dif_neg (by simp [directB]; omega),
-    dif_neg (by simp [directB]; omega)]
-  by_cases h64 : (directB (i, r)).val < 64
-  · rw [dif_pos h64]
-    apply Fin.ext
-    simp [directB, bNode] at h64 ⊢
-    omega
-  · rw [dif_neg h64]
-    apply Fin.ext
-    simp [directB, bNode] at h64 ⊢
-    omega
-
-theorem rawActive_eq_active (A : Finset (Fin 8)) (B : Finset (Fin 2))
-    (L : Finset (Fin 18)) (hL : L ⊆ lowerAvail A B) :
-    rawActive A B L = active ⟨upperFrom A B, L⟩ := by
-  ext k
-  constructor
-  · intro hk
-    simp only [rawActive, Finset.mem_union] at hk
-    rcases hk with (hk | hk) | hk
-    · obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hk
-      obtain ⟨hj, hr⟩ := Finset.mem_product.mp hx
-      rw [mem_active, upperOfChain_lowerChain, lowerOfChain_lowerChain]
-      exact ⟨(mem_availableLower _ _).1
-        (lowerAvail_subset_availableLower A B (hL hj)), hj⟩
-    · obtain ⟨i, hi, rfl⟩ := Finset.mem_image.mp hk
-      rw [mem_active, upperOfChain_directA, lowerOfChain_directA]
-      exact ⟨(aNode_mem_upperFrom _ _ _).2 hi, trivial⟩
-    · obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hk
-      obtain ⟨hi, hr⟩ := Finset.mem_product.mp hx
-      rw [mem_active, upperOfChain_directB, lowerOfChain_directB]
-      exact ⟨(bNode_mem_upperFrom _ _ _).2 hi, trivial⟩
-  · intro hk
-    obtain ⟨hu, hl⟩ := (mem_active _ _).1 hk
-    by_cases h54 : k.val < 54
-    · have heq : lowerOfChain k = some ⟨k.val / 3, by omega⟩ := by
-        simp [lowerOfChain, h54]
-      have hj : (⟨k.val / 3, by omega⟩ : Fin 18) ∈ L := by
-        simpa [heq] using hl
-      apply Finset.mem_union_left
-      apply Finset.mem_union_left
-      apply Finset.mem_image.mpr
-      refine ⟨(⟨k.val / 3, by omega⟩, ⟨k.val % 3, by omega⟩), ?_, ?_⟩
-      · rw [Finset.mem_product]
-        exact ⟨hj, Finset.mem_univ _⟩
-      · apply Fin.ext
-        simp [lowerChain]
-        omega
-    · by_cases h62 : k.val < 62
-      · apply Finset.mem_union_left
-        apply Finset.mem_union_right
-        have hi : (⟨k.val - 54, by omega⟩ : Fin 8) ∈ A := by
-          apply (aNode_mem_upperFrom _ _ _).1
-          convert hu using 1
-          apply Fin.ext
-          simp [upperOfChain, h54, h62, aNode]
-        apply Finset.mem_image.mpr
-        refine ⟨⟨k.val - 54, by omega⟩, hi, ?_⟩
-        apply Fin.ext
-        simp [directA]
-        omega
-      · apply Finset.mem_union_right
-        have hi : (⟨(k.val - 62) / 2, by omega⟩ : Fin 2) ∈ B := by
-          apply (bNode_mem_upperFrom _ _ _).1
-          convert hu using 1
-          apply Fin.ext
-          by_cases h64 : k.val < 64
-          · simp [upperOfChain, h54, h62, h64, bNode]
-            omega
-          · simp [upperOfChain, h54, h62, h64, bNode]
-            omega
-        apply Finset.mem_image.mpr
-        refine ⟨(⟨(k.val - 62) / 2, by omega⟩,
-          ⟨(k.val - 62) % 2, by omega⟩), ?_, ?_⟩
-        · rw [Finset.mem_product]
-          exact ⟨hi, Finset.mem_univ _⟩
-        · apply Fin.ext
-          simp [directB]
-          omega
-
-def Frontier.WellFormed (f : Frontier) : Prop :=
-  f.lower ⊆ availableLower f.upper
-
-/-- Number of expanded nonroot internal nodes. -/
-def Frontier.expanded (f : Frontier) : ℕ := f.upper.card + f.lower.card
-
-/-- Every ternary expansion replaces one disclosed word by three. -/
-def Frontier.words (f : Frontier) : ℕ := 10 + 2 * f.expanded
-
-/-- Root cost plus one compression for each expanded ternary node. -/
-def Frontier.fixedCost (f : Frontier) : ℕ := 3 + f.expanded
-
-/-- A full cut choice adds one bounded chain position per chain.  Inactive
-positions are fixed to 18 to make the encoding injective. -/
-structure Choice where
-  frontier : Frontier
-  position : Fin 66 → Fin 19
+/-- An input of a block hash node: the top of a chain or another hash value. -/
+inductive Kid where
+  | c (k : Fin 8)
+  | h (j : Fin 11)
   deriving DecidableEq
 
-@[ext] theorem Choice.ext {c d : Choice} (hf : c.frontier = d.frontier)
-    (hp : c.position = d.position) : c = d := by
-  cases c
-  cases d
-  simp only [Choice.mk.injEq] at hf hp ⊢
-  exact ⟨hf, hp⟩
+/-- Local chains `0..7` are the design's `c0 c1 c2 c3 c6 c7 c11 c14`; local
+hash nodes `0..10` are `h4 h5 h8 h9 h10 h12 h13 h15 h16 h17 h18`, with top
+`10`.  Slot `2` holds the exclusive kid of each hash node. -/
+def kid : Fin 11 → Fin 3 → Kid :=
+  ![![.c 3, .c 0, .c 2],
+    ![.c 0, .c 1, .h 0],
+    ![.c 3, .c 4, .c 5],
+    ![.c 1, .c 0, .h 2],
+    ![.c 4, .h 3, .h 1],
+    ![.c 4, .c 1, .c 6],
+    ![.h 3, .c 3, .h 5],
+    ![.h 3, .c 1, .c 7],
+    ![.c 4, .c 1, .h 7],
+    ![.c 0, .c 3, .h 8],
+    ![.h 4, .h 6, .h 9]]
 
-def Choice.Canonical (c : Choice) : Prop :=
-  ∀ k ∉ active c.frontier, c.position k = 18
+/-- The graph name holding a kid's 129-bit value in block `b`. -/
+def Kid.name (b : Fin 7) : Kid → Name
+  | .c k => .cv b k 17
+  | .h j => .hv b j
 
-def Choice.chainCost (c : Choice) : ℕ :=
-  Finset.sum (active c.frontier) fun k => 18 - (c.position k).val
+theorem kid_h_lt {j j' : Fin 11} {i : Fin 3} (h : kid j i = .h j') : j' < j := by
+  revert j j' i
+  decide
 
-/-- Exactly the cost-90, at-most-42-word layer. -/
-def Choice.Valid (c : Choice) : Prop :=
-  c.frontier.WellFormed ∧ c.Canonical ∧ c.frontier.expanded ≤ 16 ∧
-    c.chainCost = 90 - c.frontier.fixedCost
+/-- The exclusive kid has exactly one user, and it is not the root input. -/
+theorem kid_eq_kid_two_iff (e j : Fin 11) (i : Fin 3) :
+    kid e i = kid j 2 ↔ e = j ∧ i = 2 := by
+  revert e j i
+  decide
 
-def Choice.reconstructionCost (c : Choice) : ℕ :=
-  c.frontier.fixedCost + c.chainCost
+theorem kid_two_ne_top (j : Fin 11) : kid j 2 ≠ .h 10 := by
+  revert j
+  decide
 
-theorem Choice.words_le {c : Choice} (h : c.Valid) : c.frontier.words ≤ 42 := by
-  have he : c.frontier.upper.card + c.frontier.lower.card ≤ 16 := by
-    simpa [Frontier.expanded] using h.2.2.1
-  unfold Frontier.words Frontier.expanded
-  omega
+/-- A kid is needed when it is the block top or an input of an expanded node. -/
+def Needed (E : Finset (Fin 11)) (x : Kid) : Prop :=
+  x = .h 10 ∨ ∃ e ∈ E, ∃ i, kid e i = x
 
-theorem Choice.fixedCost_le {c : Choice} (h : c.Valid) : c.frontier.fixedCost ≤ 19 := by
-  have he : c.frontier.upper.card + c.frontier.lower.card ≤ 16 := by
-    simpa [Frontier.expanded] using h.2.2.1
-  unfold Frontier.fixedCost Frontier.expanded
-  omega
+instance (E : Finset (Fin 11)) : DecidablePred (Needed E) := by
+  intro x
+  unfold Needed
+  infer_instance
 
-theorem Choice.reconstructionCost_eq {c : Choice} (h : c.Valid) :
-    c.reconstructionCost = 90 := by
-  unfold Choice.reconstructionCost
-  rw [h.2.2.2]
-  have := Choice.fixedCost_le h
-  omega
+theorem needed_kid {E : Finset (Fin 11)} {e : Fin 11} (he : e ∈ E) (i : Fin 3) :
+    Needed E (kid e i) :=
+  Or.inr ⟨e, he, i, rfl⟩
 
-/-! The position codec below is the accepted `WideCuts.positions` argument
-with only `Fin 54` changed to `Fin 66`.  The chain length and position type are
-unchanged, so `ShallowResearch.card_comp` applies verbatim. -/
-
-irreducible_def positions (S : Finset (Fin 66)) (s : ℕ) : Finset (Fin 66 → Fin 19) :=
-  Finset.univ.filter fun t =>
-    (∀ k ∉ S, t k = 18) ∧ Finset.sum S (fun k => 18 - (t k).val) = s
-
-theorem mem_positions (S : Finset (Fin 66)) (s : ℕ) (t : Fin 66 → Fin 19) :
-    t ∈ positions S s ↔
-      (∀ k ∉ S, t k = 18) ∧ Finset.sum S (fun k => 18 - (t k).val) = s := by
-  rw [positions_def, Finset.mem_filter]
-  simp only [Finset.mem_univ, true_and]
-
-theorem card_positions (S : Finset (Fin 66)) (s : ℕ) :
-    (positions S s).card = comp S.card s := by
-  rw [← card_comp]
-  refine Finset.card_nbij' (fun t i => Fin.rev (t (S.equivFin.symm i)))
-    (fun c k => if h : k ∈ S then Fin.rev (c (S.equivFin ⟨k, h⟩)) else 18) ?_ ?_ ?_ ?_
-  · intro t ht
-    rw [Finset.mem_coe, mem_positions] at ht
-    rw [Finset.mem_coe, Finset.mem_filter]
-    refine ⟨Finset.mem_univ _, ?_⟩
-    rw [← ht.2, ← Finset.sum_coe_sort S, ← Equiv.sum_comp S.equivFin.symm]
-    refine Finset.sum_congr rfl fun i _ => ?_
-    rw [Fin.val_rev]
-    omega
-  · intro c hc
-    rw [Finset.mem_coe, Finset.mem_filter] at hc
-    rw [Finset.mem_coe, mem_positions]
-    refine ⟨fun k hk => dif_neg hk, ?_⟩
-    rw [← hc.2, ← Finset.sum_coe_sort S, ← Equiv.sum_comp S.equivFin
-      (fun i => (c i).val)]
-    refine Finset.sum_congr rfl fun x _ => ?_
-    dsimp only
-    rw [dif_pos x.2]
-    simp only [Fin.val_rev, Subtype.coe_eta]
-    omega
-  · intro t ht
-    rw [Finset.mem_coe, mem_positions] at ht
-    funext k
-    dsimp only
-    by_cases hk : k ∈ S
-    · simp only [dif_pos hk, Equiv.symm_apply_apply, Fin.rev_rev]
-    · rw [dif_neg hk, ht.1 k hk]
-  · intro c _
-    funext i
-    dsimp only
-    have h := (S.equivFin.symm i).2
-    simp only [dif_pos h, Subtype.coe_eta, Equiv.apply_symm_apply, Fin.rev_rev]
-
-/-- All structurally valid frontiers under the 42-word cap. -/
-irreducible_def structuralFrontiers : Finset Frontier :=
-  Finset.univ.filter fun f => f.WellFormed ∧ f.expanded ≤ 16
-
-theorem mem_structuralFrontiers (f : Frontier) :
-    f ∈ structuralFrontiers ↔ f.WellFormed ∧ f.expanded ≤ 16 := by
-  rw [structuralFrontiers_def, Finset.mem_filter]
-  simp only [Finset.mem_univ, true_and]
-
-/-- Canonical supported choices before mapping them to graph cuts. -/
-irreducible_def shapes : Finset Choice :=
-  (structuralFrontiers.sigma fun f =>
-    positions (active f) (90 - f.fixedCost)).image fun x =>
-      { frontier := x.1, position := x.2 }
-
-theorem choice_mk_injective : Function.Injective
-    (fun x : (f : Frontier) × (Fin 66 → Fin 19) =>
-      ({ frontier := x.1, position := x.2 } : Choice)) := by
-  rintro ⟨f, p⟩ ⟨f', p'⟩ h
-  cases h
-  rfl
-
-theorem mem_shapes_iff (c : Choice) : c ∈ shapes ↔
-    c.frontier ∈ structuralFrontiers ∧
-      c.position ∈ positions (active c.frontier) (90 - c.frontier.fixedCost) := by
-  rw [shapes, Finset.mem_image]
+/-- Binding rule: the exclusive kid of `j` is needed exactly when `j` is
+expanded. -/
+theorem needed_kid_two_iff (E : Finset (Fin 11)) (j : Fin 11) :
+    Needed E (kid j 2) ↔ j ∈ E := by
   constructor
-  · rintro ⟨⟨f, p⟩, hp, h⟩
-    rw [Finset.mem_sigma] at hp
-    cases h
-    exact hp
+  · rintro (h | ⟨e, he, i, hi⟩)
+    · exact absurd h (kid_two_ne_top j)
+    · obtain ⟨rfl, -⟩ := (kid_eq_kid_two_iff e j i).1 hi
+      exact he
   · intro h
-    exact ⟨⟨c.frontier, c.position⟩, (Finset.mem_sigma.mpr h), rfl⟩
+    exact needed_kid h 2
 
-theorem valid_of_mem_shapes {c : Choice} (hc : c ∈ shapes) : c.Valid := by
-  obtain ⟨hf, hp⟩ := (mem_shapes_iff c).1 hc
-  obtain ⟨hw, he⟩ := (mem_structuralFrontiers c.frontier).1 hf
-  obtain ⟨hcanon, hcost⟩ := (mem_positions _ _ _).1 hp
-  exact ⟨hw, hcanon, he, hcost⟩
+/-- Hash kids of each node, as literal finsets for cheap kernel evaluation. -/
+def kidsH : Fin 11 → Finset (Fin 11)
+  | 0 => ∅ | 1 => {0} | 2 => ∅ | 3 => {2} | 4 => {3, 1} | 5 => ∅ | 6 => {3, 5}
+  | 7 => {3} | 8 => {7} | 9 => {8} | 10 => {4, 6, 9}
 
-theorem card_shapes : shapes.card =
-    ∑ f ∈ structuralFrontiers, comp (active f).card (90 - f.fixedCost) := by
-  rw [shapes, Finset.card_image_of_injective _ choice_mk_injective, Finset.card_sigma]
-  apply Finset.sum_congr rfl
-  intro f hf
-  exact card_positions _ _
+/-- Chain kids of each node. -/
+def kidsC : Fin 11 → Finset (Fin 8)
+  | 0 => {3, 0, 2} | 1 => {0, 1} | 2 => {3, 4, 5} | 3 => {1, 0} | 4 => {4}
+  | 5 => {4, 1, 6} | 6 => {3} | 7 => {1, 7} | 8 => {4, 1} | 9 => {0, 3} | 10 => ∅
 
-/-! ## Explicit mode-indexed supported family
+theorem mem_kidsH (e j : Fin 11) : j ∈ kidsH e ↔ ∃ i, kid e i = .h j := by
+  revert e j
+  decide
 
-The broad `shapes` set is useful for the cut codec, but the construction only
-needs a large finite subfamily.  We enumerate that subfamily directly by the
-three mode counts `(a,b,g)`, then by the chosen upper/lower nodes and chain
-positions.  This avoids any appeal to a frontier ranking or to brute-force
-enumeration of all structural frontiers. -/
+theorem mem_kidsC (e : Fin 11) (k : Fin 8) : k ∈ kidsC e ↔ ∃ i, kid e i = .c k := by
+  revert e k
+  decide
 
-theorem upperFrom_injective : Function.Injective
-    (fun x : Finset (Fin 8) × Finset (Fin 2) => upperFrom x.1 x.2) := by
-  rintro ⟨A, B⟩ ⟨A', B'⟩ h
-  change upperFrom A B = upperFrom A' B' at h
-  apply Prod.ext
-  · ext i
-    rw [← aNode_mem_upperFrom A B i,
-      ← aNode_mem_upperFrom A' B' i, h]
-  · ext i
-    rw [← bNode_mem_upperFrom A B i,
-      ← bNode_mem_upperFrom A' B' i, h]
+def neededH (E : Finset (Fin 11)) : Finset (Fin 11) := insert 10 (E.biUnion kidsH)
 
-def frontierOf (r : RawStructure) : Frontier :=
-  ⟨upperFrom r.1.1 r.1.2, r.2⟩
+def neededC (E : Finset (Fin 11)) : Finset (Fin 8) := E.biUnion kidsC
 
-theorem frontierOf_injective : Function.Injective frontierOf := by
-  rintro ⟨⟨A, B⟩, L⟩ ⟨⟨A', B'⟩, L'⟩ h
-  have hu : upperFrom A B = upperFrom A' B' :=
-    congrArg Frontier.upper h
-  have hl : L = L' := congrArg Frontier.lower h
-  have hab : (A, B) = (A', B') := upperFrom_injective hu
-  cases hab
-  cases hl
-  rfl
+@[simp] theorem mem_neededH (E : Finset (Fin 11)) (j : Fin 11) :
+    j ∈ neededH E ↔ Needed E (.h j) := by
+  simp only [neededH, Finset.mem_insert, Finset.mem_biUnion, mem_kidsH, Needed,
+    Kid.h.injEq]
 
-abbrev ModeDatum := (a : ℕ) × (b : ℕ) × (g : ℕ) × RawStructure
+@[simp] theorem mem_neededC (E : Finset (Fin 11)) (k : Fin 8) :
+    k ∈ neededC E ↔ Needed E (.c k) := by
+  simp only [neededC, Finset.mem_biUnion, mem_kidsC, Needed, reduceCtorEq, false_or]
 
-def modeStructures : Finset ModeDatum :=
-  (Finset.range 9).sigma fun a =>
-    (Finset.range 3).sigma fun b =>
-      (Finset.range (2 * a + b + 1)).sigma fun g =>
-        if a + b + g ≤ 16 then rawStructures a b g else ∅
+theorem top_mem_neededH (E : Finset (Fin 11)) : (10 : Fin 11) ∈ neededH E :=
+  (mem_neededH E 10).2 (Or.inl rfl)
 
-theorem mem_modeStructures (x : ModeDatum) :
-    x ∈ modeStructures ↔
-      x.1 < 9 ∧ x.2.1 < 3 ∧ x.2.2.1 < 2 * x.1 + x.2.1 + 1 ∧
-        x.1 + x.2.1 + x.2.2.1 ≤ 16 ∧
-          x.2.2.2 ∈ rawStructures x.1 x.2.1 x.2.2.1 := by
-  simp only [modeStructures, Finset.mem_sigma, Finset.mem_range]
-  by_cases he : x.1 + x.2.1 + x.2.2.1 ≤ 16
-  · simp [he]
-  · simp [he]
+/-- Every expanded node is needed. -/
+def ShapeValid (E : Finset (Fin 11)) : Prop := E ⊆ neededH E
 
-def modeFrontier (x : ModeDatum) : Frontier := frontierOf x.2.2.2
+instance : DecidablePred ShapeValid := by
+  intro E
+  unfold ShapeValid
+  infer_instance
 
-set_option maxRecDepth 10000 in
-theorem modeFrontier_injOn : Set.InjOn modeFrontier modeStructures := by
-  rintro ⟨a, ⟨b, ⟨g, r⟩⟩⟩ hx
-    ⟨a', ⟨b', ⟨g', r'⟩⟩⟩ hy hfrontier
-  have hr : r = r' := frontierOf_injective hfrontier
-  have hxr := (mem_rawStructures a b g r).1
-    ((mem_modeStructures ⟨a, ⟨b, ⟨g, r⟩⟩⟩).1 hx).2.2.2.2
-  have hyr := (mem_rawStructures a' b' g' r').1
-    ((mem_modeStructures ⟨a', ⟨b', ⟨g', r'⟩⟩⟩).1 hy).2.2.2.2
-  have ha : a = a' := by rw [← hxr.1, hr, hyr.1]
-  have hb : b = b' := by rw [← hxr.2.1, hr, hyr.2.1]
-  have hg : g = g' := by rw [← hxr.2.2.1, hr, hyr.2.2.1]
-  subst a'
-  subst b'
-  subst g'
-  subst r'
-  rfl
+def validShapes : Finset (Finset (Fin 11)) := Finset.univ.filter ShapeValid
 
-set_option maxRecDepth 10000 in
-theorem mode_active_card {x : ModeDatum} (hx : x ∈ modeStructures) :
-    (active (modeFrontier x)).card = x.1 + 2 * x.2.1 + 3 * x.2.2.1 := by
-  have hr := (mem_rawStructures x.1 x.2.1 x.2.2.1 x.2.2.2).1
-    ((mem_modeStructures x).1 hx).2.2.2.2
-  rw [modeFrontier, frontierOf]
-  rw [← rawActive_eq_active x.2.2.2.1.1 x.2.2.2.1.2
-    x.2.2.2.2 hr.2.2.2]
-  rw [card_rawActive, hr.1, hr.2.1, hr.2.2.1]
-  omega
+theorem card_validShapes : validShapes.card = 139 := by decide +kernel
 
-set_option maxRecDepth 10000 in
-theorem modeFrontier_wellFormed {x : ModeDatum} (hx : x ∈ modeStructures) :
-    (modeFrontier x).WellFormed := by
-  have hr := (mem_rawStructures x.1 x.2.1 x.2.2.1 x.2.2.2).1
-    ((mem_modeStructures x).1 hx).2.2.2.2
-  intro j hj
-  exact lowerAvail_subset_availableLower _ _ (hr.2.2.2 hj)
+/-- Disclosed words of a block shape: needed unexpanded hash values plus one
+value per needed chain. -/
+def shapeWords (E : Finset (Fin 11)) : ℕ := (neededH E \ E).card + (neededC E).card
 
-set_option maxRecDepth 10000 in
-theorem modeFrontier_expanded {x : ModeDatum} (hx : x ∈ modeStructures) :
-    (modeFrontier x).expanded = x.1 + x.2.1 + x.2.2.1 := by
-  have hr := (mem_rawStructures x.1 x.2.1 x.2.2.1 x.2.2.2).1
-    ((mem_modeStructures x).1 hx).2.2.2.2
-  rw [Frontier.expanded, modeFrontier, frontierOf, card_upperFrom,
-    hr.1, hr.2.1, hr.2.2.1]
+theorem shapeWords_bad_card :
+    (validShapes.filter fun E => ¬ (1 ≤ shapeWords E ∧ shapeWords E ≤ 8)).card = 0 := by
+  decide +kernel
 
-abbrev ModeChoiceDatum :=
-  (x : ModeDatum) × (Fin 66 → Fin 19)
+theorem shapeWords_bounds {E : Finset (Fin 11)} (hE : E ∈ validShapes) :
+    1 ≤ shapeWords E ∧ shapeWords E ≤ 8 := by
+  by_contra h
+  have hm : E ∈ validShapes.filter fun E => ¬ (1 ≤ shapeWords E ∧ shapeWords E ≤ 8) :=
+    Finset.mem_filter.2 ⟨hE, h⟩
+  rw [Finset.card_eq_zero.1 shapeWords_bad_card] at hm
+  exact Finset.notMem_empty _ hm
 
-def modeChoiceData : Finset ModeChoiceDatum :=
-  modeStructures.sigma fun x =>
-    positions (active (modeFrontier x))
-      (87 - (x.1 + x.2.1 + x.2.2.1))
+theorem shapeWords_le : ∀ E ∈ validShapes, shapeWords E ≤ 8 :=
+  fun _ hE => (shapeWords_bounds hE).2
 
-def choiceOfMode (x : ModeChoiceDatum) : Choice :=
-  ⟨modeFrontier x.1, x.2⟩
+theorem shapeWords_pos : ∀ E ∈ validShapes, 1 ≤ shapeWords E :=
+  fun _ hE => (shapeWords_bounds hE).1
 
-set_option maxRecDepth 10000 in
-theorem choiceOfMode_injOn : Set.InjOn choiceOfMode modeChoiceData := by
-  rintro ⟨x, p⟩ hx ⟨y, q⟩ hy h
-  have hxmode : x ∈ modeStructures := (Finset.mem_sigma.mp hx).1
-  have hymode : y ∈ modeStructures := (Finset.mem_sigma.mp hy).1
-  have hfront : modeFrontier x = modeFrontier y :=
-    congrArg Choice.frontier h
-  have hxy : x = y := modeFrontier_injOn hxmode hymode hfront
-  subst y
-  have hp : p = q := congrArg Choice.position h
-  subst q
-  rfl
+attribute [irreducible] validShapes
 
-set_option maxRecDepth 10000 in
-theorem choiceOfMode_valid {x : ModeChoiceDatum} (hx : x ∈ modeChoiceData) :
-    (choiceOfMode x).Valid := by
-  obtain ⟨hxmode, hposition⟩ := Finset.mem_sigma.mp hx
-  have hm := (mem_modeStructures x.1).1 hxmode
-  have he : x.1.1 + x.1.2.1 + x.1.2.2.1 ≤ 16 := hm.2.2.2.1
-  have hexp := modeFrontier_expanded hxmode
-  obtain ⟨hcanon, hcost⟩ := (mem_positions _ _ _).1 hposition
-  refine ⟨modeFrontier_wellFormed hxmode, ?_, ?_, ?_⟩
-  · intro k hk
-    exact hcanon k hk
-  · simpa [choiceOfMode, hexp] using he
-  · rw [choiceOfMode, Choice.chainCost, hcost, Frontier.fixedCost, hexp]
+theorem mem_validShapes (E : Finset (Fin 11)) : E ∈ validShapes ↔ ShapeValid E := by
+  rw [validShapes, Finset.mem_filter]
+  exact and_iff_right (Finset.mem_univ _)
+
+/-! ## Per-block and full choices -/
+
+/-- A block choice: expanded hash nodes and one position per local chain. -/
+abbrev Local := Finset (Fin 11) × (Fin 8 → Fin 19)
+
+def localWords (v : Local) : ℕ := shapeWords v.1
+
+def localChainCost (v : Local) : ℕ := ∑ k ∈ neededC v.1, (18 - (v.2 k).val)
+
+/-- Block reconstruction cost: one compression per expanded ternary node plus
+the walked chain suffixes. -/
+def localCost (v : Local) : ℕ := v.1.card + localChainCost v
+
+/-- Allowed positions: free on needed chains, fixed to `18` elsewhere. -/
+def posSet (E : Finset (Fin 11)) (k : Fin 8) : Finset (Fin 19) :=
+  if k ∈ neededC E then Finset.univ else {18}
+
+def localSet : Finset Local :=
+  (validShapes.sigma fun E => Fintype.piFinset (posSet E)).map
+    (Equiv.sigmaEquivProd _ _).toEmbedding
+
+attribute [irreducible] localSet
+
+theorem mem_localSet (v : Local) : v ∈ localSet ↔
+    ShapeValid v.1 ∧ ∀ k, k ∉ neededC v.1 → v.2 k = 18 := by
+  rw [localSet]
+  constructor
+  · intro h
+    obtain ⟨⟨E, p⟩, hx, rfl⟩ := Finset.mem_map.1 h
+    obtain ⟨hE, hp⟩ := Finset.mem_sigma.1 hx
+    refine ⟨(mem_validShapes E).1 hE, fun k hk => ?_⟩
+    have := Fintype.mem_piFinset.1 hp k
+    have hk' : ¬ Needed E (.c k) := by simpa using hk
+    simpa [posSet, hk'] using this
+  · rintro ⟨hE, hp⟩
+    refine Finset.mem_map.2 ⟨⟨v.1, v.2⟩, Finset.mem_sigma.2 ⟨?_, ?_⟩, rfl⟩
+    · exact (mem_validShapes _).2 hE
+    · refine Fintype.mem_piFinset.2 fun k => ?_
+      by_cases hk : k ∈ neededC v.1
+      · simp [posSet, hk]
+      · simp [posSet, hk, hp k hk]
+
+/-- A full choice: one block choice per block. -/
+abbrev Choice := Fin 7 → Local
+
+def choiceCost (c : Choice) : ℕ := ∑ b, localCost (c b)
+
+def choiceWords (c : Choice) : ℕ := ∑ b, localWords (c b)
+
+/-- Root cost plus the block costs. -/
+def reconstructionCost (c : Choice) : ℕ := 2 + choiceCost c
+
+/-- The supported layer: valid blocks, graph cost exactly 89, at most 42
+words. -/
+def choiceTuples : Finset Choice := Fintype.piFinset fun _ : Fin 7 => localSet
+
+theorem mem_choiceTuples (c : Choice) : c ∈ choiceTuples ↔ ∀ b, c b ∈ localSet := by
+  rw [choiceTuples, Fintype.mem_piFinset]
+
+def supportedChoices : Finset Choice :=
+  choiceTuples.filter fun c =>
+    choiceCost c = 87 ∧ choiceWords c ≤ 42
+
+attribute [irreducible] supportedChoices
+
+theorem mem_supportedChoices (c : Choice) : c ∈ supportedChoices ↔
+    (∀ b, c b ∈ localSet) ∧ choiceCost c = 87 ∧ choiceWords c ≤ 42 := by
+  rw [supportedChoices, Finset.mem_filter, mem_choiceTuples]
+
+theorem shapeValid_of_supported {c : Choice} (hc : c ∈ supportedChoices) (b : Fin 7) :
+    ShapeValid (c b).1 :=
+  ((mem_localSet _).1 (((mem_supportedChoices c).1 hc).1 b)).1
+
+theorem canonical_of_supported {c : Choice} (hc : c ∈ supportedChoices) (b : Fin 7)
+    (k : Fin 8) (hk : k ∉ neededC (c b).1) : (c b).2 k = 18 :=
+  ((mem_localSet _).1 (((mem_supportedChoices c).1 hc).1 b)).2 k hk
+
+theorem reconstructionCost_eq {c : Choice} (hc : c ∈ supportedChoices) :
+    reconstructionCost c = 89 := by
+  rw [reconstructionCost, ((mem_supportedChoices c).1 hc).2.1]
+
+theorem choiceWords_le {c : Choice} (hc : c ∈ supportedChoices) : choiceWords c ≤ 42 :=
+  ((mem_supportedChoices c).1 hc).2.2
+
+/-! ## Base-`B` digit counting -/
+
+/-- Digit `n` of `∑ B ^ e x` counts the elements with exponent `n`, provided
+the finset has fewer than `B` elements. -/
+theorem digit_sum_pow {ι : Type*} (T : Finset ι) (e : ι → ℕ) {B : ℕ} (n : ℕ)
+    (hB : T.card < B) :
+    (∑ x ∈ T, B ^ e x) / B ^ n % B = (T.filter fun x => e x = n).card := by
+  have hB0 : 0 < B := lt_of_le_of_lt (Nat.zero_le _) hB
+  let lo : ι → ℕ := fun x => if e x < n then B ^ e x else 0
+  let mid : ι → ℕ := fun x => if e x = n then 1 else 0
+  let hi : ι → ℕ := fun x => if n < e x then B ^ (e x - n - 1) else 0
+  have hpt : ∀ x, B ^ e x = lo x + B ^ n * (mid x + B * hi x) := by
+    intro x
+    rcases lt_trichotomy (e x) n with h | h | h
+    · simp [lo, mid, hi, h, h.ne, not_lt.2 h.le]
+    · simp [lo, mid, hi, h]
+    · have h1 : ¬ e x < n := by omega
+      have h2 : e x ≠ n := by omega
+      simp only [lo, mid, hi, h1, h2, h, if_false, if_true, zero_add]
+      rw [← mul_assoc, ← pow_succ, ← pow_add]
+      congr 1
+      omega
+  have hsum : ∑ x ∈ T, B ^ e x =
+      (∑ x ∈ T, lo x) + B ^ n * ((∑ x ∈ T, mid x) + B * ∑ x ∈ T, hi x) := by
+    rw [Finset.sum_congr rfl fun x _ => hpt x, Finset.sum_add_distrib,
+      ← Finset.mul_sum, Finset.sum_add_distrib, ← Finset.mul_sum]
+  have hmid : ∑ x ∈ T, mid x = (T.filter fun x => e x = n).card := by
+    simp only [mid]
+    rw [Finset.sum_boole]
+    simp
+  have hlo : ∑ x ∈ T, lo x < B ^ n := by
+    rcases Nat.eq_zero_or_pos n with hn | hn
+    · subst hn
+      have : ∑ x ∈ T, lo x = 0 :=
+        Finset.sum_eq_zero fun x _ => by simp [lo]
+      rw [this]
+      simp
+    · have hle : ∀ x ∈ T, lo x ≤ B ^ (n - 1) := by
+        intro x _
+        simp only [lo]
+        split_ifs with h
+        · exact Nat.pow_le_pow_right hB0 (by omega)
+        · exact Nat.zero_le _
+      calc ∑ x ∈ T, lo x ≤ T.card * B ^ (n - 1) := by
+            simpa using Finset.sum_le_sum hle
+        _ < B * B ^ (n - 1) :=
+            Nat.mul_lt_mul_of_pos_right hB (pow_pos hB0 _)
+        _ = B ^ n := by
+            rw [← pow_succ']
+            congr 1
+            omega
+  have hmidB : (T.filter fun x => e x = n).card < B :=
+    lt_of_le_of_lt (Finset.card_filter_le _ _) hB
+  rw [hsum, Nat.add_mul_div_left _ _ (pow_pos hB0 _),
+    Nat.div_eq_of_lt hlo, zero_add, hmid, Nat.add_mul_mod_self_left,
+    Nat.mod_eq_of_lt hmidB]
+
+/-- Digit base: every digit counts at most `(2^11 * 19^8)^7 < 2^320` tuples. -/
+def digitBase : ℕ := 2 ^ 320
+
+attribute [irreducible] digitBase
+
+/-- Cost and words packed into one exponent; block words never exceed 8, so
+seven blocks stay below 57. -/
+def code (v : Local) : ℕ := localWords v + 57 * localCost v
+
+def blockGen : ℕ := ∑ v ∈ localSet, digitBase ^ code v
+
+attribute [irreducible] blockGen
+
+/-- Generating number of one needed chain: positions `18 - t` steps deep. -/
+def chainGen : ℕ := ∑ t : Fin 19, digitBase ^ (57 * (18 - t.val))
+
+/-- `blockGen` as a sum over the 139 shapes only. -/
+def blockGenFormula : ℕ :=
+  ∑ E ∈ validShapes, digitBase ^ (shapeWords E + 57 * E.card) *
+    ∏ k : Fin 8, if k ∈ neededC E then chainGen else 1
+
+attribute [irreducible] chainGen blockGenFormula
+
+theorem blockGen_eq : blockGen = blockGenFormula := by
+  unfold blockGen blockGenFormula localSet
+  rw [Finset.sum_map, Finset.sum_sigma]
+  refine Finset.sum_congr rfl fun E _ => ?_
+  have hfac : ∀ p : Fin 8 → Fin 19,
+      digitBase ^ code ((Equiv.sigmaEquivProd _ _).toEmbedding ⟨E, p⟩) =
+        digitBase ^ (shapeWords E + 57 * E.card) *
+          ∏ k : Fin 8, (if k ∈ neededC E then digitBase ^ (57 * (18 - (p k).val)) else 1) := by
+    intro p
+    simp only [Equiv.toEmbedding_apply, Equiv.sigmaEquivProd_apply, code, localWords,
+      localCost, localChainCost]
+    rw [Finset.prod_ite_mem, Finset.univ_inter, Finset.prod_pow_eq_pow_sum, ← pow_add]
+    congr 1
+    rw [← Finset.mul_sum]
+    ring
+  rw [Finset.sum_congr rfl fun p _ => hfac p, ← Finset.mul_sum]
+  congr 1
+  refine (Finset.prod_univ_sum (posSet E) fun k (t : Fin 19) =>
+    if k ∈ neededC E then digitBase ^ (57 * (18 - t.val)) else 1).symm.trans ?_
+  refine Finset.prod_congr rfl fun k _ => ?_
+  by_cases hk : k ∈ neededC E
+  · simp [posSet, hk, chainGen]
+  · simp [posSet, hk]
+
+theorem card_localSet_le : localSet.card ≤ 2 ^ 11 * 19 ^ 8 := by
+  have h := Finset.card_le_univ localSet
+  simpa [Fintype.card_prod, Fintype.card_finset, Fintype.card_fun] using h
+
+theorem card_choiceTuples_lt : choiceTuples.card < digitBase := by
+  have h : choiceTuples.card = localSet.card ^ 7 := by
+    rw [choiceTuples, Fintype.card_piFinset, Finset.prod_const, Finset.card_univ,
+      Fintype.card_fin]
+  have h2 : (2 ^ 11 * 19 ^ 8) ^ 7 < digitBase := by decide +kernel
+  have h3 : localSet.card ^ 7 ≤ (2 ^ 11 * 19 ^ 8) ^ 7 :=
+    pow_le_pow_left₀ (Nat.zero_le _) card_localSet_le 7
+  rw [h]
+  exact lt_of_le_of_lt h3 h2
+
+theorem blockGen_pow :
+    blockGen ^ 7 = ∑ c ∈ choiceTuples, digitBase ^ (∑ b, code (c b)) := by
+  rw [blockGen, ← Fin.prod_const, Finset.prod_univ_sum, choiceTuples]
+  exact Finset.sum_congr rfl fun c _ => Finset.prod_pow_eq_pow_sum _ _ _
+
+theorem card_code_eq (n : ℕ) :
+    (choiceTuples.filter fun c => ∑ b, code (c b) = n).card =
+      blockGen ^ 7 / digitBase ^ n % digitBase := by
+  rw [blockGen_pow, digit_sum_pow _ _ _ card_choiceTuples_lt]
+
+theorem sum_code (c : Choice) :
+    ∑ b, code (c b) = choiceWords c + 57 * choiceCost c := by
+  simp only [code, Finset.sum_add_distrib, choiceWords, choiceCost, Finset.mul_sum]
+
+theorem choiceWords_le_56 {c : Choice} (hc : c ∈ choiceTuples) : choiceWords c ≤ 56 := by
+  have h : ∀ b, localWords (c b) ≤ 8 := fun b => by
+    have hv := (mem_choiceTuples c).1 hc b
+    exact shapeWords_le _ ((mem_validShapes _).2 ((mem_localSet _).1 hv).1)
+  calc choiceWords c ≤ ∑ _b : Fin 7, 8 := Finset.sum_le_sum fun b _ => h b
+    _ = 56 := by simp
+
+theorem supportedChoices_eq_biUnion : supportedChoices =
+    (Finset.range 43).biUnion fun y =>
+      choiceTuples.filter fun c => ∑ b, code (c b) = y + 57 * 87 := by
+  ext c
+  simp only [supportedChoices, Finset.mem_filter, Finset.mem_biUnion, Finset.mem_range,
+    sum_code]
+  constructor
+  · rintro ⟨hc, hcost, hw⟩
+    exact ⟨choiceWords c, by omega, hc, by rw [hcost]⟩
+  · rintro ⟨y, hy, hc, he⟩
+    have := choiceWords_le_56 hc
+    exact ⟨hc, by omega, by omega⟩
+
+/-- Sum of the 43 digits for words `0..42` at cost `87` below the root. -/
+def classCount : ℕ :=
+  ∑ y ∈ Finset.range 43, blockGen ^ 7 / digitBase ^ (y + 57 * 87) % digitBase
+
+attribute [irreducible] classCount
+
+theorem card_supportedChoices_eq_classCount : supportedChoices.card = classCount := by
+  rw [supportedChoices_eq_biUnion, Finset.card_biUnion, classCount]
+  · exact Finset.sum_congr rfl fun y _ => card_code_eq _
+  · intro y _ y' _ hne
+    simp only [Function.onFun]
+    rw [Finset.disjoint_left]
+    intro c hc hc'
+    simp only [Finset.mem_filter] at hc hc'
     omega
 
-/-- The supported family used by the scheme.  It is an explicitly counted
-subfamily of the broad valid layer `shapes`. -/
-irreducible_def supportedShapes : Finset Choice :=
-  modeChoiceData.image choiceOfMode
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem classCount_formula_exact :
+    ∑ y ∈ Finset.range 43, blockGenFormula ^ 7 / digitBase ^ (y + 57 * 87) % digitBase =
+      909152326074156334680488093234770 := by
+  decide +kernel
 
-theorem mem_supportedShapes_iff (c : Choice) : c ∈ supportedShapes ↔
-    ∃ x ∈ modeChoiceData, choiceOfMode x = c := by
-  rw [supportedShapes, Finset.mem_image]
+theorem card_supportedChoices :
+    supportedChoices.card = 909152326074156334680488093234770 := by
+  rw [card_supportedChoices_eq_classCount, classCount, blockGen_eq, classCount_formula_exact]
 
-set_option maxRecDepth 10000 in
-theorem valid_of_mem_supportedShapes {c : Choice}
-    (hc : c ∈ supportedShapes) : c.Valid := by
-  obtain ⟨x, hx, rfl⟩ := (mem_supportedShapes_iff c).1 hc
-  exact choiceOfMode_valid hx
+/-- The record's schedule class count. -/
+def K91 : ℕ := 676013856769711926075368867014708
 
-set_option maxRecDepth 10000 in
-theorem supportedShapes_subset_shapes : supportedShapes ⊆ shapes := by
-  intro c hc
-  have hv := valid_of_mem_supportedShapes hc
-  apply (mem_shapes_iff c).2
-  exact ⟨(mem_structuralFrontiers c.frontier).2 ⟨hv.1, hv.2.2.1⟩,
-    (mem_positions _ _ _).2 ⟨hv.2.1, hv.2.2.2⟩⟩
-
-theorem card_supportedShapes_eq_modeChoiceData :
-    supportedShapes.card = modeChoiceData.card := by
-  rw [supportedShapes]
-  exact Finset.card_image_of_injOn choiceOfMode_injOn
-
-set_option maxRecDepth 10000 in
-theorem card_modeChoiceData : modeChoiceData.card =
-    ∑ a ∈ Finset.range 9, ∑ b ∈ Finset.range 3,
-      ∑ g ∈ Finset.range (2 * a + b + 1),
-        if a + b + g ≤ 16 then
-          (Nat.choose 8 a * Nat.choose 2 b * Nat.choose (2 * a + b) g) *
-            comp (a + 2 * b + 3 * g) (87 - (a + b + g))
-        else 0 := by
-  rw [modeChoiceData, Finset.card_sigma, modeStructures, Finset.sum_sigma]
-  apply Finset.sum_congr rfl
-  intro a ha
-  rw [Finset.sum_sigma]
-  apply Finset.sum_congr rfl
-  intro b hb
-  rw [Finset.sum_sigma]
-  apply Finset.sum_congr rfl
-  intro g hg
-  by_cases he : a + b + g ≤ 16
-  · simp only [he, if_pos]
-    have hterm : ∀ r ∈ rawStructures a b g,
-        (positions (active (modeFrontier ⟨a, ⟨b, ⟨g, r⟩⟩⟩))
-          (87 - (a + b + g))).card =
-            comp (a + 2 * b + 3 * g) (87 - (a + b + g)) := by
-      intro r hr
-      rw [card_positions]
-      congr 1
-      apply mode_active_card
-      simp [modeStructures, ha, hb, hg, he, hr]
-    rw [Finset.sum_congr rfl hterm, Finset.sum_const, smul_eq_mul,
-      card_rawStructures]
-  · simp [he]
-
-theorem card_supportedShapes_formula : supportedShapes.card =
-    ∑ a ∈ Finset.range 9, ∑ b ∈ Finset.range 3,
-      ∑ g ∈ Finset.range (2 * a + b + 1),
-        if a + b + g ≤ 16 then
-          (Nat.choose 8 a * Nat.choose 2 b * Nat.choose (2 * a + b) g) *
-            comp (a + 2 * b + 3 * g) (87 - (a + b + g))
-        else 0 := by
-  rw [card_supportedShapes_eq_modeChoiceData, card_modeChoiceData]
+theorem K91_le_card_supportedChoices : K91 ≤ supportedChoices.card := by
+  rw [card_supportedChoices, K91]
+  norm_num
 
 /-! ## Cut codec -/
 
-def upperStops (f : Frontier) : Finset (Fin 10) := Finset.univ \ f.upper
+/-- Disclosures of one block: needed unexpanded hash values and one value on
+each needed chain. -/
+def blockCut (b : Fin 7) (v : Local) : Finset Name :=
+  (neededH v.1 \ v.1).image (Name.hv b) ∪
+    (neededC v.1).image fun k => chainNode b k (v.2 k)
 
-def lowerStops (f : Frontier) : Finset (Fin 18) := availableLower f.upper \ f.lower
-
-/-- The disclosure cut encoded by a frontier and its active chain positions. -/
 def cutOf (c : Choice) : Finset Name :=
-  (upperStops c.frontier).image Name.mv ∪
-    (lowerStops c.frontier).image Name.sv ∪
-    (active c.frontier).image fun k => chainNode k (c.position k)
+  Finset.univ.biUnion fun b => blockCut b (c b)
 
-theorem chainNode_pair_injective {k k' : Fin 66} {p p' : Fin 19}
-    (h : chainNode k p = chainNode k' p') : k = k' ∧ p = p' := by
-  unfold chainNode at h
-  split_ifs at h with hp hp'
-  · have hk : k = k' := Name.src.inj h
-    have hpp : p = p' := Fin.ext (by omega)
-    exact ⟨hk, hpp⟩
-  · have hv := Name.cv.inj h
-    have hk : k = k' := hv.1
-    have hpp : p = p' := Fin.ext (by
-      have ht := congrArg Fin.val hv.2
-      simp only at ht
-      omega)
-    exact ⟨hk, hpp⟩
-
-theorem chainNode_injective (p : Fin 66 → Fin 19) :
-    Function.Injective fun k => chainNode k (p k) := by
-  intro k k' h
-  exact (chainNode_pair_injective h).1
-
-@[simp] theorem mv_mem_cutOf_iff (c : Choice) (u : Fin 10) :
-    Name.mv u ∈ cutOf c ↔ u ∈ upperStops c.frontier := by
+theorem mem_cutOf (c : Choice) (n : Name) : n ∈ cutOf c ↔
+    (∃ b j, j ∈ neededH (c b).1 ∧ j ∉ (c b).1 ∧ n = .hv b j) ∨
+      ∃ b k, k ∈ neededC (c b).1 ∧ n = chainNode b k ((c b).2 k) := by
+  simp only [cutOf, blockCut, Finset.mem_biUnion, Finset.mem_univ, true_and,
+    Finset.mem_union, Finset.mem_image, Finset.mem_sdiff]
   constructor
-  · intro h
-    simp only [cutOf, Finset.mem_union, Finset.mem_image] at h
-    rcases h with (⟨u', hu', heq⟩ | ⟨j, _, heq⟩) | ⟨k, _, heq⟩
-    · exact (Name.mv.inj heq) ▸ hu'
-    · contradiction
-    · unfold chainNode at heq
-      split_ifs at heq <;> contradiction
-  · intro h
-    apply Finset.mem_union_left
-    apply Finset.mem_union_left
-    exact Finset.mem_image_of_mem _ h
+  · rintro ⟨b, ⟨j, ⟨hj, hjE⟩, rfl⟩ | ⟨k, hk, rfl⟩⟩
+    · exact Or.inl ⟨b, j, hj, hjE, rfl⟩
+    · exact Or.inr ⟨b, k, hk, rfl⟩
+  · rintro (⟨b, j, hj, hjE, rfl⟩ | ⟨b, k, hk, rfl⟩)
+    · exact ⟨b, Or.inl ⟨j, ⟨hj, hjE⟩, rfl⟩⟩
+    · exact ⟨b, Or.inr ⟨k, hk, rfl⟩⟩
 
-@[simp] theorem sv_mem_cutOf_iff (c : Choice) (j : Fin 18) :
-    Name.sv j ∈ cutOf c ↔ j ∈ lowerStops c.frontier := by
-  constructor
-  · intro h
-    simp only [cutOf, Finset.mem_union, Finset.mem_image] at h
-    rcases h with (⟨u, _, heq⟩ | ⟨j', hj', heq⟩) | ⟨k, _, heq⟩
-    · contradiction
-    · exact (Name.sv.inj heq) ▸ hj'
-    · unfold chainNode at heq
-      split_ifs at heq <;> contradiction
-  · intro h
-    apply Finset.mem_union_left
-    apply Finset.mem_union_right
-    exact Finset.mem_image_of_mem _ h
-
-theorem chainNode_mem_cutOf_iff (c : Choice) (k : Fin 66) (p : Fin 19) :
-    chainNode k p ∈ cutOf c ↔
-      k ∈ active c.frontier ∧ c.position k = p := by
-  constructor
-  · intro h
-    simp only [cutOf, Finset.mem_union, Finset.mem_image] at h
-    rcases h with (⟨u, _, hu⟩ | ⟨j, _, hj⟩) | ⟨k', hk', heq⟩
-    · unfold chainNode at hu
-      split_ifs at hu <;> contradiction
-    · unfold chainNode at hj
-      split_ifs at hj <;> contradiction
-    · obtain ⟨hkk, hpp⟩ := chainNode_pair_injective heq
-      subst k'
-      exact ⟨hk', hpp⟩
-  · rintro ⟨hk, hp⟩
-    subst p
-    apply Finset.mem_union_right
-    exact Finset.mem_image_of_mem _ hk
-
-/-- The source-to-root value path used by the cut proof. -/
-def OnPath (k : Fin 66) (n : Name) : Prop :=
-  n = .src k ∨ (∃ t, n = .cv k t) ∨
-    (∃ j, lowerOfChain k = some j ∧ n = .sv j) ∨ n = .mv (upperOfChain k)
-
-@[simp] theorem onPath_mv_iff (k : Fin 66) (u : Fin 10) :
-    OnPath k (.mv u) ↔ u = upperOfChain k := by
-  simp [OnPath]
-
-@[simp] theorem onPath_sv_iff (k : Fin 66) (j : Fin 18) :
-    OnPath k (.sv j) ↔ lowerOfChain k = some j := by
-  simp [OnPath]
-
-@[simp] theorem onPath_chainNode_iff (k k' : Fin 66) (p : Fin 19) :
-    OnPath k (chainNode k' p) ↔ k' = k := by
-  unfold chainNode OnPath
+theorem hv_ne_chainNode (b b' : Fin 7) (j : Fin 11) (k : Fin 8) (p : Fin 19) :
+    Name.hv b j ≠ chainNode b' k p := by
+  unfold chainNode
   split_ifs <;> simp
 
-/-- The unique value selected on source path `k`. -/
-def selected (c : Choice) (k : Fin 66) : Name :=
-  if upperOfChain k ∈ c.frontier.upper then
-    match lowerOfChain k with
-    | none => chainNode k (c.position k)
-    | some j => if j ∈ c.frontier.lower then chainNode k (c.position k) else .sv j
-  else .mv (upperOfChain k)
+@[simp] theorem hv_mem_cutOf (c : Choice) (b : Fin 7) (j : Fin 11) :
+    Name.hv b j ∈ cutOf c ↔ j ∈ neededH (c b).1 ∧ j ∉ (c b).1 := by
+  rw [mem_cutOf]
+  constructor
+  · rintro (⟨b', j', hj, hjE, h⟩ | ⟨b', k, _, h⟩)
+    · obtain ⟨rfl, rfl⟩ := Name.hv.inj h
+      exact ⟨hj, hjE⟩
+    · exact absurd h (hv_ne_chainNode _ _ _ _ _)
+  · rintro ⟨hj, hjE⟩
+    exact Or.inl ⟨b, j, hj, hjE, rfl⟩
 
-theorem selected_mem_cutOf (c : Choice) (k : Fin 66) :
-    selected c k ∈ cutOf c := by
-  unfold selected
-  split_ifs with hu
-  · split <;> rename_i hl
-    · apply Finset.mem_union_right
-      exact Finset.mem_image_of_mem _ ((mem_active _ _).2 ⟨hu, by simp [hl]⟩)
-    · split_ifs with hj
-      · apply Finset.mem_union_right
-        exact Finset.mem_image_of_mem _ ((mem_active _ _).2 ⟨hu, by simp [hl, hj]⟩)
-      · apply Finset.mem_union_left
-        apply Finset.mem_union_right
-        apply Finset.mem_image_of_mem
-        simp only [lowerStops, Finset.mem_sdiff, mem_availableLower]
-        exact ⟨by rwa [← upperOfChain_eq_upperOfLower hl], hj⟩
-  · apply Finset.mem_union_left
-    apply Finset.mem_union_left
-    apply Finset.mem_image_of_mem
-    simp [upperStops, hu]
-
-theorem selected_onPath (c : Choice) (k : Fin 66) : OnPath k (selected c k) := by
-  unfold selected
-  by_cases hu : upperOfChain k ∈ c.frontier.upper
-  · rw [if_pos hu]
-    cases hl : lowerOfChain k with
-    | none =>
-        simp only [hl]
-        exact (onPath_chainNode_iff _ _ _).2 rfl
-    | some j =>
-        simp only [hl]
-        by_cases hj : j ∈ c.frontier.lower
-        · rw [if_pos hj]
-          exact (onPath_chainNode_iff _ _ _).2 rfl
-        · rw [if_neg hj]
-          exact (onPath_sv_iff _ _).2 hl
-  · rw [if_neg hu]
-    exact (onPath_mv_iff _ _).2 rfl
-
-theorem eq_selected_of_mem_onPath (c : Choice) (hw : c.frontier.WellFormed)
-    {k : Fin 66} {n : Name} (hn : n ∈ cutOf c) (hp : OnPath k n) :
-    n = selected c k := by
-  simp only [cutOf, Finset.mem_union, Finset.mem_image] at hn
-  rcases hn with (⟨u, hu, rfl⟩ | ⟨j, hj, rfl⟩) | ⟨k', hk', rfl⟩
-  · have heq : u = upperOfChain k := (onPath_mv_iff _ _).1 hp
-    subst u
-    have hnot : upperOfChain k ∉ c.frontier.upper := by
-      simpa [upperStops] using hu
-    simp [selected, hnot]
-  · have hl : lowerOfChain k = some j := (onPath_sv_iff _ _).1 hp
-    have hparts : j ∈ availableLower c.frontier.upper ∧ j ∉ c.frontier.lower := by
-      simpa [lowerStops] using hj
-    have hu : upperOfChain k ∈ c.frontier.upper := by
-      rw [upperOfChain_eq_upperOfLower hl]
-      exact (mem_availableLower _ _).1 hparts.1
-    unfold selected
-    rw [if_pos hu]
-    simp only [hl]
-    rw [if_neg hparts.2]
-  · have heq : k' = k := (onPath_chainNode_iff _ _ _).1 hp
-    subst k'
-    have ha := (mem_active _ _).1 hk'
-    unfold selected
-    rw [if_pos ha.1]
-    cases hl : lowerOfChain k with
-    | none => simp only [hl]
-    | some j =>
-        have hj : j ∈ c.frontier.lower := by simpa [hl] using ha.2
-        simp only [hl]
-        rw [if_pos hj]
-
-/-- Semantic cut interface.  The uniqueness field is the tree-antichain fact
-specialized to source paths; the later graph bridge turns it into the generic
-`WideForest.IsCut.antichain` statement. -/
-structure IsCut (A : Finset Name) : Prop where
-  values : ∀ n ∈ A, n.len = 129
-  exists_on_path : ∀ k, ∃ n ∈ A, OnPath k n
-  unique_on_path : ∀ k n, n ∈ A → OnPath k n →
-    ∀ m, m ∈ A → OnPath k m → m = n
+theorem chainNode_mem_cutOf (c : Choice) (b : Fin 7) (k : Fin 8) (p : Fin 19) :
+    chainNode b k p ∈ cutOf c ↔ k ∈ neededC (c b).1 ∧ (c b).2 k = p := by
+  rw [mem_cutOf]
+  constructor
+  · rintro (⟨b', j, _, _, h⟩ | ⟨b', k', hk, h⟩)
+    · exact absurd h.symm (hv_ne_chainNode _ _ _ _ _)
+    · obtain ⟨rfl, rfl, rfl⟩ := chainNode_pair_injective h
+      exact ⟨hk, rfl⟩
+  · rintro ⟨hk, rfl⟩
+    exact Or.inr ⟨b, k, hk, rfl⟩
 
 theorem cutOf_values (c : Choice) : ∀ n ∈ cutOf c, n.len = 129 := by
   intro n hn
-  simp only [cutOf, Finset.mem_union, Finset.mem_image] at hn
-  rcases hn with (⟨j, _, rfl⟩ | ⟨j, _, rfl⟩) | ⟨k, _, rfl⟩
+  rcases (mem_cutOf c n).1 hn with ⟨b, j, _, _, rfl⟩ | ⟨b, k, _, rfl⟩
   · rfl
+  · exact chainNode_len _ _ _
+
+/-- The block of a disclosed value. -/
+def Name.blk : Name → Option (Fin 7)
+  | src b _ | ci b _ _ | ch b _ _ | cv b _ _ | hc b _ | hh b _ | hv b _ => some b
+  | rc | rh => none
+
+theorem blk_of_mem_blockCut {b : Fin 7} {v : Local} {n : Name} (h : n ∈ blockCut b v) :
+    n.blk = some b := by
+  simp only [blockCut, Finset.mem_union, Finset.mem_image] at h
+  rcases h with ⟨j, _, rfl⟩ | ⟨k, _, rfl⟩
   · rfl
-  · exact chainNode_len _ _
+  · unfold chainNode
+    split_ifs <;> rfl
 
-/-- The remaining graph-independent cut obligation.  It is intentionally a
-named seam: its proof is a finite case split on whether the upper node and,
-when present, the lower node on a chain path were expanded. -/
-theorem cutCodecCorrect (c : Choice) (hw : c.frontier.WellFormed) : IsCut (cutOf c) where
-  values := cutOf_values c
-  exists_on_path k := ⟨selected c k, selected_mem_cutOf c k, selected_onPath c k⟩
-  unique_on_path k n hn hnp m hm hmp := by
-    rw [eq_selected_of_mem_onPath c hw hn hnp, eq_selected_of_mem_onPath c hw hm hmp]
+theorem card_blockCut (b : Fin 7) (v : Local) : (blockCut b v).card = localWords v := by
+  rw [blockCut, Finset.card_union_of_disjoint, Finset.card_image_of_injective,
+    Finset.card_image_of_injective]
+  · rfl
+  · intro k k' h
+    exact (chainNode_pair_injective h).2.1
+  · intro j j' h
+    exact (Name.hv.inj h).2
+  · rw [Finset.disjoint_left]
+    intro n hn hn'
+    obtain ⟨j, _, rfl⟩ := Finset.mem_image.1 hn
+    obtain ⟨k, _, h⟩ := Finset.mem_image.1 hn'
+    exact hv_ne_chainNode _ _ _ _ _ h.symm
 
-/-- Canonical choices are recovered from their cuts. -/
-theorem cutOf_injective : Set.InjOn cutOf shapes := by
-  intro c hc d hd hcut
-  have hupperStops : upperStops c.frontier = upperStops d.frontier := by
-    ext u
-    rw [← mv_mem_cutOf_iff c u, ← mv_mem_cutOf_iff d u, hcut]
-  have hupper : c.frontier.upper = d.frontier.upper := by
-    ext u
-    have hn : u ∉ c.frontier.upper ↔ u ∉ d.frontier.upper := by
-      have hm := Finset.ext_iff.mp hupperStops u
-      simpa [upperStops] using hm
-    tauto
-  have hcvalid := valid_of_mem_shapes hc
-  have hdvalid := valid_of_mem_shapes hd
-  have hlowerStops : lowerStops c.frontier = lowerStops d.frontier := by
-    ext j
-    rw [← sv_mem_cutOf_iff c j, ← sv_mem_cutOf_iff d j, hcut]
-  have hlower : c.frontier.lower = d.frontier.lower := by
-    ext j
-    by_cases hj : j ∈ availableLower c.frontier.upper
-    · have hn : j ∉ c.frontier.lower ↔ j ∉ d.frontier.lower := by
-        have hm := Finset.ext_iff.mp hlowerStops j
-        have hjd : j ∈ availableLower d.frontier.upper := by rwa [← hupper]
-        simpa [lowerStops, hj, hjd] using hm
-      tauto
-    · have hcj : j ∉ c.frontier.lower := fun h => hj (hcvalid.1 h)
-      have hdj : j ∉ d.frontier.lower := fun h =>
-        hj (by rw [hupper]; exact hdvalid.1 h)
-      simp [hcj, hdj]
-  have hfrontier : c.frontier = d.frontier := by
-    apply Frontier.ext
-    · exact hupper
-    · exact hlower
-  have hposition : c.position = d.position := by
-    funext k
-    by_cases hk : k ∈ active c.frontier
-    · have hm : chainNode k (c.position k) ∈ cutOf d := by
-        rw [← hcut]
-        exact (chainNode_mem_cutOf_iff c k _).2 ⟨hk, rfl⟩
-      have hp := (chainNode_mem_cutOf_iff d k _).1 hm
-      exact hp.2.symm
-    · have hkd : k ∉ active d.frontier := by rwa [← hfrontier]
-      rw [hcvalid.2.1 k hk, hdvalid.2.1 k hkd]
-  apply Choice.ext
-  · exact hfrontier
-  · exact hposition
+theorem card_cutOf (c : Choice) : (cutOf c).card = choiceWords c := by
+  rw [cutOf, Finset.card_biUnion]
+  · exact Finset.sum_congr rfl fun b _ => card_blockCut b (c b)
+  · intro b _ b' _ hne
+    rw [Function.onFun, Finset.disjoint_left]
+    intro n hn hn'
+    have h := (blk_of_mem_blockCut hn).symm.trans (blk_of_mem_blockCut hn')
+    exact hne (Option.some.inj h)
 
-/-- The actual supported cut family. -/
-irreducible_def family : Finset (Finset Name) := supportedShapes.image cutOf
-
-theorem mem_family_iff (A : Finset Name) :
-    A ∈ family ↔ ∃ c ∈ supportedShapes, cutOf c = A := by
-  rw [family, Finset.mem_image]
-
-theorem isCut_of_mem_family {A : Finset Name} (hA : A ∈ family) : IsCut A := by
-  obtain ⟨c, hc, rfl⟩ := (mem_family_iff A).1 hA
-  exact cutCodecCorrect c (valid_of_mem_supportedShapes hc).1
-
-theorem cost90_of_mem_family {A : Finset Name} (hA : A ∈ family) :
-    ∃ c ∈ supportedShapes, cutOf c = A ∧ c.reconstructionCost = 90 := by
-  obtain ⟨c, hc, hcut⟩ := (mem_family_iff A).1 hA
-  exact ⟨c, hc, hcut,
-    Choice.reconstructionCost_eq (valid_of_mem_supportedShapes hc)⟩
-
-theorem words42_of_mem_family {A : Finset Name} (hA : A ∈ family) :
-    ∃ c ∈ supportedShapes, cutOf c = A ∧ c.frontier.words ≤ 42 := by
-  obtain ⟨c, hc, hcut⟩ := (mem_family_iff A).1 hA
-  exact ⟨c, hc, hcut, Choice.words_le (valid_of_mem_supportedShapes hc)⟩
-
-theorem cutOf_injective_supported :
-    Set.InjOn cutOf supportedShapes :=
-  cutOf_injective.mono supportedShapes_subset_shapes
-
-theorem card_family_eq_supportedShapes :
-    family.card = supportedShapes.card := by
-  rw [family]
-  exact Finset.card_image_of_injOn cutOf_injective_supported
-
-/-! ## Exact cardinality certificate -/
-
-/-- Range-19 coefficient, evaluated through the already proved polynomial
-dynamic-programming table rather than exponential unfolding of `comp`. -/
-def boundedComp (n s : ℕ) : ℕ := (compTable 87 n).getD s 0
-
-theorem boundedComp_eq (n s : ℕ) (hs : s ≤ 87) : boundedComp n s = comp n s :=
-  compTable_getD 87 n s hs
-
-/-- Contribution of mode `(a,b,g)`: `a` expanded A nodes, `b` expanded B
-nodes, and `g` expanded lower S nodes. -/
-def modeCount (a b g : ℕ) : ℕ :=
-  if a ≤ 8 ∧ b ≤ 2 ∧ g ≤ 2 * a + b ∧ a + b + g ≤ 16 then
-    Nat.choose 8 a * Nat.choose 2 b * Nat.choose (2 * a + b) g *
-      boundedComp (a + 2 * b + 3 * g) (87 - (a + b + g))
-  else 0
-
-/-- Exact number of supported cost-90 cuts. -/
-def classCount : ℕ :=
-  ∑ a ∈ Finset.range 9, ∑ b ∈ Finset.range 3,
-    ∑ g ∈ Finset.range (2 * a + b + 1), modeCount a b g
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 20000000 in
-theorem classCount_exact :
-    classCount = 676013856769711926075368867014708 := by
-  decide +kernel
-
-theorem card_supportedShapes_eq_classCount :
-    supportedShapes.card = classCount := by
-  rw [card_supportedShapes_formula, classCount]
-  apply Finset.sum_congr rfl
-  intro a ha
-  have ha' := Finset.mem_range.mp ha
-  apply Finset.sum_congr rfl
-  intro b hb
-  have hb' := Finset.mem_range.mp hb
-  apply Finset.sum_congr rfl
-  intro g hg
-  have hg' := Finset.mem_range.mp hg
-  by_cases he : a + b + g ≤ 16
-  · rw [if_pos he, modeCount, if_pos]
-    · rw [boundedComp_eq]
-      omega
-    · exact ⟨by omega, by omega, by omega, he⟩
-  · rw [if_neg he, modeCount, if_neg]
-    intro h
-    exact he h.2.2.2
-
-theorem card_family_eq_classCount : family.card = classCount := by
-  rw [card_family_eq_supportedShapes, card_supportedShapes_eq_classCount]
-
-theorem classCount_le_family : classCount ≤ family.card := by
-  rw [card_family_eq_classCount]
-
-theorem card_family_exact :
-    family.card = 676013856769711926075368867014708 := by
-  rw [card_family_eq_classCount, classCount_exact]
-
-theorem classCapacity_le_family :
-    676013856769711926075368867014708 ≤ family.card := by
-  rw [card_family_exact]
+/-- Every hash-input length differs from the 342-bit index query. -/
+theorem hash_input_length_ne_index (n : Name)
+    (h : n.len = 145 ∨ n.len = 403 ∨ n.len = 919) : n.len ≠ 342 := by
+  omega
 
 /-! ## Arbitrary class numbering -/
 
 /-- Select the first `M` members of a finite family using only its canonical
-finite equivalence.  No frontier rank or schedule allocation is involved. -/
+finite equivalence. -/
 def selectCut {family : Finset (Finset Name)} {M : ℕ} (hM : M ≤ family.card) :
     Fin M → Finset Name := fun i => family.equivFin.symm (Fin.castLE hM i)
 
