@@ -10,7 +10,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
 def pairCost (q : Fin 16) : ℕ := (lengthSetup q).length +
   (2+2*earlyHash (leftChain q)) + 2 + remaining index (leftChain q) +
@@ -64,11 +64,11 @@ theorem pair_refines (q : Fin 16)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (hlen : wire.length = 5376)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      ChainsInv index wire pk u z (2*(q.val+1)) →
+      ChainsInv index wire pk a u z (2*(q.val+1)) →
       (∃ junk, Riscv.CodeAt u u.pc (nextCode q ++ junk)) →
       ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursor (2*(q.val+1)))) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (inv : ChainsInv index wire pk s x (leftChain q))
+    (inv : ChainsInv index wire pk a s x (leftChain q))
     (located : ∃ junk, Riscv.CodeAt s s.pc (prologue q ++ junk))
     (bound : pairCost index q+rest ≤ fuel) :
     Riscv.Refines fuel s
@@ -90,8 +90,8 @@ theorem pair_refines (q : Fin 16)
   have ready := lengthSetup_ready s q
   set s1 := (lengthSetup q).foldl execInstrBr s with hs1
   have E := lengthSetup_effect s q inv.length
-  have s1ctx : Ctx s1 index pk := inv.ctx.frame (fun r hr => by
-    rcases hr with rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code
+  have s1ctx : Ctx s1 index pk a := inv.ctx.frame (fun r hr => by
+    rcases hr with rfl | rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code
   have s1input : s1.getReg .x10 = W (prevInput A) := by rw [E.regs .x10 (by decide)]; exact inv.input
   have s1payload : PayloadFrom s1 wire A := fun j hj => memBits_of_mem_eq E.mem (inv.payload j hj)
   have s1done : Completed s1 (tops x) A := fun j hj => memBits_of_mem_eq E.mem (inv.done j hj)
@@ -163,7 +163,7 @@ theorem pair_bad_refines (q : Fin 16)
     (bad : pairCap q < digit index.val (2*q.val)+coarseDigit index q)
     (hlen : wire.length = 5376)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (inv : ChainsInv index wire pk s x (leftChain q))
+    (inv : ChainsInv index wire pk a s x (leftChain q))
     (located : ∃ junk, Riscv.CodeAt s s.pc (prologue q ++ junk))
     (bound : badPairCost q ≤ fuel) :
     Riscv.Refines fuel s
@@ -181,8 +181,8 @@ theorem pair_bad_refines (q : Fin 16)
   have ready := lengthSetup_ready s q
   set s1 := (lengthSetup q).foldl execInstrBr s with hs1
   have E := lengthSetup_effect s q inv.length
-  have ctx : Ctx s1 index pk := inv.ctx.frame (fun r hr => by
-    rcases hr with rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code
+  have ctx : Ctx s1 index pk a := inv.ctx.frame (fun r hr => by
+    rcases hr with rfl | rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code
   have input : s1.getReg .x10 = W (prevInput A) := by
     rw [E.regs .x10 (by decide)]; exact inv.input
   have payload : PayloadFrom s1 wire A := fun j hj => memBits_of_mem_eq E.mem (inv.payload j hj)

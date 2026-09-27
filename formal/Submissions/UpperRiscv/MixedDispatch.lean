@@ -17,12 +17,12 @@ theorem lane_offset' : ∀ q : Fin 16,
 theorem lane_access' : ∀ q : Fin 16, isValidHalfwordAccess (W (laneAddr q)) = true := by
   decide +kernel
 
-theorem dispatch_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+theorem dispatch_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey) {len : ℕ}
     (q : Fin 16) (k : Fin 32) (hk : k.val = 2*q.val) (s : MachineState) (x : graph.Assignment)
-    (inv : HashInv index wire pk s x k (work k)) (tail : Code)
+    (inv : HashInv index wire pk len s x k (work k)) (tail : Code)
     (located : Riscv.CodeAt s s.pc (dispatchCode q ++ tail))
     (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : 2 ≤ fuel)
-    (continuation : ∀ u, HashInv index wire pk u x k (work k) → u.mem=s.mem →
+    (continuation : ∀ u, HashInv index wire pk len u x k (work k) → u.mem=s.mem →
       u.pc = W (landing0 q-dispatch index q) → Riscv.Refines (fuel-2) u Q c) :
     Riscv.Refines fuel s Q (2+c) := by
   let front : Code := [.LHU .x28 .x12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q)))]
@@ -55,7 +55,7 @@ theorem dispatch_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
     exact code.append_right.code_eq acode
   have transition := jalr_transition a (imm12 (jumpImm q)) aloc.head
   rw [target] at transition
-  have binv : HashInv index wire pk (a.setPC (W (landing0 q-dispatch index q))) x k (work k) := by
+  have binv : HashInv index wire pk len (a.setPC (W (landing0 q-dispatch index q))) x k (work k) := by
     apply HashInv.frame index wire pk (t := a.setPC (W (landing0 q-dispatch index q))) ainv (work k) ainput inv.inputRange
       (fun r _ _ => rfl) rfl rfl
   rw [show fuel = front.length+((fuel-2)+1) by simp [front]; omega,

@@ -11,9 +11,9 @@ four more (chains 6, 9, 12, 15) are hashed in place six bytes above their cells.
 Every hash returns 256 bits; the next state starts at bit `truncOff k`: 64, or 112
 for the four chains hashed in place above their cells. A source is already state-width.
 
-The root commits to the low 192 bits of all 32 tops, in cell order, for 6144 bits
-(`rootCat`). The key-generation input lengths 144, 192 and 6144 differ from the
-512-bit index input.
+The root commits to the low 192 bits of the 32 tops, in cell order, less the last bit: 6143
+bits (`rootCat`), the first 6143 bits of the 6144-bit tops region (`rootRegion`). The key-generation
+input lengths 144, 192 and 6143 differ from the 512-bit index input.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -93,7 +93,7 @@ def len : Name → ℕ
   | ci k _ => chainBits k
   | ch _ _ => 256
   | cv _ _ => 256
-  | rc => 6144
+  | rc => 6143
   | rh => 256
 
 /-- Query cost of a node: one compression for every chain hash, thirteen for the root. -/
@@ -234,8 +234,12 @@ def topFun (c : Fin 32 → BitVec 256) (j : ℕ) : BitVec 256 := if h : j < 32 t
 
 /-- The 768 bytes of the working grid: the low 192 bits of every top, chain `0`
 lowest, exactly as the cells lie in memory. -/
-def rootCat (c : Fin 32 → BitVec 256) : BitVec 6144 :=
+def rootRegion (c : Fin 32 → BitVec 256) : BitVec 6144 :=
   (lowCat (topFun c) 31).cast (by norm_num)
+
+/-- The root input: the first 6143 bits of the region. The verifier hashes the first
+`a + 639` bits for a loaded signature length `a`, which is 6143 for an honest signature. -/
+def rootCat (c : Fin 32 → BitVec 256) : BitVec 6143 := (rootRegion c).setWidth 6143
 
 /-! ## The graph -/
 

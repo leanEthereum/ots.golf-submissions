@@ -169,7 +169,7 @@ theorem directVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
   by_cases hi : i ∈ validSet
   · rw [dif_pos hi, dif_pos hi]
     have hlen := Wire.payload_length_iff bits ⟨i, hi⟩
-    simp only [Wire.decode, Payload.length_permute] at hlen
+    simp only [Forest.decodeSignature, Payload.length_permute] at hlen
     change (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) ↔ bits.length = 5504 at hlen
     simp only [hlen, directReconstruct_eq]
   · rw [dif_neg hi, dif_neg hi]

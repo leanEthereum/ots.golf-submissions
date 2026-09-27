@@ -39,11 +39,11 @@ theorem completed_lowCat (s : MachineState) (c : Fin 32 → BitVec 256)
     rw [W_add]
     convert h using 1; congr 1; omega
 
-/-- The completed slices form exactly the graph's 6144-bit root input. -/
+/-- The completed slices form exactly the 6144-bit root region. -/
 theorem completed_root (s : MachineState) (c : Fin 32 → BitVec 256)
-    (done : Completed s c 32) : MemBits s (W regionAddr) (rootCat c) := by
+    (done : Completed s c 32) : MemBits s (W regionAddr) (rootRegion c) := by
   have low := completed_lowCat s c done 31 (by decide)
-  unfold rootCat
+  unfold rootRegion
   exact (memBits_cast _ _ _ _).mpr low
 
 end OptimalOTS.RiscvMixedProgram

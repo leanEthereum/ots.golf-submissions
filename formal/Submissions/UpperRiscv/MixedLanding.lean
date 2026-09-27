@@ -32,10 +32,10 @@ theorem right_previous (q : Fin 16) : prevInput (rightChain q) = work (leftChain
   unfold prevInput leftChain rightChain
   rw [if_neg (by omega : 2*q.val+1 ≠ 0), Nat.add_sub_cancel]
 
-theorem Prepared.frame {index : RawIdx} {wire : List Bool} {pk : PublicKey}
+theorem Prepared.frame {index : RawIdx} {wire : List Bool} {pk : PublicKey} {a : ℕ}
     {s t : MachineState} {x : graph.Assignment} {k : Fin 32}
-    (prep : Prepared index wire pk s x k) (inv : HashInv index wire pk t x k (work k))
-    (mem : t.mem=s.mem) : Prepared index wire pk t x k := by
+    (prep : Prepared index wire pk a s x k) (inv : HashInv index wire pk a t x k (work k))
+    (mem : t.mem=s.mem) : Prepared index wire pk a t x k := by
   refine ⟨inv, ?_⟩
   have h := prep.ready
   split_ifs at *

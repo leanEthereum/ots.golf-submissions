@@ -1,7 +1,9 @@
 import Submissions.UpperRiscv.ForestAlgorithm
 import Submissions.UpperRiscv.WireAdapter
 
-/-! The fixed-layout forest on the raw signature bit strings loaded by the machine. -/
+/-! The fixed-layout forest on the raw signature bit strings loaded by the machine, with the
+strict verifier that reads only full-length signatures. Its admissibility supplies the key
+generation and signing requirements of the submitted scheme. -/
 
 open OracleComp ENNReal
 noncomputable section
@@ -14,22 +16,6 @@ namespace OptimalOTS.RiscvUpperForest.Wire
 open OptimalOTS.Dag
 
 attribute [local irreducible] validSet numValid
-
-def decode (bits : List Bool) : Signature :=
-  (ofBits 128 (bits.take 128), Payload.permute (bits.drop 128))
-
-theorem decode_encode (σ : Signature) :
-    decode (AlgorithmAdapter.encodeSignature σ) = σ := by
-  rcases σ with ⟨nonce, payload⟩
-  simp only [decode, AlgorithmAdapter.encodeSignature]
-  have hn : (toBits nonce).length = 128 := length_toBits nonce
-  simp [← hn]
-  exact Prod.ext (ofBits_toBits nonce) rfl
-
-theorem encode_decode (bits : List Bool) (hlen : 128 ≤ bits.length) :
-    AlgorithmAdapter.encodeSignature (decode bits) = bits := by
-  change toBits (ofBits 128 (bits.take 128)) ++ Payload.unpermute (Payload.permute (bits.drop 128)) = bits
-  rw [Payload.unpermute_permute, toBits_ofBits _ (by simp [hlen]), List.take_append_drop]
 
 theorem reveal_positive (i : Idx) :
     0 < Forest.forestScheme.graph.revealBits (Forest.forestScheme.sets i) := by
@@ -58,35 +44,29 @@ theorem accepted_payload_positive (pk : PublicKey) (m : Message)
   · simp at accepted
 
 theorem canonical (pk : PublicKey) (m : Message) (bits : List Bool)
-    (accepted : true ∈ support (RiscvUpperForest.scheme.verify pk m (decode bits))) :
-    RiscvUpperForest.scheme.encodeSignature (decode bits) = bits := by
-  have positive := accepted_payload_positive pk m (decode bits) accepted
+    (accepted : true ∈ support (RiscvUpperForest.scheme.verify pk m (Forest.decodeSignature bits))) :
+    RiscvUpperForest.scheme.encodeSignature (Forest.decodeSignature bits) = bits := by
+  have positive := accepted_payload_positive pk m (Forest.decodeSignature bits) accepted
   have hlen : 128 ≤ bits.length := by
     change 0 < (Payload.permute (bits.drop 128)).length at positive
     rw [Payload.length_permute] at positive
     rw [List.length_drop] at positive
     omega
-  exact encode_decode bits hlen
+  exact Forest.encode_decode bits hlen
 
-def scheme : OracleAlgorithm.Scheme := WireAdapter.scheme RiscvUpperForest.scheme decode
-
-theorem secure : scheme.Secure :=
-  WireAdapter.secure RiscvUpperForest.scheme decode decode_encode canonical RiscvUpperForest.secure
+def scheme : OracleAlgorithm.Scheme := WireAdapter.scheme RiscvUpperForest.scheme Forest.decodeSignature
 
 theorem admissible : scheme.Admissible :=
-  WireAdapter.admissible RiscvUpperForest.scheme decode decode_encode canonical
+  WireAdapter.admissible RiscvUpperForest.scheme Forest.decodeSignature Forest.decode_encode canonical
     RiscvUpperForest.admissible 203 RiscvUpperForest.cost (by decide)
 
 theorem cost : scheme.VerifyCostAtMost 203 :=
-  WireAdapter.verifyCost RiscvUpperForest.scheme decode 203 RiscvUpperForest.cost
-
-/-- A complete OTS certificate on its transmitted signature bits. -/
-theorem certificate : scheme.Admissible ∧ scheme.Secure ∧ scheme.VerifyCostAtMost 203 := ⟨admissible, secure, cost⟩
+  WireAdapter.verifyCost RiscvUpperForest.scheme Forest.decodeSignature 203 RiscvUpperForest.cost
 
 /--
-info: 'OptimalOTS.RiscvUpperForest.Wire.certificate' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'OptimalOTS.RiscvUpperForest.Wire.admissible' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in
-#print axioms certificate
+#print axioms admissible
 
 end OptimalOTS.RiscvUpperForest.Wire

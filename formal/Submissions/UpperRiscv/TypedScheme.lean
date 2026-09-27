@@ -5,8 +5,8 @@ import OptimalOTS.OracleAlgorithm
 
 An internal proof device of this root, not part of the contract. The contract's
 `OracleAlgorithm.Scheme` transmits bit strings; here signatures have any type with an injective
-bit encoding, as for DAG signatures (nonce, disclosed values). `WireAdapter` transfers every
-requirement to the scheme on the encoded bit strings.
+bit encoding, as for DAG signatures (nonce, disclosed values). `WireAdapter` transfers the
+admission requirements to the scheme on the encoded bit strings.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -26,25 +26,6 @@ structure TypedScheme where
   verify : PublicKey → Message → Signature → OracleComp Spec Bool
 
 namespace TypedScheme
-
-/-- A one-signature attacker. -/
-structure Adversary (S : TypedScheme) where
-  State : Type
-  choose : PublicKey → OracleComp Spec (Message × State)
-  forge : State → Option S.Signature → OracleComp Spec (Message × S.Signature)
-
-/-- The strong-forgery experiment. -/
-def experiment (S : TypedScheme) (A : S.Adversary) : OracleComp Spec Bool := do
-  let (pk, sk) ← S.keygen
-  let (m₁, st) ← A.choose pk
-  let σ₁ ← S.sign sk m₁
-  let (m₂, σ₂) ← A.forge st σ₁
-  let ok ← S.verify pk m₂ σ₂
-  return ok && decide (σ₁.map (fun s => (m₁, s)) ≠ some (m₂, σ₂))
-
-def Secure (S : TypedScheme) : Prop :=
-  ∀ (A : S.Adversary) (B : ℕ), CostAtMost (S.experiment A) B →
-    probTrue (S.experiment A) < (B : ℝ≥0∞) / 2 ^ securityBits
 
 def VerifyCostAtMost (S : TypedScheme) (c : ℕ) : Prop :=
   ∀ pk m σ, CostAtMost (S.verify pk m σ) c

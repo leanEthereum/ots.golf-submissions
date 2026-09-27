@@ -101,11 +101,11 @@ def verify (pk : PublicKey) (m : Message) (bits : List Bool) :
     else return false
   else return false
 
-/-- Exact equality to the verifier covered by the forest security certificate. -/
+/-- Exact equality to the strict forest verifier on signature bits. -/
 theorem verify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     verify pk m bits = Wire.scheme.verify pk m bits := by
-  change verify pk m bits = Forest.forestScheme.verify pk m (Wire.decode bits)
-  unfold verify GScheme.verify Wire.decode
+  change verify pk m bits = Forest.forestScheme.verify pk m (Forest.decodeSignature bits)
+  unfold verify GScheme.verify Forest.decodeSignature
   simp only [Payload.length_permute]
   apply congrArg (fun f => packIndex (emsg m pk) (ofBits 128 (bits.take 128)) >>= f)
   funext i

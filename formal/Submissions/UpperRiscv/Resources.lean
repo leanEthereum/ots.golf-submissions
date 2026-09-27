@@ -43,6 +43,10 @@ theorem signLoop_returns (S : GScheme) (x : S.graph.Assignment) (m : Message) :
       · exact signLoop_returns S x m k _ σ h
     · simp at h
 
+theorem sign_returns (S : GScheme) (x : S.graph.Assignment) (m : Message) (σ : Signature)
+    (h : some σ ∈ support (S.sign x m)) : ∃ i, σ.2 = S.graph.encode (S.sets i) x :=
+  signLoop_returns S x m trials ∅ σ h
+
 theorem signatureSize (S : GScheme) :
     S.toAlgorithm.SignatureSizeAtMost (nonceBits + (maxSignatureBits - nonceBits)) := by
   change ∀ (sk : S.graph.Assignment) (m : Message) (σ : Signature),

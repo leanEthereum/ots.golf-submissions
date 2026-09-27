@@ -9,7 +9,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
 def readNodes (k : Fin 32) : List Name :=
   src k :: (List.range (RiscvUpperForest.ForestVerifier.pos index k+1)).flatMap (tripleN k)
@@ -28,12 +28,12 @@ theorem read_prefix_refines (k : Fin 32) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (hlen : wire.length = 5376)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      HashInv index wire pk u z k (wireSlot k) →
+      HashInv index wire pk a u z k (wireSlot k) →
       HoldsAt u z k (RiscvUpperForest.ForestVerifier.pos index k+1) →
       Riscv.CodeAt u u.pc tail → ∀ left, rest ≤ left →
       Riscv.Refines left u (K (z,cursor k+chainBits k)) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (inv : HashInv index wire pk s x k (wireSlot k))
+    (inv : HashInv index wire pk a s x k (wireSlot k))
     (held : MemBits s (W (wireSlot k)) (ofBits (chainBits k) (wire.drop (wireOffset k))))
     (located : Riscv.CodeAt s s.pc (.ECALL::tail)) (bound : 1+rest ≤ fuel) :
     Riscv.Refines fuel s
@@ -47,7 +47,7 @@ theorem read_prefix_refines (k : Fin 32) (tail : Code)
     rw [← hp, List.range_succ, List.flatMap_append, List.flatMap_singleton, List.cons_append]
     simp [tripleN, hp32]
   rw [nodes, runNodes'_append, run, pure_bind]
-  have inv' : HashInv index wire pk s x' k (wireSlot k) := by
+  have inv' : HashInv index wire pk a s x' k (wireSlot k) := by
     refine ⟨inv.ctx, inv.input, inv.inputRange, inv.length, inv.out, inv.payload, ?_⟩
     intro j hj
     have he : tops x' j = tops x j := by
