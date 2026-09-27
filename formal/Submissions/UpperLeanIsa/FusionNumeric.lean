@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.TierNumeric
 
-/-! Exact rational conditions for the 1139-cycle candidate's 18-tier schedule.
+/-! Exact rational conditions for the 1126-cycle candidate's 17-tier schedule.
 The separate codec proof must establish that these counts describe the accepted indices. -/
 
 set_option linter.constructorNameAsVariable false
@@ -13,11 +13,11 @@ open Tier
 
 /-- Tier weights, ascending. -/
 def tierA : List ℕ :=
-  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]
+  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]
 
 /-- Classes per tier. -/
 def tierN : List ℕ :=
-  [613719914776929430564334578416466, 228888354580430802546791677366785, 126742277681326732051972899433338, 32176228198931846982504227315838, 58999602150286646629209763803366, 18020055063450638970525467990640, 9109378732128328871630287378128, 40498483764736788040833651651897, 12362930118285276890697568638612, 6190052330686210755666063773454, 1311073087021728039426185446698, 2993205094099453560315135408660, 760667261913627586528246669440, 346392551708888547644354117448, 58475429733079688791956352704, 3117119797052517450127810464, 49479852529924384621989384, 171037360088874631477440]
+  [586059168825967220503869936247225, 225147591650264611783475280271136, 120954872951725277019767524280388, 31325366320505199505634758408824, 57133146884687464708165801018158, 17812128586964487070339292256900, 8854160434526473227054418677444, 40349309059229540697179394416982, 12456380551407731332951415142696, 6118241757575575227915602443824, 1304141987154798412506269145144, 3015153931851281431558367597556, 768656158915408775406625852044, 348012945561215323812480505524, 58560815427150584353398987960, 2795072752774262541987184032, 30628852715996861657761440]
 
 def tA (t : ℕ) : ℕ := tierA.getD t 0
 def tN (t : ℕ) : ℕ := tierN.getD t 0
@@ -95,20 +95,20 @@ def m0l (t : ℕ) : ℕ := rest t + etaDn
 
 /-- The rarest-cut schedule of the layer-86 Group3 tables. -/
 def schedule : Sched where
-  T := 18
+  T := 17
   K := 127
   a := tA
   N := tN
   Yu t := (iterUp 19 (m0u t) : ℚ) / prec
   Yl t := (iterDn 19 (m0l t) : ℚ) / prec
   yl t := (m0l t : ℚ) / prec
-  hp := 1415907530965 / 2 ^ 40 / 2 ^ 127
-  k1 := 1415907530965 / 2 ^ 41 / 2 ^ 127
-  b0 := 1
+  hp := 1455152844958 / 2 ^ 40 / 2 ^ 127
+  k1 := 727576585389 / 2 ^ 40 / 2 ^ 127
+  b0 := 38095929638710986492724218760267
 
 /-! ## The conditions -/
 
-theorem cum_le : ∀ t ≤ 18, cum t * 2 ^ 129 ≤ prec := by decide +kernel
+theorem cum_le : ∀ t ≤ 17, cum t * 2 ^ 129 ≤ prec := by decide +kernel
 
 theorem mass_eq (t : ℕ) : schedule.mass t = (cum t : ℚ) / 2 ^ 127 := by
   simp only [Sched.mass, cum, schedule]
@@ -119,41 +119,41 @@ theorem eta0_le : eta0 ≤ (etaUp : ℚ) / prec := by decide +kernel
 
 theorem le_eta0 : (etaDn : ℚ) / prec ≤ eta0 := by decide +kernel
 
-theorem ybar_eq {t : ℕ} (ht : t ≤ 18) : schedule.ybar t = (rest t : ℚ) / prec + eta0 := by
+theorem ybar_eq {t : ℕ} (ht : t ≤ 17) : schedule.ybar t = (rest t : ℚ) / prec + eta0 := by
   rw [Sched.ybar, mass_eq, rest, Nat.cast_sub (cum_le t ht)]
   push_cast
   unfold prec
   ring
 
-theorem ybar_le {t : ℕ} (ht : t ≤ 18) : schedule.ybar t ≤ (m0u t : ℚ) / prec := by
+theorem ybar_le {t : ℕ} (ht : t ≤ 17) : schedule.ybar t ≤ (m0u t : ℚ) / prec := by
   rw [ybar_eq ht, m0u, Nat.cast_add, add_div]
   linarith [eta0_le]
 
-theorem le_ybar {t : ℕ} (ht : t ≤ 18) : (m0l t : ℚ) / prec ≤ schedule.ybar t := by
+theorem le_ybar {t : ℕ} (ht : t ≤ 17) : (m0l t : ℚ) / prec ≤ schedule.ybar t := by
   rw [ybar_eq ht, m0l, Nat.cast_add, add_div]
   linarith [le_eta0]
 
-theorem ybar_nonneg {t : ℕ} (ht : t ≤ 18) : 0 ≤ schedule.ybar t :=
+theorem ybar_nonneg {t : ℕ} (ht : t ≤ 17) : 0 ≤ schedule.ybar t :=
   (div_nonneg (Nat.cast_nonneg _) prec_pos.le).trans (le_ybar ht)
 
 /-- `(1 - P_{<T}) ^ (2 ^ 19 - 1) ≤ 2 ^ -128`, from `2 ^ 19` outward squarings and one division. -/
-theorem avail : (1 - schedule.mass 18) ^ (2 ^ 19 - 1) ≤ 1 / 2 ^ 128 := by
-  set x := 1 - schedule.mass 18 with hx
-  have hxe : x = (rest 18 : ℚ) / prec := by
-    rw [hx, mass_eq, rest, Nat.cast_sub (cum_le 18 le_rfl)]
+theorem avail : (1 - schedule.mass 17) ^ (2 ^ 19 - 1) ≤ 1 / 2 ^ 128 := by
+  set x := 1 - schedule.mass 17 with hx
+  have hxe : x = (rest 17 : ℚ) / prec := by
+    rw [hx, mass_eq, rest, Nat.cast_sub (cum_le 17 le_rfl)]
     push_cast
     unfold prec
     ring
   have hpos : 0 < x := by
     rw [hxe]
-    exact div_pos (by exact_mod_cast (show 0 < rest 18 by decide +kernel)) prec_pos
+    exact div_pos (by exact_mod_cast (show 0 < rest 17 by decide +kernel)) prec_pos
   have hU := pow_le_iterUp hpos.le (le_of_eq hxe) 19
   have hsplit : x ^ 2 ^ 19 = x ^ (2 ^ 19 - 1) * x := by
     rw [← pow_succ]; norm_num
   rw [hsplit] at hU
-  have hq : (iterUp 19 (rest 18) : ℚ) / prec / ((rest 18 : ℚ) / prec) ≤ 1 / 2 ^ 128 := by
+  have hq : (iterUp 19 (rest 17) : ℚ) / prec / ((rest 17 : ℚ) / prec) ≤ 1 / 2 ^ 128 := by
     decide +kernel
-  calc x ^ (2 ^ 19 - 1) ≤ (iterUp 19 (rest 18) : ℚ) / prec / x := by
+  calc x ^ (2 ^ 19 - 1) ≤ (iterUp 19 (rest 17) : ℚ) / prec / x := by
         rw [le_div_iff₀ hpos]; exact hU
     _ ≤ 1 / 2 ^ 128 := by rw [hxe]; exact hq
 
@@ -164,7 +164,7 @@ theorem schedule_valid : schedule.Valid where
   T_le := by decide
   a_pos := by decide +kernel
   a_lt := by
-    have h : ∀ t < 18, ∀ s < t, tA s < tA t := by decide +kernel
+    have h : ∀ t < 17, ∀ s < t, tA s < tA t := by decide +kernel
     intro s t hst ht
     exact h t ht s hst
   mass_lt := by decide +kernel
@@ -172,7 +172,7 @@ theorem schedule_valid : schedule.Valid where
   Yl_le := fun t ht => iterDn_le_pow (le_ybar ht) 19
   yl_pos := by
     intro t ht
-    have h : ∀ t < 18, 0 < m0l t := by decide +kernel
+    have h : ∀ t < 17, 0 < m0l t := by decide +kernel
     exact div_pos (by exact_mod_cast h t ht) prec_pos
   yl_le := fun t ht => le_ybar ht.le
   hp_ge := by decide +kernel

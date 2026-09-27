@@ -11,7 +11,7 @@ noncomputable section
 abbrev Tbl (P : Params) := Loc P → BitVec hashBits
 
 def chainOrder : List (Fin 42) :=
-  [0,12,13,17,18,22,23,27,28,29,30,31,32,33,34,35,36,37,38,14,15,16,19,20,21,24,25,26,1,2,3,4,5,6,7,39,40,41,8,9,10,11]
+  [0,12,13,17,18,22,23,27,28,32,33,37,38,24,25,26,29,30,31,34,35,36,39,40,41,14,15,16,19,20,21,1,2,7,8,9,10,11,3,4,5,6]
 
 theorem chainOrder_values : chainOrder.map Fin.val = evaluationOrder := rfl
 
@@ -22,7 +22,7 @@ variable (P : Params)
 
 def locationOrder : List (Loc P) :=
   chainOrder.flatMap (fun k => (List.finRange (P.codec.len k - 1)).map fun j => .inl ⟨k,j⟩) ++
-    (List.finRange 2).map Sum.inr
+    (List.finRange 1).map Sum.inr
 
 /-- Query a location and place the answer in the immutable abstract record table. -/
 def evalLocations (seeds : Fin 42 → Word) : List (Loc P) → Tbl P → OracleComp Spec (Tbl P)
@@ -31,7 +31,7 @@ def evalLocations (seeds : Fin 42 → Word) : List (Loc P) → Tbl P → OracleC
     let v ← hash (Record.input (seeds,y) a)
     evalLocations seeds l (Function.update y a v)
 
-/-- Key generation queries all 625 chain locations and then the two roots. -/
+/-- Key generation queries all 625 chain locations and then the root call. -/
 def keygen : OracleComp Spec (PublicKey × SecretKey) := do
   let seeds ← tabulate (fun _ : Fin 42 => sampleBits 128)
   let y ← P.evalLocations seeds P.locationOrder (fun _ => 0)
@@ -54,14 +54,14 @@ def reconFrom (I : Index) (bits : List Bool) : List (Fin 42) → Tops → Oracle
     let x ← P.chain t k (P.codec.len k - 1 - P.codec.digit I k) (P.codec.digit I k) (decodeWord bits k)
     reconFrom I bits l (Function.update t k.val x)
 
-def rootFrom (t : Tops) : List (Fin 2) → BitVec 256 → OracleComp Spec (BitVec 256)
+def rootFrom (t : Tops) : List (Fin 1) → BitVec 256 → OracleComp Spec (BitVec 256)
   | [],st => pure st
   | r :: l,st => do
     let v ← hash (P.rootInput t r st)
     rootFrom t l v
 
 def root (t : Tops) : OracleComp Spec PublicKey :=
-  (fun v => v.extractLsb' 0 128) <$> P.rootFrom t [0,1] 0
+  (fun v => v.extractLsb' 0 128) <$> P.rootFrom t [0] 0
 
 def verify (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp Spec Bool := do
   if bits.length ≠ sigBits then return false

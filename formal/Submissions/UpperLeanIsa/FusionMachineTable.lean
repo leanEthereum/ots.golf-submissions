@@ -32,13 +32,13 @@ theorem rawCode_lt {u v : ℕ} (hu : u < 13) (hv : v < 2 ^ gb u) :
   · subst u; norm_num [gb] at hv ⊢; omega
   · rw [if_neg h0, if_neg h0]; exact hv
 
-theorem AS_eq : ∀ u < 13, ∀ c ≤ 17,
+theorem AS_eq : ∀ u < 13, ∀ c ≤ 18,
     A u c = (if u = 0 then 2 else 1) * FusionCodec.AS (FusionCodec.ushape u) c := by decide
 
 theorem A_top : ∀ u < 13, ∀ c ≤ 18, nb u ≤ c → A u c = VF u := by decide
 
 /-- The live entries of the scheme's tables are the machine's blocks. -/
-theorem cut_eq : ∀ u < 13, FusionCodec.cut u = if u = 0 then 511 else VF u := by decide
+theorem cut_eq : ∀ u < 13, FusionCodec.cut u = if u = 0 then 512 else VF u := by decide
 
 theorem live_iff {u : ℕ} (hu : u < 13) (v : ℕ) (hv : v < 2 ^ gb u) :
     rawCode u v < FusionCodec.cut u ↔ v < VF u := by
@@ -89,9 +89,9 @@ theorem fusion_band_eq {u v : ℕ} (hu : u < 13) (hvl : v < VF u) :
   have hv : v < 2 ^ gb u := lt_of_lt_of_le hvl (VF_le u hu)
   have hcut : rawCode u v < FusionCodec.cut u := (live_iff hu v hv).mpr hvl
   obtain ⟨h1, h2⟩ := FusionCodec.cost_spec hcut
-  have hc : FusionCodec.cost u (rawCode u v) < 17 := FusionCodec.cost_lt hcut
-  have ha := AS_eq u hu _ (show FusionCodec.cost u (rawCode u v) ≤ 17 by omega)
-  have hb := AS_eq u hu _ (show FusionCodec.cost u (rawCode u v) + 1 ≤ 17 by omega)
+  have hc : FusionCodec.cost u (rawCode u v) < 18 := FusionCodec.cost_lt hcut
+  have ha := AS_eq u hu _ (show FusionCodec.cost u (rawCode u v) ≤ 18 by omega)
+  have hb := AS_eq u hu _ (show FusionCodec.cost u (rawCode u v) + 1 ≤ 18 by omega)
   have h1' : A u (FusionCodec.cost u (rawCode u v)) ≤ v := by
     rw [ha]; by_cases h0 : u = 0 <;> simp only [rawCode, h0, if_true, if_false] at h1 ⊢ <;> omega
   have h2' : v < A u (FusionCodec.cost u (rawCode u v) + 1) := by
@@ -165,13 +165,16 @@ theorem fusion_compat : Compat Fusion.params fusionTab where
     change Fusion.tagWord (Fusion.rootIndex r) = _
     rw [Fusion.tagWord_small _ (by fin_cases r <;> decide)]
     rfl
-  lightCv := by
+  tripleCv k hk := by
     have h (i : Fin 47) (hi : i.val < 45) : Fusion.tagWord i = cellBits (cV i.val) := by
       rw [Fusion.tagWord_small i hi]
       rfl
-    change Fusion.tagWord 2 ++ Fusion.tagWord 1 = cellBits (cV 2) ++ cellBits (cV 1)
-    rw [h 2 (by decide), h 1 (by decide)]
-    rfl
+    have e : ∀ k : Fin 42, tri k.val → (Fusion.tripleIndex k).val = triA k.val ∧
+        (Fusion.tripleIndex k + 1).val = triA k.val + 1 ∧ triA k.val ≤ 13 := by decide
+    obtain ⟨e1, e2, e3⟩ := e k hk
+    change Fusion.tagWord (Fusion.tripleIndex k + 1) ++ Fusion.tagWord (Fusion.tripleIndex k) =
+      cellBits (cV (triA k.val + 1)) ++ cellBits (cV (triA k.val))
+    rw [h _ (by omega), h _ (by omega), e1, e2]
 
 end
 end OptimalOTS.HLFusion

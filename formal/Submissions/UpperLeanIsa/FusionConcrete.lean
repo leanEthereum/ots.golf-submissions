@@ -22,10 +22,6 @@ theorem tag_inj (k k' : Fin numChains) (j j' : ℕ) (hj : j + 1 < len k) (hj' : 
   obtain ⟨hk, hjj⟩ := Prod.mk.inj hl
   exact ⟨Fin.ext hk.symm, hjj.symm⟩
 
-/-- The final steps of the light parents 39, 40, 41 have middle tags `B = 2, 4, 6`. -/
-theorem light_final_pos : ∀ k : Fin 42, k.val ∈ Fusion.parents 6 →
-    (off k + (len k - 2)) / 9 % 9 = 2 * (k.val - 38) := by decide
-
 theorem hyp : params.Hyp where
   len_pos := fun k => (Nat.zero_le _).trans_lt (digit_lt 0 k)
   digit_lt := digit_lt
@@ -46,8 +42,8 @@ theorem hyp : params.Hyp where
 end FusionCodec
 namespace Fusion
 open LeanerVM.Parameters
-/-- The first 25 used domains plus 22 unused labels make `fusedMd` injective on all chains.
-Only the twenty labels of actual binding chains occur in the executable program. -/
+/-- Distinct labels make `fusedMd` injective on all chains. The executable program uses only
+the root label `C_1`, the sixteen labels of the five-dep chains and the three-dep cv pairs. -/
 def tagWord (i : Fin 47) : Word := (0 : BitVec 64) ++ (domainTag i : K)
 
 theorem tagWord_injective : Function.Injective tagWord := by
@@ -59,22 +55,36 @@ theorem tagWord_injective : Function.Injective tagWord := by
 def tagIndex (k : Fin 42) : Fin 47 :=
   ![23,11,12,14,15,45,46,13,17,18,19,20,24,25,2,3,4,26,27,5,6,7,28,29,8,9,10,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44] k
 
-def rootIndex (r : Fin 2) : Fin 47 := ![1,21] r
+def rootIndex (r : Fin 1) : Fin 47 := ![1] r
+
+/-- The cv index `a` of a three-dep parent: its cv pair is `(C_a, C_(a+1))`. -/
+def tripleIndex (k : Fin 42) : Fin 47 :=
+  ![1,1,1,1,1,1,1,1,1,2,3,4,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,5,6,7,1,1,8,9,10,1,1,11,12,13] k
 
 theorem tagIndex_injective : Function.Injective tagIndex := by decide +kernel
-theorem rootIndex_injective : Function.Injective rootIndex := by decide +kernel
+
+theorem tripleOwned_iff : ∀ k : Fin 42,
+    tripleOwned k ↔ k.val ∈ [8,9,10,11,29,30,31,34,35,36,39,40,41] := by
+  unfold tripleOwned
+  decide
+
+theorem tripleIndex_inj : ∀ k k' : Fin 42, k.val ∈ [8,9,10,11,29,30,31,34,35,36,39,40,41] →
+    k'.val ∈ [8,9,10,11,29,30,31,34,35,36,39,40,41] → tripleIndex k = tripleIndex k' → k = k' := by
+  decide
+
+theorem tripleIndex_ne_zero : ∀ k, tripleIndex k ≠ 0 := by decide
 
 theorem tagIndex_reserved : ∀ k, tagIndex k ≠ 0 ∧ tagIndex k ≠ 16 ∧ ∀ r, tagIndex k ≠ rootIndex r := by
   decide
 
 theorem rootIndex_reserved : ∀ r, rootIndex r ≠ 0 ∧ rootIndex r ≠ 16 := by decide +kernel
 
-/-- The light cv `(C_1, C_2)` is the machine's adjacent constant cells 51 and 52. -/
+/-- The three-dep cv `(C_a, C_(a+1))` is the machine's adjacent constant cells `50 + a`, `51 + a`. -/
 noncomputable def params : Params where
   codec := FusionCodec.params
   fusedMd k := tagWord (tagIndex k)
   rootMd r := tagWord (rootIndex r)
-  lightCv := tagWord 2 ++ tagWord 1
+  tripleCv k := tagWord (tripleIndex k + 1) ++ tagWord (tripleIndex k)
 
 attribute [local irreducible] tagWord LeanIsaFieldRescale.costFactor
 
@@ -109,7 +119,6 @@ theorem params_hyp : params.Hyp where
   fused_root := by
     intro k r h
     exact (tagIndex_reserved k).2.2 r (tagWord_injective h)
-  root_inj := tagWord_injective.comp rootIndex_injective
   root_chain := by
     intro r h
     rw [codec_chain_tag] at h
@@ -118,27 +127,17 @@ theorem params_hyp : params.Hyp where
     intro r h
     rw [codec_index_tag] at h
     exact (rootIndex_reserved r).2 (tagWord_injective h)
-  light_cv := by
-    intro h
-    have hc : tagWord 2 ++ tagWord 1 = FusionCodec.gword 1 ++ FusionCodec.gword 0 := h
+  triple_cv := by
+    intro k h
+    have hc : tagWord (tripleIndex k + 1) ++ tagWord (tripleIndex k) =
+      FusionCodec.gword 1 ++ FusionCodec.gword 0 := h
     have h1 := (append_inj hc).2
     rw [show FusionCodec.gword 0 = tagWord 0 from codec_chain_tag] at h1
-    exact absurd (tagWord_injective h1) (by decide)
-  light_tag := by
-    intro k k' hk hk' h1 _
-    have p := FusionCodec.light_final_pos k ((owner_mem k 6).mp hk)
-    have p' := FusionCodec.light_final_pos k' ((owner_mem k' 6).mp hk')
-    have hm := (owner_mem k 6).mp hk
-    have hm' := (owner_mem k' 6).mp hk'
-    simp only [parents] at hm hm'
-    change FusionCodec.tag k (FusionCodec.len k - 2) 1 =
-      FusionCodec.tag k' (FusionCodec.len k' - 2) 1 at h1
-    simp only [FusionCodec.tag, Matrix.cons_val_one] at h1
-    have e := FusionCodec.sym_inj (Nat.mod_lt _ (by norm_num)) (Nat.mod_lt _ (by norm_num)) h1
-    rw [p, p'] at e
-    apply Fin.ext
-    simp at hm hm'
-    omega
+    exact tripleIndex_ne_zero k (tagWord_injective h1)
+  triple_inj := by
+    intro k k' hk hk' h
+    have h1 := tagWord_injective (append_inj h).2
+    exact tripleIndex_inj k k' ((tripleOwned_iff k).mp hk) ((tripleOwned_iff k').mp hk') h1
 
 end Fusion
 end OptimalOTS.LeanIsaBaseline.Layer

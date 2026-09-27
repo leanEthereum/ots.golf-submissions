@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.Records
 
-/-! The fixed two-root dependency graph of the 1139-cycle research candidate.
+/-! The fixed one-root dependency graph of the 1126-cycle research candidate.
 The closure theorem is conditional on actual query equalities or a charged bad event.
 It is not a complete security or machine certificate. -/
 namespace OptimalOTS.LeanIsaBaseline.Layer.Fusion
@@ -21,76 +21,80 @@ theorem packet_injective : Function.Injective packet := by
   funext i
   fin_cases i <;> assumption
 
-def rootSet : Finset ℕ := {1,2,3,4,5,6,26,8,9,10,11}
-/-- Groups `0 … 5` fuse five dependency tops into a parent's final step; the light group `6`
-binds top 7 through the final steps of chains 39, 40, 41. -/
+def rootSet : Finset ℕ := {1,2,3,4,5,6}
+/-- Groups `0 … 4` fuse five dependency tops into a parent's final step; the three-dep groups
+`5 … 8` bind three tops through the message of their parents' final steps. -/
 def parents (u : ℕ) : Finset ℕ :=
-  if u=0 then {1,2,7} else if u=1 then {3,4,5,6}
-  else if u=2 then {8,9,10,11} else if u=3 then {14,15,16}
-  else if u=4 then {19,20,21} else if u=5 then {24,25,26} else {39,40,41}
+  if u=0 then {3,4,5,6} else if u=1 then {1,2,7}
+  else if u=2 then {14,15,16} else if u=3 then {19,20,21}
+  else if u=4 then {24,25,26} else if u=5 then {8,9,10,11}
+  else if u=6 then {29,30,31} else if u=7 then {34,35,36} else {39,40,41}
+/-- Group `8` has two children; its third message word repeats top 38. -/
 def children (u : ℕ) : List ℕ :=
-  if u=0 then [14,15,16,19,20] else if u=1 then [21,24,25,31,34]
-  else if u=2 then [35,36,39,40,41] else if u=3 then [12,13,0,17,18]
-  else if u=4 then [22,23,27,28,32] else if u=5 then [33,37,38,29,30] else [7]
+  if u=0 then [7,8,9,10,11] else if u=1 then [14,15,16,19,20]
+  else if u=2 then [26,29,30,31,34] else if u=3 then [35,36,39,40,41]
+  else if u=4 then [12,13,0,17,18] else if u=5 then [21,24,25]
+  else if u=6 then [22,23,27] else if u=7 then [28,32,33] else [37,38,38]
 /-- The order in which the groups bind their children. -/
-def bindOrder : List ℕ := [1,2,5,6,0,3,4]
+def bindOrder : List ℕ := [0,1,5,2,3,4,6,7,8]
 def closure : ℕ → Finset ℕ
   | 0 => rootSet
   | n+1 => closure n ∪ (children (bindOrder.getD n 0)).toFinset
 
-theorem bindOrder_lt : ∀ n < 7, bindOrder.getD n 0 < 7 := by decide
-theorem schedule : ∀ n < 7, parents (bindOrder.getD n 0) ⊆ closure n := by decide
-theorem full_coverage : Finset.range 42 ⊆ closure 7 := by decide
+theorem bindOrder_lt : ∀ n < 9, bindOrder.getD n 0 < 9 := by decide
+theorem schedule : ∀ n < 9, parents (bindOrder.getD n 0) ⊆ closure n := by decide
+theorem full_coverage : Finset.range 42 ⊆ closure 9 := by decide
 
-def rootWords (t st tag : ℕ → Word) (r : ℕ) : Fin 7 → Word :=
-  if r=0 then ![t 1,t 2,t 3,t 4,t 5,t 6,tag 0]
-  else ![t 26,st 0,t 8,t 9,t 10,t 11,tag 1]
+/-- The single root call: cv `(t 1, t 2)`, message `t 3 … t 6`. -/
+def rootWords (t : ℕ → Word) (tag : Word) : Fin 7 → Word := ![t 1,t 2,t 3,t 4,t 5,t 6,tag]
 
 def fusionWords (t : ℕ → Word) (u : ℕ) (x tag : Word) : Fin 7 → Word :=
   ![t ((children u).getD 0 0),t ((children u).getD 1 0),x,
     t ((children u).getD 2 0),t ((children u).getD 3 0),t ((children u).getD 4 0),tag]
 
-/-- The final step of a light parent: message `[x, t 7, B, C]`. -/
-def lightPacket (cv : BitVec 256) (b c : Word) (t : ℕ → Word) (x md : Word) : BitVec 896 :=
-  LeanIsa.hashInput cv (c ++ b ++ t 7 ++ x) md
+/-- The final step of a three-dep parent: message `[x, d0, d1, d2]` of the group's children. -/
+def triplePacket (cv : BitVec 256) (t : ℕ → Word) (u : ℕ) (x md : Word) : BitVec 896 :=
+  LeanIsa.hashInput cv
+    (t ((children u).getD 2 0) ++ t ((children u).getD 1 0) ++ t ((children u).getD 0 0) ++ x) md
 
-theorem lightPacket_eq {cv cv' : BitVec 256} {b b' c c' x x' md md' : Word} {t t' : ℕ → Word}
-    (h : lightPacket cv b c t x md = lightPacket cv' b' c' t' x' md') :
-    cv = cv' ∧ b = b' ∧ c = c' ∧ t 7 = t' 7 ∧ x = x' ∧ md = md' := by
+theorem triplePacket_eq {cv cv' : BitVec 256} {x x' md md' : Word} {t t' : ℕ → Word} {u u' : ℕ}
+    (h : triplePacket cv t u x md = triplePacket cv' t' u' x' md') :
+    cv = cv' ∧ (∀ i < 3, t ((children u).getD i 0) = t' ((children u').getD i 0)) ∧ x = x' ∧
+      md = md' := by
   obtain ⟨hc, hm, ht⟩ := (hashInput_eq_iff _ _ _ _ _ _).mp h
   obtain ⟨h3, hx⟩ := append_inj hm
-  obtain ⟨h2, h7⟩ := append_inj h3
-  obtain ⟨hcc, hb⟩ := append_inj h2
-  exact ⟨hc, hb, hcc, h7, hx, ht⟩
+  obtain ⟨h2, h0⟩ := append_inj h3
+  obtain ⟨h22, h1⟩ := append_inj h2
+  refine ⟨hc, fun i hi => ?_, hx, ht⟩
+  interval_cases i <;> assumption
 
-theorem light_binds {cv cv' : BitVec 256} {b b' c c' x x' md md' : Word} {t t' : ℕ → Word}
-    (h : lightPacket cv b c t x md = lightPacket cv' b' c' t' x' md') :
-    ∀ k ∈ children 6, t k = t' k := by
+theorem triple_binds {cv cv' : BitVec 256} {x x' md md' : Word} {t t' : ℕ → Word} {u : ℕ}
+    (hu : 5 ≤ u) (hu9 : u < 9) (h : triplePacket cv t u x md = triplePacket cv' t' u x' md') :
+    ∀ k ∈ children u, t k = t' k := by
+  have he := (triplePacket_eq h).2.1
+  have h0 := he 0 (by omega)
+  have h1 := he 1 (by omega)
+  have h2 := he 2 (by omega)
   intro k hk
-  simp [children] at hk
-  subst hk
-  exact (lightPacket_eq h).2.2.2.1
+  interval_cases u <;> simp [children] at hk h0 h1 h2
+  all_goals rcases hk with rfl | rfl | rfl <;> assumption
 
-theorem light_current {cv cv' : BitVec 256} {b b' c c' x x' md md' : Word} {t t' : ℕ → Word}
-    (h : lightPacket cv b c t x md = lightPacket cv' b' c' t' x' md') : x = x' :=
-  (lightPacket_eq h).2.2.2.2.1
+theorem triple_current {cv cv' : BitVec 256} {x x' md md' : Word} {t t' : ℕ → Word} {u : ℕ}
+    (h : triplePacket cv t u x md = triplePacket cv' t' u x' md') : x = x' :=
+  (triplePacket_eq h).2.2.1
 
-theorem root_binds (t t' : ℕ → Word) (st st' tag tag' : ℕ → Word)
-    (h : ∀ r < 2, packet (rootWords t st tag r) = packet (rootWords t' st' tag' r)) :
+theorem root_binds (t t' : ℕ → Word) (tag tag' : Word)
+    (h : packet (rootWords t tag) = packet (rootWords t' tag')) :
     ∀ k ∈ rootSet, t k = t' k := by
-  have h0 := packet_injective (h 0 (by omega))
-  have h1 := packet_injective (h 1 (by omega))
-  have eq0 (i : Fin 7) := congrFun h0 i
-  have eq1 (i : Fin 7) := congrFun h1 i
-  simp [rootWords] at eq0 eq1
+  have eq0 (i : Fin 7) := congrFun (packet_injective h) i
+  simp [rootWords] at eq0
   intro k hk
   simp [rootSet] at hk
-  rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  rcases hk with rfl | rfl | rfl | rfl | rfl | rfl
   all_goals first
     | exact eq0 0 | exact eq0 1 | exact eq0 2 | exact eq0 3 | exact eq0 4 | exact eq0 5
-    | exact eq1 0 | exact eq1 2 | exact eq1 3 | exact eq1 4 | exact eq1 5
 
-theorem fusion_binds_children (t t' : ℕ → Word) {u : ℕ} (hu : u < 6) (x x' tag tag' : Word)
+theorem fusion_binds_children (t t' : ℕ → Word) {u : ℕ} (hu : u < 5) (x x' tag tag' : Word)
     (h : packet (fusionWords t u x tag) = packet (fusionWords t' u x' tag')) :
     ∀ k ∈ children u, t k = t' k := by
   have he := packet_injective h
@@ -111,17 +115,17 @@ def GroupBinds (t t' : ℕ → Word) (u : ℕ) : Prop := ∀ k ∈ children u, t
 
 /-- Group bindings at active, already-bound parents propagate through the binding order.
 The probability of failing those bindings is deliberately a hypothesis. -/
-theorem reconstruction_binding (t t' : ℕ → Word) (st st' tag tag' : ℕ → Word)
+theorem reconstruction_binding (t t' : ℕ → Word) (tag tag' : Word)
     (d : ℕ → ℕ) (Bad : Prop)
-    (hr : ∀ r < 2, packet (rootWords t st tag r) = packet (rootWords t' st' tag' r))
-    (ha : ∀ u < 7, 0 < ∑ k ∈ parents u, d k)
-    (hf : ∀ u < 7, ∀ k ∈ parents u, 0 < d k → t k = t' k → Bad ∨ GroupBinds t t' u) :
+    (hr : packet (rootWords t tag) = packet (rootWords t' tag'))
+    (ha : ∀ u < 9, 0 < ∑ k ∈ parents u, d k)
+    (hf : ∀ u < 9, ∀ k ∈ parents u, 0 < d k → t k = t' k → Bad ∨ GroupBinds t t' u) :
     Bad ∨ ∀ k < 42, t k = t' k := by
   classical
   by_cases hb : Bad
   · exact Or.inl hb
   right
-  have active : ∀ u < 7, ∃ k ∈ parents u, 0 < d k := by
+  have active : ∀ u < 9, ∃ k ∈ parents u, 0 < d k := by
     intro u hu
     by_contra hn
     have hz : ∑ k ∈ parents u, d k = 0 := by
@@ -131,10 +135,10 @@ theorem reconstruction_binding (t t' : ℕ → Word) (st st' tag tag' : ℕ → 
       omega
     have := ha u hu
     omega
-  have hclosed : ∀ n ≤ 7, ∀ k ∈ closure n, t k = t' k := by
+  have hclosed : ∀ n ≤ 9, ∀ k ∈ closure n, t k = t' k := by
     intro n
     induction n with
-    | zero => intro _; exact root_binds t t' st st' tag tag' hr
+    | zero => intro _; exact root_binds t t' tag tag' hr
     | succ n ih =>
       intro hn k hk
       rcases Finset.mem_union.mp hk with hprev | hnew
@@ -146,19 +150,19 @@ theorem reconstruction_binding (t t' : ℕ → Word) (st st' tag tag' : ℕ → 
         · exact (hb hbad).elim
         · exact hg k (List.mem_toFinset.mp hnew)
   intro k hk
-  exact hclosed 7 le_rfl k (full_coverage (Finset.mem_range.mpr hk))
+  exact hclosed 9 le_rfl k (full_coverage (Finset.mem_range.mpr hk))
 
 /-- Key generation computes every dependency before its consumers. -/
-def evaluationOrder : List ℕ := [0, 12, 13, 17, 18, 22, 23, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 14, 15, 16, 19, 20, 21, 24, 25, 26, 1, 2, 3, 4, 5, 6, 7, 39, 40, 41, 8, 9, 10, 11]
+def evaluationOrder : List ℕ := [0, 12, 13, 17, 18, 22, 23, 27, 28, 32, 33, 37, 38, 24, 25, 26, 29, 30, 31, 34, 35, 36, 39, 40, 41, 14, 15, 16, 19, 20, 21, 1, 2, 7, 8, 9, 10, 11, 3, 4, 5, 6]
 
 def evaluationRank (k : ℕ) : ℕ := evaluationOrder.idxOf k
 
 theorem evaluationOrder_permutation : evaluationOrder.Perm (List.range 42) := by decide
 
-theorem dependency_precedes : ∀ u < 7, ∀ k ∈ parents u, ∀ d ∈ children u,
+theorem dependency_precedes : ∀ u < 9, ∀ k ∈ parents u, ∀ d ∈ children u,
     evaluationRank d < evaluationRank k := by decide
 
-/-- Every special input has exactly five dependency words and its current chain word. -/
+/-- A five-dep input has five dependency words and its current chain word. -/
 theorem fusion_current_injective (t t' : ℕ → Word) (u : ℕ) (x x' a a' : Word)
     (h : packet (fusionWords t u x a) = packet (fusionWords t' u x' a')) : x = x' := by
   exact congrFun (packet_injective h) 2
