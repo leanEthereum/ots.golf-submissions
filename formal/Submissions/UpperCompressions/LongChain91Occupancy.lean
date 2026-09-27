@@ -346,8 +346,4 @@ theorem full_table_overfull_probability :
         ENNReal.mul_inv_cancel (by norm_num) (by norm_num)
       rw [hh, one_pow, one_mul]
 
-#print axioms cap_mean
-#print axioms rowOverfull_probability
-#print axioms full_table_overfull_probability
-
 end OptimalOTS.WeightedConstruction.LongChain91Occupancy

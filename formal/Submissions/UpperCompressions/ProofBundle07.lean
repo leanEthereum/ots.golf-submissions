@@ -3,7 +3,6 @@ import VCVio.OracleComp.QueryTracking.RandomOracle.EagerTable
 import Submissions.UpperCompressions.ProofBundle06
 import Submissions.UpperCompressions.ProofBundle00
 
-/- Original module: Submissions.UpperCompressions.ReplacementPreload; SHA256 1cfc3861eb6e1698b5efcaaa8688010680d6000c941c0878bc5fc96801fc0238. -/
 section
 
 /-! Exact finite-subset eager preloading for the protected shared-cache oracle.
@@ -210,15 +209,10 @@ theorem outE_finite_preload {D α : Type} [Fintype D]
               exact (outE_hash_some q k (S.preload c g) f (g d)
                 (S.preload_fresh_inside c g q d hc hq)).symm
 
-#print axioms QuerySlice.preload_update_of_none
-#print axioms E_uniform_update
-#print axioms outE_finite_preload
-
 end
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementLengthSlice; SHA256 b6525a01a927467c2466c020541118b60c42e6f8c45927bae38b809579dfa433. -/
 section
 
 /-! Concrete eager preloading of exactly one hash-input length. Length 342 is the
@@ -231,7 +225,6 @@ namespace WeightedReplacement
 
 noncomputable section
 open scoped Classical
-local instance stagedLocal_ReplacementLengthSlice_1 {α : Type*} : DecidableEq α := Classical.decEq α
 
 def queryAtLength (b : ℕ) (q : Query) : Option (BitVec b) :=
   if h : q.1 = b then some (h ▸ q.2) else none
@@ -281,21 +274,10 @@ theorem outE_index342_preload {α : Type} (oa : OracleComp Spec α)
       (fun g => outE oa ((lengthSlice 342).preload c g) f) :=
   outE_length_preload 342 oa c f
 
-/-- Even after eager preloading, all other input lengths keep their exact cache entries. -/
-theorem preload_index342_outside (c : Cache) (g : BitVec 342 → BitVec hashBits)
-    (q : Query) (hq : q.1 ≠ 342) : (lengthSlice 342).preload c g q = c q := by
-  apply QuerySlice.preload_outside
-  simp [lengthSlice, queryAtLength, hq]
-
-#print axioms outE_length_preload
-#print axioms outE_index342_preload
-#print axioms preload_index342_outside
-
 end
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementEagerPrefix; SHA256 06607df8dfa372d74ba37b0e9ecc526cb479b845880c70c5caf4f3db507d1828. -/
 section
 
 /-! Averaging the actual first-exposure bound over the finite eager index table.
@@ -409,14 +391,10 @@ theorem eager_prefix_class_bound {M : ℕ} {α : Type} (n : ℕ)
   rw [hn, hd] at h
   exact h
 
-#print axioms E_preload_resampling
-#print axioms eager_prefix_class_bound
-
 end
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementCrossRow; SHA256 f03bc86007c4c98fcde93bb4fae93053dcaedb280ef2487f6e7553fad510ef07. -/
 section
 
 /-! A publicly unexposed coordinate in another message row is unaffected by
@@ -544,14 +522,10 @@ theorem eager_cross_row_class_bound {M : ℕ} {α : Type} (n : ℕ)
   rw [hn, hd] at h
   exact h
 
-#print axioms other_row_class_bound
-#print axioms eager_cross_row_class_bound
-
 end
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementFreshIndex; SHA256 557de86208c99fa9e9c3b64e757103e316b6cd3ddf2133b397aa7271c2d247c1. -/
 section
 
 /-! The actual all-L signer and adaptive forge/verify continuation satisfy a
@@ -660,13 +634,10 @@ theorem eager_fresh_chosen_bound {M : ℕ} {α γ : Type} (n : ℕ)
   intro d hd
   exact eager_fresh_hit_bound n decode tier m k c (fun s => forge s >>= verify s) v i d hd hmass
 
-#print axioms eager_fresh_hit_bound
-#print axioms eager_fresh_chosen_bound
 end
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementFreshOverlay; SHA256 63ad1e643bed96165e270635748dc4dd07ddf6e156516aceedb280098d08cf05. -/
 section
 
 /-! Aligning the fresh-index cost with the reduced graph-authentication
@@ -738,393 +709,10 @@ theorem eager_fresh_chosen_overlay_bound {M : ℕ} {α γ : Type} (n : ℕ)
   rw [he] at h
   exact h
 
-#print axioms loop_preload_extend
-#print axioms eager_fresh_chosen_overlay_bound
 end
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedTier; SHA256 28bf4fcc731eb1280c2f4d28222ff44866e3fcd27463edca1dc0651dc15a0d1b. -/
-section
-
-namespace OptimalOTS.WeightedConstruction.WeightedSchedule
-noncomputable section
-open scoped Classical
-attribute [local irreducible] Finset.univ Finset.filter
-attribute [local irreducible] WeightedResearch92.tierClasses WeightedResearch92.classes WeightedResearch92.acceptedAliases
-
-theorem rawTier_eq_decodeTier (x : BitVec 129) (j : Tier) :
-    (decodeRaw x).map tier = some j.val ↔ rawTier x = some j := by
-  cases h : rawAlias x with
-  | none => simp only [decodeRaw, rawClass, rawTier, h, Option.map_none, reduceCtorEq]
-  | some a =>
-    simp only [decodeRaw, rawClass, rawTier, h, Option.map_some, Option.some.injEq]
-    change (classEquiv.symm (classEquiv a.1)).1.val = j.val ↔ a.1.1 = j
-    rw [classEquiv.symm_apply_apply, Fin.ext_iff]
-
-theorem decodeTier_fiber (j : Tier) :
-    (Finset.univ.filter fun x : BitVec 256 => (decode x).map tier = some j.val).card =
-      population j * 2^(j.val+1) * 2^127 := by
-  have he : (Finset.univ.filter fun x : BitVec 256 => (decode x).map tier = some j.val) =
-      Finset.univ.filter fun x : BitVec 256 => rawTier (x.setWidth 129) = some j := by
-    ext x
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and, decode, rawTier_eq_decodeTier]
-  have h := card_truncPredicate (n := 256) (w := 129) (by omega)
-    (fun x => rawTier x = some j)
-  exact (congrArg Finset.card he).trans
-    (h.trans (congrArg (fun k : ℕ => k * 2^(256-129)) (rawTier_fiber j)))
-
-
-end
-end OptimalOTS.WeightedConstruction.WeightedSchedule
-
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.rawTier_eq_decodeTier
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.decodeTier_fiber
-end
-
-/- Original module: Submissions.UpperCompressions.WeightedProbabilities; SHA256 e907e6f39c3eea0035526d77893ccae06fc095924d80caacfdbaadbc76b22397. -/
-section
-namespace OptimalOTS.WeightedConstruction.WeightedSchedule
-noncomputable section
-open scoped Classical
-attribute [local irreducible] Finset.univ Finset.filter tier WeightedResearch92.tierClasses WeightedResearch92.classes WeightedResearch92.acceptedAliases
-theorem decode_probability (i : Fin M) :
-    ((Finset.univ.filter fun x : BitVec 256 => decode x = some i).card : ℚ) / 2^256 =
-      (2 : ℚ)^(tier i+1) / 2^129 := by
-  have h (a : ℚ) : a * 2^127 / 2^256 = a / 2^129 := by norm_num; ring
-  rw [decode_fiber]
-  push_cast
-  exact h _
-
-theorem acceptance_probability :
-    ((Finset.univ.filter fun x : BitVec 256 => (decode x).isSome).card : ℚ) / 2^256 =
-      45/524288 := by
-  rw [accepted_decode_count]
-  change ((WeightedResearch92.acceptedAliases * 2^127 : ℕ) : ℚ) / 2^256 = _
-  rw [WeightedResearch92.aliases_exact]
-  norm_num
-
-
-end
-end OptimalOTS.WeightedConstruction.WeightedSchedule
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.decode_probability
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.acceptance_probability
-end
-
-/- Original module: Submissions.UpperCompressions.WeightedGrouping; SHA256 03c3afa0ff8608ed07ee94d9d4de81bbbe9ce96a1c99f2a851b1e1b74a2f71a3. -/
-section
-
-/-! Exact grouping and real-number masses for the actual mixed72 decoder.
-These identities connect construction fibers to the reference distribution;
-they do not assert an adaptive game bound. -/
-
-namespace OptimalOTS.WeightedConstruction.WeightedSchedule
-noncomputable section
-open scoped Classical
-attribute [local irreducible] Finset.univ Finset.filter
-attribute [local irreducible] WeightedResearch92.tierClasses WeightedResearch92.classes WeightedResearch92.acceptedAliases
-
-/-- Reindex any real-valued tier function by the exact class populations. -/
-theorem sum_tier (f : ℕ → ℝ) :
-    (∑ i : Fin M, f (tier i)) = ∑ j : Tier, (population j : ℝ) * f j.val := by
-  calc
-    _ = ∑ c : Class, f c.1.val := by
-      apply Fintype.sum_equiv classEquiv.symm
-      intro i
-      rfl
-    _ = ∑ j : Tier, (population j : ℝ) * f j.val := by
-      rw [Fintype.sum_sigma]
-      simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-
-def classProbability (i : Fin M) : ℝ := (2:ℝ)^(tier i+1) / 2^129
-
-def tierProbability (j : Tier) : ℝ :=
-    ((Finset.univ.filter fun x : BitVec 256 => (decode x).map tier = some j.val).card : ℝ) / 2^256
-
-theorem class_probability_real (i : Fin M) :
-    ((Finset.univ.filter fun x : BitVec 256 => decode x = some i).card : ℝ) / 2^256 =
-      classProbability i := by
-  have h (a : ℝ) : a * 2^127 / 2^256 = a / 2^129 := by norm_num; ring
-  unfold classProbability
-  rw [decode_fiber]
-  push_cast
-  convert h ((2:ℝ)^(tier i+1)) using 1 <;> norm_num
-
-theorem tier_probability_eq (j : Tier) :
-    tierProbability j = (if j.val < 71 then 19 else 91 : ℝ) / 2^24 := by
-  unfold tierProbability
-  rw [decodeTier_fiber, tier_alias_count]
-  push_cast
-  split_ifs <;> norm_num
-
-theorem early_tier_probability (j : Tier) (hj : j.val < 71) :
-    tierProbability j = WeightedConstants.q := by
-  rw [tier_probability_eq, if_pos hj]
-  norm_num [WeightedConstants.q, WeightedConstants.L]
-
-theorem last_tier_probability :
-    tierProbability ⟨71, by decide⟩ = (91:ℝ)/2^24 := by
-  rw [tier_probability_eq]
-  norm_num
-
-/-- The exact early-tier mass accumulated before tier j. -/
-theorem early_prefix_probability (j : ℕ) (hj : j ≤ 71) :
-    (∑ t ∈ Finset.range j,
-      (if t < 71 then (19:ℝ) else 91) / 2^24) = (j:ℝ) * WeightedConstants.q := by
-  calc
-    _ = ∑ _t ∈ Finset.range j, WeightedConstants.q := by
-      apply Finset.sum_congr rfl
-      intro t ht
-      rw [if_pos (by have := Finset.mem_range.mp ht; omega)]
-      norm_num [WeightedConstants.q, WeightedConstants.L]
-    _ = _ := by simp
-
-/-- Class mass divided by kappa=2^-127 is half of its tier's power of two. -/
-theorem relative_class_probability (i : Fin M) :
-    classProbability i / ((2:ℝ)^127)⁻¹ = (1:ℝ)/2 * 2^(tier i) := by
-  unfold classProbability
-  rw [pow_succ]
-  have h (a : ℝ) : (a*2/2^129) / ((2:ℝ)^127)⁻¹ = (1:ℝ)/2*a := by norm_num; ring
-  exact h _
-
-end
-end OptimalOTS.WeightedConstruction.WeightedSchedule
-
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.sum_tier
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.tier_probability_eq
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.relative_class_probability
-end
-
-/- Original module: Submissions.UpperCompressions.WideReference; SHA256 c5cfd1d69a2410992582eb1cd8f88d7848be3b0409d8804559887b21656cb1dd. -/
-section
-
-/-! Concrete class-average coefficients for the mixed72 decoder. -/
-noncomputable section
-namespace OptimalOTS.WeightedConstruction.WeightedSchedule
-open WeightedReference
-attribute [local irreducible] WeightedResearch92.tierClasses WeightedResearch92.classes
-set_option maxHeartbeats 1000000
-
-theorem classProbability_eq (i : Fin M) : classProbability i = probability (tier i) := by
-  unfold classProbability probability kappa
-  rw [pow_succ]
-  norm_num
-  ring
-
-theorem population_probability (j : Tier) :
-    (population j : ℝ)*probability j.val = mass j.val := by
-  have hh := congrArg (fun n : ℕ => (n : ℝ)) (tier_alias_count j)
-  push_cast at hh
-  have ha : (population j : ℝ)*probability j.val =
-      (if j.val < 71 then 19 else 91 : ℝ)/2^24 := by
-    unfold probability kappa
-    rw [pow_succ] at hh
-    split_ifs at hh ⊢ <;> norm_num at hh ⊢ <;> nlinarith [hh]
-  rw [ha]
-  unfold mass lower
-  split_ifs with h
-  · norm_num [survival,WeightedConstants.q,WeightedConstants.L]
-    ring
-  · have hj : j.val=71 := by have := j.isLt; omega
-    norm_num [hj,survival,acceptance,WeightedConstants.q,WeightedConstants.L]
-
-def referenceWeight (i : Fin M) : ℝ := weight (tier i)
-def mean : ℝ := ∑ i : Fin M,classProbability i*referenceWeight i
-
-theorem mean_eq : mean = kappa*WeightedConstants.referenceMean failure := by
-  unfold mean referenceWeight
-  simp only [classProbability_eq]
-  rw [sum_tier (fun j => probability j*weight j)]
-  have he : (∑ j : Tier,(population j:ℝ)*(probability j.val*weight j.val)) =
-      ∑ j : Tier,mass j.val*weight j.val := by
-    apply Finset.sum_congr rfl
-    intro j hj
-    rw [← mul_assoc,population_probability]
-  rw [he]
-  change (∑ j : Fin 72,mass j.val*weight j.val) = _
-  rw [Fin.sum_univ_eq_sum_range (fun j => mass j*weight j) 72]
-  exact reference_mean_identity
-
-theorem mean_le : mean ≤ kappa*(223/250) := by
-  rw [mean_eq]
-  exact mul_le_mul_of_nonneg_left (WeightedConstants.referenceMean_le failure failure_nonneg)
-    (by unfold kappa; positivity)
-
-theorem referenceWeight_nonneg (i : Fin M) : 0 ≤ referenceWeight i :=
-  weight_nonneg _ (by have := tier_lt i; omega)
-
-theorem referenceWeight_le (i : Fin M) : referenceWeight i ≤ (WeightedConstants.L:ℝ)*kappa/2 :=
-  weight_le _ (by have := tier_lt i; omega)
-
-theorem classProbability_pos (i : Fin M) : 0 < classProbability i := by
-  unfold classProbability
-  positivity
-
-theorem classProbability_sum : (∑ i : Fin M,classProbability i) = acceptance := by
-  simp only [classProbability_eq]
-  rw [sum_tier probability]
-  simp only [population_probability]
-  rw [Fin.sum_univ_eq_sum_range mass 72]
-  exact total_mass
-
-theorem referenceWeight_sum : (∑ i : Fin M,referenceWeight i) = 1-failure := by
-  unfold referenceWeight
-  rw [sum_tier weight]
-  have he : (∑ j : Tier,(population j:ℝ)*weight j.val) =
-      ∑ j : Tier,mass j.val*WeightedReplacement.kernel WeightedConstants.L
-        (survival j.val) (lower j.val) := by
-    apply Finset.sum_congr rfl
-    intro j hj
-    unfold weight
-    rw [← mul_assoc,population_probability]
-  rw [he]
-  rw [Fin.sum_univ_eq_sum_range
-    (fun j => mass j*WeightedReplacement.kernel WeightedConstants.L (survival j) (lower j)) 72]
-  exact total_winner_mass
-
-def excess (i : Fin M) : ℝ := max (classProbability i/(1-acceptance)-kappa/2) 0
-
-theorem excess_eq (i : Fin M) : excess i = classProbability i/(1-acceptance)-kappa/2 := by
-  apply max_eq_left
-  have hp : kappa/2 ≤ classProbability i := by
-    rw [classProbability_eq]
-    have h : (1:ℝ) ≤ 2^(tier i) := one_le_pow₀ (by norm_num)
-    have hh := mul_le_mul_of_nonneg_left h (show 0 ≤ kappa/2 by unfold kappa; positivity)
-    simpa only [mul_one,probability] using hh
-  have hd : 0 < 1-acceptance := by norm_num [acceptance]
-  have hp' : classProbability i ≤ classProbability i/(1-acceptance) := by
-    apply (le_div_iff₀ hd).2
-    have h := mul_le_mul_of_nonneg_left
-      (show 1-acceptance ≤ 1 by norm_num [acceptance]) (classProbability_pos i).le
-    simpa only [mul_one] using h
-  linarith
-
-theorem excess_mean_eq :
-    (∑ i : Fin M,referenceWeight i*excess i) = mean/(1-acceptance)-kappa/2*(1-failure) := by
-  simp only [excess_eq,mul_sub,← mul_div_assoc,Finset.sum_sub_distrib,← Finset.sum_div,
-    ← Finset.sum_mul]
-  rw [referenceWeight_sum]
-  have hm : (∑ i : Fin M,referenceWeight i*classProbability i) = mean := by
-    unfold mean
-    apply Finset.sum_congr rfl
-    intro i hi
-    ring
-  rw [hm]
-  ring
-
-theorem excess_mean_le : (∑ i : Fin M,referenceWeight i*excess i) ≤ kappa*(2/5) := by
-  rw [excess_mean_eq]
-  exact post_excess_le mean_le failure_le
-
-#print axioms mean_eq
-#print axioms mean_le
-#print axioms referenceWeight_le
-#print axioms classProbability_sum
-#print axioms referenceWeight_sum
-#print axioms excess_mean_le
-end OptimalOTS.WeightedConstruction.WeightedSchedule
-end
-end
-
-/- Original module: Submissions.UpperCompressions.WideSecurityData; SHA256 45b47703a5027a3262aa332dcbb5f12a885c5be10e02f813c06f2939dbcf4af3. -/
-section
-
-/-! Concrete distribution and bounded score data for the stochastic lemmas.
-No security theorem is assumed by this interface. -/
-noncomputable section
-namespace OptimalOTS.WeightedConstruction.WeightedSchedule
-open WeightedReference WeightedConstants WeightedReplacement
-set_option maxHeartbeats 1000000
-
-def securityWeights : WeightedRow.Weights (Fin M) where
-  p := classProbability
-  g := referenceWeight
-  p_pos := classProbability_pos
-  g_nonneg := referenceWeight_nonneg
-  mass_le_one := by rw [classProbability_sum]; norm_num [acceptance]
-
-theorem securityWeights_mean : securityWeights.mean ≤ kappa*(223/250) := mean_le
-
-theorem survival_le_one (j : ℕ) : survival j ≤ 1 := by
-  have h : 0 ≤ (j:ℝ)*q := mul_nonneg (Nat.cast_nonneg _) (by norm_num [q,L])
-  unfold survival
-  linarith
-
-theorem survival_ge_reject (j : ℕ) (hj : j ≤ 71) : 1-acceptance ≤ survival j := by
-  have hjr : (j:ℝ) ≤ 71 := by exact_mod_cast hj
-  have hh := mul_le_mul_of_nonneg_right hjr (show 0 ≤ q by norm_num [q,L])
-  have hn : (71:ℝ)*q ≤ acceptance := by norm_num [q,L,acceptance]
-  unfold survival
-  linarith
-
-theorem lower_ge_reject (j : ℕ) (hj : j ≤ 71) : 1-acceptance ≤ lower j := by
-  unfold lower
-  split_ifs with h
-  · exact survival_ge_reject _ (by omega)
-  · exact le_refl _
-
-theorem weight_ratio (i : Fin M) : referenceWeight i/classProbability i =
-    kernel L (survival (tier i)) (lower (tier i)) := by
-  unfold referenceWeight weight
-  rw [← classProbability_eq]
-  exact mul_div_cancel_left₀ _ (classProbability_pos i).ne'
-
-theorem weight_ratio_le (i : Fin M) : referenceWeight i/classProbability i ≤ (L:ℝ) := by
-  rw [weight_ratio]
-  have hj : tier i ≤ 71 := by have := tier_lt i; omega
-  have hm := kernel_mono L (survival_nonneg _ hj) (lower_nonneg _ hj)
-    (survival_le_one _) ((lower_le_survival _ hj).trans (survival_le_one _))
-  rw [kernel_diagonal,one_pow,mul_one] at hm
-  exact hm
-
-theorem excessScore_nonneg (i : Fin M) : 0 ≤ referenceWeight i*excess i/classProbability i := by
-  apply div_nonneg
-  · exact mul_nonneg (referenceWeight_nonneg i) (le_max_right _ _)
-  · exact (classProbability_pos i).le
-
-theorem excessScore_le (i : Fin M) :
-    referenceWeight i*excess i/classProbability i ≤ (L:ℝ)*kappa := by
-  have hd : 0 < 1-acceptance := by norm_num [acceptance]
-  have hp := classProbability_pos i
-  have hg := referenceWeight_nonneg i
-  have he : excess i ≤ classProbability i/(1-acceptance) := by
-    rw [excess_eq]
-    have hk : 0 ≤ kappa/2 := by unfold kappa; positivity
-    linarith
-  calc
-    _ ≤ (referenceWeight i*(classProbability i/(1-acceptance)))/classProbability i :=
-      div_le_div_of_nonneg_right (mul_le_mul_of_nonneg_left he hg) hp.le
-    _ = referenceWeight i/(1-acceptance) := by field_simp
-    _ ≤ ((L:ℝ)*kappa/2)/(1-acceptance) :=
-      div_le_div_of_nonneg_right (referenceWeight_le i) hd.le
-    _ ≤ (L:ℝ)*kappa := by
-      norm_num [L,kappa,acceptance]
-
-/-- A complete-row prefix deficit implies the common multiplicative kernel
-envelope; this is a pointwise implication, never a conditioning operation. -/
-theorem empirical_kernel_le (i : Fin M) (Ah Bh : ℝ)
-    (ha : 0 ≤ Ah) (hb : 0 ≤ Bh)
-    (hA : Ah ≤ survival (tier i)+1/(100*(L:ℝ)))
-    (hB : Bh ≤ lower (tier i)+1/(100*(L:ℝ))) :
-    kernel L Ah Bh ≤ (99:ℝ)/98*(referenceWeight i/classProbability i) := by
-  have hj : tier i ≤ 71 := by have := tier_lt i; omega
-  have h := kernel_additive_envelope L ha hb
-    (show 0 < 1-acceptance by norm_num [acceptance])
-    (show 0 ≤ 1/(100*(L:ℝ)) by norm_num [L])
-    (survival_ge_reject _ hj) (lower_ge_reject _ hj) hA hB
-  rw [weight_ratio]
-  exact h.trans (mul_le_mul_of_nonneg_right common_envelope
-    (kernel_nonneg L (survival_nonneg _ hj) (lower_nonneg _ hj)))
-
-#print axioms securityWeights
-#print axioms weight_ratio_le
-#print axioms excessScore_le
-#print axioms empirical_kernel_le
-end OptimalOTS.WeightedConstruction.WeightedSchedule
-end
-end
-
-/- Original module: Submissions.UpperCompressions.WeightedCompletion; SHA256 08909465abfb618138711a9a6d5332357414e8c46c82aa11d20fc819178a2c27. -/
 section
 
 /-! Averaging a partially exposed row under its original completion law.
@@ -1234,12 +822,9 @@ theorem completion_score (R : Finset D) (fixed : D → Option I)
   rw [hR, known_score, hc]
 
 end WeightedCompletion
-#print axioms WeightedCompletion.joint_good_bound
-#print axioms WeightedCompletion.completion_score
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedReplay; SHA256 50674301aeefb2b4d064540f5a8f100eff47e436aa55108853fa7ef12c349c35. -/
 section
 
 /-! Exact finite-completion formulas for replay and the post-sign excess payoff.
@@ -1360,13 +945,9 @@ theorem excess_bound (w : WeightedRow.Weights I)
   exact h
 
 end WeightedCompletion
-#print axioms WeightedCompletion.replay_reference_mean
-#print axioms WeightedCompletion.replay_bound
-#print axioms WeightedCompletion.excess_bound
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedSelectorPayoff; SHA256 0026168cec577e75caa88b4c373af330ca213cdba830ac4bfe0a08794cb973a9. -/
 section
 
 /-! Exact weighted-payoff law for the actual first-minimum selector.
@@ -1500,8 +1081,5 @@ theorem tableKernel_le (n : ℕ) (table : D → Option I) (tier : I → ℕ)
   | some r => exact hf r.1 r.2
 
 end WeightedCompletion
-#print axioms WeightedCompletion.iid_selected_score
-#print axioms WeightedCompletion.tableKernel_le
 end
 end
-

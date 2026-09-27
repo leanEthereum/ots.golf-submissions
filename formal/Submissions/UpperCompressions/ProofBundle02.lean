@@ -2,7 +2,6 @@ import OptimalOTS.OracleAlgorithm
 import OptimalOTS.Dag
 import VCVio.EvalDist.Expectation
 
-/- Original module: Submissions.UpperCompressions.TypedScheme; SHA256 357bc9974021aa4bf36108aa172edd0cec0c8dc55d158a327e6f52ec83fbdc35. -/
 section
 
 /-!
@@ -100,128 +99,6 @@ end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.Adapter; SHA256 a461f9ce3805cdc5964306c7396ffb8a1b3ab279e6b7da4c705de3926688f10c. -/
-section
-
-/-!
-Every DAG scheme defines a generic oracle algorithm with the same wire data and oracle programs.
-The embedding preserves and reflects strong security; it does not establish generic admissibility.
--/
-
-open OracleSpec OracleComp ENNReal
-noncomputable section
-open scoped Classical
-
-namespace OptimalOTS
-
-open OptimalOTS.Dag
-
-namespace AlgorithmAdapter
-
-attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
-
-/-- The DAG signature's actual wire contents: nonce bits followed by disclosed bits. -/
-def encodeSignature (σ : Signature) : List Bool := toBits σ.1 ++ σ.2
-
-theorem toBits_injective {n : ℕ} : Function.Injective (@toBits n) := by
-  intro x y h
-  apply BitVec.eq_of_getLsbD_eq
-  intro i hi
-  have h' := congrArg (fun l : List Bool => l[i]?) h
-  simpa [toBits, hi] using h'
-
-theorem encodeSignature_injective : Function.Injective (@encodeSignature) := by
-  intro a b h
-  have hn : toBits a.1 = toBits b.1 := by
-    have ht := congrArg (List.take nonceBits) h
-    simpa [encodeSignature, toBits] using ht
-  have hp := toBits_injective hn
-  have ht : a.2 = b.2 := by
-    exact List.append_cancel_left (by simpa only [encodeSignature, hn] using h)
-  exact Prod.ext hp ht
-
-@[simp] theorem length_encodeSignature (σ : Signature) :
-    (encodeSignature σ).length = nonceBits + σ.2.length := by
-  simp [encodeSignature, toBits]
-
-end AlgorithmAdapter
-
-attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
-
-/-- Same key generation, signing, verification and wire data; only the interface changes. -/
-def Dag.Scheme.toAlgorithm (S : Scheme) : TypedScheme where
-  SecretKey := S.graph.Assignment
-  Signature := Signature
-  encodeSignature := AlgorithmAdapter.encodeSignature
-  encodeSignature_injective := AlgorithmAdapter.encodeSignature_injective
-  keygen := S.keygen
-  sign := S.sign
-  verify := S.verify
-
-namespace AlgorithmAdapter
-
-variable (S : Scheme)
-
-def toDAGAdversary (A : S.toAlgorithm.Adversary) : Adversary where
-  State := A.State
-  choose := A.choose
-  forge := A.forge
-
-def fromDAGAdversary (A : Adversary) : S.toAlgorithm.Adversary where
-  State := A.State
-  choose := A.choose
-  forge := A.forge
-
-/-- The adapter preserves the entire forgery experiment, including every party's queries. -/
-theorem experiment_eq (A : S.toAlgorithm.Adversary) :
-    S.toAlgorithm.experiment A = experiment S (toDAGAdversary S A) := by
-  simp only [TypedScheme.experiment, experiment, Scheme.toAlgorithm, toDAGAdversary]
-  apply bind_congr
-  intro keys
-  apply bind_congr
-  intro chosen
-  apply bind_congr
-  intro signed
-  apply bind_congr
-  intro forged
-  apply bind_congr
-  intro ok
-  congr 1
-  by_cases h : signed.map (fun s => (chosen.1, s)) ≠ some (forged.1, forged.2) <;> simp [h]
-
-theorem experiment_fromDAG_eq (A : Adversary) :
-    S.toAlgorithm.experiment (fromDAGAdversary S A) = experiment S A := by
-  simp only [TypedScheme.experiment, experiment, Scheme.toAlgorithm, fromDAGAdversary]
-  apply bind_congr
-  intro keys
-  apply bind_congr
-  intro chosen
-  apply bind_congr
-  intro signed
-  apply bind_congr
-  intro forged
-  apply bind_congr
-  intro ok
-  congr 1
-  by_cases h : signed.map (fun s => (chosen.1, s)) ≠ some (forged.1, forged.2) <;> simp [h]
-
-/-- The embedding preserves and reflects the exact security requirement. -/
-theorem secure_iff : S.toAlgorithm.Secure ↔ S.Secure := by
-  constructor
-  · intro h A B hB
-    have he := experiment_fromDAG_eq S A
-    rw [← he] at hB ⊢
-    exact h (fromDAGAdversary S A) B hB
-  · intro h A B hB
-    rw [experiment_eq] at hB ⊢
-    exact h (toDAGAdversary S A) B hB
-
-end AlgorithmAdapter
-end OptimalOTS
-end
-end
-
-/- Original module: Submissions.UpperCompressions.AlgorithmCosts; SHA256 22c47a6576cd80d9d272b123cfb9f9df19219a3281ed6ed3b21869522e8c704f. -/
 section
 
 /-! Pathwise query-cost bounds for the DAG-to-algorithm adapter.
@@ -365,58 +242,11 @@ end Dag.Graph
 
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
-theorem costAtMost_index (hidx : blockCost (msgBits + nonceBits) = 1)
-    (m : Message) (η : Nonce) : CostAtMost (index m η) 1 :=
-  CostAtMost.map (costAtMost_hash _ hidx.le) _
-
-namespace Dag.Scheme
-
-variable (S : Scheme)
-
-theorem costAtMost_keygen : CostAtMost S.keygen keygenBudget :=
-  CostAtMost.mono (CostAtMost.bind_le (Graph.costAtMost_keygen S.graph)
-    (fun _ => costAtMost_pure _ 0) (by simp)) S.keygen_le
-
-theorem costAtMost_signLoop (hidx : blockCost (msgBits + nonceBits) = 1)
-    (x : S.graph.Assignment) (m : Message) :
-    ∀ k tried, CostAtMost (S.signLoop x m k tried) k
-  | 0, _ => costAtMost_pure _ _
-  | k + 1, tried => by
-      rw [Scheme.signLoop]
-      split_ifs
-      · refine CostAtMost.bind_le (costAtMost_liftM_probComp _ 0) (b₂ := k + 1) (fun j => ?_) (by simp)
-        refine CostAtMost.bind_le (costAtMost_index hidx _ _) (b₂ := k) (fun i => ?_) (by omega)
-        split_ifs with hi
-        · exact costAtMost_pure _ _
-        · exact costAtMost_signLoop hidx x m k _
-      · exact costAtMost_pure _ _
-
-theorem costAtMost_sign (hidx : blockCost (msgBits + nonceBits) = 1)
-    (x : S.graph.Assignment) (m : Message) : CostAtMost (S.sign x m) trials :=
-  costAtMost_signLoop S hidx x m _ _
-
-theorem costAtMost_verify (hidx : blockCost (msgBits + nonceBits) = 1) {v : ℕ}
-    (hv : ∀ i, S.graph.reconstructCost (S.sets i) ≤ v) (pk : PublicKey) (m : Message)
-    (σ : Signature) : CostAtMost (S.verify pk m σ) (1 + v) := by
-  unfold Scheme.verify
-  refine CostAtMost.bind_le (costAtMost_index hidx _ _) (b₂ := v) (fun i => ?_) le_rfl
-  split_ifs with hi
-  · dsimp only
-    split_ifs
-    · exact CostAtMost.bind_le
-        (CostAtMost.mono (Graph.costAtMost_reconstruct S.graph (S.sets ⟨i, hi⟩) _) (hv _))
-        (fun _ => costAtMost_pure _ 0) (by simp)
-    · exact costAtMost_pure _ _
-  · exact costAtMost_pure _ _
-
-end Dag.Scheme
-
 end AlgorithmCosts
 end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.Cache; SHA256 3b4b18e5b1855b396872b3d38660e3f38ca0266ea11f8e7d76ea04928cdef9da. -/
 section
 
 /-!
@@ -441,7 +271,6 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
 /-- The cache of the random oracle. -/
@@ -453,7 +282,6 @@ abbrev run {α : Type} (oa : OracleComp Spec α) (c : Cache) :
   (simulateQ (oracleImpl) oa).run c
 
 namespace Cache
-
 
 /-- Overlay `f` under `c`: entries of `c` take priority. -/
 def extend (c f : Cache) : Cache := fun q => (c q).or (f q)
@@ -649,7 +477,6 @@ end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.Semantics; SHA256 6d9cc3050c4df3e9a23d15ac856b9c82e375b4a4ef34936d80f934d6a30d438e. -/
 section
 
 /-!
@@ -673,7 +500,6 @@ open scoped Classical
 namespace OptimalOTS
 
 open OptimalOTS.Dag
-
 
 namespace Dag.NodeKind
 
@@ -799,7 +625,6 @@ end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.KeygenSupport; SHA256 2c2dec264b924b82c068500a47bf754efe314356afdb559f6fd827309b87024c. -/
 section
 
 /-! Key generation satisfies its node equations in the final cache, including repeated inputs. -/
@@ -944,21 +769,10 @@ end Dag.Graph
 
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
-theorem Dag.Scheme.keygen_cacheConsistent (S : Scheme) (c : Cache) :
-    ∀ p ∈ support (run S.keygen c),
-      p.1.1 = S.publicKey p.1.2 ∧ S.graph.CacheConsistent p.1.2 p.2 := by
-  intro p hp
-  simp only [Scheme.keygen, Graph.keygen, run_bind, support_bind, Set.mem_iUnion] at hp
-  obtain ⟨⟨x, d⟩, ⟨⟨z, d'⟩, _, hx⟩, hp⟩ := hp
-  rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
-  subst hp
-  exact ⟨rfl, S.graph.evaluate_cacheConsistent z d' _ hx⟩
-
 end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedSampling; SHA256 ed52c935e9d5b7b26cfd8010d63d6c529daa28ae76604702a185d4f78e047b47. -/
 section
 
 /-! First-minimum selection with replacement. This is an executable oracle program
@@ -1055,16 +869,6 @@ theorem select_rank_le (rank : α → ℕ) (xs : List (Option α)) (v : α)
           · cases Option.some.inj ha
             exact (lt_of_not_ge hb).le
           · exact ih t ht a ha
-
-/-- Adding a first occurrence whose rank is no larger than the whole suffix
-retains that occurrence, including ties and duplicate nonce draws. -/
-theorem select_first (rank : α → ℕ) (v : α) (xs : List (Option α))
-    (h : ∀ a, some a ∈ xs → rank v ≤ rank a) :
-    select rank (some v :: xs) = some v := by
-  rcases ht : select rank xs with _ | t
-  · simp [select, ht]
-  · have hvt := h t (select_source rank xs t ht)
-    simp [select, best, ht, hvt]
 
 variable {M : ℕ}
 
@@ -1231,22 +1035,10 @@ theorem run_loop_fixed_row (n : ℕ) (decode : BitVec hashBits → Option (Fin M
     simp only [map_eq_bind_pure_comp, Function.comp_def, bind_assoc, pure_bind,
       List.map_cons, select]
 
-#print axioms run_loop_fixed_row
-
-#print axioms loop_support
-#print axioms run_loop_extend
-
-#print axioms select_source
-#print axioms select_none_iff
-#print axioms select_rank_le
-#print axioms select_first
-#print axioms costAtMost_loop86
-
 end OptimalOTS.WeightedSampling
 end
 end
 
-/- Original module: Submissions.UpperCompressions.IUB; SHA256 55d9abc33e22900fceb2a63ebb2fa9efcd66f78d84198d6f15f6b65c5373a7a9. -/
 section
 
 /-!
@@ -1273,7 +1065,6 @@ open scoped Classical
 namespace OptimalOTS
 
 open OptimalOTS.Dag
-
 
 /-- Expected value of `g` over a probabilistic computation. -/
 abbrev E {α : Type} (p : ProbComp α) (g : α → ℝ≥0∞) : ℝ≥0∞ := expectedValue p g
@@ -1370,7 +1161,6 @@ end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.Master; SHA256 cd84206bbbdb91a9a8170d8bd117e3799f41b2a3d0aeea86168352eb5014e447. -/
 section
 
 /-!
@@ -1400,7 +1190,6 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
 theorem costAtMost_query_bind_iff {α : Type} (t : Spec.Domain)
@@ -1415,163 +1204,11 @@ theorem sum_inv_card_mul {n : ℕ} (a : ℝ≥0∞) :
   rw [Finset.sum_const, Finset.card_univ, nsmul_eq_mul, ← mul_assoc,
     ENNReal.mul_inv_cancel (by simp) (by simp), one_mul]
 
-theorem kappa_split (κ : ℝ≥0∞) {c b : ℕ} (h : c ≤ b) : κ * c + κ * ((b - c : ℕ) : ℝ≥0∞) = κ * b := by
-  rw [← mul_add, ← Nat.cast_add, Nat.add_sub_cancel' h]
-
-/-- **Master lemma.** -/
-theorem master {α β : Type} (κ : ℝ≥0∞) (Φ : Cache → ℝ≥0∞)
-    (I : Cache → ℕ → Prop)
-    (hI_fresh : ∀ c b q, I c b → c q = none → queryCost (.inr q) ≤ b →
-      ∀ u, I (c.cacheQuery q u) (b - queryCost (.inr q)))
-    (hI_cached : ∀ c b q, I c b → (c q).isSome → queryCost (.inr q) ≤ b →
-      I c (b - queryCost (.inr q)))
-    (hΦ : ∀ c b q, I c b → c q = none → queryCost (.inr q) ≤ b →
-      ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * Φ (c.cacheQuery q u) ≤
-        Φ c + κ * queryCost (.inr q))
-    (oa : OracleComp Spec α) (k : α → OracleComp Spec β) (Fv : α → Cache → ℝ≥0∞)
-    (hF : ∀ x d b', I d b' → CostAtMost (k x) b' → Fv x d ≤ Φ d + κ * b') :
-    ∀ (c : Cache) (b : ℕ), I c b → CostAtMost (oa >>= k) b →
-      E (run oa c) (fun p => Fv p.1 p.2) ≤ Φ c + κ * b := by
-  induction oa using OracleComp.inductionOn with
-  | pure x =>
-    intro c b hI hB
-    rw [pure_bind] at hB
-    rw [run_pure, E_pure]
-    exact hF x c b hI hB
-  | query_bind t k' ih =>
-    intro c b hI hB
-    rw [bind_assoc, costAtMost_query_bind_iff] at hB
-    obtain ⟨hcost, hB⟩ := hB
-    rw [run_query_bind, E_bind]
-    rcases t with t | q
-    · rw [oracleImpl_run_inl, E_bind]
-      refine (expectedValue_le_of_le _ fun u => ?_)
-      rw [E_pure]
-      have := ih u c b hI (hB u)
-      simpa [queryCost] using this
-    · rcases hcq : c q with _ | v
-      · rw [oracleImpl_run_inr_none hcq, E_bind, E_uniform]
-        calc ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-              E (pure (u, c.cacheQuery q u)) (fun p => E (run (k' p.1) p.2) fun p => Fv p.1 p.2)
-            ≤ ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-                (Φ (c.cacheQuery q u) + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞)) := by
-              refine Finset.sum_le_sum fun u _ => ?_
-              rw [E_pure]
-              dsimp only
-              gcongr
-              exact ih u _ _ (hI_fresh c b q hI hcq hcost u) (hB u)
-          _ = (∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * Φ (c.cacheQuery q u)) +
-                κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) := by
-              simp only [mul_add, Finset.sum_add_distrib, sum_inv_card_mul]
-          _ ≤ Φ c + κ * queryCost (.inr q) + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) :=
-              add_le_add_left (hΦ c b q hI hcq hcost) _
-          _ = Φ c + κ * b := by rw [add_assoc, kappa_split κ hcost]
-      · rw [oracleImpl_run_inr_some hcq, E_pure]
-        have hsome : (c q).isSome := by simp [hcq]
-        calc E (run (k' v) c) (fun p => Fv p.1 p.2)
-            ≤ Φ c + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) :=
-              ih v c _ (hI_cached c b q hI hsome hcost) (hB v)
-          _ ≤ Φ c + κ * b := by
-              gcongr
-              exact Nat.sub_le _ _
-
-/-- The master lemma without a continuation. -/
-theorem master_single {α : Type} (κ : ℝ≥0∞) (Φ : Cache → ℝ≥0∞)
-    (I : Cache → ℕ → Prop)
-    (hI_fresh : ∀ c b q, I c b → c q = none → queryCost (.inr q) ≤ b →
-      ∀ u, I (c.cacheQuery q u) (b - queryCost (.inr q)))
-    (hI_cached : ∀ c b q, I c b → (c q).isSome → queryCost (.inr q) ≤ b →
-      I c (b - queryCost (.inr q)))
-    (hΦ : ∀ c b q, I c b → c q = none → queryCost (.inr q) ≤ b →
-      ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * Φ (c.cacheQuery q u) ≤
-        Φ c + κ * queryCost (.inr q))
-    (oa : OracleComp Spec α) (Fv : α → Cache → ℝ≥0∞)
-    (hF : ∀ x d, Fv x d ≤ Φ d) :
-    ∀ (c : Cache) (b : ℕ), I c b → CostAtMost oa b →
-      E (run oa c) (fun p => Fv p.1 p.2) ≤ Φ c + κ * b := by
-  intro c b hI hB
-  have := master κ Φ I hI_fresh hI_cached hΦ oa pure Fv
-    (fun x d b' _ _ => (hF x d).trans le_self_add) c b hI (by rwa [bind_pure])
-  exact this
-
 end OptimalOTS
 
-namespace OptimalOTS
-
-open OptimalOTS.Dag
-
-
-attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
-
-/-- **Master lemma, for a family of continuations.** The continuation may depend on an index
-`j` (in the application: the hidden part of the key), as long as every member of the family
-respects the budget. -/
-theorem master_family {α β J : Type} [Nonempty J] (κ : ℝ≥0∞) (Φ : Cache → ℝ≥0∞)
-    (I : Cache → ℕ → Prop)
-    (hI_fresh : ∀ c b q, I c b → c q = none → queryCost (.inr q) ≤ b →
-      ∀ u, I (c.cacheQuery q u) (b - queryCost (.inr q)))
-    (hI_cached : ∀ c b q, I c b → (c q).isSome → queryCost (.inr q) ≤ b →
-      I c (b - queryCost (.inr q)))
-    (hΦ : ∀ c b q, I c b → c q = none → queryCost (.inr q) ≤ b →
-      ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * Φ (c.cacheQuery q u) ≤
-        Φ c + κ * queryCost (.inr q))
-    (oa : OracleComp Spec α) (k : J → α → OracleComp Spec β) (Fv : α → Cache → ℝ≥0∞)
-    (hF : ∀ x d b', I d b' → (∀ j, CostAtMost (k j x) b') → Fv x d ≤ Φ d + κ * b') :
-    ∀ (c : Cache) (b : ℕ), I c b → (∀ j, CostAtMost (oa >>= k j) b) →
-      E (run oa c) (fun p => Fv p.1 p.2) ≤ Φ c + κ * b := by
-  induction oa using OracleComp.inductionOn with
-  | pure x =>
-    intro c b hI hB
-    rw [run_pure, E_pure]
-    exact hF x c b hI fun j => by simpa [pure_bind] using hB j
-  | query_bind t k' ih =>
-    intro c b hI hB
-    have hcost : queryCost t ≤ b := by
-      have := hB (Classical.arbitrary J)
-      rw [bind_assoc, costAtMost_query_bind_iff] at this
-      exact this.1
-    have hB' : ∀ u j, CostAtMost (k' u >>= k j) (b - queryCost t) := fun u j => by
-      have := hB j
-      rw [bind_assoc, costAtMost_query_bind_iff] at this
-      exact this.2 u
-    rw [run_query_bind, E_bind]
-    rcases t with t | q
-    · rw [oracleImpl_run_inl, E_bind]
-      refine (expectedValue_le_of_le _ fun u => ?_)
-      rw [E_pure]
-      have := ih u c b hI (hB' u)
-      simpa [queryCost] using this
-    · rcases hcq : c q with _ | v
-      · rw [oracleImpl_run_inr_none hcq, E_bind, E_uniform]
-        calc ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-              E (pure (u, c.cacheQuery q u)) (fun p => E (run (k' p.1) p.2) fun p => Fv p.1 p.2)
-            ≤ ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
-                (Φ (c.cacheQuery q u) + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞)) := by
-              refine Finset.sum_le_sum fun u _ => ?_
-              rw [E_pure]
-              dsimp only
-              gcongr
-              exact ih u _ _ (hI_fresh c b q hI hcq hcost u) (hB' u)
-          _ = (∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * Φ (c.cacheQuery q u)) +
-                κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) := by
-              simp only [mul_add, Finset.sum_add_distrib, sum_inv_card_mul]
-          _ ≤ Φ c + κ * queryCost (.inr q) + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) :=
-              add_le_add_left (hΦ c b q hI hcq hcost) _
-          _ = Φ c + κ * b := by rw [add_assoc, kappa_split κ hcost]
-      · rw [oracleImpl_run_inr_some hcq, E_pure]
-        have hsome : (c q).isSome := by simp [hcq]
-        calc E (run (k' v) c) (fun p => Fv p.1 p.2)
-            ≤ Φ c + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) :=
-              ih v c _ (hI_cached c b q hI hsome hcost) (hB' v)
-          _ ≤ Φ c + κ * b := by
-              gcongr
-              exact Nat.sub_le _ _
-
-end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.Reconstruct; SHA256 a3c77306949229e8a573a62e8685541f992d83d2c507265eaf2f4ddd8fa43110. -/
 section
 
 /-!
@@ -1593,7 +1230,6 @@ open scoped Classical
 namespace OptimalOTS
 
 open OptimalOTS.Dag
-
 
 /-! ## Bit strings -/
 
@@ -1756,30 +1392,6 @@ end Dag.Graph
 /-! ## Support of a hash query -/
 
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
-
-/-- A hash query records its answer in the cache. -/
-theorem hash_support {k : ℕ} (u : BitVec k) (c : Cache) :
-    ∀ p ∈ support (run (hash u) c), Cache.Sub c p.2 ∧ p.2 ⟨k, u⟩ = some p.1 := by
-  intro p hp
-  have h : hash u = liftM (Spec.query (.inr ⟨k, u⟩)) >>= pure := (bind_pure _).symm
-  rw [h, run_query_bind] at hp
-  simp only [run_pure] at hp
-  rw [support_bind] at hp
-  simp only [Set.mem_iUnion] at hp
-  obtain ⟨⟨v, c'⟩, hv, hp⟩ := hp
-  rw [support_pure, Set.mem_singleton_iff] at hp
-  subst hp
-  rcases hc : c ⟨k, u⟩ with _ | w
-  · rw [oracleImpl_run_inr_none hc, support_bind] at hv
-    simp only [Set.mem_iUnion] at hv
-    obtain ⟨w, -, hw⟩ := hv
-    simp only [support_pure, Set.mem_singleton_iff, Prod.mk.injEq] at hw
-    obtain ⟨rfl, rfl⟩ := hw
-    exact ⟨Cache.sub_cacheQuery_of_none hc _, QueryCache.cacheQuery_self ..⟩
-  · rw [oracleImpl_run_inr_some hc, support_pure] at hv
-    simp only [Set.mem_singleton_iff, Prod.mk.injEq] at hv
-    obtain ⟨rfl, rfl⟩ := hv
-    exact ⟨Cache.Sub.refl _, hc⟩
 
 namespace Dag.Graph
 
@@ -1995,62 +1607,10 @@ theorem encode_decode (A : Finset (Fin G.size)) (l : List Bool)
 
 end Dag.Graph
 
-/-- The index query records its answer in the cache. -/
-theorem index_support (m : Message) (η : Nonce) (c : Cache) :
-    ∀ p ∈ support (run (index m η) c),
-      Cache.Sub c p.2 ∧ ∃ w, p.2 ⟨msgBits + nonceBits, m ++ η⟩ = some w ∧
-        p.1 = (w.setWidth idxBits).toNat := by
-  intro p hp
-  unfold index at hp
-  rw [run_map, support_map, Set.mem_image] at hp
-  obtain ⟨⟨w, c'⟩, hw, rfl⟩ := hp
-  obtain ⟨hsub, hc'⟩ := hash_support _ c _ hw
-  dsimp only at hsub hc' ⊢
-  exact ⟨hsub, w, hc', rfl⟩
-
-/-- Every accepting run of the verifier is witnessed in the final cache: the index answer, and
-an assignment satisfying the reconstruction equations whose root prefix is the public key. -/
-theorem verify_support (S : Scheme) (pk : PublicKey) (m : Message)
-    (σ : Signature) (c : Cache) :
-    ∀ p ∈ support (run (S.verify pk m σ) c),
-      Cache.Sub c p.2 ∧ (p.1 = true →
-        ∃ w, p.2 ⟨msgBits + nonceBits, m ++ σ.1⟩ = some w ∧
-          ∃ hi : (w.setWidth idxBits).toNat < numCuts,
-            σ.2.length = S.graph.revealBits (S.sets ⟨_, hi⟩) ∧
-            ∃ y : S.graph.Assignment,
-              S.graph.ReconEqs p.2 (S.sets ⟨_, hi⟩) (S.graph.decode (S.sets ⟨_, hi⟩) σ.2) y ∧
-              S.publicKey y = pk) := by
-  intro p hp
-  unfold Scheme.verify at hp
-  rw [run_bind, support_bind] at hp
-  simp only [Set.mem_iUnion] at hp
-  obtain ⟨⟨i, c₁⟩, hi₁, hp⟩ := hp
-  obtain ⟨hsub₁, w, hw, rfl⟩ := index_support m σ.1 c ⟨i, c₁⟩ hi₁
-  dsimp only at hp hw
-  by_cases hi : (w.setWidth idxBits).toNat < numCuts
-  · rw [dif_pos hi] at hp
-    by_cases hlen : σ.2.length = S.graph.revealBits (S.sets ⟨_, hi⟩)
-    · rw [if_pos hlen, run_bind, support_bind] at hp
-      simp only [Set.mem_iUnion] at hp
-      obtain ⟨⟨y, c₂⟩, hy, hp⟩ := hp
-      obtain ⟨hsub₂, heq⟩ := S.graph.reconstruct_support _ _ c₁ ⟨y, c₂⟩ hy
-      rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
-      subst hp
-      refine ⟨hsub₁.trans hsub₂, fun hok => ?_⟩
-      refine ⟨w, hsub₂ _ _ hw, hi, hlen, y, heq, ?_⟩
-      exact of_decide_eq_true hok
-    · rw [if_neg hlen, run_pure, support_pure, Set.mem_singleton_iff] at hp
-      subst hp
-      exact ⟨hsub₁, fun h => by cases h⟩
-  · rw [dif_neg hi, run_pure, support_pure, Set.mem_singleton_iff] at hp
-    subst hp
-    exact ⟨hsub₁, fun h => by cases h⟩
-
 end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.NonceCodec; SHA256 2296ce4388d78cc2ff367a63ae4295dbe078b365c2a6c5924fb39e5792f7b71d. -/
 section
 
 /-! Width-generic codec for a nonce followed by a disclosure payload. No scheme or
@@ -2100,20 +1660,10 @@ theorem canonical_of_payload_positive {n : ℕ} {bits : List Bool}
 
 abbrev Signature86 := Signature 86
 
-theorem signature86_length (nonce : BitVec 86) (payload : List Bool)
-    (h : payload.length = 42 * 129) : (encode (nonce, payload)).length = 5504 := by
-  rw [length_encode, h]
-
 end OptimalOTS.WeightedConstruction.NonceCodec
 
-#print axioms OptimalOTS.WeightedConstruction.NonceCodec.decode_encode
-#print axioms OptimalOTS.WeightedConstruction.NonceCodec.encode_injective
-#print axioms OptimalOTS.WeightedConstruction.NonceCodec.encode_decode
-#print axioms OptimalOTS.WeightedConstruction.NonceCodec.canonical_of_payload_positive
-#print axioms OptimalOTS.WeightedConstruction.NonceCodec.signature86_length
 end
 
-/- Original module: Submissions.UpperCompressions.Keygen; SHA256 0fe0924c834833c06ba8085a01ecbf2839622614de563bfe64c8dae37ecffbce. -/
 section
 
 /-!
@@ -2143,7 +1693,6 @@ open scoped Classical
 namespace OptimalOTS
 
 open OptimalOTS.Dag
-
 
 namespace Dag.Graph
 
@@ -2596,25 +2145,6 @@ theorem E_run_evaluate (T : G.Tagging) (z : G.Assignment)
 
 end Dag.Graph
 
-/-- Key generation of a tagged graph is a uniform record. -/
-theorem E_run_keygen (S : Scheme) (T : S.graph.Tagging)
-    (g : (PublicKey × S.graph.Assignment) × Cache → ℝ≥0∞) :
-    E (run S.keygen ∅) g =
-      ∑ ξ : S.graph.Rec, (Fintype.card S.graph.Rec : ℝ≥0∞)⁻¹ *
-        g ((S.publicKey (S.graph.evalRec ξ), S.graph.evalRec ξ), S.graph.keygenCache ξ) := by
-  have hA0 : (Fintype.card S.graph.Assignment : ℝ≥0∞) ≠ 0 := by
-    exact_mod_cast Fintype.card_ne_zero
-  have hAt : (Fintype.card S.graph.Assignment : ℝ≥0∞) ≠ ⊤ := ENNReal.natCast_ne_top _
-  unfold Scheme.keygen Graph.keygen
-  rw [run_bind, E_bind]
-  simp only [run_pure, E_pure]
-  rw [run_bind, E_bind, S.graph.E_run_sampleAssignment]
-  simp only [S.graph.E_run_evaluate T]
-  rw [Fintype.sum_prod_type]
-  simp only [Fintype.card_prod, Nat.cast_mul, Finset.mul_sum]
-  refine Finset.sum_congr rfl fun z _ => Finset.sum_congr rfl fun y _ => ?_
-  rw [ENNReal.mul_inv (Or.inl hA0) (Or.inl hAt), mul_assoc]
-
 /-! ## Budgets -/
 
 /-- A lifted `ProbComp` costs nothing: the continuation keeps the whole budget. -/
@@ -2704,36 +2234,10 @@ theorem costAtMost_evalFold_bind (z : G.Assignment) {β : Type}
 
 end Dag.Graph
 
-/-- A budget for `S.keygen >>= k` covers key generation and leaves `B - keygenCost` for the
-continuation at every record. -/
-theorem costAtMost_keygen_bind (S : Scheme) {β : Type}
-    (k : PublicKey × S.graph.Assignment → OracleComp Spec β) {B : ℕ}
-    (h : CostAtMost (S.keygen >>= k) B) :
-    S.graph.keygenCost ≤ B ∧ ∀ ξ : S.graph.Rec,
-      CostAtMost (k (S.publicKey (S.graph.evalRec ξ), S.graph.evalRec ξ))
-        (B - S.graph.keygenCost) := by
-  have h' : CostAtMost (S.graph.sampleAssignment >>= fun z =>
-      S.graph.evaluate z >>= fun x => k (S.publicKey x, x)) B := by
-    simpa only [Scheme.keygen, Graph.keygen, bind_assoc, pure_bind] using h
-  unfold Graph.sampleAssignment at h'
-  have hs := S.graph.costAtMost_sampleFold_bind _ _ _ h'
-  simp only [foldl_update_finRange] at hs
-  have he : ∀ z : S.graph.Assignment,
-      ((List.finRange S.graph.size).map S.graph.nodeCost).sum ≤ B ∧
-        ∀ y : Fin S.graph.size → BitVec hashBits,
-          CostAtMost (k (S.publicKey (S.graph.evalRec (z, y)), S.graph.evalRec (z, y)))
-            (B - ((List.finRange S.graph.size).map S.graph.nodeCost).sum) := fun z =>
-    S.graph.costAtMost_evalFold_bind z (fun x => k (S.publicKey x, x)) _ _ B (hs z)
-  have hK : S.graph.keygenCost = ((List.finRange S.graph.size).map S.graph.nodeCost).sum := by
-    rw [Graph.keygenCost, Fin.sum_univ_def]
-  rw [hK]
-  exact ⟨(he (fun _ => 0)).1, fun ξ => (he ξ.1).2 ξ.2⟩
-
 end OptimalOTS
 end
 end
 
-/- Original module: Submissions.UpperCompressions.GraphKeygenBridge; SHA256 87348555b5117ded1cff0e07d94ee9f9d9f1decb0e75a7860666def0b84b5d6b. -/
 section
 
 /-! Graph-only key generation wrappers. They deliberately require no scheme,
@@ -2798,100 +2302,5 @@ theorem costAtMost_keygen_bind (G : Graph) {α β : Type}
 
 end OptimalOTS.WeightedConstruction.GraphKeygenBridge
 
-#print axioms OptimalOTS.WeightedConstruction.GraphKeygenBridge.E_run_keygen
-#print axioms OptimalOTS.WeightedConstruction.GraphKeygenBridge.costAtMost_keygen_bind
 end
 end
-
-/- Original module: Submissions.UpperCompressions.Resources; SHA256 fa929130369bbac94132097090b0ab744b933cc3ff09a7433d8c76c41edea869. -/
-section
-
-/-! Honest-party resource bounds and wire-size bounds for the generic DAG adapter. -/
-
-open OracleSpec OracleComp ENNReal
-noncomputable section
-open scoped Classical
-
-namespace OptimalOTS.AlgorithmAdapter
-
-open OptimalOTS.Dag
-
-
-attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
-
-
-theorem length_encode (G : Graph) (A : Finset (Fin G.size)) (x : G.Assignment) :
-    (G.encode A x).length = G.revealBits A := by
-  unfold Graph.encode Graph.revealBits
-  rw [List.length_flatMap]
-  simp only [toBits, List.length_ofFn]
-  rw [← List.sum_toFinset _ ((List.nodup_finRange _).filter _)]
-  congr 1
-  ext v
-  simp
-
-theorem signLoop_returns (S : Scheme) (x : S.graph.Assignment) (m : Message) :
-    ∀ k tried σ, some σ ∈ support (S.signLoop x m k tried) →
-      ∃ i, σ.2 = S.graph.encode (S.sets i) x
-  | 0, _, _, h => by simp [Scheme.signLoop] at h
-  | k + 1, tried, σ, h => by
-    rw [Scheme.signLoop] at h
-    split_ifs at h with hf
-    · rw [support_bind] at h
-      simp only [Set.mem_iUnion] at h
-      obtain ⟨j, _, h⟩ := h
-      rw [support_bind] at h
-      simp only [Set.mem_iUnion] at h
-      obtain ⟨i, _, h⟩ := h
-      split_ifs at h with hi
-      · simp only [support_pure, Set.mem_singleton_iff, Option.some.injEq] at h
-        exact ⟨⟨i, hi⟩, congrArg Prod.snd h⟩
-      · exact signLoop_returns S x m k _ σ h
-    · simp at h
-
-theorem signatureSize (S : Scheme) :
-    S.toAlgorithm.SignatureSizeAtMost (nonceBits + (maxSignatureBits - nonceBits)) := by
-  change ∀ (sk : S.graph.Assignment) (m : Message) (σ : Signature),
-    some σ ∈ support (S.sign sk m) → (encodeSignature σ).length ≤ nonceBits + (maxSignatureBits - nonceBits)
-  intro sk m σ hσ
-  obtain ⟨i, hi⟩ := signLoop_returns S sk m trials ∅ σ hσ
-  rw [length_encodeSignature, hi, length_encode]
-  have h := S.reveal_le i
-  omega
-
-theorem rejectsOversized (S : Scheme) :
-    S.toAlgorithm.RejectsOversized (nonceBits + (maxSignatureBits - nonceBits)) := by
-  change ∀ (pk : PublicKey) (m : Message) (σ : Signature),
-    nonceBits + (maxSignatureBits - nonceBits) < (encodeSignature σ).length →
-      true ∉ support (S.verify pk m σ)
-  intro pk m σ hlen hmem
-  change nonceBits + (maxSignatureBits - nonceBits) < (encodeSignature σ).length at hlen
-  rw [length_encodeSignature] at hlen
-  change true ∈ support (S.verify pk m σ) at hmem
-  rw [Scheme.verify, support_bind] at hmem
-  simp only [Set.mem_iUnion] at hmem
-  obtain ⟨i, _, hmem⟩ := hmem
-  by_cases hi : i < numCuts
-  · have hwrong : σ.2.length ≠ S.graph.revealBits (S.sets ⟨i, hi⟩) := by
-      have h := S.reveal_le ⟨i, hi⟩
-      omega
-    simp only [dif_pos hi, if_neg hwrong, support_pure, Set.mem_singleton_iff] at hmem
-    cases hmem
-  · simp [hi] at hmem
-
-theorem keygenCost (S : Scheme) : S.toAlgorithm.KeygenCostAtMost keygenBudget :=
-  AlgorithmCosts.Dag.Scheme.costAtMost_keygen S
-
-theorem signCost (S : Scheme) (hidx : blockCost (msgBits + nonceBits) = 1) :
-    S.toAlgorithm.SignCostAtMost trials :=
-  AlgorithmCosts.Dag.Scheme.costAtMost_sign S hidx
-
-theorem verifyCost (S : Scheme) (hidx : blockCost (msgBits + nonceBits) = 1)
-    {v : ℕ} (hv : ∀ i, S.graph.reconstructCost (S.sets i) ≤ v) :
-    S.toAlgorithm.VerifyCostAtMost (1 + v) :=
-  AlgorithmCosts.Dag.Scheme.costAtMost_verify S hidx hv
-
-end OptimalOTS.AlgorithmAdapter
-end
-end
-
