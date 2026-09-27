@@ -24,7 +24,6 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 namespace Forest
 
 open Name
@@ -148,18 +147,8 @@ theorem sum_updSrc (S : Finset Rec) (k : Chain)
 theorem card_bitVec_ennreal (n : ℕ) : (Fintype.card (BitVec n) : ℝ≥0∞) = 2 ^ n := by
   simp
 
-theorem inv_card_mul_two_pow : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * 2 ^ 128 = ε := by
-  have h0 : (2 : ℝ≥0∞) ^ 128 ≠ 0 := by simp
-  have ht : (2 : ℝ≥0∞) ^ 128 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
-  rw [card_bitVec_ennreal, ε, show (2 : ℝ≥0∞) ^ 256 = 2 ^ 128 * 2 ^ 128 by rw [← pow_add],
-    ENNReal.mul_inv (Or.inl h0) (Or.inl ht), mul_assoc, ENNReal.inv_mul_cancel h0 ht, mul_one]
-
 /-- `ε₁ = 2 ^ (-144)`: the sharp per-node hit probability. -/
 def ε₁ : ℝ≥0∞ := ((2 : ℝ≥0∞) ^ 144)⁻¹
-
-theorem ε₁_le_ε : ε₁ ≤ ε := by
-  unfold ε₁ ε
-  exact ENNReal.inv_le_inv.mpr (pow_le_pow_right₀ (by norm_num) (by norm_num))
 
 theorem inv_source_card_le (k : Chain) :
     (Fintype.card (BitVec (chainBits k)) : ℝ≥0∞)⁻¹ ≤ ε₁ := by
@@ -228,21 +217,12 @@ theorem sum_input_eq_le' {h p : Name} (hp : hashParent h = some p) (S : Finset R
         ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * (2 ^ 112 * w) := by gcongr
       _ = ε₁ * w := by rw [← mul_assoc, inv_card_mul_two_pow_112]
 
-/-- The same with the coarser `ε`. -/
-theorem sum_input_eq_le {h p : Name} (hp : hashParent h = some p) (S : Finset Rec)
-    (hS : ClosedAt S (coordOf h)) (u : BitVec p.len) :
-    ∑ ξ ∈ S, (if val ξ p = u then w else 0) ≤ ε * ∑ ξ ∈ S, w :=
-  (sum_input_eq_le' hp S hS u).trans (mul_le_mul' ε₁_le_ε le_rfl)
-
 /-! ## Hidden coordinates -/
 
 /-- A coordinate the public data after signing at the cut `A` does not depend on: a node
 strictly below the cut that is neither a cut node nor read by a cut node. -/
 def HiddenCoord (A : Finset Name) (s : Name) : Prop :=
   ¬ Evaluated A s ∧ s ∉ A ∧ ∀ a ∈ A, s ∉ deps a
-
-theorem len_of_hashParent {h p : Name} (hp : hashParent h = some p) : h.len = 256 := by
-  cases h <;> simp only [hashParent, reduceCtorEq] at hp <;> rfl
 
 /-- A hash node lies strictly above its coordinate. -/
 theorem above_coordOf {h p : Name} (hp : hashParent h = some p) : Above h (coordOf h) := by
@@ -438,11 +418,6 @@ theorem pointOf_updSrc {A : Finset Name} (hA : IsCut A) (ξ : Rec) {k : Chain}
   unfold pointOf
   rw [val_updSrc_of_not_mem_deps _ _ _ _ (not_mem_deps_of_hiddenCoord hA hs
     (evaluated_or_mem_of_child (child_hashParent hp) he))]
-
-/-- The keygen cache at a keygen point of a good record. -/
-theorem kc_pointOf {ξ : Rec} (hξ : DistinctRec ξ) {h p : Name} (hp : hashParent h = some p) :
-    kc ξ (pointOf ξ h p) = some (ξ.2 h.fin) :=
-  (kc_apply_iff hξ _ _).mpr ⟨h, p, hp, rfl, rfl⟩
 
 theorem fExp_congr {A : Finset Name} {ξ ξ' : Rec}
     (hpt : ∀ h p, hashParent h = some p → Exposed (some A) h → pointOf ξ' h p = pointOf ξ h p)

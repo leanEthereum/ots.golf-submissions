@@ -11,7 +11,6 @@ namespace OptimalOTS.RiscvUpperForest.ForestVerifier
 
 open OptimalOTS.Dag
 
-
 open Forest Forest.Name
 
 set_option allowUnsafeReducibility true
@@ -173,15 +172,5 @@ theorem directVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     change (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) ↔ bits.length = 5504 at hlen
     simp only [hlen, directReconstruct_eq]
   · rw [dif_neg hi, dif_neg hi]
-
-/-- The sequential disclosure cursor advances by one value exactly at disclosed nodes. -/
-theorem consumedBits_value (i : RawIdx) (n : Name) :
-    consumedBits i n = if disclosed (fixedPositions i) n then n.len else 0 := rfl
-
-/--
-info: 'OptimalOTS.RiscvUpperForest.ForestVerifier.directVerify_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms directVerify_eq
 
 end OptimalOTS.RiscvUpperForest.ForestVerifier

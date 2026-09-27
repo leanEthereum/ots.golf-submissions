@@ -1,7 +1,82 @@
 import Submissions.UpperRiscvHint.MixedDispatchArith
 import Submissions.UpperRiscvHint.MixedContext
-import Submissions.UpperRiscvHint.MixedIndexMemory
-import Submissions.UpperRiscvHint.IndexDispatchFields
+
+namespace OptimalOTS.RiscvMixedProgram
+open OptimalOTS.Dag
+
+theorem fine_field_dispatch (answer : BitVec hashBits) (index : RawIdx)
+    (hi : index.val = pack answer) (q : Fin 16) :
+    fineFld (laneGroup q) (wordOf answer (laneGroup q)).toNat (laneIdx q) =
+      digit index.val (2*q.val) := by
+  have hq := q.isLt
+  have hg : laneGroup q < 4 := by unfold laneGroup; omega
+  have hl : laneIdx q < 4 := by unfold laneIdx; omega
+  have he : fineChain (laneGroup q) (laneIdx q) = 2*q.val := by
+    unfold fineChain laneGroup laneIdx
+    omega
+  calc
+    _ = fieldDigit answer (fineChain (laneGroup q) (laneIdx q)) :=
+      fine_word answer _ _ hg hl
+    _ = fieldDigit answer (2*q.val) := congrArg (fieldDigit answer) he
+    _ = digit (pack answer) (2*q.val) := (digit_pack answer (by omega)).symm
+    _ = digit index.val (2*q.val) := congrArg (fun i => digit i (2*q.val)) hi.symm
+
+theorem coarse_field_dispatch (answer : BitVec hashBits) (index : RawIdx)
+    (hi : index.val = pack answer) (q : Fin 16) :
+    coarseFld (laneGroup q) (wordOf answer (laneGroup q)).toNat (laneIdx q) =
+      digit index.val (2*q.val+1) := by
+  have hq := q.isLt
+  have hg : laneGroup q < 4 := by unfold laneGroup; omega
+  have hl : laneIdx q < 4 := by unfold laneIdx; omega
+  have he : coarseChain (laneGroup q) (laneIdx q) = 2*q.val+1 := by
+    unfold coarseChain laneGroup laneIdx
+    omega
+  calc
+    _ = fieldDigit answer (coarseChain (laneGroup q) (laneIdx q)) :=
+      coarse_word answer _ _ hg hl
+    _ = fieldDigit answer (2*q.val+1) := congrArg (fieldDigit answer) he
+    _ = digit (pack answer) (2*q.val+1) := (digit_pack answer (by omega)).symm
+    _ = digit index.val (2*q.val+1) := congrArg (fun i => digit i (2*q.val+1)) hi.symm
+
+theorem word_fields_dispatch (answer : BitVec hashBits) (index : RawIdx)
+    (hi : index.val = pack answer) (q : Fin 16) :
+    baseLane (4*laneGroup q+laneIdx q) -
+      (4*fineFld (laneGroup q) (wordOf answer (laneGroup q)).toNat (laneIdx q) +
+       1024*coarseFld (laneGroup q) (wordOf answer (laneGroup q)).toNat (laneIdx q)) =
+      baseLane q - dispatch index q := by
+  have he : 4*laneGroup q+laneIdx q = q := by unfold laneGroup laneIdx; omega
+  have hfields := congrArg₂ (fun a b : ℕ => 4*a+1024*b)
+    (fine_field_dispatch answer index hi q) (coarse_field_dispatch answer index hi q)
+  exact congrArg₂ Nat.sub (congrArg baseLane he) hfields
+
+end OptimalOTS.RiscvMixedProgram
+
+namespace OptimalOTS.RiscvMixedProgram
+
+open RiscvZkvm.Rv64
+open Riscv2Program
+open OptimalOTS.Dag
+
+/-- Halfword extraction needs only a single abstract word of memory. -/
+theorem stored_lane_extract (s : MachineState) (q : Fin 16) (v : Word)
+    (stored : s.getMem (W (laneWordAddr (laneGroup q))) = v) :
+    (s.getHalfword (W (laneAddr q))).toNat =
+      v.toNat / 2 ^ (16 * laneIdx q) % 2 ^ 16 := by
+  have hq := q.isLt
+  have hl : laneIdx q < 4 := by unfold laneIdx; omega
+  have hg : laneGroup q < 4 := by unfold laneGroup; omega
+  have addr : laneAddr q = laneWordAddr (laneGroup q) + 2 * laneIdx q := by
+    unfold laneAddr laneWordAddr laneGroup laneIdx
+    omega
+  calc
+    _ = (s.getMem (W (laneWordAddr (laneGroup q)))).toNat /
+        2 ^ (16 * laneIdx q) % 2 ^ 16 := by
+      rw [addr]
+      exact getHalfword_lane s _ _ (by unfold laneWordAddr laneBase; omega) hl
+        (by unfold laneWordAddr laneBase; omega)
+    _ = _ := congrArg (fun w : Word => w.toNat / 2 ^ (16 * laneIdx q) % 2 ^ 16) stored
+
+end OptimalOTS.RiscvMixedProgram
 
 /-!
 # The index phase
@@ -67,11 +142,7 @@ variable (pk : PublicKey) (m : Message) (view : List Bool)
 /-- The loader's state. -/
 abbrev S0 : MachineState := RiscvHint.loadView image pk m view
 
-theorem S0_regs :
-    (S0 pk m view).getReg .x10 = W 0x400000 ∧ (S0 pk m view).getReg .x11 = W 0x400010 ∧
-    (S0 pk m view).getReg .x12 = W 0x400030 ∧
-    (S0 pk m view).getReg .x13 =
-      BitVec.ofNat 64 (min view.length (RiscvHint.maxViewBits + 1)) := ⟨rfl, rfl, rfl, rfl⟩
+theorem S0_x10 : (S0 pk m view).getReg .x10 = W 0x400000 := rfl
 
 theorem S0_pc : (S0 pk m view).pc = W 4096 := by
   simp [RiscvHint.loadView]; rfl
@@ -94,7 +165,6 @@ structure PrefixEffect (s : MachineState) : Prop where
   x11 : s.getReg .x11 = 512
   x12 : s.getReg .x12 = W dataAddr
   x5 : s.getReg .x5 = 1
-  x13 : s.getReg .x13 = BitVec.ofNat 64 (min view.length (RiscvHint.maxViewBits + 1))
   frame : ∀ addr, s.getMem addr = (S0 pk m view).getMem addr
   pc : s.pc = W (4096 + 20)
   code : s.code = (S0 pk m view).code
@@ -112,8 +182,7 @@ theorem pk_word1 : (S0 pk m view).getMem (W 0x400008) = pk.extractLsb' 64 64 := 
 theorem prefix_effect : PrefixEffect pk m view (afterPrefix pk m view) := by
   have l0 : signExtend12 (BitVec.ofNat 12 0) = 0 := by decide
   have l8 : signExtend12 (BitVec.ofNat 12 8) = W 8 := by decide
-  have r10 := (S0_regs pk m view).1
-  have r13 := (S0_regs pk m view).2.2.2
+  have r10 := S0_x10 pk m view
   have w0 := pk_word0 pk m view
   have w1 := pk_word1 pk m view
   have hmem : ∀ addr, (afterPrefix pk m view).getMem addr = (S0 pk m view).getMem addr := by
@@ -123,8 +192,8 @@ theorem prefix_effect : PrefixEffect pk m view (afterPrefix pk m view) := by
     rw [S0_pc]; decide
   have hcode : (afterPrefix pk m view).code = (S0 pk m view).code := by
     simp [afterPrefix, indexPrefix, execInstrBr]
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, hmem, hpc, hcode⟩
-  all_goals simp [afterPrefix, indexPrefix, execInstrBr, getReg_setReg_ite, l0, l8, r10, r13, w0,
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, hmem, hpc, hcode⟩
+  all_goals simp [afterPrefix, indexPrefix, execInstrBr, getReg_setReg_ite, l0, l8, r10, w0,
     w1, W_add, getReg_x0', BitVec.add_zero]
   all_goals rfl
 
@@ -311,11 +380,11 @@ theorem loadWords_effect :
 /-- After the loads. -/
 def S44 : MachineState := loadWords.foldl execInstrBr (S4 pk m view answer)
 
-/-- The view's free count: bits `2 … 7` of view byte 40. -/
-def viewDigit (view : List Bool) : ℕ := (ofBits 8 (view.drop 320)).toNat / 4
+/-- The view's free count: bits `2 … 7` of view byte 64. -/
+def viewDigit (view : List Bool) : ℕ := (ofBits 8 (view.drop 512)).toNat / 4
 
 theorem viewDigit_lt (view : List Bool) : viewDigit view < 64 := by
-  have := (ofBits 8 (view.drop 320)).isLt
+  have := (ofBits 8 (view.drop 512)).isLt
   unfold viewDigit; omega
 
 theorem S44_regs (r : Reg) (h : LoadFree r) :
@@ -328,12 +397,12 @@ theorem S44_x10 : (S44 pk m view answer).getReg .x10 = W hashBase := by
 
 /-- The view word holding the free count, untouched before the loads. -/
 theorem S44_freeWord : (S44 pk m view answer).getMem (W freeByte) =
-    ofBits 64 ((view.take RiscvHint.maxViewBits).drop 320) := by
+    ofBits 64 ((view.take RiscvHint.maxViewBits).drop 512) := by
   rw [S44, (loadWords_effect pk m view answer).mem, S4_mem,
     S2_frame _ _ _ _ _ (Or.inr (by rw [W_toNat _ (by unfold freeByte; omega)]; unfold freeByte dataAddr; omega)),
     (prefix_effect pk m view).frame]
-  have h := loadView_word image pk m view image_data_length 5 (by norm_num)
-  rw [show Riscv.signatureBase + BitVec.ofNat 64 (8 * 5) = W freeByte by decide] at h
+  have h := loadView_word image pk m view image_data_length 8 (by norm_num)
+  rw [show Riscv.signatureBase + BitVec.ofNat 64 (8 * 8) = W freeByte by decide] at h
   exact h
 
 theorem freeByte_addr (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
@@ -401,10 +470,6 @@ def S46 : MachineState := lanes.foldl execInstrBr (S45 pk m view answer)
 theorem S5_eq : S5 pk m view answer =
     (freeSum ++ sumCheck).foldl execInstrBr (S46 pk m view answer) := by
   simp [S5, S46, S45, S44, mainBlock, List.foldl_append]
-
-theorem S45_x12 : (S45 pk m view answer).getReg .x12 = W dataAddr := by
-  rw [S45_regs _ _ _ _ _ (by decide), S44,
-    LoadEffect.regs' answer (loadWords_effect pk m view answer) .x12 (by decide), S4_x12]
 
 theorem S45_x10 : (S45 pk m view answer).getReg .x10 = W hashBase := by
   rw [S45_regs _ _ _ _ _ (by decide)]
@@ -566,21 +631,11 @@ theorem afterIndex_frame (addr : Word)
 /-- The packed answer without assuming the later pair-cap checks. -/
 def rawIdx : RawIdx := ⟨pack answer, pack_lt answer⟩
 
-/-- The accepted subtype, when both the rank and pair restrictions have been established. -/
-def acceptedIdx (hi : Accepted (pack answer)) : Idx :=
-  ⟨pack answer, mem_validSet.mpr ⟨pack_lt answer, hi⟩⟩
-
 theorem laneGroup_lt (q : ℕ) (hq : q < 16) : laneGroup q < 4 := by
   unfold laneGroup; omega
 
 theorem laneIdx_lt (q : ℕ) (_hq : q < 16) : laneIdx q < 4 := by
   unfold laneIdx; omega
-
-theorem fineChain_lane (q : ℕ) (_hq : q < 16) : fineChain (laneGroup q) (laneIdx q) = firstChain q := by
-  unfold fineChain laneGroup laneIdx firstChain; omega
-
-theorem coarseChain_lane (q : ℕ) (_hq : q < 16) : coarseChain (laneGroup q) (laneIdx q) = 2*q+1 := by
-  unfold coarseChain laneGroup laneIdx; omega
 
 /-- Eliminate the large concrete register state before doing lane arithmetic. -/
 theorem afterIndex_stored (g : ℕ) (hg : g < 4) :

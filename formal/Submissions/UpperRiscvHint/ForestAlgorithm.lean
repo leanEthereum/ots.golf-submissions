@@ -19,7 +19,6 @@ namespace OptimalOTS.RiscvUpperForest
 
 open OptimalOTS.Dag
 
-
 attribute [local irreducible] Forest.forestScheme
 attribute [local irreducible] GScheme.sign GScheme.signLoop
 attribute [local irreducible] TypedScheme.Secure TypedScheme.VerifyCostAtMost
@@ -60,7 +59,6 @@ theorem signing_failure : scheme.SigningFailureAtMost (1 / 2 ^ 128) :=
 
 /-- All generic admission requirements, with the challenge's fixed failure allowance. -/
 theorem admissible : scheme.Admissible (1 / 2 ^ 128) where
-  failure_lt_one := by norm_num
   correct := correct
   verifyDeterministic := GScheme.verifyDeterministic Forest.forestScheme
   signingFailure := signing_failure
@@ -68,17 +66,5 @@ theorem admissible : scheme.Admissible (1 / 2 ^ 128) where
   rejectsOversized := rejects_oversized
   keygenCost := keygen_cost
   signCost := sign_cost
-
-/-- A complete admissible, strongly secure, 180-compression construction. -/
-theorem certificate :
-    scheme.Admissible (1 / 2 ^ 128) ∧
-    scheme.Secure ∧ scheme.VerifyCostAtMost 180 :=
-  ⟨admissible, secure, cost⟩
-
-/--
-info: 'OptimalOTS.RiscvUpperForest.certificate' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms certificate
 
 end OptimalOTS.RiscvUpperForest

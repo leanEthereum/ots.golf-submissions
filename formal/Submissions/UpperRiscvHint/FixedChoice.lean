@@ -112,8 +112,6 @@ theorem fixedCut_injective : Function.Injective (fun i : Idx => cutOf (fixedChoi
 
 theorem fixedCut_isCut (i : RawIdx) : IsCut (cutOf (fixedChoice i)) := isCut_cutOf _
 
-theorem fixedCut_card (i : RawIdx) : (cutOf (fixedChoice i)).card = 33 := card_cutOf _
-
 /-- Every disclosure set costs `target + 20 + 14 = 179` compressions to reconstruct. -/
 theorem fixedCut_cost (i : Idx) :
     ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 179 := by

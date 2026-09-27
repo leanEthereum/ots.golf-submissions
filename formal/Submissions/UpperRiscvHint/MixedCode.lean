@@ -7,14 +7,6 @@ namespace OptimalOTS.RiscvMixedProgram
 open RiscvZkvm.Rv64
 open Riscv2Program
 
-/-- Position of a copy in the concrete instruction image. -/
-def copyOffset (q d : ℕ) : ℕ :=
-  copiesIndex + groupOffset (group q) + 256*(copies q-1-d) + slotOffset q
-
-theorem copyStart_eq (q d : ℕ) : copyStart q d = 4096+4*copyOffset q d := by
-  unfold copyStart copiesStart copyOffset copiesIndex
-  omega
-
 def wellPlaced (cursor : ℕ) : List (ℕ × Code) → Bool
   | [] => true
   | (off, body) :: rest => decide (cursor ≤ off) && wellPlaced (off+body.length) rest

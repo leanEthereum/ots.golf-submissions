@@ -1,5 +1,4 @@
 import Submissions.UpperRiscvHint.Tree
-import Submissions.UpperRiscvHint.Count
 
 /-!
 # Disclosure sets of the chain forest
@@ -147,11 +146,6 @@ theorem rc_not_mem_cutOf (c : Choice) : rc ∉ cutOf c :=
 theorem rh_not_mem_cutOf (c : Choice) : rh ∉ cutOf c :=
   fun h => mem_cutOf_revealable h
 
-theorem card_cutOf (c : Choice) : (cutOf c).card = 33 := by
-  unfold cutOf
-  rw [Finset.card_image_of_injective _ (chainNode_injective c), Finset.card_univ,
-    Fintype.card_fin]
-
 /-! ### Injectivity -/
 
 /-- The choice is determined by its disclosure set. -/
@@ -229,16 +223,6 @@ theorem evaluated_ci_iff (c : Choice) (k : Chain) (t : Fin 32) :
     refine evaluated_of_child rfl (fun e => ?_) ((evaluated_ch_iff c k t).mpr h.le)
     have := (ci_mem_cutOf_iff c k t).mp e
     omega
-
-theorem child_cv_of_lt (k : Chain) (t : Fin 32) (ht : t.val < 31) :
-    child (cv k t) = some (ci k ⟨t.val + 1, by omega⟩) := by
-  simp only [Name.child]
-  rw [dif_neg (by omega)]
-
-theorem child_cv_of_eq (k : Chain) (t : Fin 32) (ht : t.val = 31) :
-    child (cv k t) = some (top k) := by
-  simp only [Name.child]
-  rw [dif_pos ht]
 
 theorem isCut_cutOf (c : Choice) : IsCut (cutOf c) where
   values _ hn := mem_cutOf_revealable hn

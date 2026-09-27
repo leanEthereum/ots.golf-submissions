@@ -7,11 +7,7 @@ namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 
-
 open RiscvZkvm.Rv64
-
-@[simp] theorem bytesOfVector_length {n : ℕ} (v : BitVec n) :
-    (Riscv.bytesOfVector v).length = (n + 7) / 8 := by simp [Riscv.bytesOfVector]
 
 @[simp] theorem bytesOfBits_length (bits : List Bool) :
     (Riscv.bytesOfBits bits).length = (bits.length + 7) / 8 := by simp [Riscv.bytesOfBits]

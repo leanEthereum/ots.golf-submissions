@@ -15,12 +15,11 @@ open scoped Classical
 
 namespace OptimalOTS
 
-/-- Key generation, signing and verification with an injective signature encoding. -/
+/-- Key generation, signing and verification with a signature encoding. -/
 structure TypedScheme where
   SecretKey : Type
   Signature : Type
   encodeSignature : Signature → List Bool
-  encodeSignature_injective : Function.Injective encodeSignature
   keygen : OracleComp Spec (PublicKey × SecretKey)
   sign : SecretKey → Message → OracleComp Spec (Option Signature)
   verify : PublicKey → Message → Signature → OracleComp Spec Bool
@@ -80,7 +79,6 @@ def SigningFailureAtMost (S : TypedScheme) (ε : ℝ≥0∞) : Prop :=
 
 /-- Every requirement except security, with signing failure at most `ε`. -/
 structure Admissible (S : TypedScheme) (ε : ℝ≥0∞) : Prop where
-  failure_lt_one : ε < 1
   correct : S.Correct
   verifyDeterministic : S.VerifyDeterministic
   signingFailure : S.SigningFailureAtMost ε

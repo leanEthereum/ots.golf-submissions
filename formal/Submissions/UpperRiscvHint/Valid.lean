@@ -1,6 +1,29 @@
-import Submissions.UpperRiscvHint.Parameters
+import OptimalOTS.Dag
 import Submissions.UpperRiscvHint.PairCount
 import Submissions.UpperRiscvHint.Digits
+
+/-! Scheme-local signature parameters. A 128-bit nonce preserves the nonce/index
+space equality used by the adaptive chosen-message security proof. -/
+
+namespace OptimalOTS
+
+open OracleSpec OracleComp
+open OptimalOTS.Dag
+
+def nonceBits : ℕ := 128
+abbrev Nonce := BitVec nonceBits
+abbrev Signature := Nonce × List Bool
+
+def idxCost : ℕ := blockCost (pkBits + msgBits + nonceBits)
+def trials : ℕ := signBudget / idxCost
+
+/-- The same unrestricted two-stage attacker interface, with this scheme's signature type. -/
+structure Adversary where
+  State : Type
+  choose : PublicKey → OracleComp Spec (Message × State)
+  forge : State → Option Signature → OracleComp Spec (Message × Signature)
+
+end OptimalOTS
 
 /-!
 # Accepted indices
@@ -28,17 +51,6 @@ def wid (k : ℕ) : ℕ := if k < 32 then 4 else 0
 abbrev pos : ℕ → ℕ := posW wid
 
 theorem pos_32 : pos 32 = 128 := by decide
-
-theorem pos_of_le {k : ℕ} (hk : 32 ≤ k) : pos k = 128 := by
-  induction k with
-  | zero => omega
-  | succ k ih =>
-    rcases Nat.lt_succ_iff_lt_or_eq.mp (Nat.lt_succ_of_le hk) with h | h
-    · show posW wid (k + 1) = 128
-      have := ih (by omega)
-      rw [posW_succ, show posW wid k = 128 from this]
-      simp [wid, show ¬ k < 4 by omega, show ¬ k < 32 by omega]
-    · rw [← h]; exact pos_32
 
 /-- Digit `k` of `i`. -/
 abbrev digit : ℕ → ℕ → ℕ := digitW wid
@@ -275,9 +287,6 @@ theorem digit_pack (y : BitVec hashBits) {k : ℕ} (hk : k < 32) :
 
 theorem pack_lt_pos (y : BitVec hashBits) : pack y < 2 ^ pos 32 :=
   ofDigits_lt _ (fieldDigit_lt y) 32
-
-theorem pack_lt' (y : BitVec hashBits) : pack y < 2 ^ 128 := by
-  rw [← pos_32]; exact pack_lt_pos y
 
 attribute [irreducible] pack
 

@@ -11,10 +11,11 @@ next state starts at bit `truncOff k`: 0 for a cap, 64 for a normal. A source is
 state-width.
 
 Each chain ends in a `top` node read by the root. A cap's top is its final 192-bit state; normals
-13–24 commit their whole last answer (256 bits), normals 25–32 their low 192 bits. The root input
-lists the tops in memory order: the free chain, then normal `13 + j` below cap `1 + j` for
-`j = 0 … 11`, then normals 25–32, for 7104 bits (`rootCat`). The key-generation input lengths
-144, 192 and 7104 differ from the 512-bit index input.
+13–24 commit their whole last answer (256 bits), normals 25–31 their low 192 bits and normal 32
+its answer bits `[64,256)`. The root input lists the tops in memory order: normal 32, the free
+chain, then normal `13 + j` below cap `1 + j` for `j = 0 … 11`, then normals 25–31, for 7104 bits
+(`rootCat`). The key-generation input lengths 144, 192 and 7104 differ from the 512-bit index
+input.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -75,8 +76,14 @@ theorem topBits_of_cap {k : Chain} (hk : k.val < 13) : topBits k = chainBits k :
   unfold topBits chainBits
   rw [if_pos hk, if_neg (by omega)]
 
-/-- The committed part of a chain's last answer: its low `topBits k` bits. -/
-def topOf (k : Chain) (w : BitVec 256) : BitVec (topBits k) := w.setWidth (topBits k)
+/-- Bit offset of the committed part of a chain's last answer: 64 for the last chain, whose top
+begins at its state, else 0. -/
+def topOff (k : Chain) : ℕ := if k.val = 32 then 64 else 0
+
+theorem topOff_add_le : ∀ k : Chain, topOff k + topBits k ≤ 256 := by decide +kernel
+
+/-- The committed part of a chain's last answer. -/
+def topOf (k : Chain) (w : BitVec 256) : BitVec (topBits k) := w.extractLsb' (topOff k) (topBits k)
 
 /-- Node names. -/
 inductive Name where
@@ -249,10 +256,11 @@ theorem Name.sum_eq {M : Type} [AddCommMonoid M] (f : Name → M) :
 
 /-! ## The root input -/
 
-/-- The chain in root slot `s`: slot 0 holds the free chain, slot `2 j + 1` normal `13 + j` and
-slot `2 j + 2` cap `1 + j` for `j < 12`, slot `s ≥ 25` normal `s`. -/
+/-- The chain in root slot `s`: slot 0 holds normal 32, slot 1 the free chain, slot `2 j + 2`
+normal `13 + j` and slot `2 j + 3` cap `1 + j` for `j < 12`, slot `s ≥ 26` normal `s - 1`. -/
 def slotChain (s : ℕ) : Chain :=
-  ⟨(if s = 0 then 0 else if s ≤ 24 then (if s % 2 = 1 then 13 + s / 2 else s / 2) else s) % 33,
+  ⟨(if s = 0 then 32 else if s = 1 then 0 else if s ≤ 25 then
+      (if s % 2 = 0 then 13 + (s - 1) / 2 else (s - 1) / 2) else s - 1) % 33,
     Nat.mod_lt _ (by decide)⟩
 
 /-- Total width of root slots `0 … s`. -/
@@ -267,9 +275,9 @@ def slotCat (c : (k : Chain) → BitVec (topBits k)) : (s : ℕ) → BitVec (slo
 
 theorem slotWidth_32 : slotWidth 32 = 7104 := by decide
 
-/-- The 888-byte root input, from low to high bits: the free chain's 24-byte top; then normal
-`12 + j`'s 32-byte top and cap `j`'s 24-byte top for `j = 0, …, 11`; then the low 24 bytes of
-normals 24–31. -/
+/-- The 888-byte root input, from low to high bits: normal 32's top; the free chain's 24-byte
+top; then normal `13 + j`'s 32-byte top and cap `1 + j`'s 24-byte top for `j = 0, …, 11`; then
+the low 24 bytes of normals 25–31. -/
 def rootCat (c : (k : Chain) → BitVec (topBits k)) : BitVec 7104 :=
   (slotCat c 32).cast slotWidth_32
 
@@ -412,9 +420,6 @@ theorem graph_parents_fin (n : Name) :
 theorem graph_isSource_fin (n : Name) :
     (graph.kind n.fin).IsSource ↔ ∃ k, n = .src k := by
   rw [graph_kind_fin]; exact kindOf_isSource _ _ _
-
-theorem Name.len_prev (k : Chain) (t : Fin 32) : (Name.prev k t).len = if t.val = 0 then chainBits k else 256 := by
-  unfold Name.prev; split_ifs <;> rfl
 
 theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
   unfold Graph.nodeCost

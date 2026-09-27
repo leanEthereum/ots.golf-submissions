@@ -1,5 +1,173 @@
-import Submissions.UpperRiscvHint.MixedPhase
-import Submissions.UpperRiscvHint.MixedStagedCost
+import Submissions.UpperRiscvHint.MixedPair
+import Submissions.UpperRiscvHint.StagedVerifier
+import Submissions.UpperRiscvHint.MixedIndexArith
+import Submissions.UpperRiscvHint.Valid
+
+/-! Arithmetic of the capped-pair verifier's cycles after the free chain. -/
+namespace OptimalOTS.CappedCost
+
+/-- Per-pair cycles besides one hash per digit unit: the length setup before pair 6, the prologue,
+the pointer move, and the extra hash of each normal chain. -/
+def overhead (q : ℕ) : ℕ := (if q < 6 then 6 else 8) + if q = 6 then 1 else 0
+
+def rejectCost (q : ℕ) : ℕ := 8 + if q = 6 then 1 else 0
+
+def cost (w : ℕ → ℕ) : (n q : ℕ) → ℕ
+  | 0, _ => 20
+  | n+1, q => if w q ≤ PairCode.cap q then
+      overhead q + w q + cost w n (q+1)
+    else rejectCost q
+
+/-- Every path fits in 33 cycles per pair plus the root and the decision. -/
+theorem cost_le (w : ℕ → ℕ) : ∀ n q, cost w n q ≤ 33 * n + 20 := by
+  intro n
+  induction n with
+  | zero => intro q; simp [cost]
+  | succ n ih =>
+    intro q
+    have h := ih (q+1)
+    rw [cost]
+    split_ifs with hw
+    · unfold overhead; unfold PairCode.cap at hw; split_ifs <;> omega
+    · unfold rejectCost; split_ifs <;> omega
+
+set_option maxHeartbeats 2000000 in
+/-- When all sixteen pairs pass, the pairs, the root and the decision cost 137 cycles besides the
+digit sum. -/
+theorem cost_allowed (w : ℕ → ℕ) (hw : ∀ q < 16, w q ≤ PairCode.cap q) :
+    cost w 16 0 = 137 + ∑ q ∈ Finset.range 16, w q := by
+  have h0 := hw 0 (by omega); have h1 := hw 1 (by omega); have h2 := hw 2 (by omega)
+  have h3 := hw 3 (by omega); have h4 := hw 4 (by omega); have h5 := hw 5 (by omega)
+  have h6 := hw 6 (by omega); have h7 := hw 7 (by omega); have h8 := hw 8 (by omega)
+  have h9 := hw 9 (by omega); have h10 := hw 10 (by omega); have h11 := hw 11 (by omega)
+  have h12 := hw 12 (by omega); have h13 := hw 13 (by omega); have h14 := hw 14 (by omega)
+  have h15 := hw 15 (by omega)
+  simp only [cost, h0, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15,
+    if_true, overhead, Finset.sum_range_succ, Finset.sum_range_zero]
+  norm_num
+  omega
+
+end OptimalOTS.CappedCost
+
+namespace OptimalOTS.RiscvMixedProgram
+
+def pairWeight (index : RawIdx) (q : ℕ) : ℕ :=
+  digit index.val (2*q) + digit index.val (2*q+1)
+
+theorem pairCost_overhead (index : RawIdx) (q : Fin 16) :
+    pairCost index q = CappedCost.overhead q.val + pairWeight index q.val := by
+  have h : (lengthSetup q).length + 8 = CappedCost.overhead q.val + 2 * lead q := by
+    revert q
+    decide +kernel
+  rw [pairCost_eq, remaining_left, remaining_right]
+  have hl := lead_le q
+  unfold pairWeight
+  omega
+
+theorem badPairCost_eq (q : Fin 16) : badPairCost q = CappedCost.rejectCost q.val := by
+  unfold badPairCost
+  rw [dispatchCode_length]
+  revert q
+  decide +kernel
+
+theorem stagedCost_eq (index : RawIdx) (n q : ℕ) (hq : q+n ≤ 16) :
+    stagedCost index n q = CappedCost.cost (pairWeight index) n q := by
+  induction n generalizing q with
+  | zero => rfl
+  | succ n ih =>
+    rw [stagedCost, dif_pos (show q < 16 by omega), CappedCost.cost]
+    change (if pairWeight index q ≤ PairCode.cap q then
+      pairCost index ⟨q, by omega⟩ + stagedCost index n (q+1) else badPairCost ⟨q, by omega⟩) = _
+    split_ifs
+    · rw [pairCost_overhead, ih (q+1) (by omega)]
+    · exact badPairCost_eq _
+
+theorem stagedCost_le (index : RawIdx) : stagedCost index 16 0 ≤ 548 := by
+  rw [stagedCost_eq index 16 0 (by decide)]
+  exact CappedCost.cost_le _ 16 0
+
+/-- When every pair passes, the pairs, the root and the decision cost 137 cycles besides the
+digit sum. -/
+theorem stagedCost_allowed (index : RawIdx) (caps : ∀ q : Fin 16, PairAllowed index.val q) :
+    stagedCost index 16 0 = 137 + digitSum index.val := by
+  rw [stagedCost_eq index 16 0 (by decide), CappedCost.cost_allowed]
+  · unfold digitSum
+    have h := sum_digit_pairs (digit index.val) 16
+    rw [show 2 * 16 = 32 from rfl] at h
+    rw [h]
+    rfl
+  · intro q hq
+    exact caps ⟨q, hq⟩
+
+end OptimalOTS.RiscvMixedProgram
+
+namespace OptimalOTS.RiscvMixedProgram
+open OptimalOTS.Dag
+open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
+open Riscv2Program
+
+set_option allowUnsafeReducibility true
+attribute [local reducible] Forest.graph
+attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
+
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+
+def blockCodeAt (q : ℕ) : Code := if q < 16 then prologue q else root ++ decision
+
+theorem nextCode_eq (q : Fin 16) : nextCode q = blockCodeAt (q.val+1) := by
+  have h := q.isLt
+  unfold nextCode blockCodeAt
+  split_ifs <;> first | rfl | omega
+
+/-- Trace refinement of the staged run: a forbidden landing rejects before any hash of its pair,
+and a completed run ends in the machine's decision on the root. -/
+theorem stagedRun_refines :
+    ∀ (n q : ℕ), 16-q=n → q ≤ 16 →
+    ∀ (s : MachineState) (x : graph.Assignment) (fuel : ℕ),
+      ChainsInv index wire pk s x (2*q+1) →
+      (∃ junk, Riscv.CodeAt s s.pc (blockCodeAt q ++ junk)) →
+      stagedCost index n q ≤ fuel →
+      Riscv.Refines fuel s
+        ((fun o => o.elim (some false) (decisionOutcome · pk)) <$>
+          stagedRun index (viewPayload wire) n q x (cursor (2*q+1)))
+        (stagedCost index n q) := by
+  intro n
+  induction n with
+  | zero =>
+    intro q hq _ s x fuel inv located bound
+    have hq16 : q=16 := by omega
+    subst q
+    obtain ⟨junk, located⟩ := located
+    unfold blockCodeAt at located
+    rw [if_neg (by omega)] at located
+    simp only [stagedCost, stagedRun, map_bind, map_pure, Option.elim] at bound ⊢
+    exact rootDecision_refines index (viewPayload wire) wire pk s x fuel
+      (final_root index wire pk inv) located.append_left (by omega)
+  | succ n ih =>
+    intro q hq hq' s x fuel inv located bound
+    have hq16 : q < 16 := by omega
+    let Q : Fin 16 := ⟨q,hq16⟩
+    rw [stagedRun, dif_pos hq16]
+    rw [stagedCost, dif_pos hq16] at bound ⊢
+    unfold blockCodeAt at located
+    rw [if_pos hq16] at located
+    by_cases good : PairAllowed index.val q
+    · simp only [if_pos good, map_bind] at bound ⊢
+      apply pair_refines index wire pk Q good
+        (fun r => (fun o => o.elim (some false) (decisionOutcome · pk)) <$>
+          stagedRun index (viewPayload wire) n (q+1) r.1 r.2)
+        (stagedCost index n (q+1)) (stagedCost index n (q+1)) ?_
+        s x fuel inv located bound
+      intro u z invU locU left hleft
+      apply ih (q+1) (by omega) (by omega) u z left invU ?_ hleft
+      simpa only [nextCode_eq Q] using locU
+    · simp only [if_neg good, map_pure, Option.elim] at bound ⊢
+      exact pair_bad_refines index wire pk Q (by
+        change ¬ (digit index.val (2*q)+coarseDigit index q ≤ pairCap q) at good
+        dsimp only [Q]
+        omega) s x fuel inv located bound
+
+end OptimalOTS.RiscvMixedProgram
 
 /-!
 # The free dispatch and the free chain

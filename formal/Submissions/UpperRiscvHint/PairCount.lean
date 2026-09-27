@@ -1,7 +1,15 @@
-import Submissions.UpperRiscvHint.Count
+import Mathlib
 
 /-! Exact counting for the pair alphabet with every pair sum at most 24. -/
 namespace OptimalOTS.PairCode
+
+theorem sum_map_range (f : ℕ → ℕ) (m : ℕ) :
+    ((List.range m).map f).sum = ∑ v ∈ Finset.range m, f v := by
+  induction m with
+  | zero => simp
+  | succ m ih =>
+    rw [List.range_succ, List.map_append, List.sum_append, Finset.sum_range_succ, ih]
+    simp
 
 def cap (_q : ℕ) : ℕ := 24
 
@@ -50,11 +58,6 @@ def count : ℕ → ℕ → ℕ
   | n+1, s => ∑ v ∈ Finset.range 31,
       multiplicity v * if v ≤ cap n ∧ v ≤ s then count n (s-v) else 0
 
-theorem allowed_snoc {n : ℕ} (c : Fin n → Pair) (p : Pair) :
-    Allowed (Fin.snoc c p) ↔ Allowed c ∧ weight p ≤ cap n := by
-  simp only [Allowed, Fin.forall_fin_succ', Fin.snoc_last, Fin.snoc_castSucc,
-    Fin.val_last, Fin.val_castSucc]
-
 theorem tuples_card (n s : ℕ) : (tuples n s).card = count n s := by
   induction n generalizing s with
   | zero =>
@@ -102,7 +105,7 @@ theorem table_getD (S n s : ℕ) (hs : s ≤ S) : (table S n).getD s 0 = count n
   | succ n ih =>
     rw [table, count, List.getD_eq_getElem?_getD, List.getElem?_map,
       List.getElem?_range (by omega), Option.map_some, Option.getD_some,
-      Forest.sum_map_range]
+      sum_map_range]
     refine Finset.sum_congr rfl fun v _ => ?_
     split_ifs with hv
     · rw [ih (s-v) (by omega)]
@@ -114,7 +117,7 @@ theorem window_count :
     ∑ s ∈ Finset.range 16, count 16 (130 + s) = 32887768277521427631995290068220650 := by
   rw [Finset.sum_congr rfl fun s hs =>
     (table_getD 145 16 (130 + s) (by rw [Finset.mem_range] at hs; omega)).symm,
-    ← Forest.sum_map_range]
+    ← sum_map_range]
   decide +kernel
 
 theorem window_lower : 89 * 2^108 ≤ ∑ s ∈ Finset.range 16, count 16 (130 + s) := by

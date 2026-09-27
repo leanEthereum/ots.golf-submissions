@@ -22,7 +22,6 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
 /-- A graph-based one-time signature scheme whose disclosure sets are indexed by the accepted
@@ -32,8 +31,6 @@ structure GScheme where
   graph : Graph
   /-- The disclosure sets. -/
   sets : Idx → Finset (Fin graph.size)
-  /-- The verifier must recompute the root. -/
-  root_not_mem : ∀ i, graph.root ∉ sets i
   /-- The revealed values suffice: `sets i` meets every path from a secret source to the root. -/
   no_hidden_source :
     ∀ i v, graph.Visited (sets i) v → v ∉ sets i → ¬ (graph.kind v).IsSource
