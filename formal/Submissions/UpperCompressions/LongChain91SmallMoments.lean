@@ -74,10 +74,6 @@ theorem pairEnvelope_nonneg (c : hashSpec.QueryCache) :
   exact add_nonneg (score_nonneg c)
     (div_nonneg (mul_nonneg (by norm_num) (pairs_nonneg c)) (by positivity))
 
-theorem scaledPairEnvelope_nonneg (c : hashSpec.QueryCache) :
-    0 ≤ C * pairEnvelope c :=
-  mul_nonneg LongChain91BudgetArithmetic.C_nonneg (pairEnvelope_nonneg c)
-
 /-! ## Fresh index domain and exact stopped moments -/
 
 theorem index_initial (c : hashSpec.QueryCache)
@@ -207,76 +203,6 @@ theorem sharp_stopped_payoff_actual { α : Type }
   rw [realEval_congr_support run _ _ (fun out ho => by rw [hτ out ho])] at h
   simpa only [pairEnvelope] using h
 
-/-- At the actual small-game threshold, the accepted generic theorem gives
-the endpoint multiplier `11/10`. -/
-theorem stopped_core_actual { α : Type }
-    (oa : OracleComp Spec α) (B : ℕ) (hB : CostAtMost oa B)
-    (hBN : (B : ℝ) ≤ (2 : ℝ)^86 / 10)
-    (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query, q.1 = 342 → c q = none) :
-    realEval ((simulateQ oracleImpl oa).run c)
-        (fun out => C * pairEnvelope out.2) ≤
-      (B : ℝ) * (11 * C * mean / 10) + kappa * (B : ℝ) / 1000 := by
-  have h := sharp_stopped_payoff_actual oa B hB hBN c hf 0
-  have hN : 0 < (2 : ℝ)^86 := by positivity
-  have hratio : ((B : ℝ) - 1) / (2 : ℝ)^86 ≤ 1 / 10 :=
-    (div_le_iff₀ hN).2 (by linarith)
-  have hpre :
-      C * mean * (1 + ((B : ℝ) - 1) / (2 : ℝ)^86) ≤
-        11 * C * mean / 10 := by
-    have hm := mul_le_mul_of_nonneg_left hratio
-      (mul_nonneg LongChain91BudgetArithmetic.C_nonneg mean_nonneg)
-    nlinarith
-  have htarget : 0 ≤ 11 * C * mean / 10 := by
-    exact div_nonneg
-      (mul_nonneg (mul_nonneg (by norm_num)
-        LongChain91BudgetArithmetic.C_nonneg) mean_nonneg) (by norm_num)
-  have hmax : max 0
-      (C * mean * (1 + ((B : ℝ) - 1) / (2 : ℝ)^86)) ≤
-        11 * C * mean / 10 := max_le htarget hpre
-  have hb := mul_le_mul_of_nonneg_left hmax (Nat.cast_nonneg B)
-  have h' : realEval ((simulateQ oracleImpl oa).run c)
-      (fun out => C * pairEnvelope out.2) ≤
-      (B : ℝ) * max 0
-        (C * mean * (1 + ((B : ℝ) - 1) / (2 : ℝ)^86)) +
-          kappa * (B : ℝ) / 1000 := by
-    simpa only [zero_mul, add_zero] using h
-  exact h'.trans (add_le_add hb le_rfl)
-
-/-- If the exact endpoint factor is at most `65/64`, the same actual-cache
-proof gives the desired core rate, with its covariance allowance explicit. -/
-theorem stopped_core_65_of_factor { α : Type }
-    (oa : OracleComp Spec α) (B : ℕ) (hB : CostAtMost oa B)
-    (hBN : (B : ℝ) ≤ (2 : ℝ)^86 / 10)
-    (hfactor : 1 + ((B : ℝ) - 1) / (2 : ℝ)^86 ≤ 65 / 64)
-    (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query, q.1 = 342 → c q = none) :
-    realEval ((simulateQ oracleImpl oa).run c)
-        (fun out => C * pairEnvelope out.2) ≤
-      (B : ℝ) * (C * (65 / 64) * mean) +
-        kappa * (B : ℝ) / 1000 := by
-  have h := sharp_stopped_payoff_actual oa B hB hBN c hf 0
-  have hpre :
-      C * mean * (1 + ((B : ℝ) - 1) / (2 : ℝ)^86) ≤
-        C * (65 / 64) * mean := by
-    have hm := mul_le_mul_of_nonneg_left hfactor
-      (mul_nonneg LongChain91BudgetArithmetic.C_nonneg mean_nonneg)
-    nlinarith
-  have htarget : 0 ≤ C * (65 / 64) * mean := by
-    exact mul_nonneg
-      (mul_nonneg LongChain91BudgetArithmetic.C_nonneg (by norm_num)) mean_nonneg
-  have hmax : max 0
-      (C * mean * (1 + ((B : ℝ) - 1) / (2 : ℝ)^86)) ≤
-        C * (65 / 64) * mean := max_le htarget hpre
-  have hb := mul_le_mul_of_nonneg_left hmax (Nat.cast_nonneg B)
-  have h' : realEval ((simulateQ oracleImpl oa).run c)
-      (fun out => C * pairEnvelope out.2) ≤
-      (B : ℝ) * max 0
-        (C * mean * (1 + ((B : ℝ) - 1) / (2 : ℝ)^86)) +
-          kappa * (B : ℝ) / 1000 := by
-    simpa only [zero_mul, add_zero] using h
-  exact h'.trans (add_le_add hb le_rfl)
-
 theorem factor_65_of_budget64 (B : ℕ)
     (hBN : (B : ℝ) ≤ (2 : ℝ)^86 / 64) :
     1 + ((B : ℝ) - 1) / (2 : ℝ)^86 ≤ 65 / 64 := by
@@ -291,89 +217,7 @@ theorem budget64_le_budget10 (B : ℕ)
   have hN : 0 ≤ (2 : ℝ)^86 := by positivity
   nlinarith
 
-theorem stopped_core_65_actual { α : Type }
-    (oa : OracleComp Spec α) (B : ℕ) (hB : CostAtMost oa B)
-    (hBN : (B : ℝ) ≤ (2 : ℝ)^86 / 64)
-    (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query, q.1 = 342 → c q = none) :
-    realEval ((simulateQ oracleImpl oa).run c)
-        (fun out => C * pairEnvelope out.2) ≤
-      (B : ℝ) * (C * (65 / 64) * mean) +
-        kappa * (B : ℝ) / 1000 :=
-  stopped_core_65_of_factor oa B hB (budget64_le_budget10 B hBN)
-    (factor_65_of_budget64 B hBN) c hf
-
-/-- With one further `1/1000` game allowance, the stronger threshold closes
-at the exact small coefficient certified in `LongChain91BudgetArithmetic`. -/
-theorem small_coefficient_actual { α : Type }
-    (oa : OracleComp Spec α) (B : ℕ) (hB : CostAtMost oa B)
-    (hBN : (B : ℝ) ≤ (2 : ℝ)^86 / 64)
-    (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query, q.1 = 342 → c q = none) :
-    realEval ((simulateQ oracleImpl oa).run c)
-        (fun out => C * pairEnvelope out.2) + kappa * (B : ℝ) / 1000 ≤
-      (6235189 / 6272000) * kappa * (B : ℝ) := by
-  have hcore := stopped_core_65_actual oa B hB hBN c hf
-  have hfactor : 0 ≤ (B : ℝ) * (C * (65 / 64)) := by
-    exact mul_nonneg (Nat.cast_nonneg B)
-      (mul_nonneg LongChain91BudgetArithmetic.C_nonneg (by norm_num))
-  have hm := mul_le_mul_of_nonneg_left
-    LongChain91Security.securityWeights_mean hfactor
-  have he := LongChain91BudgetArithmetic.small_coefficient_identity (B : ℝ)
-  nlinarith
-
 /-! ## Real/ENNReal transport -/
-
-theorem queryCount_expectation_eq_ofReal { α : Type }
-    (oa : OracleComp Spec α) (c : hashSpec.QueryCache) :
-    E (run oa c) (fun out => (queryCount out.2 : ℝ≥0∞)) =
-      ENNReal.ofReal
-        (realEval (run oa c) (fun out => (queryCount out.2 : ℝ))) := by
-  simpa only [ENNReal.ofReal_natCast] using
-    (ofReal_realEval (run oa c) (fun out => (queryCount out.2 : ℝ))
-      (fun out => Nat.cast_nonneg _)).symm
-
-theorem pairEnvelope_expectation_eq_ofReal { α : Type }
-    (oa : OracleComp Spec α) (c : hashSpec.QueryCache) :
-    E (run oa c) (fun out => ENNReal.ofReal (pairEnvelope out.2)) =
-      ENNReal.ofReal
-        (realEval (run oa c) (fun out => pairEnvelope out.2)) :=
-  (ofReal_realEval (run oa c) (fun out => pairEnvelope out.2)
-    (fun out => pairEnvelope_nonneg out.2)).symm
-
-theorem scaledPairEnvelope_expectation_eq_ofReal { α : Type }
-    (oa : OracleComp Spec α) (c : hashSpec.QueryCache) :
-    E (run oa c) (fun out => ENNReal.ofReal (C * pairEnvelope out.2)) =
-      ENNReal.ofReal
-        (realEval (run oa c) (fun out => C * pairEnvelope out.2)) :=
-  (ofReal_realEval (run oa c) (fun out => C * pairEnvelope out.2)
-    (fun out => scaledPairEnvelope_nonneg out.2)).symm
-
-theorem small_coefficient_ennreal { α : Type }
-    (oa : OracleComp Spec α) (B : ℕ) (hB : CostAtMost oa B)
-    (hBN : (B : ℝ) ≤ (2 : ℝ)^86 / 64)
-    (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query, q.1 = 342 → c q = none) :
-    E (run oa c) (fun out => ENNReal.ofReal (C * pairEnvelope out.2)) +
-        ENNReal.ofReal (kappa * (B : ℝ) / 1000) ≤
-      ENNReal.ofReal
-        ((6235189 / 6272000) * kappa * (B : ℝ)) := by
-  have hr := small_coefficient_actual oa B hB hBN c hf
-  have hP0 : 0 ≤ realEval (run oa c)
-      (fun out => C * pairEnvelope out.2) :=
-    realEval_nonneg (run oa c) _ (fun out => scaledPairEnvelope_nonneg out.2)
-  have he0 : 0 ≤ kappa * (B : ℝ) / 1000 := by
-    exact div_nonneg
-      (mul_nonneg LongChain91BudgetArithmetic.kappa_pos.le
-        (Nat.cast_nonneg B)) (by norm_num)
-  rw [scaledPairEnvelope_expectation_eq_ofReal]
-  rw [← ENNReal.ofReal_add hP0 he0]
-  exact ENNReal.ofReal_le_ofReal hr
-
-/-- The numerical obstruction at the advertised `2^86/10` threshold: the
-generic stopped endpoint is strictly larger than `65/64`. -/
-theorem eleven_tenths_not_le_sixtyfive_sixtyfour :
-    ¬ (11 / 10 : ℝ) ≤ 65 / 64 := by norm_num
 
 theorem hazard_le_pairEnvelope (m : Message) (c : hashSpec.QueryCache) :
     securityWeights.hazard ((2 : ℝ)^86)
@@ -384,15 +228,5 @@ theorem hazard_le_pairEnvelope (m : Message) (c : hashSpec.QueryCache) :
   intro i
   exact WeightedCacheCounts.classCounts_mono
     (WideDomains.row_subset m) c decode i
-
-#print axioms moments
-#print axioms sharp_stopped_payoff_actual
-#print axioms stopped_core_actual
-#print axioms stopped_core_65_actual
-#print axioms small_coefficient_actual
-#print axioms queryCount_expectation_eq_ofReal
-#print axioms pairEnvelope_expectation_eq_ofReal
-#print axioms small_coefficient_ennreal
-#print axioms hazard_le_pairEnvelope
 
 end OptimalOTS.WeightedConstruction.LongChain91SmallMoments

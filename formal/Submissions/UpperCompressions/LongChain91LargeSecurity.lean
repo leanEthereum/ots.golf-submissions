@@ -4,7 +4,7 @@ import Submissions.UpperCompressions.LongChain91SecurityClosure
 import Submissions.UpperCompressions.ProofBundle13
 
 /-!
-# Large-budget actual-game closure for the cost-90 long chain
+# Large-budget actual-game closure for the cost-89 long chain
 
 The good replay hazard, authentication work, and post-sign continuation share
 the same public query clock.  The terminal large-row theorem supplies the four
@@ -37,28 +37,6 @@ abbrev N : ℝ := LongChain91CollisionArithmetic.N
 variable (A : scheme.toAlgorithm.Adversary)
 
 /-! ## Exact shared-clock scalar closure -/
-
-/-- A form of the checked real scalar closure in which the replay term has
-already been multiplied by the empirical kernel constant `C`. -/
-theorem large_scalar_closure_scaled (K q a t H : ℝ)
-    (hq : 0 ≤ q) (ha : 0 ≤ a) (ht : 0 ≤ t)
-    (hclock : q + a + t ≤ K)
-    (hH : H ≤ C * tightAlpha * q + C * (kappa * K / 100)) :
-    (kappa / 2) * a + H + postRate * t + kappa * K / 1000 ≤
-      (2423 / 2450) * kappa * K := by
-  have hC : 0 < C := by
-    norm_num [C, LongChain91BudgetArithmetic.C]
-  have hraw : H / C ≤ tightAlpha * q + kappa * K / 100 := by
-    apply (div_le_iff₀ hC).2
-    calc
-      H ≤ C * tightAlpha * q + C * (kappa * K / 100) := hH
-      _ = (tightAlpha * q + kappa * K / 100) * C := by ring
-  have h := LongChain91CollisionArithmetic.large_scalar_closure_tight
-    K q a t (H / C) hq ha ht hclock hraw
-  have heq : C * (H / C) = H := by
-    field_simp [hC.ne']
-  rw [heq] at h
-  linarith
 
 /-- ENNReal realization of the same shared-clock allocation.  `r` is the
 already-kernel-scaled replay clock. -/
@@ -143,21 +121,21 @@ theorem choose_budget {B : ℕ}
 
 theorem choose_count_other_post_le {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey) :
-    E (runRemaining (A.choose pk) ∅ (B - 1087)) (countClock A pk) +
+    E (runRemaining (A.choose pk) ∅ (B - 1101)) (countClock A pk) +
       expectedCharge (otherPaid (isIndexLength (msgBits + 86)))
         (A.choose pk) ∅ +
-      E (runRemaining (A.choose pk) ∅ (B - 1087))
+      E (runRemaining (A.choose pk) ∅ (B - 1101))
         (postRemaining A pk) ≤ B := by
   have hd := distinct_other_le_expected_paid (A.choose pk) ∅
     (fun _ _ => rfl)
-  rw [← runRemaining_project (A.choose pk) ∅ (B - 1087), E_map] at hd
+  rw [← runRemaining_project (A.choose pk) ∅ (B - 1101), E_map] at hd
   have hh := (add_le_add hd (le_refl
-    (E (runRemaining (A.choose pk) ∅ (B - 1087))
+    (E (runRemaining (A.choose pk) ∅ (B - 1101))
       (postRemaining A pk)))).trans
       (choose_spent_post_remaining_le A hB pk)
   exact hh.trans (by
     exact_mod_cast
-      ((Nat.sub_le (B - 1087) signBudget).trans (Nat.sub_le B 1087)))
+      ((Nat.sub_le (B - 1101) signBudget).trans (Nat.sub_le B 1101)))
 
 theorem global_count_other_post_le {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) :
@@ -182,7 +160,7 @@ theorem large_bad_clock_le {B : ℕ}
       4 * LongChain91LargeTerminal.eps244 +
         (2 : ℝ≥0∞)⁻¹ ^ 334 := by
   have htail (pk : PublicKey) :
-      E (runRemaining (A.choose pk) ∅ (B - 1087))
+      E (runRemaining (A.choose pk) ∅ (B - 1101))
           (badGate A (largeGood A B) pk) ≤
         4 * LongChain91LargeTerminal.eps244 +
           (2 : ℝ≥0∞)⁻¹ ^ 334 := by
@@ -194,7 +172,7 @@ theorem large_bad_clock_le {B : ℕ}
           then 1 else 0) =
         Pr[fun p => ¬ LongChain91LargeTerminal.LargeGood B p.2 |
           run (A.choose pk) ∅] := expectedValue_ite_one _ _
-    rw [← he, ← runRemaining_project (A.choose pk) ∅ (B - 1087), E_map] at h
+    rw [← he, ← runRemaining_project (A.choose pk) ∅ (B - 1101), E_map] at h
     convert h using 1
     congr 1
     funext r
@@ -338,13 +316,5 @@ theorem actual_large_security {B : ℕ}
       (1 + (B : ℝ≥0∞)) * (2 : ℝ≥0∞)⁻¹ ^ 760)
     (global_count_other_post_le A hB) hh herr
   exact hex.trans (by simpa only [add_assoc] using hn)
-
-#print axioms large_scalar_closure_scaled
-#print axioms large_shared_ennreal
-#print axioms global_count_other_post_le
-#print axioms large_bad_clock_le
-#print axioms large_hazard_clock_le
-#print axioms large_exception_margin_ennreal
-#print axioms actual_large_security
 
 end OptimalOTS.WeightedConstruction.LongChain91LargeSecurity

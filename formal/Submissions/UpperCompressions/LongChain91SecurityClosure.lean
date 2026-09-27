@@ -2,7 +2,7 @@ import Submissions.UpperCompressions.LongChain91Scheme
 import Submissions.UpperCompressions.ProofBundle13
 
 /-!
-# Security endpoints for the cost-90 long-chain construction
+# Security endpoints for the cost-89 long-chain construction
 
 This module isolates the final, exact security closure from the two
 construction-specific actual-game estimates.  In particular, it proves the
@@ -24,20 +24,11 @@ open LongChain91 WeightedReference
 /-- Every typed adversarial experiment pays the concrete graph key-generation
 cost before running the adversary. -/
 theorem experiment_budget (A : typed.Adversary) (B : ℕ)
-    (hB : CostAtMost (typed.experiment A) B) : 1087 ≤ B := by
+    (hB : CostAtMost (typed.experiment A) B) : 1101 ≤ B := by
   have h := GraphKeygenBridge.costAtMost_keygen_bind
     scheme.graph scheme.publicKey _ hB
   rw [scheme_keygenCost] at h
   exact h.1
-
-/-- The exact wire-experiment identity transfers the same budget lower bound
-to raw adversaries. -/
-theorem raw_experiment_budget (A : OracleAlgorithm.Adversary) (B : ℕ)
-    (hB : CostAtMost (OracleAlgorithm.experiment wireScheme A) B) : 1087 ≤ B := by
-  change CostAtMost
-    (OracleAlgorithm.experiment (WireAdapter.scheme typed decodeWire) A) B at hB
-  rw [WireAdapter.experiment_eq typed decodeWire decodeWire_encode wire_canonical A] at hB
-  exact experiment_budget _ B hB
 
 /-- The small-budget coefficient is strictly below the target coefficient. -/
 theorem small_strict (K : ℝ) (hK : 0 < K) :
@@ -64,13 +55,6 @@ theorem above_trivial_budget (p : ℝ) (hp : p ≤ 1) (B : ℕ) (hB : 2 ^ 127 < 
 /-- Canonical wire encoding transfers typed strong security exactly. -/
 theorem raw_secure_of_typed (h : typed.Secure) : wireScheme.Secure :=
   WireAdapter.secure typed decodeWire decodeWire_encode wire_canonical h
-
-#print axioms experiment_budget
-#print axioms raw_experiment_budget
-#print axioms small_strict
-#print axioms large_strict
-#print axioms above_trivial_budget
-#print axioms raw_secure_of_typed
 
 end OptimalOTS.WeightedConstruction.LongChain91BudgetEndpoints
 
@@ -126,7 +110,7 @@ theorem typed_secure_of_bounds
     (small : SmallActualGameBound)
     (large : LargeActualGameBound) : typed.Secure := by
   intro A B hB
-  have hbudget : 1087 ≤ B := experiment_budget A B hB
+  have hbudget : 1101 ≤ B := experiment_budget A B hB
   have hpos : 0 < (B : ℝ) := by
     exact_mod_cast (show 0 < B by omega)
   have hrate : 0 < kappa * (B : ℝ) :=
@@ -151,11 +135,5 @@ theorem raw_secure_of_bounds
     (small : SmallActualGameBound)
     (large : LargeActualGameBound) : wireScheme.Secure :=
   raw_secure_of_typed (typed_secure_of_bounds small large)
-
-#print axioms probTrue_eq_success
-#print axioms security_rate
-#print axioms successValue_le_one
-#print axioms typed_secure_of_bounds
-#print axioms raw_secure_of_bounds
 
 end OptimalOTS.WeightedConstruction.LongChain91SecurityClosure

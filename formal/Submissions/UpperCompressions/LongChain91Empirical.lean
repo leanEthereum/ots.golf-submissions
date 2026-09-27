@@ -67,14 +67,6 @@ theorem prefixLe_decode (j : ℕ) (x : BitVec 256) :
   rw [prefixLe, rawTier_eq_decode_map]
   cases decode x <;> simp [rank]
 
-/-- The atomic fact behind both prefix laws: every tier's full-output fiber
-has exactly its emitted class count times its alias multiplicity. -/
-theorem rawTier_full_output_fiber (j : Tier) :
-    (Finset.univ.filter fun x : BitVec 256 =>
-      LongChain91Schedule.rawTier x = some j).card = Chain18Compact.tierMass j := by
-  rw [LongChain91Schedule.rawTier_fiber]
-  rfl
-
 theorem uniform_decode_probability (i : Fin M) :
     uniformMean (fun x : BitVec 256 => if decode x = some i then 1 else 0) =
       classProbability i := by
@@ -243,16 +235,6 @@ theorem weakRank_probability (i : Fin M) :
   rw [weakRank_prefix, fraction_not]
   have hp := prefixLt_probability (classTier i)
   change fraction (prefixLt (rank i)) = _ at hp
-  rw [hp]
-  rfl
-
-theorem strictRank_probability (i : Fin M) :
-    fraction (WeightedReplacement.strictRank rank i ∘ decode) =
-      Chain18Compact.survival
-        (Chain18Compact.prefixMass (classTier i) + Chain18Compact.tierMass (classTier i)) := by
-  rw [strictRank_prefix, fraction_not]
-  have hp := prefixLe_probability (classTier i)
-  change fraction (prefixLe (rank i)) = _ at hp
   rw [hp]
   rfl
 
@@ -485,33 +467,6 @@ theorem fullTableGood_row
   apply hg
   exact (fullRowBad160_iff cachePrefixPredicates g).2 ⟨(m, j), hj⟩
 
-theorem fullTableGood_kernel
-    (g : BitVec (msgBits + 86) → BitVec hashBits)
-    (hg : fullTableGood g) (m : Message) (i : Fin M) :
-    WeightedReplacement.kernel Chain18Compact.L
-      (fraction (WeightedReplacement.weakRank rank i ∘ cacheDecode ∘
-        (fun η : BitVec 86 => g (m ++ η))))
-      (fraction (WeightedReplacement.strictRank rank i ∘ cacheDecode ∘
-        (fun η : BitVec 86 => g (m ++ η)))) ≤
-        (99 / 98 : ℝ) * (referenceWeight i / classProbability i) :=
-  rowGood_kernel _ (fullTableGood_row g hg m) i
-
-theorem fullTableGood_bad_probability :
-    E ($ᵗ (BitVec (msgBits + 86) → BitVec hashBits))
-      (fun g => if fullTableGood g then 0 else 1) ≤
-        (2 : ℝ≥0∞)⁻¹^760 := by
-  have h := full_table_bad_probability160 cachePrefixPredicates
-  have he :
-      (fun g : BitVec (msgBits + 86) → BitVec hashBits =>
-        if fullTableGood g then (0 : ℝ≥0∞) else 1) =
-      (fun g : BitVec (msgBits + 86) → BitVec hashBits =>
-        if fullRowBad160 cachePrefixPredicates g then 1 else 0) := by
-    funext g
-    by_cases hb : fullRowBad160 cachePrefixPredicates g <;>
-      simp [fullTableGood, hb]
-  rw [he]
-  exact h
-
 theorem completed_full_bad_probability160 { α : Type }
     (oa : OracleComp Spec α) (c : Cache)
     (hc : ∀ x : BitVec (msgBits + 86), c ⟨msgBits + 86, x⟩ = none)
@@ -703,14 +658,6 @@ theorem prefix_bound { α : Type } (m : Message) (j : Tier)
   rw [he] at h
   change crossing oa c (prefixBad m j) ≤ _ at h
   exact h
-
-theorem securityScore_le (i : Fin M) :
-    referenceWeight i ≤ (Chain18Compact.L : ℝ) * Chain18Compact.kappa := by
-  exact (LongChain91Security.referenceWeight_le i).trans (by
-    have hk : 0 ≤ (Chain18Compact.L : ℝ) * Chain18Compact.kappa := by
-      unfold Chain18Compact.kappa
-      positivity
-    linarith)
 
 theorem score_bound { α : Type } (m : Message) (oa : OracleComp Spec α)
     (c : hashSpec.QueryCache)
@@ -960,24 +907,6 @@ theorem terminal_bad { α : Type } (oa : OracleComp Spec α)
   have h := all_crossings oa c hf
   simpa only [crossing, WeightedOracleExecution.prob_stopped_hit_eq_firstHitRun] using h
 
-theorem good_prefix (c : hashSpec.QueryCache) (hc : Good c)
-    (m : Message) (j : Tier) :
-    (∑ i ∈ prefixClasses j, classProbability i) *
-        (seen (WideDomains.rowDomain m) c).card -
-      ∑ i ∈ prefixClasses j,
-        (classCounts (WideDomains.rowDomain m) c cacheDecode i : ℝ) ≤
-          (2 : ℝ)^86 / (100 * (2 : ℝ)^20) := by
-  have h := hc (m, ⟨j.val, by have := j.isLt; omega⟩)
-  have he : event (m, ⟨j.val, by have := j.isLt; omega⟩) c =
-      prefixBad m j c := by
-    dsimp only [event]
-    rw [dif_pos j.isLt]
-  rw [he] at h
-  have hh := (lt_of_not_ge h).le
-  change -(securityWeights.prefixWeights (prefixClasses j)).M1 _ _ ≤ _ at hh
-  rw [WeightedRow.Weights.prefix_deficit] at hh
-  exact hh
-
 theorem good_row_score (c : hashSpec.QueryCache) (hc : Good c)
     (m : Message) :
     securityWeights.score (classCounts (WideDomains.rowDomain m) c cacheDecode) ≤
@@ -1002,21 +931,6 @@ theorem good_row_excess (c : hashSpec.QueryCache) (hc : Good c)
   unfold excessBad WeightedRow.Weights.M1 at hh
   rw [excessWeights_mean] at hh
   linarith
-
-#print axioms rawTier_full_output_fiber
-#print axioms prefixLt_probability
-#print axioms prefixLe_probability
-#print axioms prefix_deficits_rowGood
-#print axioms rowGood_kernel
-#print axioms excessWeights_mean
-#print axioms all_crossings
-#print axioms terminal_bad
-#print axioms good_prefix
-#print axioms good_row_excess
-#print axioms full_table_bad_probability160
-#print axioms fullTableGood_kernel
-#print axioms completed_full_bad_probability160
-#print axioms actual_rowGood_completion_failure
 
 end
 end OptimalOTS.WeightedConstruction.LongChain91Empirical

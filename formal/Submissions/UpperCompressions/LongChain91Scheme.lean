@@ -3,10 +3,10 @@ import Submissions.UpperCompressions.LongChain91Codec
 import Submissions.UpperCompressions.ProofBundle04
 
 /-!
-# The concrete cost-90 long-chain scheme
+# The concrete cost-89 long-chain scheme
 
 This module selects the schedule's classes injectively from the certified
-cost-89 cut family, instantiates the generic 86-bit weighted signer, and
+cost-88 cut family, instantiates the generic 86-bit weighted signer, and
 discharges the honest-party resource and availability obligations.
 -/
 
@@ -53,18 +53,14 @@ def scheme : WeightedScheme.Scheme M where
     norm_num [keygenBudget]
 
 theorem scheme_reconstructCost (i : Fin M) :
-    scheme.graph.reconstructCost (scheme.sets i) ≤ 89 :=
+    scheme.graph.reconstructCost (scheme.sets i) ≤ 88 :=
   family_reconstructCost (setsName_mem i)
 
-theorem scheme_revealBits (i : Fin M) :
-    scheme.graph.revealBits (scheme.sets i) + 86 ≤ 5504 :=
-  family_disclosure_and_nonce (setsName_mem i)
-
-theorem scheme_keygenCost : scheme.graph.keygenCost = 1087 := graph_keygenCost
+theorem scheme_keygenCost : scheme.graph.keygenCost = 1101 := graph_keygenCost
 
 abbrev typed : TypedScheme := scheme.toAlgorithm
 
-theorem typed_cost : typed.VerifyCostAtMost 90 :=
+theorem typed_cost : typed.VerifyCostAtMost 89 :=
   scheme.verifyCost scheme_reconstructCost
 
 theorem typed_correct : typed.Correct := scheme.correct
@@ -114,27 +110,8 @@ theorem wire_canonical (pk : PublicKey) (m : Message) (bits : List Bool)
 
 def wireScheme : OracleAlgorithm.Scheme := WireAdapter.scheme typed decodeWire
 
-theorem wire_cost : wireScheme.VerifyCostAtMost 90 :=
-  WireAdapter.verifyCost typed decodeWire 90 typed_cost
-
-theorem wire_correct : wireScheme.Correct :=
-  WireAdapter.correct typed decodeWire decodeWire_encode typed_correct
-
-theorem wire_signatureSize : wireScheme.SignatureSizeAtMost maxSignatureBits :=
-  WireAdapter.signatureSize typed decodeWire maxSignatureBits typed_signatureSize
-
-theorem wire_rejectsOversized : wireScheme.RejectsOversized maxSignatureBits :=
-  WireAdapter.rejectsOversized typed decodeWire wire_canonical maxSignatureBits
-    typed_rejectsOversized
-
-theorem wire_keygenCost : wireScheme.KeygenCostAtMost keygenBudget :=
-  typed_keygenCost
-
-theorem wire_signCost : wireScheme.SignCostAtMost signBudget :=
-  fun sk m => AlgorithmCosts.CostAtMost.map (typed_signCost sk m) _
-
-theorem wire_verifyDeterministic : wireScheme.VerifyDeterministic :=
-  fun pk m bits => typed_verifyDeterministic pk m (decodeWire bits)
+theorem wire_cost : wireScheme.VerifyCostAtMost 89 :=
+  WireAdapter.verifyCost typed decodeWire 89 typed_cost
 
 /-! ## Honest signing availability
 
@@ -221,7 +198,11 @@ theorem graph_hashInputsAvoid :
   intro v
   obtain ⟨n, rfl⟩ := Name.nameEquiv.surjective v
   erw [graph_kind_fin]
-  cases n <;> simp [kindOf, graph_len_fin, Name.len, msgBits]
+  cases n
+  case hh b j =>
+    simp [kindOf, graph_len_fin, Name.len, msgBits]
+    omega
+  all_goals simp [kindOf, graph_len_fin, Name.len, msgBits]
 
 theorem keygen_fresh
     (p : (PublicKey × scheme.graph.Assignment) × Cache)
@@ -272,15 +253,5 @@ theorem typed_admissible :
 theorem wire_admissible : wireScheme.Admissible :=
   WireAdapter.admissible typed decodeWire decodeWire_encode wire_canonical typed_admissible
     typed_cost (by norm_num [verifyBudget])
-
-#print axioms typed_cost
-#print axioms typed_correct
-#print axioms typed_signingFailure
-#print axioms typed_signatureSize
-#print axioms typed_rejectsOversized
-#print axioms typed_keygenCost
-#print axioms typed_signCost
-#print axioms typed_verifyDeterministic
-#print axioms wire_admissible
 
 end OptimalOTS.WeightedConstruction.LongChain91

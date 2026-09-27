@@ -67,19 +67,9 @@ theorem largeActualGameBound :
   rw [← kappa_eq_reference]
   exact h
 
-/-- Strong security of the typed cost-91 construction. -/
-theorem typed_secure : LongChain91.typed.Secure :=
-  LongChain91SecurityClosure.typed_secure_of_bounds
-    smallActualGameBound largeActualGameBound
-
 /-- Strong security of the canonical public wire encoding. -/
 theorem raw_secure : LongChain91.wireScheme.Secure :=
   LongChain91SecurityClosure.raw_secure_of_bounds
     smallActualGameBound largeActualGameBound
-
-#print axioms smallActualGameBound
-#print axioms largeActualGameBound
-#print axioms typed_secure
-#print axioms raw_secure
 
 end OptimalOTS.WeightedConstruction.LongChain91Secure

@@ -2,7 +2,7 @@ import Submissions.UpperCompressions.LongChain91Scheme
 import Submissions.UpperCompressions.ProofBundle05
 
 /-!
-# Authentication bridge for the cost-90 shared-DAG construction
+# Authentication bridge for the cost-89 shared-DAG construction
 
 This module identifies the concrete key-generation oracle points of the
 shared-DAG graph, splits them into exposed and hidden points after signing,
@@ -29,13 +29,10 @@ abbrev EncInput := Message × BitVec 86
 
 def encQuery (u : EncInput) : Query := ⟨msgBits + 86, u.1 ++ u.2⟩
 
-theorem encQuery_length (u : EncInput) : (encQuery u).1 = 342 := rfl
-
 theorem ne_encQuery_of_length_ne {q : Query} (hq : q.1 ≠ msgBits + 86)
     (u : EncInput) : q ≠ encQuery u := by
   intro h
   exact hq (congrArg Sigma.fst h)
-
 
 /-! ## Bit-vector helpers -/
 
@@ -81,41 +78,41 @@ theorem bv_append_inj {n m : ℕ} {x x' : BitVec n} {y y' : BitVec m}
     have hh := key i
     simpa [hi] using hh
 
-theorem cat3_inj {a b c a' b' c' : BitVec 129}
-    (h : cat3 a b c = cat3 a' b' c') :
-    a = a' ∧ b = b' ∧ c = c' := by
-  unfold cat3 at h
-  obtain ⟨h12, h3⟩ := bv_append_inj (cast_injective _ h)
-  obtain ⟨h1, h2⟩ := bv_append_inj h12
-  exact ⟨h1, h2, h3⟩
-
-theorem cat7_inj {a b : Fin 7 → BitVec 129} (h : cat7 a = cat7 b) : a = b := by
-  unfold cat7 at h
-  obtain ⟨hprefix5, h6⟩ := bv_append_inj (cast_injective _ h)
-  obtain ⟨hprefix4, h5⟩ := bv_append_inj hprefix5
-  obtain ⟨hprefix3, h4⟩ := bv_append_inj hprefix4
-  obtain ⟨hprefix2, h3⟩ := bv_append_inj hprefix3
-  obtain ⟨hprefix1, h2⟩ := bv_append_inj hprefix2
-  obtain ⟨h0, h1⟩ := bv_append_inj hprefix1
-  funext u
-  fin_cases u <;> assumption
+theorem catW_inj {n : ℕ} {a b : Fin n → BitVec 129} (h : catW a = catW b) : a = b := by
+  induction n with
+  | zero => exact funext fun i => i.elim0
+  | succ n ih =>
+      obtain ⟨h0, hs⟩ := bv_append_inj (cast_injective _ h)
+      have hs' := ih hs
+      funext i
+      exact Fin.cases h0 (fun i => congrFun hs' i) i
 
 theorem lowWord_tw_append {n : ℕ} (hn : 129 ≤ n) (a : BitVec 16) (x : BitVec n) :
     lowWord (a ++ x) = lowWord x := by
   unfold lowWord
   rw [BitVec.setWidth_append, dif_pos hn]
 
-theorem lowWord_cat3 (x y z : BitVec 129) : lowWord (cat3 x y z) = z := by
-  unfold cat3
-  rw [lowWord_cast]
-  unfold lowWord
-  rw [BitVec.setWidth_append, dif_pos le_rfl, BitVec.setWidth_eq]
-
-theorem lowWord_cat7 (a : Fin 7 → BitVec 129) : lowWord (cat7 a) = a 6 := by
-  unfold cat7
-  rw [lowWord_cast]
-  unfold lowWord
-  rw [BitVec.setWidth_append, dif_pos le_rfl, BitVec.setWidth_eq]
+/-- The last word of a concatenation is its low slot. -/
+theorem lowWord_catW {n : ℕ} (hn : 0 < n) (a : Fin n → BitVec 129) :
+    lowWord (catW a) = a ⟨n - 1, by omega⟩ := by
+  induction n with
+  | zero => omega
+  | succ n ih =>
+      simp only [catW]
+      rw [lowWord_cast]
+      unfold lowWord
+      rcases Nat.eq_zero_or_pos n with rfl | hpos
+      · rw [BitVec.setWidth_append, dif_neg (by omega)]
+        ext i hi
+        simp
+      · rw [BitVec.setWidth_append, dif_pos (by omega)]
+        have := ih hpos fun i => a i.succ
+        unfold lowWord at this
+        rw [this]
+        congr 1
+        ext
+        simp
+        omega
 
 /-! ## Node roles
 
@@ -144,15 +141,15 @@ def Kid.coord (b : Fin 7) : Kid → Name
 its input, read by no other node. -/
 def exclOf : Name → Name
   | .ch b k t => prev b k t
-  | .hh b j => (kid j 2).name b
-  | .rh => .hv 6 10
+  | .hh b j => (kid j (excl j)).name b
+  | .rh => .hv 6 12
   | n => n
 
 /-- The independent record coordinate behind the exclusive kid. -/
 def coordOf : Name → Name
   | .ch b k t => if h : t.val = 0 then .src b k else .ch b k ⟨t.val - 1, by omega⟩
-  | .hh b j => (kid j 2).coord b
-  | .rh => .hh 6 10
+  | .hh b j => (kid j (excl j)).coord b
+  | .rh => .hh 6 12
   | n => n
 
 theorem hashParent_isSome_iff (h : Name) :
@@ -199,20 +196,27 @@ theorem len_of_hashParent {h p : Name} (hp : hashParent h = some p) :
     h.len = 256 := by
   cases h <;> simp_all [hashParent, Name.len]
 
+/-- Binary and ternary hash inputs have 274 and 403 bits. -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 145 ∨ p.len = 403 ∨ p.len = 919 := by
+    p.len = 145 ∨ p.len = 274 ∨ p.len = 403 ∨ p.len = 919 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
-    subst hp <;> simp [Name.len]
+    subst hp
+  · exact Or.inl rfl
+  · rename_i b j
+    simp only [Name.len]
+    rcases arity_eq j with e | e <;> rw [e] <;> simp
+  · exact Or.inr (Or.inr (Or.inr rfl))
 
 theorem len_hashParent_ne_129 {h p : Name} (hp : hashParent h = some p) :
     p.len ≠ 129 := by
-  rcases len_hashParent_cases hp with e | e | e <;> omega
+  rcases len_hashParent_cases hp with e | e | e | e <;> omega
 
+/-- No graph hash input has the 342-bit index-query length. -/
 theorem len_hashParent_ne_enc {h p : Name} (hp : hashParent h = some p) :
     p.len ≠ msgBits + 86 := by
   have he : msgBits + 86 = 342 := rfl
   rw [he]
-  rcases len_hashParent_cases hp with h | h | h <;> omega
+  rcases len_hashParent_cases hp with h | h | h | h <;> omega
 
 theorem cost_hashParent {h p : Name} (hp : hashParent h = some p) :
     p.cost = 0 := by
@@ -261,11 +265,6 @@ theorem hashParent_value {v h : Name} (hh : hashOf v = some h) :
 theorem ne_rh_of_hashOf {v h : Name} (hh : hashOf v = some h) : h ≠ .rh := by
   cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
     subst hh <;> intro e <;> nomatch e
-
-theorem hashOf_rh : hashOf .rh = none := rfl
-
-theorem one_le_cost_of_hashParent {h p : Name} (hp : hashParent h = some p) :
-    1 ≤ h.cost := Nat.one_le_iff_ne_zero.2 (cost_ne_zero_of_hashParent hp)
 
 /-- The four node roles. -/
 theorem role_cases (n : Name) :
@@ -383,7 +382,7 @@ theorem exclOf_mem {h p : Name} (hp : hashParent h = some p) :
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
     subst hp <;> simp [exclOf, parents]
 
-theorem kid_ne_top (j : Fin 11) (a : Fin 3) : kid j a ≠ Kid.h 10 := by
+theorem kid_ne_top (j : Fin 13) (a : Fin (arity j)) : kid j a ≠ Kid.h 12 := by
   revert j a
   decide
 
@@ -435,18 +434,18 @@ theorem compress_reader_of_exclOf {h p h' m : Name} (hp : hashParent h = some p)
   · obtain ⟨a, ha⟩ := (mem_parents_hc _ _ _).1 hm
     exact absurd ha.symm (prev_ne_kidName _ _ _ _ _)
   · obtain ⟨b', hb'⟩ := (mem_parents_rc _).1 hm
-    exact absurd hb'.symm (prev_ne_kidName _ _ _ _ (Kid.h 10))
+    exact absurd hb'.symm (prev_ne_kidName _ _ _ _ (Kid.h 12))
   · simp only [parents, Finset.mem_singleton] at hm
     exact absurd hm.symm (prev_ne_kidName _ _ _ _ _)
   · obtain ⟨a, ha⟩ := (mem_parents_hc _ _ _).1 hm
     obtain ⟨rfl, hk⟩ := kidName_injective ha
-    rw [((kid_eq_kid_two_iff _ _ a).1 hk).1]
+    rw [((kid_eq_kid_excl_iff _ _ a).1 hk).1]
   · obtain ⟨b', hb'⟩ := (mem_parents_rc _).1 hm
-    exact absurd (kidName_injective (κ := Kid.h 10) hb').2.symm (kid_ne_top _ 2)
+    exact absurd (kidName_injective (κ := Kid.h 12) hb').2.symm (kid_ne_top _ _)
   · simp only [parents, Finset.mem_singleton] at hm
-    exact absurd hm.symm (prev_ne_kidName _ _ _ _ (Kid.h 10))
+    exact absurd hm.symm (prev_ne_kidName _ _ _ _ (Kid.h 12))
   · obtain ⟨a, ha⟩ := (mem_parents_hc _ _ _).1 hm
-    exact absurd (kidName_injective (κ' := Kid.h 10) ha).2 (kid_ne_top _ a)
+    exact absurd (kidName_injective (κ' := Kid.h 12) ha).2 (kid_ne_top _ a)
   · rfl
 
 /-- The exclusive kid is read only by the input of its hash node. -/
@@ -468,11 +467,13 @@ theorem lowWord_detVal_compress {h p : Name} (hp : hashParent h = some p)
   · show lowWord (tw _ ++ lowWord (x _)) = _
     rw [lowWord_tw_append le_rfl, lowWord_lowWord]
     rfl
-  · show lowWord (tw _ ++ cat3 _ _ _) = _
-    rw [lowWord_tw_append (by norm_num), lowWord_cat3]
+  · rename_i b j
+    have := arity_eq j
+    show lowWord (tw _ ++ catW _) = _
+    rw [lowWord_tw_append (by omega), lowWord_catW (by omega)]
     rfl
-  · show lowWord (tw _ ++ cat7 _) = _
-    rw [lowWord_tw_append (by norm_num), lowWord_cat7]
+  · show lowWord (tw _ ++ catW _) = _
+    rw [lowWord_tw_append (by norm_num), lowWord_catW (by norm_num)]
     rfl
 
 /-- A compression input determines the low 129 bits of each of its inputs. -/
@@ -484,15 +485,10 @@ theorem compress_inj {h p : Name} (hp : hashParent h = some p) {x x' : Asg}
       Finset.mem_univ, true_and] at hn
   · subst hn
     exact (bv_append_inj e).2
-  · rename_i b j
-    obtain ⟨a, rfl⟩ := hn
-    obtain ⟨h0, h1, h2⟩ := cat3_inj (bv_append_inj e).2
-    fin_cases a
-    · exact h0
-    · exact h1
-    · exact h2
+  · obtain ⟨a, rfl⟩ := hn
+    exact congrFun (catW_inj (bv_append_inj e).2) a
   · obtain ⟨b, rfl⟩ := hn
-    exact congrFun (cat7_inj (bv_append_inj e).2) b
+    exact congrFun (catW_inj (bv_append_inj e).2) b
 
 /-! ## Concrete record values -/
 
@@ -793,13 +789,6 @@ theorem fExp_none (ξ : Rec) : fExp none ξ = ∅ := by
   · rfl
   · rintro ⟨h, -, -, he, -⟩
     exact not_exposed_none h he
-
-theorem fExp_enc (A? : Option (Finset Name)) (ξ : Rec) (u : EncInput) :
-    fExp A? ξ (encQuery u) = none := by
-  simp only [fExp]
-  rw [if_neg]
-  rintro ⟨h, p, hp, -, hq⟩
-  exact pointOf_ne_encQuery hp ξ u hq.symm
 
 theorem fHid_enc (A? : Option (Finset Name)) (ξ : Rec) (u : EncInput) :
     fHid A? ξ (encQuery u) = none := by
@@ -1212,34 +1201,5 @@ theorem authPotential_after_sign {d d' : Cache}
   have hh := not_hits_extend_fExp_fHid hd' (hT ξ hξ) A?
   have hs := spr_extend_fExp_iff hd' ξ A?
   simp only [ind, if_neg hh, hs, zero_add]
-
-theorem sign_indexExtension {M' : ℕ} (S : WeightedScheme.Scheme M')
-    (x : S.graph.Assignment) (m : Message) (c : Cache)
-    (p : Option WeightedScheme.Signature × Cache)
-    (hp : p ∈ support (run (S.sign x m) c)) : IndexExtension c p.2 := by
-  refine ⟨sub_of_mem_support_run _ c p hp, ?_⟩
-  intro q v hc he
-  obtain ⟨η, hη⟩ :=
-    ReplacementLocality.sign_new_cache_row S x m c p hp q v hc he
-  exact ⟨(m, η), hη⟩
-
-theorem authPotential_after_actual_sign {M' : ℕ}
-    (S : WeightedScheme.Scheme M') (x : S.graph.Assignment)
-    (m : Message) (c : Cache)
-    (p : Option WeightedScheme.Signature × Cache)
-    (hp : p ∈ support (run (S.sign x m) c))
-    (T : Finset Rec) (A? : Option (Finset Name))
-    (hT : ∀ ξ ∈ T, ¬ Cache.Hits c (kc ξ))
-    (fe : Cache) (he : ∀ ξ ∈ T, fExp A? ξ = fe) :
-    authPotential T A? (Cache.extend p.2 fe) =
-      ∑ ξ ∈ T, w * ind (Spr c ξ) :=
-  authPotential_after_sign (sign_indexExtension S x m c p hp)
-    T A? hT fe he
-
-#print axioms spr_charge
-#print axioms authentication_charge_budget
-#print axioms not_spr_kc
-#print axioms authPotential_index
-#print axioms authPotential_after_actual_sign
 
 end OptimalOTS.WeightedConstruction.LongChain91

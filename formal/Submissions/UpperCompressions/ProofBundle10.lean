@@ -4,7 +4,6 @@ import Submissions.UpperCompressions.ProofBundle01
 import Submissions.UpperCompressions.ProofBundle08
 import Submissions.UpperCompressions.ProofBundle07
 
-/- Original module: Submissions.UpperCompressions.ActualWeightedMoments; SHA256 724214e81b746c932938cc14bb12cf49f4e8a70d1b433f83155c4ad8b74dd79c. -/
 section
 
 /-! Stopped moments in actual OracleComp execution from an explicit one-query
@@ -91,13 +90,10 @@ theorem actual_stopped_moments
   have hb := mul_le_mul_of_nonneg_left hqmean (mul_nonneg hG hh)
   nlinarith
 
-#print axioms actual_stopped_moments
-
 end WeightedActualMoments
 end
 end
 
-/- Original module: Submissions.UpperCompressions.ActualLinearBoundary; SHA256 38baf3df0738f2f6087b134984ee88e34d3201abfb472ca94469e9092a51276e. -/
 section
 
 /-! Time-uniform linear-boundary concentration for actual OracleComp execution.
@@ -150,12 +146,10 @@ theorem actual_linear_boundary
   dsimp only [F]
   nlinarith
 
-#print axioms actual_linear_boundary
 end WeightedOracleExecution
 end
 end
 
-/- Original module: Submissions.UpperCompressions.ActualScoreConcentration; SHA256 1d0eff2f3d473a56b2371a71d6de5a5981affa20a3f19d3849cf7859d19f998a. -/
 section
 
 /-! Concentration of actual fresh-query score statistics. The only oracle-law
@@ -263,25 +257,6 @@ theorem row_freedman (lower : Bool) (G N a : ℝ)
       _ ≤ G*G*N := by gcongr
       _ = G^2*N := by ring
 
-/-- Concrete global mixed72 margin, uniform in the program length and paid budget. -/
-theorem mixed_global (κ : ℝ) (hκ : 0 < κ) (hm : w.mean ≤ κ)
-    (hg : ∀ i, w.g i ≤ (2^20:ℝ)*κ/2)
-    (oa : OracleComp OptimalOTS.Spec α) (s₀ : S)
-    (hq0 : qCount s₀ = 0) (hk0 : counts s₀ = fun _ => 0) :
-    let hit := fun (_ : ℕ) (s : S) =>
-      (κ/100)*max (qCount s:ℝ) ((2^86:ℝ)/10) ≤ signedM1 w qCount counts false s
-    let kill := fun (_ : ℕ) (_ : S) => False
-    Pr[fun out => out.2.status = .hit |
-      (simulateQ (stoppedImpl impl hit kill) oa).run (classify hit kill 0 s₀)] ≤
-      ENNReal.ofReal (Real.exp (-(2^40:ℝ))) := by
-  obtain ⟨hθ, hθG, hc, he⟩ := mixed_global_constants w κ hκ hm
-  have hx := global_boundary w impl qCount counts fresh hlaw false
-    ((2^20:ℝ)*κ/2) (mixedTheta κ) (κ/100) ((2^86:ℝ)/10)
-    (by positivity) hg hθ.le hθG (by positivity) hc oa s₀ hq0 hk0
-  apply hx.trans
-  apply ENNReal.ofReal_le_ofReal
-  exact Real.exp_le_exp.mpr (neg_le_neg he)
-
 /-- Concrete row margin for either tail. Set G=1 for prefix indicators and
 G=Lκ for rowS or rowU. The counted finite-domain restriction is explicit. -/
 theorem mixed_row (lower : Bool) (G : ℝ) (hG : 0 < G) (hg : ∀ i, w.g i ≤ G)
@@ -302,17 +277,10 @@ theorem mixed_row (lower : Bool) (G : ℝ) (hG : 0 < G) (hg : ∀ i, w.g i ≤ G
   apply Real.exp_le_exp.mpr
   simpa only [neg_div] using neg_le_neg he
 
-#print axioms mixed_global
-#print axioms mixed_row
-
-#print axioms query_mgf
-#print axioms global_boundary
-#print axioms row_freedman
 end WeightedActualScore
 end
 end
 
-/- Original module: Submissions.UpperCompressions.ProtectedCacheStatistics; SHA256 53fcef296f9370dda8f4ed38b6acf00a7d909921b599d95465af7162af0c312e. -/
 section
 
 /-! The actual protected shared-oracle implementation, with statistics defined
@@ -399,54 +367,10 @@ theorem stopped_moments (w : WeightedRow.Weights ι)
     (protectedFresh A) (query_law w A decode hfiber) (count_le_cost A)
     G hG hg oa B hbudget cache hq0 hk0
 
-#print axioms count_le_cost
-#print axioms count_bound
-#print axioms stopped_moments
-
-#print axioms protectedImpl_eq
-#print axioms query_law
 end WeightedProtectedCache
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WidePreSign; SHA256 9d4dae7495da2edcfa37a8bb350948937956dc0c1a7f6de7e4913ffe920aebb3. -/
-section
-
-/-! The exact primitive-query law for the concrete weighted92 decoder under
-the contract's actual shared random oracle. This applies before signing. -/
-noncomputable section
-namespace OptimalOTS.WeightedConstruction.WidePreSign
-open OracleSpec OracleComp
-open WeightedSchedule WideDomains WeightedCacheCounts WeightedRow.Weights
-open WeightedRealExecution WeightedDirectCache
-open scoped Classical
-
-theorem primitive_law (A : Finset Query) (t : Spec.Domain) (c : hashSpec.QueryCache)
-    (f : ℕ → (Fin M → ℕ) → ℝ) :
-    realEval ((oracleImpl t).run c)
-      (fun out => f (seen A out.2).card (classCounts A out.2 decode)) =
-    securityWeights.expect (fun x => f
-      (step (protectedFresh A t c) (seen A c).card (classCounts A c decode) x).1
-      (step (protectedFresh A t c) (seen A c).card (classCounts A c decode) x).2) := by
-  exact WeightedProtectedCache.query_law securityWeights A decode decoder_law t c f
-
-theorem index_initial (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query,q.1=342 → c q=none) :
-    (seen indexDomain c).card=0 ∧ classCounts indexDomain c decode=(fun _ => 0) := by
-  constructor
-  · rw [fresh_seen_empty c hf,Finset.card_empty]
-  · exact fresh_counts_zero c hf
-
-theorem row_count_bound (m : Message) (c : hashSpec.QueryCache) :
-    (seen (rowDomain m) c).card ≤ 2^86 := seen_row_bound m c
-
-#print axioms primitive_law
-#print axioms index_initial
-end OptimalOTS.WeightedConstruction.WidePreSign
-end
-end
-
-/- Original module: Submissions.UpperCompressions.ProtectedConcentration; SHA256 5e8ef6309635368ee6575d81d04f6a8ba952f299ec11c84671250a9498ef6e37. -/
 section
 
 /-! Concentration for statistics read directly from the actual protected cache.
@@ -459,25 +383,6 @@ open WeightedRealExecution WeightedRow.Weights WeightedCacheCounts WeightedDirec
 open WeightedOracleExecution WeightedFirstHit WeightedActualScore
 set_option maxHeartbeats 800000
 variable {ι α : Type} [Fintype ι] [DecidableEq ι]
-
-/-- Every prefix of actual shared-oracle execution obeys the global boundary,
-except with probability exp(-2^40); no fixed paid budget or time union is used. -/
-theorem global_score (w : WeightedRow.Weights ι)
-    (A : Finset OptimalOTS.Query) (decode : BitVec OptimalOTS.hashBits → Option ι)
-    (hfiber : ∀ x, ((Finset.univ.filter (fun b => decode b=x)).card:ℝ) /
-      Fintype.card (BitVec OptimalOTS.hashBits) = w.classMass x)
-    (κ : ℝ) (hκ : 0 < κ) (hm : w.mean ≤ κ) (hg : ∀ i, w.g i ≤ (2^20:ℝ)*κ/2)
-    (oa : OracleComp OptimalOTS.Spec α) (cache : OptimalOTS.hashSpec.QueryCache)
-    (hq0 : (seen A cache).card = 0) (hk0 : classCounts A cache decode = fun _ => 0) :
-    let hit := fun (_ : ℕ) (c : OptimalOTS.hashSpec.QueryCache) =>
-      (κ/100)*max ((seen A c).card:ℝ) ((2^86:ℝ)/10) ≤ w.M1 (seen A c).card (classCounts A c decode)
-    let kill := fun (_ : ℕ) (_ : OptimalOTS.hashSpec.QueryCache) => False
-    Pr[fun out => out.2.status = .hit |
-      (simulateQ (stoppedImpl OptimalOTS.oracleImpl hit kill) oa).run (classify hit kill 0 cache)] ≤
-      ENNReal.ofReal (Real.exp (-(2^40:ℝ))) := by
-  exact WeightedActualScore.mixed_global w OptimalOTS.oracleImpl
-    (fun c => (seen A c).card) (fun c => classCounts A c decode)
-    (protectedFresh A) (query_law w A decode hfiber) κ hκ hm hg oa cache hq0 hk0
 
 /-- Row concentration for either score tail, with the finite nonce-domain cap
 proved automatically from A.card≤2^86. The execution is never killed by a count cap. -/
@@ -521,13 +426,10 @@ theorem row_score (w : WeightedRow.Weights ι)
   rw [hhit, hkill] at hx
   exact hx
 
-#print axioms global_score
-#print axioms row_score
 end WeightedProtectedCache
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WideCountRelations; SHA256 bc7e9db5b0cf68461e5fc391f68d1284637353c30e7b223856692f1572499c7d. -/
 section
 
 /-! Physical relations between row and global multiplicities in the actual cache. -/
@@ -557,140 +459,16 @@ end WeightedCacheCounts
 namespace OptimalOTS.WeightedConstruction.WideDomains
 open WeightedCacheCounts
 
-theorem row_class_le_global (m : Message) (c : hashSpec.QueryCache)
-    (i : Fin WeightedSchedule.M) :
-    classCounts (rowDomain m) c WeightedSchedule.decode i ≤
-      classCounts indexDomain c WeightedSchedule.decode i :=
-  classCounts_mono (row_subset m) c WeightedSchedule.decode i
-
 theorem fresh_row_succ_bound (m : Message) (c : hashSpec.QueryCache)
     (q : Query) (hq : q ∈ rowDomain m) (hc : c q = none) :
     (seen (rowDomain m) c).card + 1 ≤ 2^86 :=
   (fresh_seen_succ_le (rowDomain m) c q (0 : BitVec hashBits) hq hc).trans_eq
     (row_card m)
 
-#print axioms row_class_le_global
-#print axioms fresh_row_succ_bound
 end OptimalOTS.WeightedConstruction.WideDomains
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WideConcentration; SHA256 f2d70a3e365277ff9a1eb34b6375afa2f54a3ea172119a610029e7a2faf4ff48. -/
-section
-
-/-! Concrete time-uniform pre-sign score bounds for every message row.
-The underlying execution is the contract's actual shared oracle throughout. -/
-noncomputable section
-open OracleSpec OracleComp
-open scoped Classical
-namespace WeightedProtectedCache
-variable {ι α : Type} [Fintype ι] [DecidableEq ι]
-theorem row_reweighted (w : WeightedRow.Weights ι)
-    (A : Finset OptimalOTS.Query) (hcard : A.card ≤ 2^86)
-    (decode : BitVec OptimalOTS.hashBits → Option ι)
-    (hfiber : ∀ x, ((Finset.univ.filter (fun b => decode b=x)).card:ℝ) /
-      Fintype.card (BitVec OptimalOTS.hashBits) = w.classMass x)
-    (g : ι → ℝ) (hg0 : ∀ i,0 ≤ g i)
-    (lower : Bool) (G : ℝ) (hG : 0 < G) (hg : ∀ i,g i ≤ G)
-    (oa : OracleComp OptimalOTS.Spec α) (cache : OptimalOTS.hashSpec.QueryCache)
-    (hq0 : (WeightedCacheCounts.seen A cache).card=0)
-    (hk0 : WeightedCacheCounts.classCounts A cache decode=(fun _ => 0)) :
-    let hit := fun (_ : ℕ) (c : OptimalOTS.hashSpec.QueryCache) =>
-      G*(2^86:ℝ)/(100*(2^20:ℝ)) ≤ WeightedActualScore.signedM1 (w.withScore g hg0)
-        (fun c => (WeightedCacheCounts.seen A c).card)
-        (fun c => WeightedCacheCounts.classCounts A c decode) lower c
-    let kill := fun (_ : ℕ) (_ : OptimalOTS.hashSpec.QueryCache) => False
-    Pr[fun out => out.2.status = .hit |
-      (simulateQ (WeightedOracleExecution.stoppedImpl OptimalOTS.oracleImpl hit kill) oa).run
-        (WeightedFirstHit.classify hit kill 0 cache)] ≤
-      ENNReal.ofReal (Real.exp (-(2^30:ℝ))) := by
-  apply row_score (w.withScore g hg0) A hcard decode _ lower G hG hg oa cache hq0 hk0
-  intro x
-  exact (hfiber x).trans (WeightedRow.Weights.withScore_classMass w g hg0 x).symm
-end WeightedProtectedCache
-namespace OptimalOTS.WeightedConstruction.WideConcentration
-open OracleSpec OracleComp OracleComp.EvalDist
-open WeightedReference WeightedConstants WeightedSchedule WideDomains
-open WeightedCacheCounts WeightedRow.Weights WeightedOracleExecution WeightedFirstHit
-open scoped Classical ENNReal
-set_option maxHeartbeats 1000000
-set_option maxRecDepth 10000
-attribute [local irreducible] Finset.univ Finset.filter
-
-def crossing {α : Type} (oa : OracleComp Spec α) (c : hashSpec.QueryCache)
-    (bad : hashSpec.QueryCache → Prop) : ℝ≥0∞ :=
-  Pr[fun out => out.2.status = .hit |
-    (simulateQ (stoppedImpl oracleImpl (fun _ c => bad c) (fun _ _ => False)) oa).run
-      (classify (fun _ c => bad c) (fun _ _ => False) 0 c)]
-
-theorem row_initial (m : Message) (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query,q.1=342 → c q=none) :
-    (seen (rowDomain m) c).card=0 ∧ classCounts (rowDomain m) c decode=(fun _ => 0) := by
-  obtain ⟨hq,hk⟩ := WidePreSign.index_initial c hf
-  constructor
-  · have h := Finset.card_le_card (seen_row_subset m c)
-    rw [hq] at h
-    exact Nat.eq_zero_of_le_zero h
-  · funext i
-    have h := row_class_le_global m c i
-    rw [hk] at h
-    exact Nat.eq_zero_of_le_zero h
-
-theorem global_bound {α : Type} (oa : OracleComp Spec α) (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query,q.1=342 → c q=none) :
-    crossing oa c (fun d => (kappa/100)*max ((seen indexDomain d).card:ℝ) ((2:ℝ)^86/10) ≤
-      securityWeights.M1 (seen indexDomain d).card (classCounts indexDomain d decode)) ≤
-        ENNReal.ofReal (Real.exp (-(2^40:ℝ))) := by
-  obtain ⟨hq,hk⟩ := WidePreSign.index_initial c hf
-  have hm : securityWeights.mean ≤ kappa := securityWeights_mean.trans (by norm_num [kappa])
-  exact WeightedProtectedCache.global_score securityWeights indexDomain decode decoder_law kappa
-    (by norm_num [kappa]) hm (fun i => by
-      simpa only [securityWeights,L,Nat.cast_pow,Nat.cast_ofNat] using referenceWeight_le i) oa c hq hk
-
-theorem row_withScore_bound {α : Type} (g : Fin M → ℝ) (hg0 : ∀ i,0 ≤ g i)
-    (G : ℝ) (hG : 0 < G) (hg : ∀ i,g i ≤ G) (lower : Bool)
-    (m : Message) (oa : OracleComp Spec α) (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query,q.1=342 → c q=none) :
-    crossing oa c (fun d => G*(2:ℝ)^86/(100*(2:ℝ)^20) ≤
-      WeightedActualScore.signedM1 (securityWeights.withScore g hg0)
-        (fun d => (seen (rowDomain m) d).card)
-        (fun d => classCounts (rowDomain m) d decode) lower d) ≤
-      ENNReal.ofReal (Real.exp (-(2^30:ℝ))) := by
-  obtain ⟨hq,hk⟩ := row_initial m c hf
-  exact WeightedProtectedCache.row_reweighted securityWeights (rowDomain m)
-    (row_card m).le decode decoder_law g hg0 lower G hG hg oa c hq hk
-
-def excessWeights : WeightedRow.Weights (Fin M) := securityWeights.withScore
-  (fun i => referenceWeight i*excess i/classProbability i) excessScore_nonneg
-
-theorem excessWeights_mean : excessWeights.mean=(∑ i : Fin M,referenceWeight i*excess i) := by
-  unfold WeightedRow.Weights.mean
-  apply Finset.sum_congr rfl
-  intro i hi
-  change classProbability i*(referenceWeight i*excess i/classProbability i)=_
-  field_simp [(classProbability_pos i).ne']
-
-theorem row_excess_bound {α : Type} (m : Message) (oa : OracleComp Spec α)
-    (c : hashSpec.QueryCache) (hf : ∀ q : Query,q.1=342 → c q=none) :
-    crossing oa c (fun d => kappa*(2:ℝ)^86/100 ≤
-      excessWeights.M1 (seen (rowDomain m) d).card (classCounts (rowDomain m) d decode)) ≤
-      ENNReal.ofReal (Real.exp (-(2^30:ℝ))) := by
-  have h := row_withScore_bound
-    (fun i => referenceWeight i*excess i/classProbability i) excessScore_nonneg
-    ((L:ℝ)*kappa) (by norm_num [L,kappa]) excessScore_le false m oa c hf
-  have he : ((L:ℝ)*kappa)*(2:ℝ)^86/(100*(2:ℝ)^20)=kappa*(2:ℝ)^86/100 := by
-    norm_num [L,kappa]
-  simp only [WeightedActualScore.signedM1,Bool.false_eq_true,ite_false,he] at h
-  exact h
-
-#print axioms global_bound
-#print axioms row_withScore_bound
-#print axioms row_excess_bound
-end OptimalOTS.WeightedConstruction.WideConcentration
-end
-end
-
-/- Original module: Submissions.UpperCompressions.FirstHitUnion; SHA256 99292e25bed08ed3fcb78f7146a9d2f64ac9f05f8fcdb3593b0dfb4f5b53a6e9. -/
 section
 noncomputable section
 open OracleSpec OracleComp OracleComp.EvalDist
@@ -780,30 +558,6 @@ theorem stopped_hit_union_uniform (impl : QueryImpl spec (StateT S ProbComp))
       Finset.sum_le_sum (fun i _ => hbound i)
     _ = (Fintype.card I:ℝ≥0∞)*ε := by simp [nsmul_eq_mul]
 
-/-- Actual mixed72 Good-event union, including all message rows and the global
-boundary, once the explicit per-event crossing bounds are supplied. -/
-theorem stopped_mixed_union (impl : QueryImpl spec (StateT S ProbComp))
-    (hit : I → ℕ → S → Prop) (oa : OracleComp spec α) (t : ℕ) (s : S)
-    (hcard : Fintype.card I ≤ 74*2^256+1)
-    (hbound : ∀ i, Pr[fun out => out.2.status = .hit |
-      (simulateQ (stoppedImpl impl (hit i) (fun _ _ => False)) oa).run
-        (classify (hit i) (fun _ _ => False) t s)] ≤
-          ENNReal.ofReal (Real.exp (-(2^30:ℝ)))) :
-    Pr[fun out => out.2.status = .hit |
-      (simulateQ (stoppedImpl impl (fun n s => ∃ i, hit i n s) (fun _ _ => False)) oa).run
-        (classify (fun n s => ∃ i, hit i n s) (fun _ _ => False) t s)] ≤
-      ENNReal.ofReal (((2:ℝ)^512)⁻¹) := by
-  have hn : (Fintype.card I:ℝ) ≤ 74*(2^256:ℝ)+1 := by exact_mod_cast hcard
-  calc
-    _ ≤ (Fintype.card I:ℝ≥0∞)*ENNReal.ofReal (Real.exp (-(2^30:ℝ))) :=
-      stopped_hit_union_uniform impl hit oa t s _ hbound
-    _ = ENNReal.ofReal ((Fintype.card I:ℝ)*Real.exp (-(2^30:ℝ))) := by
-      rw [ENNReal.ofReal_mul (by positivity), ENNReal.ofReal_natCast]
-    _ ≤ ENNReal.ofReal ((74*(2^256:ℝ)+1)*Real.exp (-(2^30:ℝ))) :=
-      ENNReal.ofReal_le_ofReal (mul_le_mul_of_nonneg_right hn (Real.exp_nonneg _))
-    _ ≤ ENNReal.ofReal (((2:ℝ)^512)⁻¹) :=
-      ENNReal.ofReal_le_ofReal WeightedEmpirical.mixed_row_union_margin
-
 /-- A terminal violation in the actual unmodified execution is included in a
 first hit of the same state predicate. No transcript or stopping coupling is assumed. -/
 theorem terminal_bad_le_firstHit (impl : QueryImpl spec (StateT S ProbComp))
@@ -826,273 +580,10 @@ theorem terminal_bad_le_firstHit (impl : QueryImpl spec (StateT S ProbComp))
       intro out
       exact ih out.1 (t+1) out.2
 
-#print axioms stopped_hit_union_uniform
-#print axioms stopped_mixed_union
-#print axioms terminal_bad_le_firstHit
-
-#print axioms firstHitRun_union_le
-#print axioms stopped_hit_union_le
 end WeightedOracleExecution
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WideEmpiricalGood; SHA256 c638154d911963644d18fffd17a30b74b403899348e8bc9a250c10d104bea748. -/
-section
-
-/-! A single actual pre-sign Good event, simultaneously over all messages and
-72 tier prefixes, row scores, row excess scores, and the global score. -/
-noncomputable section
-namespace OptimalOTS.WeightedConstruction.WideEmpirical
-open OracleSpec OracleComp OracleComp.EvalDist
-open WeightedReference WeightedConstants WeightedSchedule WideDomains WideConcentration
-open WeightedCacheCounts WeightedRow.Weights WeightedOracleExecution WeightedFirstHit
-open scoped Classical ENNReal
-set_option maxHeartbeats 1000000
-set_option maxRecDepth 10000
-attribute [local irreducible] Finset.univ Finset.filter
-
-def prefixClasses (j : Fin 72) : Finset (Fin M) := Finset.univ.filter (fun i => tier i ≤ j.val)
-def prefixWeight (j : Fin 72) : WeightedRow.Weights (Fin M) := securityWeights.prefixWeights (prefixClasses j)
-
-def globalBad (c : hashSpec.QueryCache) : Prop :=
-  (kappa/100)*max ((seen indexDomain c).card:ℝ) ((2:ℝ)^86/10) ≤
-    securityWeights.M1 (seen indexDomain c).card (classCounts indexDomain c decode)
-def prefixBad (m : Message) (j : Fin 72) (c : hashSpec.QueryCache) : Prop :=
-  (2:ℝ)^86/(100*(2:ℝ)^20) ≤
-    -(prefixWeight j).M1 (seen (rowDomain m) c).card (classCounts (rowDomain m) c decode)
-def scoreBad (m : Message) (c : hashSpec.QueryCache) : Prop :=
-  kappa*(2:ℝ)^86/100 ≤ securityWeights.M1
-    (seen (rowDomain m) c).card (classCounts (rowDomain m) c decode)
-def excessBad (m : Message) (c : hashSpec.QueryCache) : Prop :=
-  kappa*(2:ℝ)^86/100 ≤ excessWeights.M1
-    (seen (rowDomain m) c).card (classCounts (rowDomain m) c decode)
-
-theorem prefix_bound {α : Type} (m : Message) (j : Fin 72) (oa : OracleComp Spec α)
-    (c : hashSpec.QueryCache) (hf : ∀ q : Query,q.1=342 → c q=none) :
-    crossing oa c (prefixBad m j) ≤ ENNReal.ofReal (Real.exp (-(2^30:ℝ))) := by
-  obtain ⟨hq,hk⟩ := row_initial m c hf
-  have h := row_withScore_bound (fun i => if i ∈ prefixClasses j then 1 else 0)
-    (fun i => by split_ifs <;> norm_num) 1 (by norm_num)
-    (securityWeights.prefix_weight_bound (prefixClasses j)) true m oa c hf
-  simp only [WeightedActualScore.signedM1,ite_true,one_mul] at h
-  exact h
-
-theorem score_bound {α : Type} (m : Message) (oa : OracleComp Spec α)
-    (c : hashSpec.QueryCache) (hf : ∀ q : Query,q.1=342 → c q=none) :
-    crossing oa c (scoreBad m) ≤ ENNReal.ofReal (Real.exp (-(2^30:ℝ))) := by
-  obtain ⟨hq,hk⟩ := row_initial m c hf
-  have hg (i : Fin M) : securityWeights.g i ≤ (L:ℝ)*kappa := by
-    have h := referenceWeight_le i
-    change referenceWeight i ≤ _
-    have hn : 0 ≤ (L:ℝ)*kappa := by norm_num [L,kappa]
-    linarith
-  have h : crossing oa c (fun d => ((L:ℝ)*kappa)*(2:ℝ)^86/(100*(2:ℝ)^20) ≤
-      WeightedActualScore.signedM1 securityWeights
-        (fun d => (seen (rowDomain m) d).card)
-        (fun d => classCounts (rowDomain m) d decode) false d) ≤
-        ENNReal.ofReal (Real.exp (-(2^30:ℝ))) :=
-    WeightedProtectedCache.row_score securityWeights (rowDomain m) (row_card m).le
-      decode decoder_law false ((L:ℝ)*kappa) (by norm_num [L,kappa]) hg oa c hq hk
-  have he : ((L:ℝ)*kappa)*(2:ℝ)^86/(100*(2:ℝ)^20)=kappa*(2:ℝ)^86/100 := by norm_num [L,kappa]
-  simp only [WeightedActualScore.signedM1,Bool.false_eq_true,ite_false,he] at h
-  exact h
-
-abbrev BadIndex := Unit ⊕ (Message × Fin 74)
-def event : BadIndex → hashSpec.QueryCache → Prop
-  | .inl _ => globalBad
-  | .inr (m,j) => if h : j.val < 72 then prefixBad m ⟨j.val,h⟩
-      else if j.val=72 then scoreBad m else excessBad m
-
-theorem event_bound {α : Type} (oa : OracleComp Spec α) (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query,q.1=342 → c q=none) (i : BadIndex) :
-    crossing oa c (event i) ≤ ENNReal.ofReal (Real.exp (-(2^30:ℝ))) := by
-  cases i with
-  | inl u =>
-    apply (global_bound oa c hf).trans
-    apply ENNReal.ofReal_le_ofReal
-    apply Real.exp_le_exp.mpr
-    norm_num
-  | inr p =>
-    obtain ⟨m,j⟩ := p
-    dsimp only [event]
-    split_ifs with h h'
-    · exact prefix_bound m ⟨j.val,h⟩ oa c hf
-    · exact score_bound m oa c hf
-    · exact row_excess_bound m oa c hf
-
-def Good (c : hashSpec.QueryCache) : Prop := ∀ i : BadIndex,¬ event i c
-
-theorem all_crossings {α : Type} (oa : OracleComp Spec α) (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query,q.1=342 → c q=none) :
-    crossing oa c (fun d => ∃ i : BadIndex,event i d) ≤ ENNReal.ofReal (((2:ℝ)^512)⁻¹) := by
-  have hc : Fintype.card BadIndex ≤ 74*2^256+1 := by
-    norm_num [BadIndex,Message,msgBits,Fintype.card_sum,Fintype.card_prod,Fintype.card_bitVec]
-  exact stopped_mixed_union oracleImpl (fun i _ c => event i c) oa 0 c hc (event_bound oa c hf)
-
-theorem terminal_bad {α : Type} (oa : OracleComp Spec α) (c : hashSpec.QueryCache)
-    (hf : ∀ q : Query,q.1=342 → c q=none) :
-    Pr[fun out => ¬Good out.2 | (simulateQ oracleImpl oa).run c] ≤
-      ENNReal.ofReal (((2:ℝ)^512)⁻¹) := by
-  have hgood (d : hashSpec.QueryCache) : (¬Good d) = (∃ i : BadIndex,event i d) := by
-    simp only [Good,not_forall,not_not]
-  simp only [hgood]
-  apply (terminal_bad_le_firstHit oracleImpl (fun d => ∃ i : BadIndex,event i d) oa 0 c).trans
-  have h := all_crossings oa c hf
-  simpa only [crossing,prob_stopped_hit_eq_firstHitRun] using h
-
-#print axioms all_crossings
-#print axioms terminal_bad
-end OptimalOTS.WeightedConstruction.WideEmpirical
-end
-end
-
-/- Original module: Submissions.UpperCompressions.WideReplayBounds; SHA256 e64e7f3870bb0c3fea67475d28f077decb9dac69749365c133bf08779fe2306f. -/
-section
-
-/-! Concrete mixed72 replay/excess bounds for literal uniform completion tables.
-The remaining Good-tail premise is supplied by global table concentration. -/
-noncomputable section
-open scoped BigOperators Classical
-namespace OptimalOTS.WeightedConstruction.WeightedSchedule
-open WeightedCompletion WeightedReplacement WeightedConstants WeightedReference
-attribute [local irreducible] Finset.univ Finset.filter WeightedResearch92.classes
-variable {D : Type} [Fintype D] [Nonempty D] [DecidableEq D]
-
-def rowGood (table : D → Option (Fin M)) : Prop := ∀ i,
-  fraction (weakRank tier i ∘ table) ≤ survival (tier i)+1/(100*(L:ℝ)) ∧
-  fraction (strictRank tier i ∘ table) ≤ lower (tier i)+1/(100*(L:ℝ))
-
-theorem rowGood_kernel (table : D → Option (Fin M)) (hg : rowGood table) (i : Fin M) :
-    kernel L (fraction (weakRank tier i ∘ table)) (fraction (strictRank tier i ∘ table)) ≤
-      (99:ℝ)/98 * (referenceWeight i / classProbability i) := by
-  apply empirical_kernel_le i _ _ _ _ (hg i).1 (hg i).2
-  all_goals
-    unfold fraction uniformMean
-    apply div_nonneg
-    · apply Finset.sum_nonneg
-      intro x _
-      split_ifs <;> norm_num
-    · exact Nat.cast_nonneg _
-
-/-- The replay formula is concrete at nonce-domain D; D=BitVec86 gives N=2^86.
-The independent table is sampled before applying the joint Good indicator. -/
-theorem concrete_replay_bound (R : Finset D) (fixed : D → Option (Fin M)) (k : Fin M → ℕ)
-    (Good : (D → BitVec 256) → Prop) (δ : ℝ)
-    (hgood : ∀ g, Good g → rowGood (completionTable R fixed decode g))
-    (hbad : uniformMean (fun g => if Good g then 0 else 1) ≤ δ) :
-    uniformMean (fun g : D → BitVec 256 =>
-      tableKernel L (completionTable R fixed decode g) tier (fun a i =>
-        if a ∈ R then (if 2 ≤ k i then 1 else 0) else (if k i = 0 then 0 else 1))) ≤
-      (99:ℝ)/98 * securityWeights.hazard (Fintype.card D) R.card k (rowCount R fixed) + δ := by
-  apply replay_kernel_bound securityWeights L tier R fixed (completionTable R fixed decode) k
-    (completionTable_known R fixed decode)
-    (completion_decode_probability R fixed) Good ((99:ℝ)/98) δ (by norm_num)
-  · intro g hg i
-    exact rowGood_kernel _ (hgood g hg) i
-  · exact hbad
-
-/-- Concrete expected excess score, including zero payoff on signing failure. -/
-theorem concrete_excess_bound (R : Finset D) (fixed : D → Option (Fin M))
-    (Good : (D → BitVec 256) → Prop) (δ emax : ℝ) (hemax : 0 ≤ emax)
-    (hesc : ∀ i, excess i ≤ emax)
-    (hgood : ∀ g, Good g → rowGood (completionTable R fixed decode g))
-    (hbad : uniformMean (fun g => if Good g then 0 else 1) ≤ δ) :
-    uniformMean (fun g : D → BitVec 256 =>
-      tableKernel L (completionTable R fixed decode g) tier (fun _ i => excess i)) ≤
-      (99:ℝ)/98 * ((1-(R.card : ℝ)/Fintype.card D) * (∑ i, referenceWeight i * excess i) +
-        (∑ i, (rowCount R fixed i : ℝ) * (referenceWeight i/classProbability i * excess i)) /
-          Fintype.card D) + emax * δ := by
-  apply excess_kernel_bound securityWeights L tier R fixed (completionTable R fixed decode)
-    (completionTable_known R fixed decode) (completion_decode_probability R fixed)
-    excess (fun i => le_max_right _ _) emax hemax hesc Good ((99:ℝ)/98) δ (by norm_num)
-  · intro g hg i
-    exact rowGood_kernel _ (hgood g hg) i
-  · exact hbad
-
-end OptimalOTS.WeightedConstruction.WeightedSchedule
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.concrete_replay_bound
-#print axioms OptimalOTS.WeightedConstruction.WeightedSchedule.concrete_excess_bound
-end
-end
-
-/- Original module: Submissions.UpperCompressions.WideEmpiricalBounds; SHA256 59df98fe826bc35855270a7f349da889541876297345cb81663ae0314b947356. -/
-section
-
-/-! Pointwise consequences of the single concrete empirical Good event. -/
-noncomputable section
-namespace OptimalOTS.WeightedConstruction.WideEmpirical
-open WeightedReference WeightedConstants WeightedSchedule WideDomains WideConcentration
-open WeightedCacheCounts WeightedRow.Weights
-open scoped Classical
-set_option maxHeartbeats 1000000
-
-theorem good_global (c : hashSpec.QueryCache) (hc : Good c) :
-    securityWeights.score (classCounts indexDomain c decode) ≤
-      mean*(seen indexDomain c).card+(kappa/100)*max ((seen indexDomain c).card:ℝ) ((2:ℝ)^86/10) := by
-  have h := hc (.inl ())
-  change ¬((kappa/100)*max ((seen indexDomain c).card:ℝ) ((2:ℝ)^86/10) ≤
-    securityWeights.M1 (seen indexDomain c).card (classCounts indexDomain c decode)) at h
-  have hh := lt_of_not_ge h
-  change securityWeights.score _-mean*(seen indexDomain c).card < _ at hh
-  linarith
-
-theorem good_row_score (c : hashSpec.QueryCache) (hc : Good c) (m : Message) :
-    securityWeights.score (classCounts (rowDomain m) c decode) ≤
-      mean*(seen (rowDomain m) c).card+kappa*(2:ℝ)^86/100 := by
-  have h := hc (.inr (m,⟨72,by decide⟩))
-  change ¬scoreBad m c at h
-  have hh := lt_of_not_ge h
-  change securityWeights.score _-mean*(seen (rowDomain m) c).card < _ at hh
-  linarith
-
-theorem good_row_excess (c : hashSpec.QueryCache) (hc : Good c) (m : Message) :
-    excessWeights.score (classCounts (rowDomain m) c decode) ≤
-      (∑ i : Fin M,referenceWeight i*excess i)*(seen (rowDomain m) c).card+kappa*(2:ℝ)^86/100 := by
-  have h := hc (.inr (m,⟨73,by decide⟩))
-  change ¬excessBad m c at h
-  have hh := lt_of_not_ge h
-  unfold excessBad WeightedRow.Weights.M1 at hh
-  rw [excessWeights_mean] at hh
-  linarith
-
-theorem good_prefix (c : hashSpec.QueryCache) (hc : Good c) (m : Message) (j : Fin 72) :
-    (∑ i ∈ prefixClasses j,classProbability i)*(seen (rowDomain m) c).card -
-      ∑ i ∈ prefixClasses j,(classCounts (rowDomain m) c decode i:ℝ) ≤
-        (2:ℝ)^86/(100*(2:ℝ)^20) := by
-  have h := hc (.inr (m,⟨j.val,by have := j.isLt; omega⟩))
-  have he : event (.inr (m,⟨j.val,by have := j.isLt; omega⟩)) c = prefixBad m j c := by
-    dsimp only [event]
-    rw [dif_pos j.isLt]
-  rw [he] at h
-  have hh := (lt_of_not_ge h).le
-  change -(securityWeights.prefixWeights (prefixClasses j)).M1 _ _ ≤ _ at hh
-  rw [prefix_deficit] at hh
-  exact hh
-
-/-- On Good, the full-completion expected excess has a common class-independent
-ceiling. The failure-table allowance remains explicit and joint. -/
-theorem good_excess_payoff (c : hashSpec.QueryCache) (hc : Good c) (m : Message) :
-    (1-((seen (rowDomain m) c).card:ℝ)/(2:ℝ)^86)*(∑ i : Fin M,referenceWeight i*excess i)+
-      excessWeights.score (classCounts (rowDomain m) c decode)/(2:ℝ)^86 ≤
-        kappa*(2/5)+kappa/100 := by
-  have hs := good_row_excess c hc m
-  have hn : (0:ℝ)<2^86 := by positivity
-  have hd := (div_le_div_iff_of_pos_right hn).mpr hs
-  have hm := excess_mean_le
-  have he : (1-((seen (rowDomain m) c).card:ℝ)/(2:ℝ)^86)*(∑ i : Fin M,referenceWeight i*excess i)+
-      ((∑ i : Fin M,referenceWeight i*excess i)*(seen (rowDomain m) c).card+kappa*(2:ℝ)^86/100)/(2:ℝ)^86 =
-      (∑ i : Fin M,referenceWeight i*excess i)+kappa/100 := by ring
-  linarith
-
-#print axioms good_global
-#print axioms good_row_score
-#print axioms good_prefix
-#print axioms good_excess_payoff
-end OptimalOTS.WeightedConstruction.WideEmpirical
-end
-end
-
-/- Original module: Submissions.UpperCompressions.WideCachedRow; SHA256 a05acfd5a94ffbe092a16d0231abd0a750624e9b2b57a0e125ba1fa76de4320f. -/
 section
 
 /-! The actual pre-sign cache, viewed as a partially exposed nonce row. -/
@@ -1126,101 +617,9 @@ theorem counts_image (e : D → Q) (he : Function.Injective e) (c : Q → Option
   rw [seen_image,Finset.filter_image,Finset.card_image_of_injective _ he]
 end WeightedCacheCounts
 
-namespace OptimalOTS.WeightedConstruction.WideCachedRow
-open OracleSpec OracleComp OracleComp.EvalDist
-open WeightedSchedule WideDomains WideForest WeightedReference WeightedConstants
-open WeightedReplacement WeightedCompletion WeightedCacheCounts
-open scoped Classical
-attribute [local irreducible] Finset.univ Finset.filter
-
-def exposed (m : Message) (c : Cache) : Finset (BitVec 86) :=
-  Finset.univ.filter (fun η => (c (WideForest.encQuery (m,η))).isSome)
-def fixed (m : Message) (c : Cache) (η : BitVec 86) : Option (Fin M) :=
-  (c (WideForest.encQuery (m,η))).bind decode
-
-theorem row_injective (m : Message) : Function.Injective (fun η : BitVec 86 => WideForest.encQuery (m,η)) :=
-  fun _ _ h => WeightedSampling.Availability.nonce_query_inj m h
-
-theorem exposed_card (m : Message) (c : Cache) :
-    (exposed m c).card=(seen (rowDomain m) c).card :=
-  (seen_image_card _ (row_injective m) c).symm
-
-theorem fixed_counts (m : Message) (c : Cache) :
-    rowCount (exposed m c) (fixed m c)=classCounts (rowDomain m) c decode :=
-  (counts_image _ (row_injective m) c decode).symm
-
-theorem cached_known (m : Message) (c : Cache) (g : BitVec 342 → BitVec 256)
-    (η : BitVec 86) (hη : η ∈ exposed m c) :
-    decode (cachedRow 86 m c g η)=fixed m c η := by
-  have hc : (c (WideForest.encQuery (m,η))).isSome := (Finset.mem_filter.mp hη).2
-  cases hh : c (WideForest.encQuery (m,η)) with
-  | none => simp [hh] at hc
-  | some y =>
-    change decode ((c (WideForest.encQuery (m,η))).getD _)=(c (WideForest.encQuery (m,η))).bind decode
-    rw [hh]
-    rfl
-
-theorem cached_fresh (m : Message) (c : Cache) (g : BitVec 342 → BitVec 256)
-    (η : BitVec 86) (hη : η ∉ exposed m c) :
-    decode (cachedRow 86 m c g η)=decode (g (m++η)) := by
-  have hc : c (WideForest.encQuery (m,η))=none := by
-    cases hh : c (WideForest.encQuery (m,η)) with
-    | none => rfl
-    | some y => exact False.elim (hη (Finset.mem_filter.mpr ⟨Finset.mem_univ _,by simp [hh]⟩))
-  change decode ((c (WideForest.encQuery (m,η))).getD _)=_
-  rw [hc]
-  rfl
-
-theorem cached_fresh_probability (m : Message) (c : Cache) (η : BitVec 86)
-    (hη : η ∉ exposed m c) (i : Fin M) :
-    uniformMean (fun g : BitVec 342 → BitVec 256 =>
-      if decode (cachedRow 86 m c g η)=some i then 1 else 0)=classProbability i := by
-  simp only [cached_fresh m c _ η hη]
-  exact (uniformMean_coordinate (W:=BitVec 256) (m++η)
-    (fun x => if decode x=some i then 1 else 0)).trans (uniform_decode_probability i)
-
-theorem tableKernel_nonneg {D I : Type} [Fintype D] [Nonempty D] [DecidableEq D]
-    [Fintype I] [DecidableEq I] (k : ℕ) (table : D → Option I) (tier : I → ℕ)
-    (f : D → I → ℝ) (hf : ∀ a i,0 ≤ f a i) : 0 ≤ tableKernel k table tier f := by
-  rw [← iid_selected_score]
-  apply iidMean_nonneg
-  intro xs
-  cases hs : selected table tier xs with
-  | none => simp [score,hs]
-  | some p => simpa [score,hs] using hf p.1 p.2
-
-/-- Exact payoff of the actual all-L signing loop, from an arbitrary real cache.
-Its conditional row completion is averaged; no Good conditioning is performed. -/
-theorem actual_sign_payoff (m : Message) (c : Cache) (f : BitVec 86 → Fin M → ℝ)
-    (hf : ∀ a i,0 ≤ f a i) :
-    outE (WeightedSampling.loop 86 decode tier m L) c
-      (fun s => ENNReal.ofReal (score s (fun r => f r.1 r.2))) =
-      ENNReal.ofReal (uniformMean (fun g : BitVec 342 → BitVec 256 =>
-        tableKernel L (decode ∘ cachedRow 86 m c g) tier f)) := by
-  rw [outE_index342_preload]
-  have he (g : BitVec 342 → BitVec 256) :
-      outE (WeightedSampling.loop 86 decode tier m L) ((lengthSlice 342).preload c g)
-        (fun s => ENNReal.ofReal (score s (fun r => f r.1 r.2))) =
-        ENNReal.ofReal (tableKernel L (decode ∘ cachedRow 86 m c g) tier f) :=
-    E_loop_fixed_row_score 86 M L decode tier m (cachedRow 86 m c g)
-      ((lengthSlice 342).preload c g) (length_preload_row 86 m c g) f hf
-  calc
-    _ = E ($ᵗ (BitVec 342 → BitVec 256)) (fun g => ENNReal.ofReal
-        (tableKernel L (decode ∘ cachedRow 86 m c g) tier f)) := by
-      congr 1
-      funext g
-      exact he g
-    _ = _ := E_uniform_ofReal _ (fun g => tableKernel_nonneg L _ tier f hf)
-
-#print axioms exposed_card
-#print axioms fixed_counts
-#print axioms cached_fresh_probability
-#print axioms actual_sign_payoff
-end OptimalOTS.WeightedConstruction.WideCachedRow
 end
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementCompletion; SHA256 c3ad2e9a1618abf7712f7cdb58e6c60a013b4e2f1a2f06a426858633ca06c2d9. -/
 section
 
 /-! Exact conditional-completion tower for cache-sensitive terminal payoffs.
@@ -1345,9 +744,6 @@ theorem cacheE_finite_completion {D α : Type} [Fintype D]
               exact (cacheE_hash_some q k (S.preload c g) f (g d)
                 (S.preload_fresh_inside c g q d hc hq)).symm
 
-
-#print axioms cacheE_finite_completion
 end
 end WeightedReplacement
 end
-

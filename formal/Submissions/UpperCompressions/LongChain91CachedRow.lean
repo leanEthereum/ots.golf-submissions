@@ -270,11 +270,6 @@ theorem actual_excess_bound (m : Message) (c : Cache)
 
 /-! ## Adaptive average of the row-local exception -/
 
-theorem uniformMean_instances {A : Type} (fa fb : Fintype A) (f : A → ℝ) :
-    @uniformMean A fa f = @uniformMean A fb f := by
-  cases Subsingleton.elim fa fb
-  rfl
-
 theorem tableFailure_average { α : Type } (oa : OracleComp Spec α)
     (message : α → Message) (c : Cache)
     (hf : ∀ q : Query, q.1 = 342 → c q = none) :
@@ -292,92 +287,6 @@ The following stronger predicate records one completion table that is good for
 every message.  It exposes the exact `fullTableGood_kernel` bridge for callers
 that keep a global completion witness.
 -/
-
-def fullTableFailure (c : Cache) : ℝ :=
-  uniformMean (fun g : BitVec 342 → BitVec hashBits =>
-    if LongChain91Empirical.fullTableGood
-      (completedTable 342 c g) then 0 else 1)
-
-theorem fullTableGood_cached_kernel (m : Message) (c : Cache)
-    (g : BitVec 342 → BitVec hashBits)
-    (hg : LongChain91Empirical.fullTableGood (completedTable 342 c g))
-    (i : Fin M) :
-    kernel Chain18Compact.L
-      (fraction (weakRank tier i ∘ decode ∘ cachedRow 86 m c g))
-      (fraction (strictRank tier i ∘ decode ∘ cachedRow 86 m c g)) ≤
-        (99 / 98 : ℝ) * (referenceWeight i / classProbability i) := by
-  have hw :
-      (weakRank tier i ∘ decode ∘ cachedRow 86 m c g) =
-        (weakRank LongChain91Empirical.rank i ∘
-          LongChain91Empirical.cacheDecode ∘
-            fun η : BitVec 86 => completedTable 342 c g (m ++ η)) := by
-    funext η
-    rfl
-  have hs :
-      (strictRank tier i ∘ decode ∘ cachedRow 86 m c g) =
-        (strictRank LongChain91Empirical.rank i ∘
-          LongChain91Empirical.cacheDecode ∘
-            fun η : BitVec 86 => completedTable 342 c g (m ++ η)) := by
-    funext η
-    rfl
-  rw [hw, hs]
-  exact LongChain91Empirical.fullTableGood_kernel
-    (completedTable 342 c g) hg m i
-
-theorem actual_replay_bound_full (m : Message) (c : Cache) :
-    outE (WeightedSampling.loop 86 decode tier m Chain18Compact.L) c
-      (fun s => ENNReal.ofReal
-        (score s (fun r => replayScore m c r.1 r.2))) ≤
-      ENNReal.ofReal ((99 : ℝ) / 98 * securityWeights.hazard ((2 : ℝ)^86)
-        (seen (WideDomains.rowDomain m) c).card
-        (classCounts WideDomains.indexDomain c decode)
-        (classCounts (WideDomains.rowDomain m) c decode) +
-          fullTableFailure c) := by
-  rw [actual_sign_payoff m c _ (replayScore_nonneg m c)]
-  apply ENNReal.ofReal_le_ofReal
-  have h := replay_kernel_bound securityWeights Chain18Compact.L tier
-    (exposed m c) (fixed m c)
-    (fun g : BitVec 342 → BitVec hashBits => decode ∘ cachedRow 86 m c g)
-    (classCounts WideDomains.indexDomain c decode)
-    (cached_known m c) (cached_fresh_probability m c)
-    (fun g => LongChain91Empirical.fullTableGood (completedTable 342 c g))
-    ((99 : ℝ) / 98) (fullTableFailure c) (by norm_num)
-    (fun g hg i => fullTableGood_cached_kernel m c g hg i) le_rfl
-  rw [exposed_card, fixed_counts, Fintype.card_bitVec,
-    Nat.cast_pow, Nat.cast_ofNat] at h
-  exact h
-
-theorem actual_excess_bound_full (m : Message) (c : Cache)
-    (hc : LongChain91Empirical.Good c) :
-    outE (WeightedSampling.loop 86 decode tier m Chain18Compact.L) c
-      (fun s => ENNReal.ofReal (score s (fun r => excess r.2))) ≤
-      ENNReal.ofReal ((99 : ℝ) / 98 *
-        (((471 : ℝ) / 1000) * Chain18Compact.kappa) +
-          fullTableFailure c) := by
-  rw [actual_sign_payoff m c (fun _ i => excess i)
-    (fun _ i => LongChain91Empirical.excess_nonneg i)]
-  apply ENNReal.ofReal_le_ofReal
-  have h := excess_kernel_bound securityWeights Chain18Compact.L tier
-    (exposed m c) (fixed m c)
-    (fun g : BitVec 342 → BitVec hashBits => decode ∘ cachedRow 86 m c g)
-    (cached_known m c) (cached_fresh_probability m c)
-    excess LongChain91Empirical.excess_nonneg 1 zero_le_one excess_le_one
-    (fun g => LongChain91Empirical.fullTableGood (completedTable 342 c g))
-    ((99 : ℝ) / 98) (fullTableFailure c) (by norm_num)
-    (fun g hg i => fullTableGood_cached_kernel m c g hg i) le_rfl
-  rw [exposed_card, fixed_counts, Fintype.card_bitVec,
-    Nat.cast_pow, Nat.cast_ofNat, one_mul] at h
-  change _ ≤ (99 : ℝ) / 98 *
-    ((1 - ((seen (WideDomains.rowDomain m) c).card : ℝ) / (2 : ℝ)^86) *
-      (∑ i : Fin M, referenceWeight i * excess i) +
-      (∑ i : Fin M,
-        (classCounts (WideDomains.rowDomain m) c decode i : ℝ) *
-          (referenceWeight i / classProbability i * excess i)) / (2 : ℝ)^86) +
-      fullTableFailure c at h
-  rw [excess_score_identity] at h
-  have hb := mul_le_mul_of_nonneg_left (good_excess_payoff c hc m)
-    (show (0 : ℝ) ≤ 99 / 98 by norm_num)
-  exact h.trans (add_le_add hb le_rfl)
 
 /-! ## Cached alternate-class adapter -/
 
@@ -450,9 +359,6 @@ def alternatePayoff (m : Message) (c : Cache) :
     Option (WeightedSampling.Winner 86 M) → ℝ≥0∞ :=
   optionEvent (fun r => alternateClass c (m, r.1) r.2)
 
-@[simp] theorem alternatePayoff_none (m : Message) (c : Cache) :
-    alternatePayoff m c none = 0 := rfl
-
 @[simp] theorem alternatePayoff_some (m : Message) (c : Cache)
     (η : BitVec 86) (i : Fin M) :
     alternatePayoff m c (some (η, i)) =
@@ -497,18 +403,5 @@ theorem actual_alternative_bound (m : Message) (c : Cache) :
     rw [he]
     exact hzi
   · exact actual_replay_bound m c
-
-#print axioms exposed_card
-#print axioms cached_fresh_probability
-#print axioms actual_sign_payoff
-#print axioms actual_replay_bound
-#print axioms good_excess_payoff
-#print axioms actual_excess_bound
-#print axioms tableFailure_average
-#print axioms fullTableGood_cached_kernel
-#print axioms actual_replay_bound_full
-#print axioms actual_excess_bound_full
-#print axioms alternate_replayScore
-#print axioms actual_alternative_bound
 
 end OptimalOTS.WeightedConstruction.LongChain91CachedRow

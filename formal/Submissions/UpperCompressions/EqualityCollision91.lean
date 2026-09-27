@@ -58,10 +58,6 @@ def diagonalMean : ℝ := ∑ i, (w.g i)^2
 def rowSquareScore (row : ι → ℕ) : ℝ :=
   ∑ i, (row i : ℝ) * (w.g i)^2
 
-/-- Remaining mean forward-clock increment. -/
-def unseenDiagonalMean (k : ι → ℕ) : ℝ :=
-  ∑ i, if k i = 0 then (w.g i)^2 else 0
-
 private theorem collision_sum_change (f f' : ι → ℝ) (i : ι)
     (h : ∀ j, j ≠ i → f' j = f j) :
     (∑ j, f' j) = (∑ j, f j) + (f' i - f i) := by
@@ -73,17 +69,6 @@ private theorem collision_sum_change (f f' : ι → ℝ) (i : ι)
     · simp [hj, h j hj]
   rw [he, Finset.sum_add_distrib]
   simp
-
-theorem D_bump (row : ι → ℕ) (i : ι) :
-    w.D (bump row i) = w.D row + w.collisionMass i := by
-  unfold D
-  rw [collision_sum_change
-    (fun j => (row j : ℝ) * w.collisionMass j)
-    (fun j => (bump row i j : ℝ) * w.collisionMass j) i]
-  · simp only [bump, Function.update_self, Nat.cast_add, Nat.cast_one]
-    ring
-  · intro j hj
-    simp [bump, Function.update_of_ne hj]
 
 theorem X_bump (row : ι → ℕ) (i : ι) :
     w.X (bump row i) = w.X row +
@@ -98,18 +83,6 @@ theorem X_bump (row : ι → ℕ) (i : ι) :
   · intro j hj
     simp [bump, Function.update_of_ne hj]
 
-theorem Qrev_bump (row : ι → ℕ) (i : ι) :
-    w.Qrev (bump row i) = w.Qrev row +
-      (2 * (row i : ℝ) + 1) * w.collisionMass i := by
-  unfold Qrev
-  rw [collision_sum_change
-    (fun j => (row j : ℝ)^2 * w.collisionMass j)
-    (fun j => (bump row i j : ℝ)^2 * w.collisionMass j) i]
-  · simp only [bump, Function.update_self, Nat.cast_add, Nat.cast_one]
-    ring
-  · intro j hj
-    simp [bump, Function.update_of_ne hj]
-
 theorem Qrev_eq_D_add_X (row : ι → ℕ) :
     w.Qrev row = w.D row + w.X row := by
   unfold Qrev D X
@@ -118,74 +91,16 @@ theorem Qrev_eq_D_add_X (row : ι → ℕ) :
   intro i _
   ring
 
-theorem Qfwd_bump (k : ι → ℕ) (i : ι) :
-    w.Qfwd (bump k i) = w.Qfwd k +
-      if k i = 0 then w.collisionMass i else 0 := by
-  unfold Qfwd
-  rw [collision_sum_change
-    (fun j => if k j = 0 then 0 else w.collisionMass j)
-    (fun j => if bump k i j = 0 then 0 else w.collisionMass j) i]
-  · simp only [bump, Function.update_self]
-    by_cases h0 : k i = 0
-    · simp [h0]
-    · simp [h0]
-  · intro j hj
-    simp [bump, Function.update_of_ne hj]
-
-/-- One-query diagonal increment; rejection contributes zero. -/
-def dJump : Option ι → ℝ
-  | none => 0
-  | some i => w.collisionMass i
-
 /-- One-query ordered self-collision increment; rejection contributes zero. -/
 def xJump (row : ι → ℕ) : Option ι → ℝ
   | none => 0
   | some i => 2 * (row i : ℝ) * w.collisionMass i
-
-/-- One-query reverse square-clock increment. -/
-def qrevJump (row : ι → ℕ) : Option ι → ℝ
-  | none => 0
-  | some i => (2 * (row i : ℝ) + 1) * w.collisionMass i
-
-/-- One-query forward square-clock increment. -/
-def qfwdJump (k : ι → ℕ) : Option ι → ℝ
-  | none => 0
-  | some i => if k i = 0 then w.collisionMass i else 0
-
-theorem D_advance (row : ι → ℕ) (x : Option ι) :
-    w.D (advance row x) = w.D row + w.dJump x := by
-  cases x with
-  | none => simp [advance, dJump]
-  | some i => simpa [advance, dJump] using w.D_bump row i
 
 theorem X_advance (row : ι → ℕ) (x : Option ι) :
     w.X (advance row x) = w.X row + w.xJump row x := by
   cases x with
   | none => simp [advance, xJump]
   | some i => simpa [advance, xJump] using w.X_bump row i
-
-theorem Qrev_advance (row : ι → ℕ) (x : Option ι) :
-    w.Qrev (advance row x) = w.Qrev row + w.qrevJump row x := by
-  cases x with
-  | none => simp [advance, qrevJump]
-  | some i => simpa [advance, qrevJump] using w.Qrev_bump row i
-
-theorem Qfwd_advance (k : ι → ℕ) (x : Option ι) :
-    w.Qfwd (advance k x) = w.Qfwd k + w.qfwdJump k x := by
-  cases x with
-  | none => simp [advance, qfwdJump]
-  | some i => simpa [advance, qfwdJump] using w.Qfwd_bump k i
-
-theorem qrevJump_eq (row : ι → ℕ) (x : Option ι) :
-    w.qrevJump row x = w.dJump x + w.xJump row x := by
-  cases x <;> simp [qrevJump, dJump, xJump] <;> ring
-
-theorem expect_dJump : w.expect w.dJump = w.diagonalMean := by
-  unfold expect dJump diagonalMean collisionMass
-  simp only [mul_zero, zero_add]
-  apply Finset.sum_congr rfl
-  intro i _
-  field_simp [(w.p_pos i).ne']
 
 theorem expect_xJump (row : ι → ℕ) :
     w.expect (w.xJump row) = 2 * w.rowSquareScore row := by
@@ -196,52 +111,6 @@ theorem expect_xJump (row : ι → ℕ) :
   intro i _
   field_simp [(w.p_pos i).ne']
   <;> ring
-
-theorem expect_qrevJump (row : ι → ℕ) :
-    w.expect (w.qrevJump row) = w.diagonalMean + 2 * w.rowSquareScore row := by
-  rw [show w.qrevJump row = fun x => w.dJump x + w.xJump row x by
-    funext x
-    exact w.qrevJump_eq row x]
-  rw [expect_add, expect_dJump, expect_xJump]
-
-theorem expect_qfwdJump (k : ι → ℕ) :
-    w.expect (w.qfwdJump k) = w.unseenDiagonalMean k := by
-  unfold expect qfwdJump unseenDiagonalMean collisionMass
-  simp only [mul_zero, zero_add]
-  apply Finset.sum_congr rfl
-  intro i _
-  by_cases h0 : k i = 0
-  · simp only [if_pos h0]
-    field_simp [(w.p_pos i).ne']
-  · simp [h0]
-
-theorem unseenDiagonalMean_le (k : ι → ℕ) :
-    w.unseenDiagonalMean k ≤ w.diagonalMean := by
-  unfold unseenDiagonalMean diagonalMean
-  apply Finset.sum_le_sum
-  intro i _
-  split_ifs
-  · exact le_rfl
-  · exact sq_nonneg _
-
-theorem rowSquareScore_nonneg (row : ι → ℕ) : 0 ≤ w.rowSquareScore row := by
-  unfold rowSquareScore
-  exact Finset.sum_nonneg fun i _ => mul_nonneg (Nat.cast_nonneg _) (sq_nonneg _)
-
-theorem rowSquareScore_le_score_mul (row : ι → ℕ) (G : ℝ)
-    (hg : ∀ i, w.g i ≤ G) :
-    w.rowSquareScore row ≤ G * w.score row := by
-  unfold rowSquareScore score
-  rw [Finset.mul_sum]
-  apply Finset.sum_le_sum
-  intro i _
-  have hrow : 0 ≤ (row i : ℝ) := Nat.cast_nonneg _
-  have hgi : 0 ≤ w.g i := w.g_nonneg i
-  calc
-    (row i : ℝ) * (w.g i)^2 ≤ (row i : ℝ) * (G * w.g i) :=
-      mul_le_mul_of_nonneg_left
-        (by simpa only [pow_two] using mul_le_mul_of_nonneg_right (hg i) hgi) hrow
-    _ = G * ((row i : ℝ) * w.g i) := by ring
 
 theorem rowSquareScore_le_total (row : ι → ℕ) (r G : ℝ)
     (hG : 0 ≤ G) (hg : ∀ i, w.g i ≤ G)
@@ -266,9 +135,6 @@ theorem expect_xJump_le (row : ι → ℕ) (r G : ℝ)
   rw [expect_xJump]
   nlinarith [w.rowSquareScore_le_total row r G hG hg hrow]
 
-theorem dJump_nonneg (x : Option ι) : 0 ≤ w.dJump x := by
-  cases x <;> simp [dJump, collisionMass_nonneg]
-
 theorem xJump_nonneg (row : ι → ℕ) (x : Option ι) : 0 ≤ w.xJump row x := by
   cases x with
   | none => simp [xJump]
@@ -276,49 +142,6 @@ theorem xJump_nonneg (row : ι → ℕ) (x : Option ι) : 0 ≤ w.xJump row x :=
       simp only [xJump]
       exact mul_nonneg (mul_nonneg (by norm_num) (Nat.cast_nonneg _))
         (w.collisionMass_nonneg i)
-
-theorem qrevJump_nonneg (row : ι → ℕ) (x : Option ι) :
-    0 ≤ w.qrevJump row x := by
-  rw [qrevJump_eq]
-  exact add_nonneg (w.dJump_nonneg x) (w.xJump_nonneg row x)
-
-theorem qfwdJump_nonneg (k : ι → ℕ) (x : Option ι) :
-    0 ≤ w.qfwdJump k x := by
-  cases x with
-  | none => simp [qfwdJump]
-  | some i =>
-      simp only [qfwdJump]
-      split_ifs
-      · exact w.collisionMass_nonneg i
-      · exact le_rfl
-
-theorem Qrev_nonneg (row : ι → ℕ) : 0 ≤ w.Qrev row := by
-  unfold Qrev
-  exact Finset.sum_nonneg fun i _ => mul_nonneg (sq_nonneg _) (w.collisionMass_nonneg i)
-
-theorem D_nonneg (row : ι → ℕ) : 0 ≤ w.D row := by
-  unfold D
-  exact Finset.sum_nonneg fun i _ =>
-    mul_nonneg (Nat.cast_nonneg _) (w.collisionMass_nonneg i)
-
-theorem X_nonneg (row : ι → ℕ) : 0 ≤ w.X row := by
-  have hle : w.D row ≤ w.Qrev row := by
-    unfold Qrev D
-    apply Finset.sum_le_sum
-    intro i _
-    have hn : 0 ≤ (row i : ℝ) := Nat.cast_nonneg _
-    have hm := w.collisionMass_nonneg i
-    have hs : (row i : ℝ) ≤ (row i : ℝ)^2 := by
-      have hi : (row i : ℝ) = 0 ∨ 1 ≤ (row i : ℝ) := by
-        cases h : row i with
-        | zero => exact Or.inl (by simp [h])
-        | succ n => exact Or.inr (by exact_mod_cast Nat.succ_le_succ (Nat.zero_le n))
-      rcases hi with hi | hi
-      · simp [hi]
-      · nlinarith
-    exact mul_le_mul_of_nonneg_right hs hm
-  rw [w.Qrev_eq_D_add_X row] at hle
-  linarith
 
 theorem Qfwd_nonneg (k : ι → ℕ) : 0 ≤ w.Qfwd k := by
   unfold Qfwd
@@ -561,30 +384,6 @@ def collisionExpectLinear : (Option ι → ℝ) →ₗ[ℝ] ℝ where
   map_add' := w.expect_add
   map_smul' c f := w.expect_smul c f
 
-/-- One-step compensated MGF for the stopped self-collision clock. -/
-theorem xJump_compensated_mgf_of_cap (row u : ι → ℕ) (θ J : ℝ)
-    (hθ : 0 ≤ θ) (hJ : 0 ≤ J) (hθJ : θ * J < 3)
-    (hrow : ∀ i, row i ≤ u i)
-    (hcap : ∀ i, 2 * (u i : ℝ) * w.collisionMass i ≤ J) :
-    w.expect (fun x => Real.exp
-      (θ * (w.xJump row x - w.expect (w.xJump row)) -
-        θ^2 * (J * w.expect (w.xJump row)) / (2 * (1 - θ * J / 3)))) ≤ 1 := by
-  let E := w.collisionExpectLinear
-  have hnorm : E (fun _ => 1) = 1 := w.expect_one
-  have hmean : E (fun x => w.xJump row x - w.expect (w.xJump row)) = 0 := by
-    change w.expect (fun x => w.xJump row x - w.expect (w.xJump row)) = 0
-    rw [expect_sub, expect_const, sub_self]
-  have habs : ∀ x, |w.xJump row x - w.expect (w.xJump row)| ≤ J := by
-    intro x
-    exact w.centered_abs_le _ _
-      (fun y => ⟨w.xJump_nonneg row y, w.xJump_le_of_cap row u J hJ hrow hcap y⟩) x
-  have hsecond : E (fun x => (w.xJump row x - w.expect (w.xJump row))^2) ≤
-      J * w.expect (w.xJump row) :=
-    w.xJump_centered_variance_le_of_cap row u J hJ hrow hcap
-  exact WeightedMGF.compensated_mgf E w.expect_mono hnorm
-    (fun x => w.xJump row x - w.expect (w.xJump row)) θ J
-    (J * w.expect (w.xJump row)) hθ hJ hθJ habs hmean hsecond
-
 /-- The stopped-process interface: replace the exact conditional drift by any
 predictable upper bound `μ`, charging the corresponding larger variance rate. -/
 theorem xJump_upper_compensated_mgf_of_cap (row u : ι → ℕ) (θ J μ : ℝ)
@@ -620,13 +419,5 @@ theorem xJump_upper_compensated_mgf_of_cap (row u : ι → ℕ) (θ J μ : ℝ)
   have hd : 0 < 2*(1-θ*J/3) := by linarith
   have hm := mul_le_mul_of_nonneg_left hmean hθ
   linarith
-
-#print axioms Qrev_eq_D_add_X
-#print axioms X_bump
-#print axioms expect_xJump
-#print axioms positiveInside_square_envelope
-#print axioms positiveOutside_square_envelope
-#print axioms xJump_compensated_mgf_of_cap
-#print axioms xJump_upper_compensated_mgf_of_cap
 
 end WeightedRow.Weights

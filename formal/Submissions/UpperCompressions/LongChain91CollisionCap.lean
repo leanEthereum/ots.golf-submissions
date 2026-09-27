@@ -1,6 +1,243 @@
 import Submissions.UpperCompressions.LongChain91Occupancy
-import Submissions.UpperCompressions.CollisionCache91
 import Submissions.UpperCompressions.LongChain91SecurityData
+import Submissions.UpperCompressions.EqualityCollision91
+import Submissions.UpperCompressions.ProofBundle12
+
+/-!
+# Actual-cache bridge for equality replay clocks
+
+The equality collision algebra in `EqualityCollision91` is phrased for two
+multiplicity vectors: all exposed index inputs and one distinguished nonce row.
+This file connects those vectors to the contract's real memoized random-oracle
+cache.  A fresh row query advances both vectors with the same decoded answer; a
+fresh index query outside the row advances only the global vector; every cache
+hit and every private query leaves both vectors fixed.
+
+The bridge is deliberately generic in the finite decoder.  The chain-18
+schedule can instantiate it once its decoder-fiber theorem is available.
+-/
+
+noncomputable section
+
+open OracleSpec OracleComp OracleComp.EvalDist
+open scoped Classical BigOperators ENNReal
+
+namespace EqualityCollisionCache91
+
+open WeightedCacheCounts WeightedRealExecution
+open WeightedRow.Weights WeightedDualCache
+
+set_option maxHeartbeats 1600000
+
+variable {ι : Type} [Fintype ι] [DecidableEq ι]
+
+/-! The diagonal and forward clocks also chain through complete adaptive
+`OracleComp` programs.  These two lemmas use the one-domain cache kernel: `D`
+is an exact martingale after subtracting its mean, while `Qfwd` is a
+supermartingale after subtracting the same envelope. -/
+
+/-! ## The stopped self-collision process -/
+
+/-- Decoded class multiplicities cannot outnumber the finite set of inputs
+from which they were obtained.  Rejected decoder outputs account for the
+possible strict inequality. -/
+theorem counts_sum_le_card {Q : Type} [DecidableEq Q]
+    (S : Finset Q) (answer : Q → Option ι) :
+    (∑ i : ι, WeightedPublicCounts.counts S answer i) ≤ S.card := by
+  classical
+  induction S using Finset.induction_on with
+  | empty => simp [WeightedPublicCounts.counts]
+  | @insert q S hq ih =>
+      rw [Finset.card_insert_of_notMem hq]
+      simp_rw [WeightedPublicCounts.counts_insert_apply S answer q hq]
+      rw [Finset.sum_add_distrib]
+      have hone : (∑ i : ι, if answer q = some i then 1 else 0) ≤ 1 := by
+        cases ha : answer q with
+        | none => simp [ha]
+        | some j => simp [ha]
+      omega
+
+theorem classCounts_sum_le_seen {B : Type} {D : Type} [DecidableEq D]
+    (A : Finset D) (cache : D → Option B) (decode : B → Option ι) :
+    (∑ i : ι, WeightedCacheCounts.classCounts A cache decode i) ≤
+      (WeightedCacheCounts.seen A cache).card := by
+  unfold WeightedCacheCounts.classCounts
+  exact counts_sum_le_card _ _
+
+/-- Self-collision martingale coordinate after subtracting the deterministic
+envelope for the accumulated conditional means `2 r G²`. -/
+def xZ (w : WeightedRow.Weights ι) (G : ℝ) (r : ℕ) (row : ι → ℕ) : ℝ :=
+  w.X row - G^2 * (r : ℝ) * ((r : ℝ) - 1)
+
+/-- Predictable variance clock paired with `xZ`. -/
+def xW (J G : ℝ) (r : ℕ) : ℝ :=
+  J * G^2 * (r : ℝ) * ((r : ℝ) - 1)
+
+theorem xZ_advance (w : WeightedRow.Weights ι) (G : ℝ) (r : ℕ)
+    (row : ι → ℕ) (x : Option ι) :
+    xZ w G (r+1) (advance row x) =
+      xZ w G r row + (w.xJump row x - 2*(r:ℝ)*G^2) := by
+  unfold xZ
+  rw [w.X_advance]
+  push_cast
+  ring
+
+theorem xW_succ (J G : ℝ) (r : ℕ) :
+    xW J G (r+1) = xW J G r + J*(2*(r:ℝ)*G^2) := by
+  unfold xW
+  push_cast
+  ring
+
+/-- Exponential potential used by the stopped process. -/
+def xPhi (w : WeightedRow.Weights ι) (θ J G : ℝ) (r : ℕ)
+    (row : ι → ℕ) : ℝ :=
+  Real.exp (θ*xZ w G r row - θ^2*xW J G r /
+    (2*(1-θ*J/3)))
+
+theorem xPhi_advance (w : WeightedRow.Weights ι) (θ J G : ℝ) (r : ℕ)
+    (row : ι → ℕ) (x : Option ι) :
+    xPhi w θ J G (r+1) (advance row x) =
+      xPhi w θ J G r row * Real.exp
+        (θ*(w.xJump row x-2*(r:ℝ)*G^2) -
+          θ^2*(J*(2*(r:ℝ)*G^2))/(2*(1-θ*J/3))) := by
+  unfold xPhi
+  rw [xZ_advance, xW_succ]
+  rw [← Real.exp_add]
+  congr 1
+  ring
+
+/-- Occupancy cap for a distinguished row, expressed on the actual cache. -/
+def OccupancyGood (A : Finset OptimalOTS.Query)
+    (decode : BitVec OptimalOTS.hashBits → Option ι) (u : ι → ℕ)
+    (cache : OptimalOTS.hashSpec.QueryCache) : Prop :=
+  ∀ i, WeightedCacheCounts.classCounts A cache decode i ≤ u i
+
+/-- The compensated self-collision potential is a supermartingale for one
+primitive query of the actual memoized oracle, until the occupancy cap fails. -/
+theorem actual_xPhi_step (w : WeightedRow.Weights ι)
+    (A Gdom : Finset OptimalOTS.Query) (hAG : A ⊆ Gdom)
+    (decode : BitVec OptimalOTS.hashBits → Option ι)
+    (hfiber : ∀ x, ((Finset.univ.filter (fun b => decode b = x)).card : ℝ) /
+      Fintype.card (BitVec OptimalOTS.hashBits) = w.classMass x)
+    (u : ι → ℕ) (G θ J : ℝ)
+    (hG : 0 ≤ G) (hg : ∀ i, w.g i ≤ G)
+    (hθ : 0 ≤ θ) (hJ : 0 ≤ J) (hθJ : θ*J < 3)
+    (hcap : ∀ i, 2*(u i:ℝ)*w.collisionMass i ≤ J)
+    (t : OptimalOTS.Spec.Domain) (cache : OptimalOTS.hashSpec.QueryCache)
+    (hgood : OccupancyGood A decode u cache) :
+    realEval ((OptimalOTS.oracleImpl t).run cache) (fun out =>
+      xPhi w θ J G (WeightedCacheCounts.seen A out.2).card
+        (WeightedCacheCounts.classCounts A out.2 decode)) ≤
+      xPhi w θ J G (WeightedCacheCounts.seen A cache).card
+        (WeightedCacheCounts.classCounts A cache decode) := by
+  let r := (WeightedCacheCounts.seen A cache).card
+  let row := WeightedCacheCounts.classCounts A cache decode
+  have hsumNat : (∑ i : ι, row i) ≤ r := by
+    exact classCounts_sum_le_seen A cache decode
+  have hsum : (∑ i : ι, (row i : ℝ)) ≤ (r : ℝ) := by
+    exact_mod_cast hsumNat
+  have hmean : w.expect (w.xJump row) ≤ 2*(r:ℝ)*G^2 :=
+    w.expect_xJump_le row (r:ℝ) G hG hg hsum
+  have hmgf := w.xJump_upper_compensated_mgf_of_cap row u θ J
+    (2*(r:ℝ)*G^2) hθ hJ hθJ hgood hcap hmean
+  have hlaw := actual_query_law w A Gdom hAG decode hfiber t cache
+    (fun r _ row => xPhi w θ J G r row)
+  rw [hlaw]
+  cases hs : protectedPhase A Gdom t cache with
+  | idle =>
+      simp only [hs, after, expect_const]
+      exact le_rfl
+  | outside =>
+      simp only [hs, after, expect_const]
+      exact le_rfl
+  | inside =>
+      simp only [hs, after]
+      change w.expect (fun x => xPhi w θ J G (r+1) (advance row x)) ≤
+        xPhi w θ J G r row
+      rw [show (fun x => xPhi w θ J G (r+1) (advance row x)) =
+          (fun x => xPhi w θ J G r row * Real.exp
+            (θ*(w.xJump row x-2*(r:ℝ)*G^2) -
+              θ^2*(J*(2*(r:ℝ)*G^2))/(2*(1-θ*J/3)))) by
+        funext x
+        exact xPhi_advance w θ J G r row x]
+      rw [w.expect_smul]
+      have hm := mul_le_mul_of_nonneg_left hmgf
+        (Real.exp_nonneg (θ*xZ w G r row - θ^2*xW J G r/(2*(1-θ*J/3))))
+      simpa only [xPhi, mul_one] using hm
+
+/-- Cache specialization of the two stopped-process coordinates. -/
+def cacheXz (w : WeightedRow.Weights ι) (A : Finset OptimalOTS.Query)
+    (decode : BitVec OptimalOTS.hashBits → Option ι) (G : ℝ)
+    (cache : OptimalOTS.hashSpec.QueryCache) : ℝ :=
+  xZ w G (WeightedCacheCounts.seen A cache).card
+    (WeightedCacheCounts.classCounts A cache decode)
+
+def cacheXw (A : Finset OptimalOTS.Query) (J G : ℝ)
+    (cache : OptimalOTS.hashSpec.QueryCache) : ℝ :=
+  xW J G (WeightedCacheCounts.seen A cache).card
+
+/-- Maximal Freedman bound for the actual oracle execution, stopped before an
+occupancy-cap violation.  The theorem chains the one-query cache law through
+the real `OracleComp` syntax; no independent-draw execution is substituted. -/
+theorem actual_stopped_x_freedman {α : Type}
+    (w : WeightedRow.Weights ι)
+    (A Gdom : Finset OptimalOTS.Query) (hAG : A ⊆ Gdom)
+    (decode : BitVec OptimalOTS.hashBits → Option ι)
+    (hfiber : ∀ x, ((Finset.univ.filter (fun b => decode b = x)).card : ℝ) /
+      Fintype.card (BitVec OptimalOTS.hashBits) = w.classMass x)
+    (u : ι → ℕ) (G J : ℝ)
+    (hG : 0 ≤ G) (hg : ∀ i, w.g i ≤ G) (hJ : 0 ≤ J)
+    (hcap : ∀ i, 2*(u i:ℝ)*w.collisionMass i ≤ J)
+    (oa : OracleComp OptimalOTS.Spec α)
+    (initial : OptimalOTS.hashSpec.QueryCache)
+    (hr0 : (WeightedCacheCounts.seen A initial).card = 0)
+    (hk0 : WeightedCacheCounts.classCounts A initial decode = fun _ => 0)
+    (a v : ℝ) (ha : 0 < a) (hv : 0 < v) :
+    let hit := fun (_ : ℕ) (cache : OptimalOTS.hashSpec.QueryCache) =>
+      a ≤ cacheXz w A decode G cache ∧ cacheXw A J G cache ≤ v
+    let kill := fun (_ : ℕ) (cache : OptimalOTS.hashSpec.QueryCache) =>
+      ¬ OccupancyGood A decode u cache
+    Pr[fun out => out.2.status = WeightedFirstHit.Status.hit |
+      (simulateQ (WeightedOracleExecution.stoppedImpl OptimalOTS.oracleImpl hit kill) oa).run
+        (WeightedFirstHit.classify hit kill 0 initial)] ≤
+      ENNReal.ofReal (Real.exp (-a^2/(2*(v+J*a/3)))) := by
+  dsimp only
+  let hit := fun (_ : ℕ) (cache : OptimalOTS.hashSpec.QueryCache) =>
+    a ≤ cacheXz w A decode G cache ∧ cacheXw A J G cache ≤ v
+  let kill := fun (_ : ℕ) (cache : OptimalOTS.hashSpec.QueryCache) =>
+    ¬ OccupancyGood A decode u cache
+  apply WeightedOracleExecution.actual_stopped_freedman
+    OptimalOTS.oracleImpl oa
+    (fun _ cache => cacheXz w A decode G cache)
+    (fun _ cache => cacheXw A J G cache)
+    initial a v J ha hv hJ
+  · unfold cacheXz xZ
+    rw [hr0, hk0]
+    simp [WeightedRow.Weights.X]
+  · simp [cacheXw, xW, hr0]
+  · intro θ hθ hθJ t _ cache _ hnotKill
+    have hgood : OccupancyGood A decode u cache := by
+      exact Classical.not_not.mp hnotKill
+    change expectedValue ((OptimalOTS.oracleImpl t).run cache) (fun out =>
+      ENNReal.ofReal (xPhi w θ J G (WeightedCacheCounts.seen A out.2).card
+        (WeightedCacheCounts.classCounts A out.2 decode))) ≤
+      ENNReal.ofReal (xPhi w θ J G (WeightedCacheCounts.seen A cache).card
+        (WeightedCacheCounts.classCounts A cache decode))
+    calc
+      _ = ENNReal.ofReal (realEval ((OptimalOTS.oracleImpl t).run cache) (fun out =>
+          xPhi w θ J G (WeightedCacheCounts.seen A out.2).card
+            (WeightedCacheCounts.classCounts A out.2 decode))) :=
+        (WeightedRealExecution.ofReal_realEval _ _ (fun _ => by
+          unfold xPhi
+          exact Real.exp_nonneg _)).symm
+      _ ≤ _ := ENNReal.ofReal_le_ofReal (actual_xPhi_step w A Gdom hAG decode hfiber
+        u G θ J hG hg hθ.le hJ hθJ hcap t cache hgood)
+  · intro _ _ hh
+    exact hh.1
+  · intro _ _ hh
+    exact hh.2
+
+end EqualityCollisionCache91
 
 /-!
 # Concrete collision cap for the cost-91 long-chain schedule
@@ -280,11 +517,5 @@ theorem completed_occupancyGood
         rw [hcards] at hnamed
         exact hnamed
       omega
-
-#print axioms capTier_kernel_numerator
-#print axioms capTier_kernelUpper_le
-#print axioms security_collisionMass_eq
-#print axioms collision_cap
-#print axioms completed_occupancyGood
 
 end OptimalOTS.WeightedConstruction.LongChain91CollisionCap

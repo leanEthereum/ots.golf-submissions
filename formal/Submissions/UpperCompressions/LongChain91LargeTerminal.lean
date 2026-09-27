@@ -20,36 +20,6 @@ namespace WeightedOracleExecution
 
 variable { ι S α I : Type } {spec : OracleSpec ι} [spec.Inhabited]
 
-/-- Enlarging a hit predicate can only increase its first-hit probability. -/
-theorem firstHitRun_mono
-    (impl : QueryImpl spec (StateT S ProbComp))
-    (hit₁ hit₂ : ℕ → S → Prop)
-    (hsub : ∀ n s, hit₁ n s → hit₂ n s)
-    (oa : OracleComp spec α) (t : ℕ) (s : S) :
-    Pr[= true | firstHitRun impl hit₁ (fun _ _ => False) oa t s] ≤
-      Pr[= true | firstHitRun impl hit₂ (fun _ _ => False) oa t s] := by
-  induction oa using OracleComp.inductionOn generalizing t s with
-  | pure a =>
-      by_cases h₁ : hit₁ t s
-      · have h₂ := hsub t s h₁
-        simp [h₁, h₂]
-      · by_cases h₂ : hit₂ t s <;> simp [h₁, h₂]
-  | query_bind q k ih =>
-      by_cases h₁ : hit₁ t s
-      · have h₂ := hsub t s h₁
-        simp [firstHitRun_query_bind, h₁, h₂]
-      · by_cases h₂ : hit₂ t s
-        · simpa [firstHitRun_query_bind, h₁, h₂] using
-            (probOutput_le_one :
-            Pr[= true | firstHitRun impl hit₁ (fun _ _ => False)
-              ((liftM (spec.query q) : OracleComp spec (spec.Range q)) >>= k)
-              t s] ≤ 1)
-        · simp only [firstHitRun_query_bind, h₁, h₂, if_false,
-            probOutput_bind_eq_expectedValue]
-          apply expectedValue_mono
-          intro out
-          exact ih out.1 (t + 1) out.2
-
 /-- A larger killing predicate stops earlier and therefore has no larger
 hit-before-kill probability. -/
 theorem firstHitRun_kill_antitone
@@ -69,67 +39,6 @@ theorem firstHitRun_kill_antitone
         · have hk₁ : ¬ kill₁ t s := fun h => hk₂ (hsub t s h)
           simp only [firstHitRun_query_bind, hh, hk₁, hk₂, if_false,
             probOutput_bind_eq_expectedValue]
-          apply expectedValue_mono
-          intro out
-          exact ih out.1 (t + 1) out.2
-
-/-- Finite union with a different killing predicate for each target.  This is
-the pathwise decomposition needed by the long-chain collision argument. -/
-theorem firstHitRun_union_varying_kill_le [Fintype I]
-    (impl : QueryImpl spec (StateT S ProbComp))
-    (hit kill : I → ℕ → S → Prop)
-    (oa : OracleComp spec α) (t : ℕ) (s : S) :
-    Pr[= true | firstHitRun impl (fun n s => ∃ i, hit i n s)
-        (fun _ _ => False) oa t s] ≤
-      (∑ i, Pr[= true | firstHitRun impl (hit i) (kill i) oa t s]) +
-      Pr[= true | firstHitRun impl (fun n s => ∃ i, kill i n s)
-        (fun _ _ => False) oa t s] := by
-  induction oa using OracleComp.inductionOn generalizing t s with
-  | pure a =>
-      by_cases hh : ∃ i, hit i t s
-      · obtain ⟨i, hi⟩ := hh
-        have hone : Pr[= true | firstHitRun impl (hit i) (kill i)
-            (pure a) t s] = 1 := by simp [hi]
-        have hsum := Finset.single_le_sum (s := Finset.univ)
-          (f := fun j : I =>
-            Pr[= true | firstHitRun impl (hit j) (kill j) (pure a) t s])
-          (fun j _ => zero_le) (Finset.mem_univ i)
-        rw [hone] at hsum
-        have hall : Pr[= true | firstHitRun impl
-            (fun n s => ∃ i, hit i n s) (fun _ _ => False)
-            (pure a) t s] = 1 := by
-          simp [show ∃ j, hit j t s from ⟨i, hi⟩]
-        rw [hall]
-        exact hsum.trans le_self_add
-      · simp [hh]
-  | query_bind q k ih =>
-      by_cases hh : ∃ i, hit i t s
-      · obtain ⟨i, hi⟩ := hh
-        have hone : Pr[= true | firstHitRun impl (hit i) (kill i)
-            ((liftM (spec.query q) : OracleComp spec (spec.Range q)) >>= k)
-            t s] = 1 := by
-          rw [firstHitRun_of_hit _ _ _ _ _ _ hi]
-          simp
-        have hsum := Finset.single_le_sum (s := Finset.univ)
-          (f := fun j : I => Pr[= true | firstHitRun impl (hit j) (kill j)
-            ((liftM (spec.query q) : OracleComp spec (spec.Range q)) >>= k)
-            t s]) (fun j _ => zero_le) (Finset.mem_univ i)
-        rw [hone] at hsum
-        exact (probOutput_le_one).trans (hsum.trans le_self_add)
-      · have hnone : ∀ i, ¬ hit i t s := fun i hi => hh ⟨i, hi⟩
-        by_cases hk : ∃ i, kill i t s
-        · have hone : Pr[= true | firstHitRun impl
-              (fun n s => ∃ i, kill i n s) (fun _ _ => False)
-              ((liftM (spec.query q) : OracleComp spec (spec.Range q)) >>= k)
-              t s] = 1 := by
-            rw [firstHitRun_of_hit _ _ _ _ _ _ hk]
-            simp
-          rw [hone]
-          exact (probOutput_le_one).trans le_add_self
-        · have hknone : ∀ i, ¬ kill i t s := fun i hi => hk ⟨i, hi⟩
-          simp only [firstHitRun_query_bind, hh, hk, hnone, hknone,
-            exists_false, if_false, probOutput_bind_eq_expectedValue]
-          rw [← expectedValue_finsetSum, ← expectedValue_add]
           apply expectedValue_mono
           intro out
           exact ih out.1 (t + 1) out.2
@@ -805,19 +714,6 @@ theorem largeBad_implies_hit_of_support { β : Type }
   unfold Z
   linarith
 
-theorem actual_large_hazard_bound { β : Type }
-    (B : ℕ) (hlarge : N / 64 ≤ (B : ℝ))
-    (oa : OracleComp Spec β) (hbudget : CostAtMost oa B)
-    (initial : hashSpec.QueryCache)
-    (hfresh : ∀ q : Query, q.1 = 342 → initial q = none) :
-    Pr[fun out => LargeBad B out.2 |
-        (simulateQ oracleImpl oa).run initial] ≤
-      4 * eps244 + (2 : ℝ≥0∞)⁻¹ ^ 334 := by
-  apply (probEvent_mono (fun out hout hbad =>
-    Or.inl (largeBad_implies_hit_of_support B oa hbudget initial hfresh
-      out hout hbad))).trans
-  exact terminal_hits_or_cover_bound B hlarge oa hbudget initial hfresh
-
 def LargeGood (B : ℕ) (c : hashSpec.QueryCache) : Prop :=
   LongChain91Empirical.Good c ∧ ¬ LargeBad B c
 
@@ -839,14 +735,5 @@ theorem actual_large_good_failure_bound { β : Type }
   · exact Or.inr (Or.inl (Or.inl he))
   · exact Or.inl (largeBad_implies_hit_of_support B oa hbudget initial
       hfresh out hout hL)
-
-#print axioms WeightedOracleExecution.firstHitRun_union_varying_kill_le
-#print axioms WeightedOracleExecution.firstHitRun_union_or_kill_le
-#print axioms occupancy_crossing_bound
-#print axioms self_collision_exponent
-#print axioms self_occupancy_crossing_bound
-#print axioms terminal_hits_or_cover_bound
-#print axioms actual_large_hazard_bound
-#print axioms actual_large_good_failure_bound
 
 end OptimalOTS.WeightedConstruction.LongChain91LargeTerminal

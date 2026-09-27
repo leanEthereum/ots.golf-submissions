@@ -39,14 +39,6 @@ def cacheHazard (m : Message) (c : Cache) : ℝ :=
 def excessPayoff : Option (WeightedSampling.Winner 86 M) → ℝ≥0∞ :=
   fun s => ENNReal.ofReal (score s (fun r => excess r.2))
 
-theorem direct_replay_bound (m : Message) (c : Cache) :
-    outE (WeightedSampling.loop 86 decode tier m Chain18Compact.L) c
-        (LongChain91CachedRow.alternatePayoff m c) ≤
-      ENNReal.ofReal (C * cacheHazard m c) +
-        ENNReal.ofReal (LongChain91CachedRow.tableFailure m c) := by
-  exact (LongChain91CachedRow.actual_alternative_bound m c).trans
-    ENNReal.ofReal_add_le
-
 theorem direct_excess_bound (m : Message) (c : Cache)
     (hc : LongChain91Empirical.Good c) :
     outE (WeightedSampling.loop 86 decode tier m Chain18Compact.L) c
@@ -73,43 +65,5 @@ theorem concrete_postRate :
   · exact div_nonneg LongChain91BudgetArithmetic.kappa_pos.le (by norm_num)
   · exact mul_nonneg LongChain91BudgetArithmetic.C_nonneg
       (mul_nonneg (by norm_num) LongChain91BudgetArithmetic.kappa_pos.le)
-
-/-- Pointwise continuation bound before averaging over the adversary's public
-execution.  The completion error is charged once for the immediate replay and
-once per remaining signing opportunity. -/
-theorem direct_continuation_bound (m : Message) (c : Cache)
-    (hc : LongChain91Empirical.Good c) (remaining : ℕ) :
-    outE (WeightedSampling.loop 86 decode tier m Chain18Compact.L) c
-        (LongChain91CachedRow.alternatePayoff m c) +
-      remaining * (LongChain91.authRate +
-        outE (WeightedSampling.loop 86 decode tier m Chain18Compact.L) c
-          excessPayoff) ≤
-      ENNReal.ofReal (C * cacheHazard m c) +
-        ENNReal.ofReal postRate * remaining +
-        (1 + remaining) *
-          ENNReal.ofReal (LongChain91CachedRow.tableFailure m c) := by
-  have he : LongChain91.authRate +
-      outE (WeightedSampling.loop 86 decode tier m Chain18Compact.L) c
-        excessPayoff ≤
-      ENNReal.ofReal postRate +
-        ENNReal.ofReal (LongChain91CachedRow.tableFailure m c) := by
-    calc
-      _ ≤ LongChain91.authRate +
-          (ENNReal.ofReal (C * ((471 / 1000 : ℝ) * kappa)) +
-            ENNReal.ofReal (LongChain91CachedRow.tableFailure m c)) :=
-        add_le_add le_rfl (direct_excess_bound m c hc)
-      _ = _ := by rw [← add_assoc, concrete_postRate]
-  calc
-    _ ≤ (ENNReal.ofReal (C * cacheHazard m c) +
-          ENNReal.ofReal (LongChain91CachedRow.tableFailure m c)) +
-        remaining * (ENNReal.ofReal postRate +
-          ENNReal.ofReal (LongChain91CachedRow.tableFailure m c)) :=
-      add_le_add (direct_replay_bound m c) (mul_le_mul_right he remaining)
-    _ = _ := by ring
-
-#print axioms direct_replay_bound
-#print axioms direct_excess_bound
-#print axioms concrete_postRate
-#print axioms direct_continuation_bound
 
 end OptimalOTS.WeightedConstruction.LongChain91Continuation
