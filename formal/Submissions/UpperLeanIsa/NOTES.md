@@ -1,5 +1,31 @@
 # Fused chain binding at 1138 cycles
 
+## Local research toward 1110 (2026-09-27)
+
+`Solution.lean` and `claim.txt` still describe the upstream 1138-cycle construction.
+There is no 1110-cycle certificate in this checkout. Two independent research helpers
+have been compiled with the pinned Lean toolchain:
+
+- `LightRootShape.lean` proves packet-location separation, three-child packet binding,
+  acyclic evaluation, and conditional coverage of all 42 chains from one six-word root.
+  Twelve groups must each have a positive parent. Constant CV pairs distinguish parent
+  coordinates, and metadata distinguishes groups; only existing constants C_1 through
+  C_16 are needed. Availability, security, and a concrete machine remain to be proved.
+- `Nonce128Budget.lean` proves the budget charging and bounding algebra with a 2^128
+  nonce row. At attack budgets at most 2^127, setting the linear slope to hp/2 gives
+  an upper slope of 5*hp/8, compared with 3*hp/4 in the current numeric schedule.
+  This is not a security theorem. The current nonce is still 127 bits; the proposed
+  128-bit nonce fits exactly in the 5504-bit signature limit, but needs a new encoding,
+  length gate, signing-row analysis, numeric certificate, and machine proof.
+
+Numerical searches tried 128-bit effective indices, varied field widths, and mixed alias
+multiplicities within a cost band. None produced a candidate meeting every security,
+availability, and code-size condition. Search scores are floating-point diagnostics.
+A weighted acceptance condition accounting for zero-digit copies also needs an efficient
+machine checksum: its extra cost-factor initialization cannot be omitted from a cycle claim.
+
+The following notes describe the unchanged certified 1138 construction.
+
 Claim **1138 cycles**: **128 ordinary instructions + 89 BLAKE2S × 10 + 120 boundary cycles**.
 Every completing path executes 217 instructions. The 89 hashes are 86 chain steps, one index,
 and two root calls. This improves the 1209 reference by 71 cycles (5.87%) and the 1149 fused
