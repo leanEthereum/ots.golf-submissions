@@ -3,7 +3,7 @@ import Submissions.UpperRiscvHint.Program
 /-! The 320-cycle free-chain image. This module proves image validity; the execution and
 refinement certificate is a separate obligation.
 
-The view holds the nonce and then the 888-byte root region from 0x400040. Chain 0 is the free
+The view holds the nonce and then the 884-byte root region from 0x400040. Chain 0 is the free
 chain and chains 1 to 12 are the index caps: a cap takes answer bytes `[0,24)` as its 192-bit
 state and hashes in place, so its top is its value when its count is 0. Chains 13 to 32 are normal
 chains with their 144-bit value eight bytes into a 32-byte answer buffer. Chain 32, which hashes
@@ -28,11 +28,11 @@ open Riscv2Program (Code imm12 reject indexPrefix wordReg
 
 /-- The answer buffer of chain `k`, and for a cap also its value and state. -/
 def outAddr (k : ℕ) : ℕ :=
-  if k = 32 then 0x400038 else 0x400058 +
+  if k = 32 then 0x400038 else if k = 31 then 0x4003A8 else 0x400058 +
     if k ≤ 12 then 56 * k else if k < 25 then 56 * (k - 13) + 24 else 696 + 24 * (k - 25)
 /-- View byte offset of chain `k`'s value, after the 16-byte nonce. -/
 def wireByte (k : ℕ) : ℕ :=
-  if k = 32 then 0 else 24 +
+  if k = 32 then 6 else 24 +
     if k ≤ 12 then 56 * k else if k < 25 then 56 * (k - 13) + 32 else 704 + 24 * (k - 25)
 /-- The input address while chain `k` hashes: its value in the view, then its state. -/
 def work (k : ℕ) : ℕ := 0x400040 + wireByte k
@@ -66,7 +66,7 @@ def baseWord (g : ℕ) : ℕ :=
   (List.range 4).foldl (fun n j => n + baseLane (4 * g + j) * 2 ^ (16 * j)) 0
 /-- A cap pair's first chain hashes once per digit unit, one hash fewer than a normal chain, so
 its landing is one row later. -/
-def lead (q : ℕ) : ℕ := if q < 6 then 1 else 0
+def lead (q : ℕ) : ℕ := if q < 6 ∨ 15 ≤ q then 1 else 0
 def jumpImm (q : ℕ) : ℤ := (landing0 q : ℤ) + 4 * lead q - baseLane q
 def baseReg (_g : ℕ) : Reg := .x3
 
@@ -111,7 +111,7 @@ def prologue (q : ℕ) : Code :=
      .JALR .x0 .x28 (imm12 (jumpImm q))]
 /-- The last chain's state is the root input's first slot, so `x10` needs no move. The root length
 is the free base less 960. -/
-def root : Code := [.ADDI .x11 .x1 (imm12 (7104 - (freeBase : ℤ))), .ECALL]
+def root : Code := [.ADDI .x11 .x1 (imm12 (7072 - (freeBase : ℤ))), .ECALL]
 def pairCap (_q : ℕ) : ℕ := 24
 /-- Rejection fragments occupy previously unreachable padding, in discovery order. -/
 def rejectStubs : List ℕ := [655,4518,8382,12247,716,4581,8447,12310]
@@ -164,7 +164,7 @@ def dataImage : List (BitVec 8) :=
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
 theorem index_length : indexPhase.length = 34 := by decide +kernel
-theorem code_length : verifier.length = 15751 := by decide +kernel
+theorem code_length : verifier.length = 15750 := by decide +kernel
 theorem data_length : dataImage.length = 64 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel
 theorem image_valid : image.Valid := by

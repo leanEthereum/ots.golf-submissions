@@ -83,7 +83,7 @@ def freeBit : ℕ := 512
 /-- The signature bit placed at view bit `b`; 5504, past every signature, marks padding. -/
 def sigIndex (b : ℕ) : ℕ :=
   if b < 128 then b
-  else if b < 272 then 5360 + (b - 128)
+  else if 176 ≤ b ∧ b < 320 then 5360 + (b - 176)
   else if b < 320 then 5504
   else if b - 320 < 5568 then
     if (b - 320) % 448 < 192 then 128 + 192 * ((b - 320) / 448) + (b - 320) % 448

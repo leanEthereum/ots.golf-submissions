@@ -33,7 +33,7 @@ theorem completed_slotCat (s : MachineState) (c : (k : Chain) → BitVec (topBit
     rw [e, ← W_add] at h
     exact h
 
-/-- The completed tops form exactly the graph's 7104-bit root input. -/
+/-- The completed tops form exactly the graph's 7072-bit root input. -/
 theorem completed_root (s : MachineState) (c : (k : Chain) → BitVec (topBits k))
     (done : Completed s c 33) : MemBits s (W regionAddr) (rootCat c) := by
   unfold rootCat

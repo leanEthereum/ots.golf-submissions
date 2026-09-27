@@ -1,3 +1,50 @@
+# Hinted RISC-V: 318 cycles with caps at both root boundaries
+
+This extends lucemans's verified 320-cycle submission, source
+`3bfb3022de749d253c8faa5b5068c72b91e5bb06` (PR 53), by turning chains 31 and 32 into
+144-bit caps. Each can now have zero hashes. Together they save two hashes on
+ every accepting execution; the accepted digit set and 5504-bit signatures stay
+unchanged.
+
+Chain 32 occupies the bottom of the root. Its state and top use answer bits
+`[112,256)`, so the final chain's input pointer is already the root pointer.
+Chain 31 occupies the top of the root, uses answer bits `[0,144)`, and has its
+answer buffer moved up eight bytes. Chain 30's top grows from 192 to 256 bits
+to fill the intervening gap. These two boundary caps need no additional spacer
+chains. The root is 884 bytes (7072 bits), still 14 compression blocks. The lane
+scratch area moves to `0x4003D0` to avoid the final answer write.
+
+Caps are chains 0 through 12, 31 and 32; chain widths remain 192 bits for 0
+through 12 and 144 bits for 13 through 32. The final dispatch pair is now a
+cap pair. The free count still comes from view byte 64, and honest views remain
+7248 bits. Root resampling now allows a fiber of size `2^112` instead of `2^64`;
+the existing security bound already accommodates this and is proved in Lean.
+
+Exact accepting cost: **318 = 34 index + 4 free dispatch + 145 digit units +
+135 pair/root/decision overhead**. This is 178 hash-compression cycles and 140
+ordinary cycles. The image contains 15,750 instructions and 64 data bytes,
+**63,064 bytes** total.
+
+Local validation (2026-09-27, trusted contract
+`8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c`, Lean 4.33.1):
+
+- The full `submission.Certificate 318` and `image_size` build successfully.
+- Exact exported statements, definitions and primitives match the rendered
+  318 challenge; only `propext`, `Quot.sound` and `Classical.choice` occur as axioms.
+- An unchanged fresh Lean kernel replays all 22,416 exported declarations.
+  Export took 6.51 seconds; comparison and replay took 97.88 seconds wall clock.
+- An independent emulator executes the exported image and matches the complete
+  abstract hash transcript for 768 accepting fixtures, including both new
+  zero-count caps. It also checks all 256 free-byte values and six raw views.
+- The official local verifier refuses to run because this host lacks Landlock.
+  These are standalone local proof checks, not a hosted competition verdict.
+
+The previous 320-cycle notes follow as historical context. Their numerical
+costs, cap classification and boundary layout describe that predecessor; the
+current construction is specified above and by the Lean definitions.
+
+---
+
 # Hinted RISC-V: a free chain, 320 cycles
 
 This entry changes one thing in the 321-cycle free-chain entry: the chain that hashes last,

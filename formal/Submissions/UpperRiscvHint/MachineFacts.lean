@@ -97,7 +97,7 @@ abbrev W (n : ℕ) : Word := BitVec.ofNat 64 n
 def dataAddr : ℕ := 0x200000
 
 /-- The root input region: it starts right after the 128-bit nonce. -/
-def regionAddr : ℕ := 0x400040
+def regionAddr : ℕ := 0x400046
 
 theorem W_toNat (n : ℕ) (h : n < 2 ^ 64) : (W n).toNat = n := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]

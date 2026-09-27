@@ -8,7 +8,7 @@ namespace OptimalOTS.CappedCost
 
 /-- Per-pair cycles besides one hash per digit unit: the length setup before pair 6, the prologue,
 the pointer move, and the extra hash of each normal chain. -/
-def overhead (q : ℕ) : ℕ := (if q < 6 then 6 else 8) + if q = 6 then 1 else 0
+def overhead (q : ℕ) : ℕ := (if q < 6 ∨ 15 ≤ q then 6 else 8) + if q = 6 then 1 else 0
 
 def rejectCost (q : ℕ) : ℕ := 8 + if q = 6 then 1 else 0
 
@@ -32,10 +32,10 @@ theorem cost_le (w : ℕ → ℕ) : ∀ n q, cost w n q ≤ 33 * n + 20 := by
     · unfold rejectCost; split_ifs <;> omega
 
 set_option maxHeartbeats 2000000 in
-/-- When all sixteen pairs pass, the pairs, the root and the decision cost 137 cycles besides the
+/-- When all sixteen pairs pass, the pairs, the root and the decision cost 135 cycles besides the
 digit sum. -/
 theorem cost_allowed (w : ℕ → ℕ) (hw : ∀ q < 16, w q ≤ PairCode.cap q) :
-    cost w 16 0 = 137 + ∑ q ∈ Finset.range 16, w q := by
+    cost w 16 0 = 135 + ∑ q ∈ Finset.range 16, w q := by
   have h0 := hw 0 (by omega); have h1 := hw 1 (by omega); have h2 := hw 2 (by omega)
   have h3 := hw 3 (by omega); have h4 := hw 4 (by omega); have h5 := hw 5 (by omega)
   have h6 := hw 6 (by omega); have h7 := hw 7 (by omega); have h8 := hw 8 (by omega)
@@ -86,10 +86,10 @@ theorem stagedCost_le (index : RawIdx) : stagedCost index 16 0 ≤ 548 := by
   rw [stagedCost_eq index 16 0 (by decide)]
   exact CappedCost.cost_le _ 16 0
 
-/-- When every pair passes, the pairs, the root and the decision cost 137 cycles besides the
+/-- When every pair passes, the pairs, the root and the decision cost 135 cycles besides the
 digit sum. -/
 theorem stagedCost_allowed (index : RawIdx) (caps : ∀ q : Fin 16, PairAllowed index.val q) :
-    stagedCost index 16 0 = 137 + digitSum index.val := by
+    stagedCost index 16 0 = 135 + digitSum index.val := by
   rw [stagedCost_eq index 16 0 (by decide), CappedCost.cost_allowed]
   · unfold digitSum
     have h := sum_digit_pairs (digit index.val) 16
@@ -392,7 +392,7 @@ theorem freeDecision_rejects (index : RawIdx) (payload : List Bool) (pk : Public
 theorem remaining_free (index : RawIdx) (c : ℕ) (hc : c < 16) (rank : freeDigit index.val = c) :
     remaining index 0 = c := by
   rw [steps_eq_digit]
-  simp only [chainDigit, Fin.val_zero, if_true, show (0 : ℕ) < 13 by omega]
+  simp only [chainDigit, Fin.val_zero, if_true, show (0 : ℕ) < 13 by omega, true_or]
   omega
 
 /-- On an admitted residue the free row hashes the free chain, and the pairs follow. -/

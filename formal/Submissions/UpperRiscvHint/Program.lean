@@ -20,7 +20,7 @@ store base of the lane area (`x10` through the index phase). -/
 def hashBase : ℕ := 0x400000
 
 /-- The lane area: four words above the root region and the honest view. -/
-def laneBase : ℕ := 0x4003C0
+def laneBase : ℕ := 0x4003D0
 
 /-- The address of lane word `g`. -/
 def laneWordAddr (g : ℕ) : ℕ := laneBase + 8 * g

@@ -30,7 +30,7 @@ open Name
 
 /-- The first level of chain `k` the verifier hashes when the chain is revealed at position `p`;
 `32` means none. -/
-def firstEval (k : Chain) (p : Fin 32) : ℕ := if k.val < 13 then p.val + 1 else p.val
+def firstEval (k : Chain) (p : Fin 32) : ℕ := if k.val < 13 ∨ 31 ≤ k.val then p.val + 1 else p.val
 
 theorem firstEval_le (k : Chain) (p : Fin 32) : firstEval k p ≤ 32 := by
   unfold firstEval; split_ifs <;> omega
@@ -53,7 +53,7 @@ def cutOf (c : Choice) : Finset Name := Finset.univ.image fun k => chainNode k (
 /-! ### Membership in a disclosure set -/
 
 theorem cap_of_firstEval {k : Chain} {p : Fin 32} (h : ¬ firstEval k p < 32) :
-    k.val < 13 := by
+    k.val < 13 ∨ 31 ≤ k.val := by
   unfold firstEval at h; split_ifs at h with hk <;> omega
 
 theorem chainNode_len (k : Chain) (p : Fin 32) : (chainNode k p).len = chainBits k := by

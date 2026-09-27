@@ -13,8 +13,8 @@ state-width.
 Each chain ends in a `top` node read by the root. A cap's top is its final 192-bit state; normals
 13–24 commit their whole last answer (256 bits), normals 25–31 their low 192 bits and normal 32
 its answer bits `[64,256)`. The root input lists the tops in memory order: normal 32, the free
-chain, then normal `13 + j` below cap `1 + j` for `j = 0 … 11`, then normals 25–31, for 7104 bits
-(`rootCat`). The key-generation input lengths 144, 192 and 7104 differ from the 512-bit index
+chain, then normal `13 + j` below cap `1 + j` for `j = 0 … 11`, then normals 25–31, for 7072 bits
+(`rootCat`). The key-generation input lengths 144, 192 and 7072 differ from the 512-bit index
 input.
 -/
 
@@ -50,7 +50,7 @@ theorem chainBits_le (k : Chain) : chainBits k ≤ 192 := by
 /-- Bit offset of a chain's next state inside a 256-bit answer: a cap keeps answer bytes
 `[0, 24)`, a normal answer bytes `[8, 26)`. -/
 def truncOff (k : Chain) : ℕ :=
-  if k.val < 13 then 0 else 64
+  if k.val = 32 then 112 else if k.val < 13 ∨ k.val = 31 then 0 else 64
 
 theorem truncOff_add_le' : ∀ k : Chain, truncOff k + chainBits k ≤ 256 := by
   decide +kernel
@@ -64,21 +64,26 @@ theorem truncOff_mod8 (k : Chain) : truncOff k % 8 = 0 := truncOff_mod8' k
 
 /-- Width of the value the root commits for chain `k`. -/
 def topBits (k : Chain) : ℕ :=
-  if 13 ≤ k.val ∧ k.val < 25 then 256 else 192
+  if 31 ≤ k.val then 144 else if (13 ≤ k.val ∧ k.val < 25) ∨ k.val = 30 then 256 else 192
 
-theorem topBits_ge (k : Chain) : 192 ≤ topBits k := by
+theorem topBits_ge (k : Chain) : 144 ≤ topBits k := by
   unfold topBits; split_ifs <;> omega
 
 theorem topBits_le (k : Chain) : topBits k ≤ 256 := by
   unfold topBits; split_ifs <;> omega
 
-theorem topBits_of_cap {k : Chain} (hk : k.val < 13) : topBits k = chainBits k := by
+theorem topBits_of_cap {k : Chain} (hk : k.val < 13 ∨ 31 ≤ k.val) : topBits k = chainBits k := by
   unfold topBits chainBits
-  rw [if_pos hk, if_neg (by omega)]
+  split_ifs <;> omega
 
 /-- Bit offset of the committed part of a chain's last answer: 64 for the last chain, whose top
 begins at its state, else 0. -/
-def topOff (k : Chain) : ℕ := if k.val = 32 then 64 else 0
+def topOff (k : Chain) : ℕ := if k.val = 32 then 112 else 0
+
+theorem topOff_cap {k : Chain} (hk : k.val < 13 ∨ 31 ≤ k.val) : topOff k = truncOff k := by
+  have := k.isLt
+  unfold topOff truncOff
+  split_ifs <;> omega
 
 theorem topOff_add_le : ∀ k : Chain, topOff k + topBits k ≤ 256 := by decide +kernel
 
@@ -124,7 +129,7 @@ def len : Name → ℕ
   | ch _ _ => 256
   | cv _ _ => 256
   | top k => topBits k
-  | rc => 7104
+  | rc => 7072
   | rh => 256
 
 /-- Query cost of a node: one compression for every chain hash, fourteen for the root. -/
@@ -273,12 +278,12 @@ def slotCat (c : (k : Chain) → BitVec (topBits k)) : (s : ℕ) → BitVec (slo
   | 0 => c (slotChain 0)
   | s + 1 => c (slotChain (s + 1)) ++ slotCat c s
 
-theorem slotWidth_32 : slotWidth 32 = 7104 := by decide
+theorem slotWidth_32 : slotWidth 32 = 7072 := by decide
 
-/-- The 888-byte root input, from low to high bits: normal 32's top; the free chain's 24-byte
+/-- The 884-byte root input, from low to high bits: normal 32's top; the free chain's 24-byte
 top; then normal `13 + j`'s 32-byte top and cap `1 + j`'s 24-byte top for `j = 0, …, 11`; then
 the low 24 bytes of normals 25–31. -/
-def rootCat (c : (k : Chain) → BitVec (topBits k)) : BitVec 7104 :=
+def rootCat (c : (k : Chain) → BitVec (topBits k)) : BitVec 7072 :=
   (slotCat c 32).cast slotWidth_32
 
 /-! ## The graph -/

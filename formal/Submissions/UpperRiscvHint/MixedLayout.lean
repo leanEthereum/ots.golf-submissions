@@ -30,7 +30,7 @@ theorem work_eq_view (k : ℕ) : work k = 0x400030 + wireOffset k / 8 := by
 
 /-- Every answer buffer lies above the message, below the lane words. -/
 theorem output_bounds (k : Chain) :
-    0x400038 ≤ outAddr k ∧ outAddr k + 32 ≤ 0x4003C0 ∧ outAddr k % 8 = 0 := by
+    0x400038 ≤ outAddr k ∧ outAddr k + 32 ≤ 0x4003D0 ∧ outAddr k % 8 = 0 := by
   revert k; decide
 
 /-- Where chain `k`'s committed top lies: its answer buffer, shifted by the top's offset. -/
