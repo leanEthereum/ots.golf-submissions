@@ -1,0 +1,121 @@
+import Submissions.UpperLeanIsa.FourTargets
+
+/-! Binding from actual cached queries. Final chain steps at a hidden boundary
+are handled by the same charged target event as exposed steps. -/
+namespace OptimalOTS.LeanIsaBaseline.Layer.FourFusion
+open scoped Classical
+noncomputable section
+variable {P : Params}
+
+/-- A final step that reaches an honest top uses its honest input, or hits a cut target. -/
+theorem final_query_binding (d : Cut) (hd : ValidCut P d) (ζ : Record P) (c : Cache)
+    (k : Fin 42) (hlen : 2 ≤ P.codec.len k) (q : Query) (v : BitVec hashBits)
+    (hq : queryLocation P q = some (.inl ⟨k,⟨P.codec.len k - 2,by omega⟩⟩))
+    (hv : c q = some v) (hout : P.codec.slice k (P.codec.len k - 2) v = ζ.top k)
+    (hno : ¬ TargetHit (cutTargets P d ζ) c) :
+    q = ζ.query (.inl ⟨k,⟨P.codec.len k - 2,by omega⟩⟩) := by
+  let a : Loc P := .inl ⟨k,⟨P.codec.len k - 2,by omega⟩⟩
+  have hmem : v ∈ matchingAnswers ζ a := by
+    rw [matchingAnswers_inl, mem_sliceAnswers]
+    have he : P.codec.len k - 1 = (P.codec.len k - 2) + 1 := by omega
+    unfold Record.top at hout
+    rw [he,Record.word_succ ζ k (P.codec.len k - 2) (by omega)] at hout
+    exact hout
+  by_contra hne
+  apply hno
+  refine ⟨q,v,hv,?_⟩
+  by_cases hh : Hidden d a
+  · have hb : Boundary d a := by
+      change P.codec.len k - 2 + 1 = d k
+      change P.codec.len k - 2 < d k at hh
+      have := hd k
+      omega
+    exact mem_cutTargets_boundary hq hh hb hmem
+  · exact mem_cutTargets_exposed hq hh (Ne.symm hne) hmem
+
+/-- An executed final binding hash binds all children of its group. -/
+theorem final_binds_dependencies (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
+    (ζ : Record P) (c : Cache) (k : Fin 42) (hlen : 2 ≤ P.codec.len k)
+    (u : Fin 9) (hu : owner k = some u) (t : Tops) (x : Word) (v : BitVec hashBits)
+    (hv : c ⟨896,P.chainInput t k (P.codec.len k - 2) x⟩ = some v)
+    (hout : P.codec.slice k (P.codec.len k - 2) v = ζ.top k)
+    (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ a ∈ children u, t a = ζ.tops a := by
+  have hloc := queryLocation_chainInput hP t k ⟨P.codec.len k - 2,by omega⟩ x
+  have he := final_query_binding d hd ζ c k hlen _ v hloc hv hout hno
+  rw [Record.query_inl] at he
+  have hq := query_inj he
+  have ha : P.active k (P.codec.len k - 2) = some u := by
+    rw [Params.active, if_pos (by omega), hu]
+  simp only [Params.chainInput, ha] at hq
+  exact Params.groupInput_binds t ζ.tops x (ζ.word k (P.codec.len k - 2)) hq
+
+/-- Matching a root answer without a target hit forces its input to be honest. -/
+theorem root_query_binding (d : Cut) (ζ : Record P) (c : Cache) (r : Fin 1)
+    (q : Query) (v : BitVec hashBits) (hq : queryLocation P q = some (.inr r))
+    (hv : c q = some v) (hout : v.extractLsb' 0 128 = (ζ.2 (.inr r)).extractLsb' 0 128)
+    (hno : ¬ TargetHit (cutTargets P d ζ) c) : q = ζ.query (.inr r) := by
+  by_contra hne
+  apply hno
+  refine ⟨q,v,hv,mem_cutTargets_exposed hq (not_hidden_inr d r) (Ne.symm hne) ?_⟩
+  rw [matchingAnswers_inr,mem_lowAnswers]
+  exact hout
+
+/-- The sole root answer is the public key, so its input is bound directly. -/
+theorem root_path_inputs (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
+    (t : Tops) (S : ℕ → BitVec 256)
+    (hc : ∀ r : Fin 1, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
+    (hpk : (S 1).extractLsb' 0 128 = ζ.pk)
+    (hno : ¬ TargetHit (cutTargets P d ζ) c) :
+    ∀ r : Fin 1, P.rootInput t r (S r.val) = P.rootInput ζ.tops r (ζ.rootState r.val) := by
+  have h0 := root_query_binding d ζ c 0 _ _ (queryLocation_rootInput hP t 0 (S 0)) (hc 0) hpk hno
+  rw [Record.query_inr] at h0
+  intro r
+  fin_cases r
+  exact query_inj h0
+
+/-- All six root anchors are bound without an extra root call. -/
+theorem root_path_anchors (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
+    (t : Tops) (S : ℕ → BitVec 256)
+    (hc : ∀ r : Fin 1, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
+    (hpk : (S 1).extractLsb' 0 128 = ζ.pk)
+    (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ k ∈ rootSet, t k = ζ.tops k := by
+  have he := root_path_inputs hP d ζ c t S hc hpk hno
+  exact root_binds t ζ.tops (P.rootMd 0) (P.rootMd 0) (he 0)
+
+theorem parents_bounded : ∀ u : Fin 9, ∀ k ∈ parents u, k < 42 := by decide
+
+/-- Actual cached final queries propagate the root binding through both dependency levels. -/
+theorem all_tops_bound (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
+    (ζ : Record P) (c : Cache) (I : Index) (t : Tops) (S : ℕ → BitVec 256)
+    (hc : ∀ r : Fin 1, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
+    (hpk : (S 1).extractLsb' 0 128 = ζ.pk)
+    (hactive : ∀ u : Fin 9, ∃ k : Fin 42, k.val ∈ parents u ∧ 0 < P.codec.digit I k)
+    (hfinal : ∀ k : Fin 42, 0 < P.codec.digit I k → ∃ x v,
+      c ⟨896,P.chainInput t k (P.codec.len k - 2) x⟩ = some v ∧
+        P.codec.slice k (P.codec.len k - 2) v = t k.val)
+    (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ k < 42, t k = ζ.tops k := by
+  have hroot := root_path_anchors hP d ζ c t S hc hpk hno
+  have hclosed : ∀ n ≤ 9, ∀ k ∈ closure n, t k = ζ.tops k := by
+    intro n
+    induction n with
+    | zero => intro _; exact hroot
+    | succ n ih =>
+      intro hn k hk
+      rcases Finset.mem_union.mp hk with hold | hnew
+      · exact ih (by omega) k hold
+      · have hg := bindOrder_lt n (by omega)
+        obtain ⟨b,hb,hpos⟩ := hactive ⟨_,hg⟩
+        have hbnd := ih (by omega) b.val (schedule n (by omega) hb)
+        obtain ⟨x,v,hv,hout⟩ := hfinal b hpos
+        have hlen : 2 ≤ P.codec.len b := by have := hP.codec.digit_lt I b; omega
+        have hbtop : ζ.tops b.val = ζ.top b := by
+          unfold Record.tops Layer.Params.topAt
+          rw [dif_pos b.isLt]
+        have he := final_binds_dependencies hP d hd ζ c b hlen ⟨_,hg⟩
+          ((owner_mem b ⟨_,hg⟩).mpr hb) t x v hv (hout.trans (hbnd.trans hbtop)) hno
+        exact he k (List.mem_toFinset.mp hnew)
+  intro k hk
+  exact hclosed 9 le_rfl k (full_coverage (Finset.mem_range.mpr hk))
+
+end
+end OptimalOTS.LeanIsaBaseline.Layer.FourFusion
