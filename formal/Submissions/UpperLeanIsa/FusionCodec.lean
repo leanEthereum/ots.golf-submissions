@@ -3,7 +3,7 @@ import Submissions.UpperLeanIsa.LayerDigits
 import Submissions.UpperLeanIsa.LayerProfile
 import Submissions.UpperLeanIsa.TierCodec
 
-/-! Layer-86 codec for the fixed-tag fusion candidate. Each unit has its own table.
+/-! Layer-85 codec for the fixed-tag fusion candidate. Each unit has its own table.
 The nine binding units omit the zero tuple. Their live bands start at field zero;
 unused field values occur only after the live bands. The base `params` stores the
 index and signing codec; the fusion construction supplies different chain/root queries. -/
@@ -44,51 +44,51 @@ def shLen (s i : ℕ) : ℕ := if 7 ≤ s then 17 else if (s = 5 ∨ s = 6) ∧ 
 
 /-- Tuples of each cost. -/
 def shN (s : ℕ) : List ℕ :=
-  ([[0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 52, 0, 0, 0, 0],
+  ([[0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 58, 0, 0, 0, 0],
     [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0],
     [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0],
-    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47, 0, 0, 0, 0],
     [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0],
+    [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 106, 0, 0, 0, 0],
     [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230, 0, 0, 0, 0],
-    [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230, 0, 0, 0, 0],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 119, 0],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 32],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 50],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 0],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 38],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 38],
     [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 59],
     [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 84, 0, 0, 0],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 59]]).getD s []
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 145, 0]]).getD s []
 
 /-- Field values per tuple of each cost (`1` for an empty band). -/
 def shMu (s : ℕ) : List ℕ :=
-  ([[1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  ([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 32, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 2, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 128, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).getD s []
+    [1, 4, 1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).getD s []
 
 /-- Cumulative band sizes: entry `c` counts the live values of cost `< c`. -/
 def shCum (s : ℕ) : List ℕ :=
-  ([[0, 0, 3, 15, 25, 40, 61, 89, 125, 170, 225, 291, 369, 460, 512, 512, 512, 512, 512],
+  ([[0, 0, 3, 9, 19, 34, 55, 83, 119, 164, 219, 285, 363, 454, 512, 512, 512, 512, 512],
     [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512, 512],
     [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512, 512],
-    [0, 1, 4, 10, 30, 45, 66, 94, 130, 175, 230, 296, 374, 465, 512, 512, 512, 512, 512],
     [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512, 512],
+    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512, 512],
+    [0, 0, 128, 138, 158, 193, 249, 333, 453, 618, 838, 1124, 1488, 1942, 2048, 2048, 2048, 2048, 2048],
     [0, 0, 4, 14, 34, 69, 125, 209, 329, 494, 714, 1000, 1364, 1818, 2048, 2048, 2048, 2048, 2048],
-    [0, 0, 4, 14, 34, 69, 125, 209, 329, 494, 714, 1000, 1364, 1818, 2048, 2048, 2048, 2048, 2048],
-    [0, 0, 3, 99, 109, 124, 145, 173, 209, 254, 309, 375, 453, 544, 649, 769, 905, 1024, 1024],
-    [0, 0, 12, 36, 46, 61, 82, 110, 146, 191, 246, 312, 390, 481, 586, 706, 842, 992, 1024],
-    [0, 0, 6, 18, 28, 43, 64, 92, 128, 173, 228, 294, 372, 463, 568, 688, 824, 974, 1024],
+    [0, 0, 6, 18, 38, 68, 110, 138, 174, 219, 274, 340, 418, 509, 614, 734, 870, 1020, 1020],
+    [0, 0, 24, 30, 40, 55, 76, 104, 140, 185, 240, 306, 384, 475, 580, 700, 836, 986, 1024],
+    [0, 0, 6, 30, 40, 55, 76, 104, 140, 185, 240, 306, 384, 475, 580, 700, 836, 986, 1024],
     [0, 0, 3, 9, 19, 34, 55, 83, 119, 164, 219, 285, 363, 454, 559, 679, 815, 965, 1024],
     [0, 0, 384, 390, 400, 415, 436, 464, 500, 545, 600, 666, 744, 835, 940, 1024, 1024, 1024, 1024],
-    [0, 0, 3, 9, 19, 34, 55, 83, 119, 164, 219, 285, 363, 454, 559, 679, 815, 965, 1024]]).getD s []
+    [0, 0, 12, 18, 38, 53, 74, 102, 138, 228, 283, 349, 427, 518, 623, 743, 879, 1024, 1024]]).getD s []
 
 /-- Number of cost bands of shape `s`. -/
 def nb (s : ℕ) : ℕ := (shN s).length
@@ -479,7 +479,7 @@ def field (u : ℕ) (I : Index) : ℕ := digitW ubits I.toNat u
 def gsum (I : Index) : ℕ := ∑ u ∈ Finset.range 13, cost u (field u I)
 
 /-- The free chain's digit: the layer minus the total cost, when that is in `[0, 63]`. -/
-def freeDigit (c : ℕ) : ℕ := if 23 ≤ c ∧ c ≤ 86 then 86 - c else 0
+def freeDigit (c : ℕ) : ℕ := if 22 ≤ c ∧ c ≤ 85 then 85 - c else 0
 
 /-- The live entries of unit `u`. -/
 def cut (u : ℕ) : ℕ := cutS (ushape u)
@@ -488,10 +488,10 @@ def cut (u : ℕ) : ℕ := cutS (ushape u)
 entries, and the free digit keeps dummy indices off the layer. -/
 def dummy (I : Index) : Prop := ∃ u < 13, cut u ≤ field u I
 
-/-- The free digit of an index: `[gsum = 86]` for a dummy (so its digit sum is never `86`),
+/-- The free digit of an index: `[gsum = 85]` for a dummy (so its digit sum is never `85`),
 else `freeDigit (gsum I)`. -/
 def freeD (I : Index) : ℕ :=
-  if dummy I then (if gsum I = 86 then 1 else 0) else freeDigit (gsum I)
+  if dummy I then (if gsum I = 85 then 1 else 0) else freeDigit (gsum I)
 
 /-- Digit of chain `k` (on naturals). -/
 def digitN (I : Index) (k : ℕ) : ℕ :=
@@ -563,7 +563,7 @@ def rootExp (r : ℕ) : ℕ := (r + 1) * 1152921504606846976
 def len (k : Fin numChains) : ℕ := lenN k
 
 /-- The accepted layer. -/
-def layer : ℕ := 86
+def layer : ℕ := 85
 
 /-- Digit of chain `k`. -/
 def digit (I : Index) (k : Fin numChains) : ℕ := digitN I k
@@ -588,7 +588,7 @@ def idxMd : Word := gword 0
 /-- Metadata of root call `r`: the frame constant `F_r`. -/
 def rootMd (r : ℕ) : Word := gword (rootExp r)
 
-/-- The layer-86 fusion parameters. -/
+/-- The layer-85 fusion parameters. -/
 def params : Params where
   len := len
   layer := layer
@@ -672,8 +672,8 @@ theorem sum_digits (I : Index) :
 
 /-- **Acceptance** is a window on the total cost. -/
 theorem accepted_iff (I : Index) :
-    params.Accepted I ↔ ¬ dummy I ∧ 23 ≤ gsum I ∧ gsum I < 87 := by
-  change ∑ k : Fin numChains, digit I k = 86 ↔ _
+    params.Accepted I ↔ ¬ dummy I ∧ 22 ≤ gsum I ∧ gsum I < 86 := by
+  change ∑ k : Fin numChains, digit I k = 85 ↔ _
   rw [sum_digits]
   unfold freeD freeDigit
   by_cases hd : dummy I

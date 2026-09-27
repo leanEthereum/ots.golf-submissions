@@ -5,10 +5,10 @@ import Submissions.UpperLeanIsa.FusionMachineRun
 
 Every completing walk follows the 18 straight prologue instructions, the free dispatch,
 then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `j`. The block relations give
-GP_u = initialProduct(81,s) * C_(sum of preceding product exponents). The five `shifted` units
+GP_u = initialProduct(80,s) * C_(sum of preceding product exponents). The five `shifted` units
 have positive cost and multiply by C_(cost − 1), so the exit target is GP_13 = g ^ seedExp t with
 t = s + Σ costs. The exit table (`seed_table`, a hash-free identity)
-shows that only t = 86 lands on the sentinel; every other total lands on a pad or past the
+shows that only t = 85 lands on the sentinel; every other total lands on a pad or past the
 bytecode (`exit_forced`).
 
 walk_full extracts the path facts, landings, exact instruction count and cycle cost.
@@ -332,15 +332,15 @@ theorem pcost_sum (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) :
 theorem prod_eq {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
     (hpro : ∀ y ∈ proList, y.RelB B v)
     (hblk : ∀ f < 14, ∀ y ∈ bodyF T (frU (xs 0) f) (xs f), y.RelB B v) : ∀ u ≤ 13,
-      v (gpCell u) = ofK (LeanIsaFieldRescale.initialProduct 81 (xs 0) *
+      v (gpCell u) = ofK (LeanIsaFieldRescale.initialProduct 80 (xs 0) *
         LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, pcost T w (xs (w + 1)))) := by
   intro u
   induction u with
   | zero =>
     intro _
-    have hseed : CInstr.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 81 (xs 0))) ∈
+    have hseed : CInstr.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 80 (xs 0))) ∈
         bodyF T (frU (xs 0) 0) (xs 0) := by rw [bodyF_frU_zero]; unfold fbody; simp
-    have h : v (gpCell 0) = ofK (LeanIsaFieldRescale.initialProduct 81 (xs 0)) :=
+    have h : v (gpCell 0) = ofK (LeanIsaFieldRescale.initialProduct 80 (xs 0)) :=
       hblk 0 (by omega) _ hseed
     rw [Finset.sum_range_zero]
     change v (gpCell 0) = ofK (_ * gpow 0)
@@ -366,56 +366,56 @@ theorem prod_eq {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (
     change ofK ((_ * LeanIsaFieldRescale.costFactor _) * LeanIsaFieldRescale.costFactor _) = _
     rw [mul_assoc, LeanIsaFieldRescale.factor_add]
 
-/-- The exponent of the landing product for the total `t`: `sentinel + Q (t − 86)` modulo the
+/-- The exponent of the landing product for the total `t`: `sentinel + Q (t − 85)` modulo the
 order of `g`. -/
-def seedExp (t : ℕ) : ℕ := (11529215046068731897 + LeanIsaFieldRescale.stride * t) % ordG
+def seedExp (t : ℕ) : ℕ := (12682136550675578873 + LeanIsaFieldRescale.stride * t) % ordG
 
 theorem seed_lt (t : ℕ) : seedExp t < ordG := Nat.mod_lt _ (by decide)
 
-theorem seedExp_86 : seedExp 86 = sentinel := by
+theorem seedExp_85 : seedExp 85 = sentinel := by
   norm_num [seedExp, ordG, sentinel, LeanIsaFieldRescale.stride]
 
 /-- The free seed times `C_c` is `g ^ seedExp (s + c)`. -/
 theorem initialProduct_mul (s c : ℕ) :
-    LeanIsaFieldRescale.initialProduct 86 s * LeanIsaFieldRescale.costFactor c =
+    LeanIsaFieldRescale.initialProduct 85 s * LeanIsaFieldRescale.costFactor c =
       gpow (seedExp (s + c)) := by
-  have hl : LeanIsaFieldRescale.costFactor 86 ≠ 0 := pow_ne_zero _ g_ne_zero
+  have hl : LeanIsaFieldRescale.costFactor 85 ≠ 0 := pow_ne_zero _ g_ne_zero
   rw [LeanIsaFieldRescale.initialProduct, mul_assoc, LeanIsaFieldRescale.factor_add,
     div_mul_eq_mul_div, div_eq_iff hl, LeanIsaFieldRescale.costFactor,
     LeanIsaFieldRescale.costFactor, gpow_mul_gpow, gpow_mul_gpow, seedExp,
     ← gpow_mod (_ % ordG + _), Nat.mod_add_mod, ← gpow_mod (LeanIsaFieldRescale.sentinel + _)]
   have he : (LeanIsaFieldRescale.sentinel + LeanIsaFieldRescale.stride * (s + c)) % ordG =
-      (11529215046068731897 + LeanIsaFieldRescale.stride * (s + c) +
-        LeanIsaFieldRescale.stride * 86) % ordG := by
+      (12682136550675578873 + LeanIsaFieldRescale.stride * (s + c) +
+        LeanIsaFieldRescale.stride * 85) % ordG := by
     unfold LeanIsaFieldRescale.stride ordG LeanIsaFieldRescale.sentinel; omega
   rw [he]
 
-/-- The shifted seed: `initialProduct(81, s) · C_p = initialProduct(86, s) · C_(p + 5)`. -/
+/-- The shifted seed: `initialProduct(80, s) · C_p = initialProduct(85, s) · C_(p + 5)`. -/
 theorem initialProduct_shift (s p : ℕ) :
-    LeanIsaFieldRescale.initialProduct 81 s * LeanIsaFieldRescale.costFactor p =
-      LeanIsaFieldRescale.initialProduct 86 s * LeanIsaFieldRescale.costFactor (p + 5) := by
-  have h86 : LeanIsaFieldRescale.costFactor 86 =
-      LeanIsaFieldRescale.costFactor 81 * LeanIsaFieldRescale.costFactor 5 :=
-    (LeanIsaFieldRescale.factor_add 81 5).symm
+    LeanIsaFieldRescale.initialProduct 80 s * LeanIsaFieldRescale.costFactor p =
+      LeanIsaFieldRescale.initialProduct 85 s * LeanIsaFieldRescale.costFactor (p + 5) := by
+  have h85 : LeanIsaFieldRescale.costFactor 85 =
+      LeanIsaFieldRescale.costFactor 80 * LeanIsaFieldRescale.costFactor 5 :=
+    (LeanIsaFieldRescale.factor_add 80 5).symm
   have h5 : LeanIsaFieldRescale.costFactor 5 ≠ 0 := pow_ne_zero _ g_ne_zero
-  have h81 : LeanIsaFieldRescale.costFactor 81 ≠ 0 := pow_ne_zero _ g_ne_zero
-  rw [LeanIsaFieldRescale.initialProduct, LeanIsaFieldRescale.initialProduct, h86,
+  have h80 : LeanIsaFieldRescale.costFactor 80 ≠ 0 := pow_ne_zero _ g_ne_zero
+  rw [LeanIsaFieldRescale.initialProduct, LeanIsaFieldRescale.initialProduct, h85,
     ← LeanIsaFieldRescale.factor_add p 5]
   field_simp
 
 /-- **The landing total.** On a valid path, the last landing product is `g ^ seedExp` of the
 chain-step total `s + Σ costs`. -/
 theorem landing_total (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) :
-    LeanIsaFieldRescale.initialProduct 81 (xs 0) *
+    LeanIsaFieldRescale.initialProduct 80 (xs 0) *
         LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range 13, pcost T w (xs (w + 1))) =
       gpow (seedExp (xs 0 + ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)))) := by
   rw [initialProduct_shift, pcost_sum hT hV, initialProduct_mul]
 
 /-- **The exit table.** For every reachable total `t ≤ 284`, the exit target `g ^ seedExp t` is
-the sentinel only at the layer `t = 86`; otherwise it is past the bytecode or one of the pads
-`sentinel − 5 … sentinel − 1` (the totals `86 − 16 j`, since `16 Q ≡ 1`). -/
+the sentinel only at the layer `t = 85`; otherwise it is past the bytecode or one of the pads
+`sentinel − 5 … sentinel − 1` (the totals `85 − 16 j`, since `16 Q ≡ 1`). -/
 theorem seed_table : ∀ t < 285,
-    t = 86 ∨ 2 ^ 18 ≤ seedExp t ∨ (262137 ≤ seedExp t ∧ seedExp t < 262143) := by
+    t = 85 ∨ 2 ^ 18 ≤ seedExp t ∨ (262137 ≤ seedExp t ∧ seedExp t < 262143) := by
   decide +kernel
 
 theorem slotOf_high {x : ℕ} (h1 : 2 ^ 18 ≤ x) (h2 : x < 2 ^ 64 - 1) : slotOf (gpow x) = 2 ^ 18 := by
@@ -429,9 +429,9 @@ theorem slotOf_high {x : ℕ} (h1 : 2 ^ 18 ≤ x) (h2 : x < 2 ^ 64 - 1) : slotOf
 landing product `g ^ seedExp t` is `g ^ sentinel`: every other target is a pad (it fails) or past
 the bytecode. -/
 theorem exit_forced {B : BlakeRel} {v : ℕ → E} {t n c : ℕ} (ht : t ≤ 284)
-    (h : Walk T B v n (slotOf (gpow (seedExp t))) c) : t = 86 := by
-  rcases seed_table t (by omega) with h96 | hhi | ⟨hlo, hlt⟩
-  · exact h96
+    (h : Walk T B v n (slotOf (gpow (seedExp t))) c) : t = 85 := by
+  rcases seed_table t (by omega) with h85 | hhi | ⟨hlo, hlt⟩
+  · exact h85
   · rw [slotOf_high hhi (by have := seed_lt t; unfold ordG at this; omega)] at h
     have := h.le_sentinel
     unfold sentinel at this; omega
@@ -517,8 +517,8 @@ theorem walk_full (hT : T.Hyp) {n c : ℕ} (h : Walk T B v n 0 c) :
     show slotOf _ = _
     rw [hgp', limb_ofK_zero]
   rw [hnext0] at hw2
-  have ht96 : t = 86 := exit_forced (by omega) hw2
-  have hsen : seedExp t = sentinel := by rw [ht96]; exact seedExp_86
+  have ht85 : t = 85 := exit_forced (by omega) hw2
+  have hsen : seedExp t = sentinel := by rw [ht85]; exact seedExp_85
   rw [hsen, slotOf_gpow (by unfold sentinel; omega)] at hw2
   obtain ⟨rfl, rfl⟩ := hw2.at_sentinel
   refine ⟨hV, ⟨hRp, fun f hf => (hall f hf).2.2.1,

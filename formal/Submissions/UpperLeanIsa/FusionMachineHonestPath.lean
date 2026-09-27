@@ -5,7 +5,7 @@ import Submissions.UpperLeanIsa.FusionMachineHonestChain
 
 Every op of every block on the honest path holds on the loaded honest image (`honest_blk`), so
 the relations along the path of `hxs T I` hold (`honest_path`), and the machine completes in
-`213` instructions at cost `1005` (`honest_run`).
+`212` instructions at cost `995` (`honest_run`).
 -/
 
 set_option maxRecDepth 4000
@@ -41,7 +41,7 @@ theorem honest_free : ∀ y ∈ fbody (XF P T f pk m bits 0), y.Rel f (hv P T f 
   have hd0 : hd T (y0F P f pk m bits) 0 = XF P T f pk m bits 0 := by
     rw [hd_XF]; unfold dg; rw [if_pos rfl]
   have hseed : (CInstr.setc (gpCell 0)
-      (ofK (LeanIsaFieldRescale.initialProduct 81 (XF P T f pk m bits 0)))).Rel f
+      (ofK (LeanIsaFieldRescale.initialProduct 80 (XF P T f pk m bits 0)))).Rel f
         (hv P T f pk m bits) := by
     show hv P T f pk m bits (gpCell 0) = _
     rw [honest_gp (by omega)]
@@ -303,11 +303,11 @@ theorem honest_path : PathFacts T (oracleRel f) (hv P T f pk m bits) (XF P T f p
 
 include hT hC hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`213` instructions. -/
+`212` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 213
-          Regs.initial) = pure (some 1005) := by
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 212
+          Regs.initial) = pure (some 995) := by
   obtain ⟨n, c, hw⟩ := walk_mk hT (hxs_valid T _ (hlive hC hacc)) (honest_path hT hC hlen hacc hroot)
     (fun r hr => by rw [hv_h1 (frU_lt _ hr), XFr_frU hr])
   have hpin : Pinned (hv P T f pk m bits) := by

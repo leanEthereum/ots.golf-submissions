@@ -109,7 +109,7 @@ def hm (u : ℕ) : ℕ := if u = 5 then 1 else 0
 
 /-- Raw field-value counts in each live cost band. -/
 def prof (u : ℕ) : List ℕ :=
-  ([[0, 6, 24, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 104], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 20, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 3, 96, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 119], [0, 12, 24, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 32], [0, 6, 12, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 50], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 59], [0, 384, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 84], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 59]]).getD u []
+  ([[0, 6, 12, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 116], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [0, 128, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 106], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 6, 12, 20, 30, 42, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150], [0, 24, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 38], [0, 6, 24, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 38], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 59], [0, 384, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 84], [0, 12, 6, 20, 15, 21, 28, 36, 90, 55, 66, 78, 91, 105, 120, 136, 145]]).getD u []
 
 /-- Number of cost bands of group `u` (maximal cost plus one). -/
 def nb (u : ℕ) : ℕ := (prof u).length
@@ -133,10 +133,10 @@ def RS (u : ℕ) : ℕ := OFF u (nb u)
 def BASE (u : ℕ) : ℕ := 27 + psum RS u
 
 /-- End of the group regions. -/
-def gEnd : ℕ := 243270
+def gEnd : ℕ := 241722
 
 /-- The number of blocks (live field values) of group `u`: the live values are a contiguous prefix. -/
-def VF (u : ℕ) : ℕ := ([1024, 512, 512, 512, 512, 2048, 2048, 1024, 1024, 1024, 1024, 1024, 1024]).getD u 0
+def VF (u : ℕ) : ℕ := ([1024, 512, 512, 512, 512, 2048, 2048, 1020, 1024, 1024, 1024, 1024, 1024]).getD u 0
 
 /-- The cost band of field value `v` of group `u`. -/
 def band (u v : ℕ) : ℕ := bandIdx (A u) (nb u) v
@@ -422,8 +422,8 @@ structure Tab.Hyp (T : Tab) : Prop where
   /-- The groups from `7` on have digits at most `15`. -/
   coord_lt16 : ∀ u < 13, 7 ≤ u → ∀ v < 2 ^ gb u, ∀ i < gk u, T u v i < 16
 
-/-- The free chain's digit: `86 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
-def freeDigit (c : ℕ) : ℕ := if c ≤ 86 ∧ 86 - c ≤ 63 then 86 - c else 0
+/-- The free chain's digit: `85 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
+def freeDigit (c : ℕ) : ℕ := if c ≤ 85 ∧ 85 - c ≤ 63 then 85 - c else 0
 
 /-- Group `u`'s field of the index. -/
 def field (u : ℕ) (I : Word) : ℕ := digitW gb I.toNat u
@@ -434,7 +434,7 @@ def gcost (T : Tab) (I : Word) : ℕ := ((List.range 13).map (fun u => cost T u 
 /-- The facts about the scheme parameters the machine relies on. -/
 structure Compat (P : Fusion.Params) (T : Tab) : Prop where
   len : ∀ k : Fin numChains, P.codec.len k = LEN k.val
-  layer : P.codec.layer = 86
+  layer : P.codec.layer = 85
   digit_grp : ∀ (I : Word) (u i : ℕ) (hu : u < 13) (hi : i < gk u),
     P.codec.digit (effective I) ⟨chainOf u i, chainOf_lt u hu i hi⟩ = T u (field u I) i
   digit_free : ∀ I : Word, (∀ u < 13, field u I < VF u) →

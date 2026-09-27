@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.Records
 
-/-! The fixed one-root dependency graph of the 1125-cycle construction.
+/-! The fixed one-root dependency graph of the 1115-cycle construction.
 The closure theorem is conditional on actual query equalities or a charged bad event.
 It is not a complete security or machine certificate. -/
 namespace OptimalOTS.LeanIsaBaseline.Layer.Fusion

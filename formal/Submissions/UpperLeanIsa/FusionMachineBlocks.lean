@@ -158,7 +158,7 @@ theorem fbody_len (s : ℕ) : (fbody s).length = 3+s := by
 theorem fbody_lcost (s : ℕ) : lcost (fbody s) = 3+10*s := by
   unfold fbody
   rw [lcost_append,lcost_append,chainOps_lcost]
-  have h1 : lcost [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 81 s))] = 1 := rfl
+  have h1 : lcost [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 80 s))] = 1 := rfl
   have h2 : lcost [copy (if s = 0 then wCell 0 else tfCell) tfCell,.mul (hCell 1) gCell (h1Cell 1)] = 2 := rfl
   rw [h1,h2]
   omega

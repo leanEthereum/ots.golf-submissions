@@ -2,7 +2,7 @@ import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.FusionMachineLayout
 import Submissions.UpperLeanIsa.LengthGate
 
-/-! The 1125-cycle bytecode and its local instruction algebra. The complete machine
+/-! The 1115-cycle bytecode and its local instruction algebra. The complete machine
 certificate is assembled in `FusionMachine.lean`. -/
 
 namespace OptimalOTS.HLFusion
@@ -351,9 +351,9 @@ def ctlF (f : ℕ) : CInstr := if f < 13 then .dispatch (f + 1) else .exit
 def frG0 (_s : ℕ) : ℕ := 1
 
 /-- The free block: seed, `s` chain steps, top materialization, and the next hint product. The
-seed targets layer `86 − 5` because the five units of `shifted` multiply by `C_(cost − 1)`. -/
+seed targets layer `85 − 5` because the five units of `shifted` multiply by `C_(cost − 1)`. -/
 def fbody (s : ℕ) : List CInstr :=
-  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 81 s))] ++
+  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 80 s))] ++
   chainOps 0 s tfCell ++ [copy (if s = 0 then wCell 0 else tfCell) tfCell,
     .mul (hCell 1) gCell (h1Cell 1)]
 
