@@ -1,22 +1,16 @@
 import Submissions.UpperRiscvHint.Program
 
-/-! The 320-cycle free-chain image. This module proves image validity; the execution and
-refinement certificate is a separate obligation.
+/-! The 317-cycle free-chain image. Caps 31 and 32 occupy the opposite boundaries
+of an 884-byte root at 0x400046; caps 0 through 12 have 192-bit states, and the boundary
+caps have 144-bit states. Other chains have 144-bit states and a mandatory final hash.
+Chain 32's state uses answer bits [112,256), leaving its input pointer at the root start.
+Chain 31's top uses [0,144); chain 30 contributes a full 256-bit top before it.
 
-The view holds the nonce and then the 884-byte root region from 0x400040. Chain 0 is the free
-chain and chains 1 to 12 are the index caps: a cap takes answer bytes `[0,24)` as its 192-bit
-state and hashes in place, so its top is its value when its count is 0. Chains 13 to 32 are normal
-chains with their 144-bit value eight bytes into a 32-byte answer buffer. Chain 32, which hashes
-last, has its value at region byte 0 and its buffer eight bytes lower, in the nonce's high word:
-after its last hash `x10` already points at the root input. The free chain is at region byte 24
-and cap `k` at `24 + 56 k`; normal `13 + j` has its buffer at region byte `48 + 56 j` below cap
-`j + 1` for `j < 12`, and at `720 + 24 (j - 12)` after. The free chain runs first, then the caps,
-then the normals.
-
-The free chain's count `c` is the view byte `v` at 0x400070, a dead byte of normal 13's buffer:
-`v & 0xFC = 4 c`. The checksum subtracts `4 c` from the address sum, so its residue is the HASH call
-number exactly when the digit sum plus `c` is 145 modulo 255. The free dispatch lands `c` cells
-before pair 0's prologue; cells for `c ≥ 16` jump to a rejection stub. -/
+The free count c is encoded by the view length. The loader supplies its capped length L
+in x13, and ANDI computes x6 = L & 124 = 4 d, where c = 31-d. The checksum adds 4 d to
+the biased address sum. Its residue is the HASH call number exactly when S+c = 145
+modulo 255. Free dispatch adds x6 to the base and lands c cells before pair 0.
+Counts at least 16 select rejection stubs; oversized honest raw forms have count 31. -/
 
 set_option maxRecDepth 100000
 
@@ -36,11 +30,11 @@ def wireByte (k : ℕ) : ℕ :=
     if k ≤ 12 then 56 * k else if k < 25 then 56 * (k - 13) + 32 else 704 + 24 * (k - 25)
 /-- The input address while chain `k` hashes: its value in the view, then its state. -/
 def work (k : ℕ) : ℕ := 0x400040 + wireByte k
-/-- The length of the honest view. -/
+/-- A bound containing every fixed payload position in an honest view. -/
 def honestViewBits : ℕ := 7248
-/-- The view byte that carries the free chain's count. -/
+/-- The former count byte, now unused by execution. -/
 def freeByte : ℕ := 0x400070
-/-- The constant in `x1`: the free dispatch base and, less 960, the root length. -/
+/-- The constant in `x1`: the free dispatch base and, plus 928, the root length. -/
 def freeBase : ℕ := 6144
 def fineWidth (_q : ℕ) : ℕ := 4
 def copies (_q : ℕ) : ℕ := 16
@@ -59,9 +53,9 @@ def copiesStart : ℕ := 4096 + 4 * copiesIndex
 def copyStart (q d : ℕ) : ℕ :=
   copiesStart + 4 * (groupOffset (group q) + 256 * (copies q - 1 - d) + slotOffset q)
 def landing0 (q : ℕ) : ℕ := copyStart q 0 + 4 * (2 ^ fineWidth q - 1)
-/-- Lane 0 carries the checksum adjustment: the address sum less `4 c` has residue 1 modulo 255
-exactly when the digit sum plus `c` is 145 modulo 255. -/
-def baseLane (q : ℕ) : ℕ := min (landing0 (q % 4)) 65532 + if q % 4 = 0 then 49 else 0
+/-- Lane 0 carries the bias for the complemented count: adding `4*(31-c)` gives
+residue 1 exactly when the digit sum plus `c` is 145 modulo 255. -/
+def baseLane (q : ℕ) : ℕ := min (landing0 (q % 4)) 65532 + if q % 4 = 0 then 18 else 0
 def baseWord (g : ℕ) : ℕ :=
   (List.range 4).foldl (fun n j => n + baseLane (4 * g + j) * 2 ^ (16 * j)) 0
 /-- A cap pair's first chain hashes once per digit unit, one hash fewer than a normal chain, so
@@ -75,16 +69,16 @@ base. -/
 def loadWords : Code :=
   [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
    .LD .x25 .x12 32, .LD .x2 .x12 40, .LD .x3 .x12 48, .LD .x1 .x12 56]
-/-- The free chain's count, four times over: `x6 = v & 0xFC`. -/
+/-- Four times the complemented count: `x6 = cappedViewLength & 124`. -/
 def freeCount : Code :=
-  [.LBU .x6 .x10 (imm12 ((freeByte : ℤ) - hashBase)), .ANDI .x6 .x6 (imm12 0xFC)]
+  [.ANDI .x6 .x13 (imm12 0x7C)]
 def maskReg (_g : ℕ) : Reg := .x25
 def laneWord (g : ℕ) : Code :=
   let dst := if g = 0 then Reg.x27 else Reg.x26
   [.AND dst (wordReg g) (maskReg g), .SUB dst (baseReg g) dst] ++
     (if g = 0 then [] else [.ADD .x27 .x27 .x26]) ++
     [.SD .x10 dst (imm12 ((laneWordAddr g : ℤ) - hashBase))]
-def freeSum : Code := [.SUB .x27 .x27 .x6]
+def freeSum : Code := [.ADD .x27 .x27 .x6]
 /-- The residue lands in `x5`: 1, the HASH call number, exactly when the digit sum plus the free
 count is 145 modulo 255. Any other residue traps at the first hash. -/
 def sumCheck : Code := [.REMU .x5 .x27 .x2]
@@ -101,7 +95,7 @@ def enter (k previous : ℕ) : Code :=
 def freeLanding : ℕ := 4096 + 4 * 101
 /-- The free chain's pointers, then the jump `c` cells before pair 0's prologue. -/
 def freeDispatch : Code :=
-  enter 0 hashBase ++ [.SUB .x28 .x1 .x6, .JALR .x0 .x28 (imm12 ((freeLanding : ℤ) - freeBase))]
+  enter 0 hashBase ++ [.ADD .x28 .x1 .x6, .JALR .x0 .x28 (imm12 ((freeLanding : ℤ) - freeBase - 124))]
 /-- The table-row register `x28` changes only while `x12` points at neither chain of the pair. -/
 def prologue (q : ℕ) : Code :=
   (if q = 6 then [.ADDI .x11 .x0 144] else []) ++
@@ -110,7 +104,7 @@ def prologue (q : ℕ) : Code :=
      .ADDI .x10 .x12 (imm12 ((work (2*q+1) : ℤ) - outAddr (2*q+1))),
      .JALR .x0 .x28 (imm12 (jumpImm q))]
 /-- The last chain's state is the root input's first slot, so `x10` needs no move. The root length
-is the free base less 960. -/
+is the free base plus 928. -/
 def root : Code := [.ADDI .x11 .x1 (imm12 (7072 - (freeBase : ℤ))), .ECALL]
 def pairCap (_q : ℕ) : ℕ := 24
 /-- Rejection fragments occupy previously unreachable padding, in discovery order. -/
@@ -122,7 +116,7 @@ def rejectJump (ip : ℕ) : Instr :=
 /-- The free cell `c` instructions before pair 0's prologue: a hash of the free chain, or for
 `c ≥ 16` a jump to a rejection stub. -/
 def freeCell (c : ℕ) : Instr := if c < 16 then .ECALL else rejectJump (101 - c)
-def freeRow : Code := (List.range 63).map fun p => freeCell (63 - p)
+def freeRow : Code := [nop] ++ (List.range 63).map fun p => freeCell (63 - p)
 /-- Landing at row `i` hashes the first chain `16 - i` times, that is for digit
 `15 - i + lead q`. A cap row's entry 0 would need digit 16 and is never a landing. -/
 def rowInstr (q d i : ℕ) : Instr :=
@@ -163,7 +157,7 @@ def dataImage : List (BitVec 8) :=
     wordBytes freeBase
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
-theorem index_length : indexPhase.length = 34 := by decide +kernel
+theorem index_length : indexPhase.length = 33 := by decide +kernel
 theorem code_length : verifier.length = 15750 := by decide +kernel
 theorem data_length : dataImage.length = 64 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel

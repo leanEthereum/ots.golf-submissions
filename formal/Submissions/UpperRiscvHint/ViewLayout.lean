@@ -1,15 +1,13 @@
 import Submissions.UpperRiscvHint.MixedLayout
 
-/-! The in-place view. Bits `[0,128)` hold the nonce and the root region follows. Region bits
-`[0,144)` hold normal chain 32's value, region bits `[192,384)` the free chain's value and region
-byte 48 the free count `v`. From region bit 192 to 5760 the region is a run of 448-bit cells:
-cell `i` holds cap `i`'s 192-bit value at bit 0 (`i ≥ 1`) and normal chain `13 + i`'s 144-bit
-value at bit 256 (`i < 12`). After it, normal chain `25 + t` has its value at region bit
-`5824 + 192 t`. The honest view is 7248 bits and is zero outside the nonce, the values and `v`.
+/-! The in-place view holds the nonce in bits [0,128) and the chain values at
+fixed byte positions. Cap 32's value occupies bits [176,320), and the free chain's
+value begins at bit 320. The remaining values lie at wireOffset k.
 
-`viewNonce` and `viewPayload` read a view, with zero padding, as the nonce and the chain values in
-graph order, which is the signature's order. `honestView σ c` places a 5504-bit signature with
-free count `c`. -/
+viewNonce and viewPayload extract the nonce and values in graph/signature order.
+For a valid free count c, honestView has 7296 + 4*(31-c) bits. Its length supplies
+the count to the machine. The former count byte at bit 512 is harmless padding;
+the certificate does not rely on its contents. -/
 
 namespace OptimalOTS.RiscvMixedProgram
 
@@ -97,14 +95,14 @@ def sigIndex (b : ℕ) : ℕ :=
 /-- The in-place view of a signature with free count `c`: its nonce, every chain value in its
 cell, and `v = 4 c`. -/
 def honestView (σ : List Bool) (c : ℕ) : List Bool :=
-  List.ofFn fun b : Fin honestViewBits =>
+  List.ofFn fun b : Fin (7296 + 4*(31-c)) =>
     if freeBit ≤ b.val ∧ b.val < freeBit + 8 then (4 * c).testBit (b.val - freeBit)
     else σ.getD (sigIndex b) false
 
 theorem honestView_getD {σ : List Bool} {c b : ℕ} (hb : b < honestViewBits)
     (hv : ¬ (freeBit ≤ b ∧ b < freeBit + 8)) :
     (honestView σ c).getD b false = σ.getD (sigIndex b) false := by
-  rw [List.getD_eq_getElem?_getD, honestView, List.getElem?_ofFn, dif_pos hb, Option.getD_some,
+  rw [List.getD_eq_getElem?_getD, honestView, List.getElem?_ofFn, dif_pos (show b < 7296 + 4*(31-c) by unfold honestViewBits at hb; omega), Option.getD_some,
     if_neg hv]
 
 theorem viewNonce_honestView {σ : List Bool} (c : ℕ) (h : σ.length = 5504) :

@@ -1,12 +1,13 @@
 import Submissions.UpperRiscvHint.MixedVerifier
 import Submissions.UpperRiscvHint.HintTrap
 
-/-! In-place views of the free-chain scheme's signatures. A view whose free count (bits `2 … 7` of
-view byte 64) is below 16 holds the nonce and every chain value at fixed positions, and `compress`
-extracts them in signature order. A view with a larger count carries a raw signature after view
-byte 64; the image rejects it at the free dispatch, before its first possible trap. The honest
-prover lays out accepted signatures with the free count of their index, and hands every other
-signature over in the raw form (`HintTrap`). -/
+/-! Views for the free-chain signature scheme. The capped view length L determines
+the count 31 - (L % 128)/4. Counts below 16 use the fixed payload layout. Larger
+counts select a raw encoding: the signature, one true marker, then zero padding
+to a multiple of 128 bits. The marker makes this encoding injective for arbitrary
+signature lengths. Both ordinary and oversized raw encodings have count 31 and
+halt rejecting before a potentially faulting hash. Honest accepted signatures use
+their index's free count in the view length. -/
 
 noncomputable section
 
@@ -21,16 +22,18 @@ open OptimalOTS.RiscvHint RiscvZkvm.Rv64
 set_option allowUnsafeReducibility true in
 attribute [local irreducible] stagedBlocks stagedRun freeBlocks freeRun instDecidablePredNatStagedRank
 
-/-- A raw view carries its signature after these bits: view byte 64 is the free count. -/
-def rawFlagBits : ℕ := 520
+/-- Remove raw-form zero padding and its final true marker. -/
+def rawDecode (view : List Bool) : List Bool :=
+  ((view.reverse.dropWhile (! ·)).drop 1).reverse
 
 def viewCompress (view : List Bool) : List Bool :=
-  if 16 ≤ viewDigit view then view.drop rawFlagBits
+  if 16 ≤ viewDigit view then rawDecode view
   else viewNonce view ++ viewPayload view
 
-/-- The raw form: free count 63, then the signature. -/
+/-- Raw signatures are marked then padded to a multiple of 128 bits. The length count is 31,
+including when the loader caps an oversized view. -/
 def rawView (σ : List Bool) : List Bool :=
-  List.replicate 512 false ++ List.replicate 8 true ++ σ
+  (σ ++ [true]) ++ List.replicate (127 - σ.length % 128) false
 
 /-- The index query of a signature. -/
 def indexQuery (pk : PublicKey) (m : Message) (σ : List Bool) :=
@@ -96,44 +99,17 @@ theorem decisionOutcome_eq_true (r pk : PublicKey) :
 
 /-! ## The free count of a view -/
 
-theorem honestView_free (σ : List Bool) (c b : ℕ) (hb : freeBit ≤ b ∧ b < freeBit + 8) :
-    (honestView σ c).getD b false = (4 * c).testBit (b - freeBit) := by
-  have hl : b < honestViewBits := by unfold freeBit honestViewBits at *; omega
-  unfold honestView
-  rw [List.getD_eq_getElem?_getD, List.getElem?_ofFn, dif_pos hl, Option.getD_some]
-  exact if_pos hb
-
-theorem viewDigit_honestView (σ : List Bool) (c : ℕ) (hc : c < 64) :
+theorem viewDigit_honestView (σ : List Bool) (c : ℕ) (hc : c < 32) :
     viewDigit (honestView σ c) = c := by
-  have e : ofBits 8 ((honestView σ c).drop 512) = BitVec.ofNat 8 (4 * c) := by
-    apply BitVec.eq_of_getLsbD_eq
-    intro i hi
-    simp only [ofBits, BitVec.getLsbD_ofNat, hi, decide_true, Bool.true_and,
-      testBit_foldr_bits, List.getD_eq_getElem?_getD, List.getElem?_drop]
-    rw [← List.getD_eq_getElem?_getD, honestView_free σ c (512 + i) (by unfold freeBit; omega)]
-    unfold freeBit
-    rw [show 512 + i - 512 = i by omega]
-  unfold viewDigit
-  rw [e, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  simp only [viewDigit, viewLength, honestView, List.length_ofFn, RiscvHint.maxViewBits]
+  rw [Nat.min_eq_left (by omega)]
   omega
 
-theorem viewDigit_rawView (σ : List Bool) : viewDigit (rawView σ) = 63 := by
-  have e : ofBits 8 ((rawView σ).drop 512) = BitVec.ofNat 8 255 := by
-    apply BitVec.eq_of_getLsbD_eq
-    intro i hi
-    simp only [ofBits, BitVec.getLsbD_ofNat, hi, decide_true, Bool.true_and,
-      testBit_foldr_bits, List.getD_eq_getElem?_getD, List.getElem?_drop]
-    have hbit : (rawView σ)[512 + i]? = some true := by
-      unfold rawView
-      rw [List.getElem?_append_left (by simp only [List.length_append, List.length_replicate]; omega),
-        List.getElem?_append_right (by simp only [List.length_replicate]; omega),
-        List.getElem?_replicate]
-      simp only [List.length_replicate, show 512 + i - 512 < 8 by omega, if_true]
-    rw [hbit, Option.getD_some]
-    interval_cases i <;> decide
-  unfold viewDigit
-  rw [e]
-  decide
+theorem viewDigit_rawView (σ : List Bool) : viewDigit (rawView σ) = 31 := by
+  simp only [viewDigit, viewLength, rawView, List.length_append, List.length_cons,
+    List.length_nil, List.length_replicate, RiscvHint.maxViewBits]
+  have h := Nat.mod_lt σ.length (show 0 < 128 by omega)
+  omega
 
 theorem viewCompress_layout (σ : List Bool) (c : ℕ) (hc : c < 16) :
     viewCompress (honestView σ c) = viewNonce (honestView σ c) ++ viewPayload (honestView σ c) :=
@@ -146,10 +122,14 @@ theorem layout_compress (σ : List Bool) (len : σ.length = 5504) (c : ℕ) (hc 
 
 theorem raw_compress (σ : List Bool) : viewCompress (rawView σ) = σ := by
   unfold viewCompress
-  rw [if_pos (by rw [viewDigit_rawView]; omega), rawView]
-  exact List.drop_left' (by simp only [List.length_append, List.length_replicate, rawFlagBits])
+  rw [if_pos (by rw [viewDigit_rawView]; omega)]
+  simp [rawDecode, rawView, List.reverse_append]
 
 /-! ## The staged verifier on views -/
+
+-- Use the layout lemmas below instead of reducing its variable-length bit list.
+set_option allowUnsafeReducibility true in
+attribute [local irreducible] honestView viewDigit viewLength
 
 /-- The staged verifier with its nonce and chain values given separately. -/
 def viewCore (pk : PublicKey) (m : Message) (nonce payload : List Bool) :
