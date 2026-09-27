@@ -1,9 +1,9 @@
 import Submissions.UpperRiscvHint.Count
 
-/-! Exact counting for the restricted pair alphabet of the 349-cycle scheme. -/
+/-! Exact counting for the pair alphabet with every pair sum at most 24. -/
 namespace OptimalOTS.PairCode
 
-def cap (q : ℕ) : ℕ := if q < 8 then 23 else if q < 10 then 24 else 30
+def cap (_q : ℕ) : ℕ := 24
 
 abbrev Pair := Fin 16 × Fin 16
 
@@ -109,12 +109,20 @@ theorem table_getD (S n s : ℕ) (hs : s ≤ S) : (table S n).getD s 0 = count n
     · rfl
 
 set_option maxRecDepth 100000 in
-theorem exact_count : count 16 158 = 29517020996343900342099578715398432 := by
-  rw [← table_getD 158 16 158 le_rfl]
+/-- The digit sums `130, …, 145` of sixteen capped pairs. -/
+theorem window_count :
+    ∑ s ∈ Finset.range 16, count 16 (130 + s) = 32887768277521427631995290068220650 := by
+  rw [Finset.sum_congr rfl fun s hs =>
+    (table_getD 145 16 (130 + s) (by rw [Finset.mem_range] at hs; omega)).symm,
+    ← Forest.sum_map_range]
   decide +kernel
 
-theorem count_lower : 89 * 2^108 ≤ count 16 158 := by
-  rw [exact_count]
+theorem window_lower : 89 * 2^108 ≤ ∑ s ∈ Finset.range 16, count 16 (130 + s) := by
+  rw [window_count]
+  norm_num
+
+theorem window_le_half : ∑ s ∈ Finset.range 16, count 16 (130 + s) ≤ 2 ^ 127 := by
+  rw [window_count]
   norm_num
 
 end OptimalOTS.PairCode

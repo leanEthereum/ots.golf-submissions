@@ -9,11 +9,11 @@ attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 /-- The committed tops, as the root input reads them. -/
-def tops (x : graph.Assignment) (k : Fin 32) : BitVec (topBits k) :=
+def tops (x : graph.Assignment) (k : Chain) : BitVec (topBits k) :=
   (x (top k).fin).cast (lenF_fin _)
 
 /-- The last answer of chain `k`. -/
-def lastOut (x : graph.Assignment) (k : Fin 32) : BitVec 256 :=
+def lastOut (x : graph.Assignment) (k : Chain) : BitVec 256 :=
   (x (cv k 31).fin).cast (lenF_fin _)
 
 variable (index : RawIdx) (payload : List Bool)
@@ -33,7 +33,7 @@ theorem writeHash_pc (w : MachineState) (a : BitVec hashBits) :
     (Riscv.writeHash w a).pc = w.pc + 4 := rfl
 
 /-- The three specification steps of a level, as one hash of the input `v`. -/
-def tripleUpdate (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
+def tripleUpdate (x : graph.Assignment) (k : Chain) (t : Fin 32)
     (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) : graph.Assignment :=
   Function.update (Function.update (Function.update x (ci k t).fin v)
     (ch k t).fin (y.cast (graph_len_fin (ch k t)).symm))
@@ -41,7 +41,7 @@ def tripleUpdate (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
       (graph_len_fin (cv k t)).symm)
 
 /-- The disclosed level: the input is read from the payload. -/
-theorem triple_run_read (k : Fin 32) (t : Fin 32) (ht : firstAt index k = t.val)
+theorem triple_run_read (k : Chain) (t : Fin 32) (ht : firstAt index k = t.val)
     (x : graph.Assignment) (cursor : ℕ) :
     runNodes' index payload [ci k t, ch k t, cv k t] x cursor =
       hash (ofBits (graph.len (ci k t).fin) ((payload.drop cursor).take (graph.len (ci k t).fin)))
@@ -54,7 +54,7 @@ theorem triple_run_read (k : Fin 32) (t : Fin 32) (ht : firstAt index k = t.val)
     tripleUpdate]
 
 /-- A level above the disclosed one: the input is the previous value. -/
-theorem triple_run_step (k : Fin 32) (t : Fin 32) (ht : firstAt index k < t.val)
+theorem triple_run_step (k : Chain) (t : Fin 32) (ht : firstAt index k < t.val)
     (x : graph.Assignment) (cursor : ℕ) :
     runNodes' index payload [ci k t, ch k t, cv k t] x cursor =
       hash ((Forest.trunc k (x (prev k t).fin)).cast (graph_len_fin (ci k t)).symm)
@@ -66,14 +66,14 @@ theorem triple_run_step (k : Fin 32) (t : Fin 32) (ht : firstAt index k < t.val)
     if_pos hle, pure_bind, bind_assoc, map_eq_bind_pure_comp, Function.comp_def,
     Function.update_self, tripleUpdate]
 
-theorem tripleUpdate_cv (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
+theorem tripleUpdate_cv (x : graph.Assignment) (k : Chain) (t : Fin 32)
     (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) :
     tripleUpdate x k t v y (cv k t).fin =
       ((y.cast (graph_len_fin (ch k t)).symm).cast (lenF_ch k t)).cast
         (graph_len_fin (cv k t)).symm := by
   simp only [tripleUpdate, Function.update_self]
 
-theorem tripleUpdate_other (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
+theorem tripleUpdate_other (x : graph.Assignment) (k : Chain) (t : Fin 32)
     (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits)
     (n : Name) (h1 : n ≠ ci k t) (h2 : n ≠ ch k t) (h3 : n ≠ cv k t) :
     tripleUpdate x k t v y n.fin = x n.fin := by
@@ -82,7 +82,7 @@ theorem tripleUpdate_other (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
     Function.update_of_ne (fin_ne_of_ne h1)]
 
 /-- The trunc of the value node is the trunc of the answer. -/
-theorem trunc_tripleUpdate_cv (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
+theorem trunc_tripleUpdate_cv (x : graph.Assignment) (k : Chain) (t : Fin 32)
     (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) :
     Forest.trunc k (tripleUpdate x k t v y (cv k t).fin) = Forest.trunc k y := by
   rw [tripleUpdate_cv]
@@ -90,17 +90,17 @@ theorem trunc_tripleUpdate_cv (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
   simp only [Forest.trunc, BitVec.extractLsb', BitVec.toNat_ofNat, BitVec.toNat_cast, lenF_fin]
   rfl
 
-theorem tops_tripleUpdate (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
+theorem tops_tripleUpdate (x : graph.Assignment) (k : Chain) (t : Fin 32)
     (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) :
     tops (tripleUpdate x k t v y) = tops x := by
   funext k'
   unfold tops
   rw [tripleUpdate_other x k t v y (top k') (by simp) (by simp) (by simp)]
 
-def tripleN (k : Fin 32) (t : ℕ) : List Name :=
+def tripleN (k : Chain) (t : ℕ) : List Name :=
   if h : t < 32 then [ci k ⟨t, h⟩, ch k ⟨t, h⟩, cv k ⟨t, h⟩] else []
 
-theorem chainNodes_eq (k : Fin 32) :
+theorem chainNodes_eq (k : Chain) :
     chainNodes k = (src k :: (List.range 32).flatMap (tripleN k)) ++ [top k] := by
   simp only [chainNodes, List.finRange, List.range]
   rfl
@@ -112,7 +112,7 @@ theorem range_split (p : ℕ) (hp : p ≤ 32) :
   rw [List.range_eq_range', List.range_eq_range', h]
 
 /-- Below its first evaluated level, a chain's nodes are pure zeros. -/
-theorem prefix_run (k : Fin 32) :
+theorem prefix_run (k : Chain) :
     ∀ (q : ℕ), q ≤ firstAt index k → ∀ (x : graph.Assignment) (cursor : ℕ),
     ∃ x' : graph.Assignment,
       runNodes' index payload (src k :: (List.range q).flatMap (tripleN k)) x cursor =
@@ -156,7 +156,7 @@ theorem prefix_run (k : Fin 32) :
       Function.update_of_ne (fin_ne_of_ne (by simp))]
 
 /-- The top of a chain with an evaluated level is the low part of its last answer. -/
-theorem top_run_eval (k : Fin 32) (h : firstAt index k < 32) (x : graph.Assignment) (cursor : ℕ) :
+theorem top_run_eval (k : Chain) (h : firstAt index k < 32) (x : graph.Assignment) (cursor : ℕ) :
     runNodes' index payload [top k] x cursor =
       pure (Function.update x (top k).fin
         ((topOf k (lastOut x k)).cast (graph_len_fin (top k)).symm), cursor) := by
@@ -165,7 +165,7 @@ theorem top_run_eval (k : Fin 32) (h : firstAt index k < 32) (x : graph.Assignme
   rfl
 
 /-- A fully hidden cap reads its top from the payload. -/
-theorem top_run_read (k : Fin 32) (h : 32 ≤ firstAt index k) (x : graph.Assignment)
+theorem top_run_read (k : Chain) (h : 32 ≤ firstAt index k) (x : graph.Assignment)
     (cursor : ℕ) :
     runNodes' index payload [top k] x cursor =
       pure (Function.update x (top k).fin
@@ -173,13 +173,13 @@ theorem top_run_read (k : Fin 32) (h : 32 ≤ firstAt index k) (x : graph.Assign
         cursor + topBits k) := by
   simp only [runNodes', cursorStep_top, if_pos h, pure_bind, Prod.mk.eta]
 
-theorem tops_update_top (x : graph.Assignment) (k : Fin 32) (v : BitVec (graph.len (top k).fin)) :
+theorem tops_update_top (x : graph.Assignment) (k : Chain) (v : BitVec (graph.len (top k).fin)) :
     tops (Function.update x (top k).fin v) k = v.cast (lenF_fin _) := by
   unfold tops
   rw [Function.update_self]
   rfl
 
-theorem tops_update_top_other (x : graph.Assignment) (k j : Fin 32) (hjk : j ≠ k)
+theorem tops_update_top_other (x : graph.Assignment) (k j : Chain) (hjk : j ≠ k)
     (v : BitVec (graph.len (top k).fin)) :
     tops (Function.update x (top k).fin v) j = tops x j := by
   unfold tops

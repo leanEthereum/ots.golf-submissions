@@ -9,10 +9,10 @@ open Forest Forest.Name OracleComp
 
 /-- A chain hash preserves the dispatch table and all fixed registers. -/
 theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {view : List Bool} {pk : PublicKey}
-    (ctx : Ctx s index view pk) (k : Fin 32) (y : BitVec hashBits)
+    (ctx : Ctx s index view pk) (k : Chain) (y : BitVec hashBits)
     (ho : s.getReg .x12 = W (outAddr k)) : Ctx (Riscv.writeHash s y) index view pk := by
   have b := output_bounds k
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, by rw [writeHash_code]; exact ctx.null,
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, by rw [writeHash_code]; exact ctx.null,
     ctx.code.code_eq (writeHash_code s y)⟩
   · rw [writeHash_regs]; exact ctx.pk0
   · rw [writeHash_regs]; exact ctx.pk1
@@ -30,15 +30,14 @@ theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {view : List Bool} {pk
       omega
     rw [he]; exact ctx.lanes q
   · simp only [writeHash_regs]; exact ctx.row
-  · rw [writeHash_regs]; exact ctx.viewLen
-  · rw [writeHash_regs]; exact ctx.lenWord
+  · rw [writeHash_regs]; exact ctx.base
 
 /-- Each admitted chain input costs one oracle compression, at either state width. -/
-theorem chain_blockCost (k : Fin 32) : blockCost (chainBits k) = 1 := by
+theorem chain_blockCost (k : Chain) : blockCost (chainBits k) = 1 := by
   rcases chainBits_cases k with h | h <;> rw [h] <;> decide
 
 /-- A chain hash is valid for the packed initial input as well as the expanded state. -/
-theorem chain_hashValid (s : MachineState) (k : Fin 32) (base : ℕ)
+theorem chain_hashValid (s : MachineState) (k : Chain) (base : ℕ)
     (hp : s.getReg .x10 = W base) (ho : s.getReg .x12 = W (outAddr k))
     (hn : s.getReg .x11 = W (chainBits k)) (hb : 32 ≤ base ∧ base+24 ≤ 0x78000000) :
     Riscv.hashArgumentsValid s = true := by
@@ -53,7 +52,7 @@ theorem chain_hashValid (s : MachineState) (k : Fin 32) (base : ℕ)
   exact r2
 
 /-- One actual machine HASH refines one specification query; the result is universally quantified. -/
-theorem chain_hash_refines (s : MachineState) (k : Fin 32) (base : ℕ)
+theorem chain_hash_refines (s : MachineState) (k : Chain) (base : ℕ)
     (v : BitVec (chainBits k)) (K : BitVec hashBits → OracleComp Spec (Option Bool))
     (c fuel : ℕ) (hf : 1 ≤ fuel)
     (hp : s.getReg .x10 = W base) (ho : s.getReg .x12 = W (outAddr k))

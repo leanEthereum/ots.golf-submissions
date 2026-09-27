@@ -1,3 +1,66 @@
+# Hinted RISC-V: a free chain, 321 cycles
+
+This entry adds a 33rd chain to the 324-cycle cap-chain entry below. Chain 0 is the free chain:
+a 192-bit cap whose count is `c = 145 - S`, where `S` is the sum of the 32 index digits. Chains 1
+to 12 are the index caps (digits 0 to 11, pairs 0 to 5) and chains 13 to 32 are the 144-bit normal
+chains (digits 12 to 31, pairs 6 to 15). Pair `q` is chains `2q + 1` and `2q + 2`. The accepted
+digit set is every vector with all sixteen pair sums at most 24 and `S` in `[130, 145]`. The scheme
+side (`Names`, `Cuts`, `FixedChoice`, `Valid`, `StagedVerifier`, `Wire`) is HintCSch's; this
+section describes the machine.
+
+## Layout
+
+The view is at `0x400030`: the nonce, then the root region from `0x400040`. The free chain is at
+region byte 0 and cap `k` at `56 k`, both hashing in place. Normal `13 + j` has its 32-byte buffer at
+`56 j + 24` for `j < 12`, below cap `j + 1`, and at `696 + 24 (j - 12)` after; its value is eight
+bytes into the buffer. The root input is the region in memory order (`Names.rootCat`). View byte
+40 (region byte 24, the first pad byte of normal 13's buffer) is the free count `v`, and
+`viewDigit view = v / 4`. A view with `viewDigit view ≥ 16` is the raw form, with the signature
+after view bit 328 (`HintView.rawView`). The signature order is the graph order: the nonce, the
+free chain, then chains 1 to 32 (`ViewLayout.viewPayload`).
+
+## Machine changes
+
+- The index phase loads the free base 6144 into `x1` (`LD x1 x12 56`) and the count into `x6`
+  (`LBU x6 x10 88; ANDI x6 x6 0xFC`). After the lanes it computes `SUB x27 x27 x6` before
+  `REMU x5 x27 x2`. Lane 0 carries 49, so the residue is 1 exactly when `freeDigit index = c`
+  (`MixedIndexArith.free_remainder_iff`).
+- The free dispatch is `ADDI x10; ADDI x12; SUB x28 x1 x6; JALR x0 x28 -1644`. It lands at
+  code address `4500 - 4 c`: the free row holds 48 jumps to the stub at 655 for `c ≥ 16` and 15
+  `ECALL`s, then pair 0's prologue at code index 101. The copies start at code index 105.
+- Pairs 0 to 5 are cap pairs (`lead`), pair 6's prologue sets the width 144, and all pair caps are
+  24. The root length is `ADDI x11 x1 960`.
+- `Refines` now bounds the cycles of accepting paths only (`Refines.anyCost`). A forbidden pair
+  after many passing pairs can cost more than 321 cycles, but such a path never accepts.
+
+Accounting on every accepting path: **321** = 34 index + 4 free dispatch + `c` free hashes +
+`138 + S` for the pairs, the root and the decision (`CappedCost.cost_allowed`), with `S + c = 145`.
+
+## Proof
+
+`MixedVerifier.image_refines_trap` proves that the machine on every view refines `trapVerify`
+for every fuel of at least 1337 instructions, and that every accepting path costs at most 321
+cycles. `trapVerify` hashes the index input, then returns `some false` for `viewDigit view ≥ 16`,
+the staged run `freeDecision` when `freeDigit index = viewDigit view`, `none` for another positive
+count (the free chain's first hash traps), and otherwise the first hashing cap pair's verdict
+(`firstBusy`, `walk_refines`). `MixedFree` proves the free dispatch, the rejection cells and the
+free chain. `HintTrap` now lets the honest layout be a deterministic oracle computation:
+`HintView.layoutView` hashes the index input and places `v = 4 (freeDigit % 16)`.
+
+## Validation
+
+- `RVH_STAGE=C python3 .tmp/portrvh/rvh.py` is the generator; `compare.py` confirms that the Lean
+  image equals it (15,752 instructions, 64 data bytes).
+- `RVH_STAGE=C python3 .tmp/portrvh/transcript.py` passes 13,299 cases: all pair and digit landings
+  with `S` in the window, every free byte `v` in `0 … 255` on accepted views, the residue aliases
+  `S + c = 145` with `c` in `16 … 63` (each lands on a rejection stub), sum aliases, every bit flip of
+  one honest view, view lengths, raw forms, and a wrong key and message. Honest runs never trap and
+  every accepting run costs exactly 321 cycles.
+- `lake build Submissions.UpperRiscvHint.Solution` passes; `certificate : submission.Certificate
+  321` depends on `propext`, `Classical.choice` and `Quot.sound` only.
+
+---
+
 # Hinted RISC-V: cap chains, 324 cycles
 
 This entry changes the chain graph of the 337-cycle trap-mode entry below. Chains 0 to 15 are

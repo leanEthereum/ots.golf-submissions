@@ -1,3 +1,25 @@
+# Hinted RISC-V upper bound: 321 cycles with a free chain
+
+A 33rd chain, the free chain, completes the index digit sum `S` to 145. Its count `c = 145 - S`
+is not in the signature. The honest view carries it as byte `v = 4 c` at view byte 40, a dead
+byte of normal chain 13's buffer. The machine subtracts `v & 0xFC` from the checksum sum, so the
+residue in `x5` is the HASH call number exactly when `S + c = 145` modulo 255. The free dispatch
+jumps `c` cells before pair 0's prologue. A count of 16 or more lands on a jump to a rejection
+stub, and this is also the raw-form flag, so the length check is gone. The accepted set is every
+digit vector with all sixteen pair sums at most 24 and `S` in `[130, 145]`. Chain 0 is the free
+chain, chains 1 to 12 are the index caps and chains 13 to 32 are the normals. The root reads
+888 bytes (14 compression blocks). `x1` holds the free base 6144, and the root length is `x1 + 960`.
+
+Proved accounting: every accepting path costs **321 = 38 index and free dispatch + 145 digit
+units + 20 extra normal hashes + 97 pointers, dispatch and width change + 21 root/decision**
+cycles. The image is 15,752 instructions and 64 data bytes, 63,072 bytes. The signature is 5504
+bits; the honest view is 7248 bits.
+
+The Lean image equals the independent generator, and 13,299 transcript cases pass. See
+`NOTES.md` for the layout, the proof and the validation.
+
+---
+
 # Hinted RISC-V upper bound: 324 cycles with cap chains
 
 The sixteen 192-bit chains are cap chains: each keeps answer bytes `[0,24)` as its state and hashes

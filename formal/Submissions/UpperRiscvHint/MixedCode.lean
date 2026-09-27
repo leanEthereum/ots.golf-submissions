@@ -9,10 +9,10 @@ open Riscv2Program
 
 /-- Position of a copy in the concrete instruction image. -/
 def copyOffset (q d : ℕ) : ℕ :=
-  50 + groupOffset (group q) + 256*(copies q-1-d) + slotOffset q
+  copiesIndex + groupOffset (group q) + 256*(copies q-1-d) + slotOffset q
 
 theorem copyStart_eq (q d : ℕ) : copyStart q d = 4096+4*copyOffset q d := by
-  unfold copyStart copiesStart copyOffset
+  unfold copyStart copiesStart copyOffset copiesIndex
   omega
 
 def wellPlaced (cursor : ℕ) : List (ℕ × Code) → Bool
@@ -33,7 +33,7 @@ theorem mem_insertFragment (a b : ℕ × Code) (parts : List (ℕ × Code)) :
     split_ifs <;> simp_all [List.mem_cons, or_left_comm]
 
 theorem mem_addStubs (a : ℕ × Code) (stubs : List ℕ) :
-    a ∈ addStubs stubs ↔ a ∈ copyFragments ∨ ∃ ip ∈ stubs, a = (ip-50,reject) := by
+    a ∈ addStubs stubs ↔ a ∈ copyFragments ∨ ∃ ip ∈ stubs, a = (ip-copiesIndex,reject) := by
   induction stubs with
   | nil => simp [addStubs]
   | cons ip rest ih =>
@@ -78,8 +78,9 @@ theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
 theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (q : Fin 16) (d : Fin (copies q)) :
     Riscv.CodeAt s (W (copyStart q d)) (copyCode q d) := by
-  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 14 nop) (last := tables)
-  rw [show (indexPhase ++ prologue 0 ++ List.replicate 14 nop).length = 50 by decide, W_add] at ht
+  have ht := global.append_right (first := indexPhase ++ freeDispatch ++ freeRow ++ prologue 0) (last := tables)
+  rw [show (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).length = copiesIndex by decide,
+    W_add] at ht
   have mem : (groupOffset (group q)+256*(15-d.val)+slotOffset q, copyCode q d) ∈ fragments :=
     (mem_addStubs _ _).mpr (Or.inl
       (List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩))
@@ -89,15 +90,16 @@ theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifi
 theorem rejectStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (ip : ℕ) (hi : ip ∈ rejectStubs) :
     Riscv.CodeAt s (W (4096+4*ip)) reject := by
-  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 14 nop) (last := tables)
-  rw [show (indexPhase ++ prologue 0 ++ List.replicate 14 nop).length = 50 by decide, W_add] at ht
-  have mem : (ip-50,reject) ∈ fragments :=
+  have ht := global.append_right (first := indexPhase ++ freeDispatch ++ freeRow ++ prologue 0) (last := tables)
+  rw [show (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).length = copiesIndex by decide,
+    W_add] at ht
+  have mem : (ip-copiesIndex,reject) ∈ fragments :=
     (mem_addStubs _ _).mpr (Or.inr ⟨ip,hi,rfl⟩)
   have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
-  have hb : 50 ≤ ip := by
+  have hb : copiesIndex ≤ ip := by
     simp only [rejectStubs, List.mem_cons, List.not_mem_nil, or_false] at hi
-    omega
-  have he : copiesStart+4*(ip-50) = 4096+4*ip := by unfold copiesStart; omega
+    unfold copiesIndex; omega
+  have he : copiesStart+4*(ip-copiesIndex) = 4096+4*ip := by unfold copiesStart; omega
   simpa only [he] using h
 
 end OptimalOTS.RiscvMixedProgram
