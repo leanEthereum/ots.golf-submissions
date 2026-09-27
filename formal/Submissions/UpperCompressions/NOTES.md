@@ -1,50 +1,56 @@
-# Candidate 89: fused shared-DAG blocks with collision-aware replay
+# Candidate 88: fused shared-DAG blocks with collision-aware replay
 
-This root claims a worst-case verification bound of 89 compressions for the
+This root claims a worst-case verification bound of 88 compressions for the
 generic upper-bound track. It exports the canonical raw bit-string scheme,
 including deterministic verification, oversized-input rejection, admissibility,
 and 127-bit strong security.
 
 ## Construction
 
-The DAG consists of seven identical blocks under one root. Each block has
+The DAG consists of three identical blocks under one root. Each block has
 
-- 8 chains `c0, c4, c6, c7, c11, c13, c17, c20`, each with 18 one-compression
-  steps;
-- 13 hash nodes, two binary and eleven ternary, each costing one compression
-  (kids in input order, high word first; the last kid is the low word):
+- 14 chains `c0, c1, c2, c3, c5, c7, c9, c12, c15, c17, c22, c26, c29, c31`,
+  each with 18 one-compression steps;
+- 20 ternary hash nodes, each costing one compression (kids in input order,
+  high word first; the last kid is the low word):
 
 | node | kids | exclusive kid |
 |---|---|---|
-| h5 | c4, c0 | c0 |
-| h8 | c4, h5, c7 | c7 |
-| h9 | c4, h8 | h8 |
-| h10 | h5, h9, c6 | c6 |
-| h12 | h5, h10, c11 | c11 |
-| h14 | h10, h9, c13 | c13 |
-| h15 | c4, h5, h14 | h14 |
-| h16 | h9, h15, h12 | h12 |
-| h18 | h9, c4, c17 | c17 |
-| h19 | h15, h10, h18 | h18 |
-| h21 | h9, h15, c20 | c20 |
-| h22 | h5, h10, h21 | h21 |
-| h23 (block top) | h16, h19, h22 | all |
+| h4 | c2, c3, c1 | c1 |
+| h6 | c0, c5, h4 | h4 |
+| h8 | c0, h6, c7 | c7 |
+| h10 | c0, c5, c9 | c9 |
+| h11 | c3, h6, h10 | h10 |
+| h13 | c2, c0, c12 | c12 |
+| h14 (block top) | h8, h13, h11 | h11 |
+| h16 | h13, c2, c15 | c15 |
+| h18 | c3, h13, c17 | c17 |
+| h19 | h13, c5, h18 | h18 |
+| h20 | c5, h19, h16 | h16 |
+| h21 | c3, h6, h20 | h20 |
+| h23 | h13, c3, c22 | c22 |
+| h24 | h6, c2, h23 | h23 |
+| h25 (block top) | h21, h19, h24 | h24 |
+| h27 | h13, h19, c26 | c26 |
+| h28 (block top) | h21, h8, h27 | h27 |
+| h30 (block top) | h8, h19, c29 | c29 |
+| h32 | h19, h21, c31 | c31 |
+| h33 (block top) | c2, c5, h32 | h32 |
 
-The root hashes a 16-bit tweak and the seven block tops (`16 + 7 * 129 = 919`
-bits, two compressions). All disclosed graph values are 129 bits; the public
+The five block tops `h14, h25, h28, h30, h33` are read only by the root. The
+root hashes a 16-bit tweak and the fifteen block tops (`16 + 15 * 129 = 1951`
+bits, four compressions). All disclosed graph values are 129 bits; the public
 key is the low 128 bits of the root output. Input lengths are 145 (chain step),
-274 (binary node), 403 (ternary node) and 919 (root). None equals the 342-bit
-index query.
+403 (hash node) and 1951 (root). None equals the 342-bit index query.
 
-The graph is a DAG, not a tree. The hub chain `c4` and the nodes `h5, h9, h10,
-h15` have several parents, so one disclosure or one expanded node serves
-several parents. The other seven chains are private: each is the exclusive kid
-of one node. Every hash node has an exclusive kid, which is a kid with no other
-parent, and it sits in the last (low) input slot.
+The graph is a DAG, not a tree. The hub chains `c0, c2, c3, c5` and the nodes
+`h6, h8, h13, h19, h21` have several parents, so one disclosure or one expanded
+node serves several parents. Every hash node has an exclusive kid, which is a
+kid with no other parent, and it sits in the last (low) input slot.
 
 Key generation costs
 
-`7 * (8 * 18 + 13) + 2 = 1101`
+`3 * (14 * 18 + 20) + 4 = 820`
 
 compressions.
 
@@ -53,17 +59,21 @@ compressions.
 A cut expands a set `E` of hash nodes in each block. The needed values are the
 root inputs and the kids of expanded nodes. A needed hash node outside `E` is
 disclosed. A needed chain is disclosed once at one position `t` in `[0, 18]`,
-whatever its number of parents, and costs `18 - t` steps. Each block has 873
-valid expanded sets.
+whatever its number of parents, and costs `18 - t` steps. Each block has 37153
+valid expanded sets, and each discloses between 1 and 14 words, so every cut
+discloses at most 42 words.
 
-A cut is supported if its graph reconstruction cost is exactly 88 and it
-discloses at most 42 words. There are exactly
+A cut is supported if its graph reconstruction cost is exactly 87. There are
+exactly
 
-`789639520673168360830123672680154`
+`688066614596935136894097107917056`
 
-supported cuts (`1.168` times the schedule cardinality). The count is the
-seventh power of the per-block generating number, read off in base `2^330`.
-The scheme uses a subfamily of exactly
+supported cuts (`1.0178` times the schedule cardinality). The per-block cost
+generating number is a top-down recursion over the hash nodes that sums over
+the valid expanded sets only. The kernel evaluates it by a forward pass over
+weighted states that drops bits no lower node reads and merges equal states
+(at most 52 states per level); the count is a base-`2^240` digit of its
+cube. The scheme uses a subfamily of exactly
 
 `676013856769711926075368867014708`
 
@@ -77,9 +87,9 @@ A signature contains an 86-bit nonce and at most 42 disclosed 129-bit values:
 
 `86 + 42 * 129 = 5504` bits.
 
-Verification reconstructs the selected cut in 88 compressions. Its
+Verification reconstructs the selected cut in 87 compressions. Its
 256-bit-message/86-bit-nonce query has length 342 and costs one compression,
-so the worst-case total is 89 on arbitrary raw inputs and oracle-answer paths.
+so the worst-case total is 88 on arbitrary raw inputs and oracle-answer paths.
 
 ## Exact 160-tier schedule
 
@@ -145,8 +155,8 @@ cross-cut authentication event.
 
 The 16-bit tag names at most one node, whose hidden kid is a free uniform
 129-bit coordinate, so a hidden hit has probability at most `2^-129`. The root
-binding rate `2 * 2^-129` equals `2^-129` times the root's block cost 2; the
-inequality is tight and still covers every query at `2^-128` per compression.
+binding rate `2 * 2^-129` is below `2^-129` times the root's block cost 4, so
+every query is still covered at `2^-128` per compression.
 
 The replay proof keeps the actual shared memoized cache. It separately tracks
 
@@ -210,7 +220,7 @@ The smaller numerical margin is the small-budget coefficient
 smaller empirical multiplier than `99/98`, or a schedule with a lower reference
 mean while preserving the collision moments.
 
-An 88-compression candidate needs graph reconstruction cost 87 with at least
+An 87-compression candidate needs graph reconstruction cost 86 with at least
 `676013856769711926075368867014708` supported cuts under the same 42-word
 disclosure bound.
 

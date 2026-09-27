@@ -3,7 +3,7 @@ import Submissions.UpperCompressions.LongChain91Continuation
 import Submissions.UpperCompressions.ProofBundle09
 
 /-!
-# Actual initial game for the cost-89 long-chain construction
+# Actual initial game for the cost-88 long-chain construction
 
 This is the concrete adaptive choose/sign/forge reduction.  It preserves the
 actual shared cache and the exact remaining query clock while averaging over
@@ -74,14 +74,14 @@ theorem E_experiment (F : Bool × Cache → ℝ≥0∞) :
 
 theorem keygen_remaining {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) :
-    1101 ≤ B ∧ ∀ ξ : Rec,
-      CostAtMost (afterKeygen A (pkOf ξ,graph.evalRec ξ)) (B-1101) := by
+    820 ≤ B ∧ ∀ ξ : Rec,
+      CostAtMost (afterKeygen A (pkOf ξ,graph.evalRec ξ)) (B-820) := by
   rw [experiment_eq,WeightedScheme.Scheme.keygen] at hB
   obtain ⟨hc,hr⟩ := GraphKeygenBridge.costAtMost_keygen_bind scheme.graph scheme.publicKey (afterKeygen A) hB
   rw [scheme_keygenCost] at hc hr
   refine ⟨hc,fun ξ => ?_⟩
   have hh := hr ξ
-  change CostAtMost (afterKeygen A (scheme.publicKey (graph.evalRec ξ),graph.evalRec ξ)) (B-1101) at hh
+  change CostAtMost (afterKeygen A (scheme.publicKey (graph.evalRec ξ),graph.evalRec ξ)) (B-820) at hh
   rwa [publicKey_record] at hh
 
 theorem afterChoose_loop (pk : PublicKey) (ξ : Rec) (x : Message × A.State) :
@@ -266,12 +266,12 @@ theorem choose_supported_sign_reserve (pk : PublicKey) (b : ℕ)
 theorem experiment_choose_reserve {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B)
     (pk : PublicKey) (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1101))) :
-    signBudget ≤ r.2.2 ∧ r.2.2 ≤ B-1101 ∧
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-820))) :
+    signBudget ≤ r.2.2 ∧ r.2.2 ≤ B-820 ∧
       ∀ ξ ∈ fiberA pk, ∀ c p,
         p ∈ support (run (loop 86 signedDecode signedTier r.1.1 signBudget) c) →
         CostAtMost (stBWithForgery A pk r.1.1 r.1.2 (signatureFromWinner ξ p.1)) (r.2.2-signBudget) :=
-  choose_supported_sign_reserve A pk (B-1101) (fun ξ _ => (keygen_remaining A hB).2 ξ) r hr
+  choose_supported_sign_reserve A pk (B-820) (fun ξ _ => (keygen_remaining A hB).2 ξ) r hr
 
 end OptimalOTS.WeightedConstruction.LongChain91InitialGame
 end
@@ -427,7 +427,7 @@ theorem conditional_actual_master (A : scheme.toAlgorithm.Adversary) (pk : Publi
 theorem supportedPostBudget_of_experiment (A : scheme.toAlgorithm.Adversary) {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey)
     (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1101))) :
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-820))) :
     SupportedPostBudget A pk r.1.1 r.1.2 r.2.1 signBudget (r.2.2-signBudget) := by
   intro ξ hξ g p hp
   have h := (experiment_choose_reserve A hB pk r hr).2.2 ξ hξ _ p hp
@@ -477,7 +477,7 @@ theorem conditional_supported_gated (A : scheme.toAlgorithm.Adversary) {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B)
     (good : PublicKey → ((Message × A.State) × Cache × ℕ) → Prop)
     (pk : PublicKey) (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1101))) :
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-820))) :
     conditional A pk r.1 r.2.1 ≤ survivingSpr pk r.2.1 + gatedContinuationPayoff A good pk r := by
   by_cases hg : good pk r
   · rw [gatedContinuationPayoff,if_pos hg]
@@ -495,9 +495,9 @@ theorem global_actual_game_payoff_gated (A : scheme.toAlgorithm.Adversary) {B : 
     E (run (scheme.toAlgorithm.experiment A) ∅) successValue ≤
       (∑ pk : PublicKey, (authRate*sumW (fiberA pk))*
         expectedCharge (otherPaid (isIndexLength (msgBits+86))) (A.choose pk) ∅) +
-      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1101))
+      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-820))
         (gatedContinuationPayoff A good pk) := by
-  apply global_payoff_clock A (B-1101) (isIndexLength (msgBits+86))
+  apply global_payoff_clock A (B-820) (isIndexLength (msgBits+86))
     (fun q hq => exists_encQuery_of_length q hq) (gatedContinuationPayoff A good)
   exact conditional_supported_gated A hB good
 
