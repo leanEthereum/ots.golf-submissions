@@ -47,8 +47,6 @@ def aliasEquiv : Alias ≃ Fin A := Fintype.equivFinOfCardEq card_alias
 
 def tier (i : Fin M) : Tier := (classEquiv.symm i).1
 
-@[simp] theorem tier_val_lt (i : Fin M) : (tier i).val < 160 := (tier i).isLt
-
 theorem accepted_lt : A < 2 ^ 256 := Chain18Compact.acceptedAliases_bounds.2
 
 /-- Interpret the accepted prefix of the 256-bit oracle-output space as the
@@ -135,49 +133,7 @@ theorem decode_fiber (i : Fin M) :
   rw [he, rawClass_fiber]
   rfl
 
-/-- A generic projection of aliases has the corresponding exact output
-fiber. -/
-def rawMapFiberEquiv {B : Type} (f : Alias → B) (b : B) :
-    {x : BitVec 256 // (rawAlias x).map f = some b} ≃ {a : Alias // f a = b} :=
-  (Equiv.ofBijective
-    (fun a : {a : Alias // f a = b} =>
-      (⟨aliasBits a.val, by simp [a.property]⟩ :
-        {x : BitVec 256 // (rawAlias x).map f = some b}))
-    (by
-      constructor
-      · intro a c h
-        apply Subtype.ext
-        have he := congrArg
-          (fun x : {x : BitVec 256 // (rawAlias x).map f = some b} => rawAlias x.val) h
-        simpa using he
-      · intro x
-        have hx := x.property
-        rw [Option.map_eq_some_iff] at hx
-        obtain ⟨a, ha, hb⟩ := hx
-        exact ⟨⟨a, hb⟩, Subtype.ext (aliasBits_of_rawAlias ha)⟩)).symm
-
-def aliasTierFiberEquiv (j : Tier) :
-    {a : Alias // a.1.1 = j} ≃
-      Fin (population j) × Fin (Chain18Compact.aliases j) where
-  toFun a := by
-    rcases a with ⟨⟨⟨j', k⟩, r⟩, h⟩
-    cases h
-    exact (k, r)
-  invFun a := ⟨⟨⟨j, a.1⟩, a.2⟩, rfl⟩
-  left_inv := by rintro ⟨⟨⟨j', k⟩, r⟩, h⟩; cases h; rfl
-  right_inv a := by cases a; rfl
-
 def rawTier (x : BitVec 256) : Option Tier := (rawAlias x).map fun a => a.1.1
-
-theorem rawTier_fiber (j : Tier) :
-    (Finset.univ.filter fun x : BitVec 256 => rawTier x = some j).card =
-      population j * Chain18Compact.aliases j := by
-  change (Finset.univ.filter fun x : BitVec 256 =>
-    (rawAlias x).map (fun a => a.1.1) = some j).card = _
-  rw [← Fintype.card_subtype,
-    Fintype.card_congr (rawMapFiberEquiv (fun a => a.1.1) j),
-    Fintype.card_congr (aliasTierFiberEquiv j), Fintype.card_prod,
-    Fintype.card_fin, Fintype.card_fin]
 
 def acceptedEquiv : {x : BitVec 256 // (rawAlias x).isSome} ≃ Alias :=
   (Equiv.ofBijective
@@ -221,19 +177,6 @@ theorem class_probability_real (i : Fin M) :
   rw [decode_fiber]
   unfold classProbability Chain18Compact.R
   norm_num
-
-theorem acceptance_probability :
-    ((Finset.univ.filter fun x : BitVec 256 => (decode x).isSome).card : ℝ) /
-        2^256 = (A : ℝ) / (Chain18Compact.R : ℝ) := by
-  rw [accepted_count]
-  norm_num [Chain18Compact.R]
-
-#print axioms card_class
-#print axioms card_alias
-#print axioms decode_fiber
-#print axioms rawTier_fiber
-#print axioms accepted_count
-#print axioms class_probability_real
 
 end
 end OptimalOTS.WeightedConstruction.LongChain91Schedule

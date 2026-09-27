@@ -1,187 +1,5 @@
 import Mathlib
 
-/- Original module: Submissions.UpperCompressions.ShallowCount; SHA256 a6142df965081e7f00f85e4f7be8aaa1fb9d6aeba757e8f71ae2adec0788bfcc. -/
-section
-
-/-!
-# Counting positions for the exploratory shallow forest
-
-`comp n s` is the number of tuples `(c_1, …, c_n) ∈ {0, …, 18}^n` with sum `s` (`card_comp`).
-
-Concrete values are certified without `native_decide`: `comp` is evaluated through a
-polynomial-size table of partial sums (`compTable`), which agrees with `comp` by induction
-(`compTable_getD`) and is computed by kernel reduction.
--/
-
-namespace OptimalOTS
-
-namespace ShallowResearch
-
-/-- Number of `(c : Fin n → Fin 19)` with `∑ i, (c i).val = s`. -/
-def comp : ℕ → ℕ → ℕ
-  | 0, s => if s = 0 then 1 else 0
-  | n + 1, s => ∑ v ∈ Finset.range 19, if v ≤ s then comp n (s - v) else 0
-
-theorem card_comp (n s : ℕ) :
-    (Finset.univ.filter fun c : Fin n → Fin 19 => ∑ i, (c i).val = s).card = comp n s := by
-  induction n generalizing s with
-  | zero =>
-    rw [comp]
-    split_ifs with h
-    · subst h
-      simp
-    · simp [Ne.symm h]
-  | succ n ih =>
-    rw [comp, ← Fin.sum_univ_eq_sum_range (fun v => if v ≤ s then comp n (s - v) else 0) 19]
-    simp only [← ih]
-    rw [Finset.card_filter, ← (Fin.consEquiv fun _ => Fin 19).sum_comp, Fintype.sum_prod_type]
-    refine Finset.sum_congr rfl fun v _ => ?_
-    simp only [Fin.consEquiv_apply, Fin.sum_univ_succ, Fin.cons_zero, Fin.cons_succ]
-    split_ifs with hv
-    · rw [Finset.card_filter]
-      refine Finset.sum_congr rfl fun c _ => ?_
-      exact if_congr (by omega) rfl rfl
-    · refine Finset.sum_eq_zero fun c _ => ?_
-      rw [if_neg]
-      omega
-
-/-! ### Kernel-checkable evaluation of `comp`
-
-`comp` as written unfolds exponentially, so the concrete values are obtained from the row-by-row
-dynamic programming table `compTable S n = [comp n 0, …, comp n S]`, which is computed by structural
-recursion on lists and therefore reduces in the kernel in polynomial time. -/
-
-/-- `compTable S n` is the list `[comp n 0, comp n 1, …, comp n S]`. -/
-def compTable (S : ℕ) : ℕ → List ℕ
-  | 0 => 1 :: List.replicate S 0
-  | n + 1 =>
-    (List.range (S + 1)).map fun s =>
-      ((List.range 19).map fun v => if v ≤ s then (compTable S n).getD (s - v) 0 else 0).sum
-
-theorem sum_map_range (f : ℕ → ℕ) (m : ℕ) :
-    ((List.range m).map f).sum = ∑ v ∈ Finset.range m, f v := by
-  induction m with
-  | zero => simp
-  | succ m ih =>
-    rw [List.range_succ, List.map_append, List.sum_append, Finset.sum_range_succ, ih]
-    simp
-
-theorem compTable_getD (S n s : ℕ) (hs : s ≤ S) : (compTable S n).getD s 0 = comp n s := by
-  induction n generalizing s with
-  | zero =>
-    rw [compTable, comp]
-    cases s with
-    | zero => simp
-    | succ s =>
-      simp only [List.getD_eq_getElem?_getD, List.getElem?_cons_succ, List.getElem?_replicate,
-        Nat.succ_ne_zero, if_false]
-      split_ifs <;> rfl
-  | succ n ih =>
-    rw [compTable, comp, List.getD_eq_getElem?_getD, List.getElem?_map,
-      List.getElem?_range (by omega), Option.map_some, Option.getD_some, sum_map_range]
-    refine Finset.sum_congr rfl fun v _ => ?_
-    split_ifs with h
-    · exact ih (s - v) (by omega)
-    · rfl
-
-/-- Exact coefficient for the 102-compression numerical candidate. -/
-theorem comp_36_84 : comp 36 84 = 1588422833690542979003596657572 := by
-  rw [← compTable_getD 84 36 84 le_rfl]
-  decide +kernel
-
-/-- Exact coefficient for 36 length-18 chains at total reconstruction cost 85. -/
-theorem comp_36_85 : comp 36 85 = 2237827609476623676586919095944 := by
-  rw [← compTable_getD 85 36 85 le_rfl]
-  decide +kernel
-
-/-- Number of choices: six of eighteen groups are disclosed, and the remaining
-36 chains have total cost 85. Realizing these choices as a secure scheme is a
-separate obligation; this file proves only the combinatorial count. -/
-theorem single_shape_count :
-    Nat.choose 18 6 * comp 36 85 =
-      41543031742324041932159566097104416 := by
-  rw [comp_36_85]
-  decide +kernel
-
-theorem single_shape_ge : 2 ^ 115 ≤ Nat.choose 18 6 * comp 36 85 := by
-  rw [single_shape_count]
-  norm_num
-
-/-- The smaller cost layer admits the acceptance fraction 45 / 524288 when
-indices are uniform 128-bit words. Availability and security are separate proofs. -/
-theorem single_shape_102_count :
-    Nat.choose 18 6 * comp 36 84 =
-      29487481484631239862222768351166608 := by
-  rw [comp_36_84]
-  decide +kernel
-
-theorem single_shape_102_ge : 45 * 2 ^ 109 ≤ Nat.choose 18 6 * comp 36 84 := by
-  rw [single_shape_102_count]
-  norm_num
-
-#print axioms single_shape_ge
-#print axioms single_shape_102_ge
-
-end ShallowResearch
-
-end OptimalOTS
-end
-
-/- Original module: Submissions.UpperCompressions.Count92; SHA256 fdb8fdee53b493adcf192882ac5247e50627a029418851bc256a56e4350a3fd0. -/
-section
-
-/-! Exact mixed72 class count and rank74 cut capacity. This is arithmetic for
-an unproved weighted construction, not an admissibility or security export. -/
-namespace OptimalOTS.WeightedResearch92
-open ShallowResearch
-set_option maxRecDepth 100000
-set_option maxHeartbeats 2000000
-
-def tierClasses (j : ℕ) : ℕ :=
-  if j < 71 then 19 * 2 ^ (104-j) else if j = 71 then 91 * 2 ^ 33 else 0
-
-def classes : ℕ := ∑ j ∈ Finset.range 72, tierClasses j
-def acceptedAliases : ℕ := ∑ j ∈ Finset.range 72, tierClasses j * 2 ^ (j+1)
-
-theorem classes_exact : classes = 770731564938763476110450815401984 := by
-  decide +kernel
-
-theorem aliases_exact : acceptedAliases = 45 * 2 ^ 110 := by
-  decide +kernel
-
-theorem row36 : compTable 76 36 = [1,36,666,8436,82251,658008,4496388,26978328,145008513,708930508,3190187286,13340783196,52251400851,192928249296,675248872536,2250829575120,7174519270695,21945588357420,64617565719070,183649923622584,505037289960909,1346766106541904,3489348548526084,8799226772348844,21631432465615167,51915437812458324,121801603507011954,279692568026003504,629308264282699149,1388818179893555496,3009105825002450160,6406482510816104340,13413569750053582950,27640073124131434680,56093057878466718396,112186019533969100412,221255480097237522482,430550415658610439192,827107866445940948862,1569378520206180891732,2942570331823825626210,5454484870541961587760,9999802454167283261910,18138972423171011777820,32567229708428410551738,57896234989709386484648,101945370364057577878038,177857047504597789011348,307533654960367530886758,527177933467646430672144,896156010781404704103942,1511071060381038101043792,2527950987009856504498662,4196985377626749242665152,6916543167030379911409746,11316623300211009184924752,18386956474180182575674182,29672434214856493510305372,47569459804045740237276522,75772711149244247504470824,119944823469469898626742238,188714656593605800704866868,295157330460382829410955178,458976975181272088280096448,709709303992678175027173563,1091396933579605285047406320,1669381310079376782728339220,2540122303120774647161827500,3845328815098000789598874645,5792200194804402778954401132,8682291625252691066932936512,12952497981352711317329172672,19232995069718270925816402327,28428811666219616937580398312,41834199218963804960625988326,61292342173830113592773276100,89417505832567661255943043350] := by decide +kernel
-
-theorem coefficient_74 : comp 36 74 = 41834199218963804960625988326 := by
-  rw [← compTable_getD 76 36 74 (by omega), row36]
-  decide +kernel
-
-theorem count_74 : Nat.choose 18 6 * comp 36 74 = 776610074300844075289060847283864 := by
-  rw [coefficient_74]
-  decide +kernel
-
-
-theorem enough_classes92 : classes ≤ Nat.choose 18 6 * comp 36 74 := by
-  rw [classes_exact, count_74]
-  norm_num
-
-theorem signature_bits : 42*129+86=5504 := rfl
-theorem keygen_compressions : 54*18+18+5=995 := rfl
-theorem verification_compressions : 74+12+5+1=92 := rfl
-
-theorem acceptance_fraction : (acceptedAliases : ℚ) / 2^129 = 45/524288 := by
-  rw [aliases_exact]
-  norm_num
-
-theorem finite_nonce_correction : (90 : ℚ) / 2^86 ≤ 1 / (100 * 2^20) := by
-  norm_num
-
-#print axioms enough_classes92
-#print axioms aliases_exact
-#print axioms acceptance_fraction
-end OptimalOTS.WeightedResearch92
-end
-
-/- Original module: Submissions.UpperCompressions.Availability; SHA256 1164cc775158b2b3a3324dc6997b33c61732e612c874d776cb8dbcc3cbb790c6. -/
 section
 namespace WeightedAvailability
 attribute [local irreducible] Nat.choose
@@ -261,11 +79,9 @@ theorem empirical_failure :
     _ ≤ ((1:ℝ)/2)^128*(1/2) := mul_le_mul_of_nonneg_left extra_half (by positivity)
     _ = ((2:ℝ)^129)⁻¹ := by norm_num
 
-#print axioms empirical_failure
 end WeightedAvailability
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementKernel; SHA256 69043ee39743a544b1027da73dd61e88fd09d8ee78e18aac633e0b87508873ad. -/
 section
 
 /-! Algebraic kernel for the iid-nonce, first-minimum weighted signer.
@@ -279,7 +95,6 @@ def kernel (L : ℕ) (A B : ℝ) : ℝ :=
   ∑ k ∈ Finset.range L, A^k * B^(L-1-k)
 
 @[simp] theorem kernel_zero (A B : ℝ) : kernel 0 A B = 0 := by simp [kernel]
-@[simp] theorem kernel_one (A B : ℝ) : kernel 1 A B = 1 := by simp [kernel]
 
 theorem kernel_nonneg (L : ℕ) {A B : ℝ} (hA : 0 ≤ A) (hB : 0 ≤ B) :
     0 ≤ kernel L A B := by
@@ -315,20 +130,6 @@ theorem sub_mul_kernel (L : ℕ) (A B : ℝ) :
     (A-B)*kernel L A B = A^L-B^L := by
   exact (Commute.all A B).mul_geom_sum₂ L
 
-/-- Reversing time in the first-minimum position sum leaves the kernel unchanged. -/
-theorem kernel_symm (L : ℕ) (A B : ℝ) : kernel L A B = kernel L B A := by
-  exact geom_sum₂_comm A B L
-
-/-- This is the sum of the first-minimum position probabilities after removing 1/N.
-Earlier positions must have tier strictly above the winner, later positions may tie. -/
-theorem first_minimum_sum (L : ℕ) (A B : ℝ) :
-    (∑ t ∈ Finset.range L, B^t*A^(L-1-t)) = kernel L A B :=
-  kernel_symm L B A
-
-/-- Tier winning mass is its tier probability times the common kernel. -/
-theorem tier_mass (L : ℕ) (A B Q : ℝ) (hQ : Q=A-B) :
-    Q*kernel L A B = A^L-B^L := by rw [hQ]; exact sub_mul_kernel L A B
-
 /-- Compare arbitrary nonnegative empirical endpoints to scaled reference endpoints. -/
 theorem kernel_le_scaled (L : ℕ) {Ah Bh A B c : ℝ}
     (hAh : 0 ≤ Ah) (hBh : 0 ≤ Bh) (hA : Ah ≤ c*A) (hB : Bh ≤ c*B) :
@@ -354,25 +155,9 @@ theorem kernel_additive_envelope (L : ℕ) {Ah Bh A B z delta : ℝ}
   · nlinarith
   · nlinarith
 
-/-- Nonempty-tier division recovers the usual difference quotient exactly. -/
-theorem kernel_eq_div (L : ℕ) {A B : ℝ} (hAB : A ≠ B) :
-    kernel L A B = (A^L-B^L)/(A-B) := by
-  apply (eq_div_iff (sub_ne_zero.mpr hAB)).2
-  rw [mul_comm]
-  exact sub_mul_kernel L A B
-
-#print axioms kernel_mono
-#print axioms kernel_scale
-#print axioms sub_mul_kernel
-#print axioms kernel_symm
-#print axioms first_minimum_sum
-#print axioms kernel_additive_envelope
-#print axioms kernel_eq_div
-
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementSampling; SHA256 077527aa68cb20196340759b7297a005835ef79c06b2a4959b943eea366297f4. -/
 section
 
 /-! Exact finite-table iid sampling law. `iidMean` is the expectation obtained by
@@ -553,54 +338,9 @@ theorem iid_first_minimum_event_probability {α : Type*} [Fintype α]
   simp_rw [← targetWins_indicator v weak strict hv]
   exact iid_first_minimum_probability v weak strict hv n
 
-set_option maxHeartbeats 1000000 in
-/-- Independent finite uniform sampling is exactly the uniform distribution on
-all length-n vectors, with denominator N^n. The recursive definition does not hide
-any random-sampling or independence premise. -/
-theorem iidMean_eq_uniform_vectors {α : Type*} [Fintype α] (n : ℕ) (f : List α → ℝ) :
-    iidMean n f = (∑ draws : Fin n → α, f (List.ofFn draws)) / (Fintype.card α : ℝ)^n := by
-  classical
-  induction n generalizing f with
-  | zero => simp [iidMean]
-  | succ n ih =>
-    simp only [iidMean]
-    simp_rw [ih]
-    unfold uniformMean
-    rw [← Finset.sum_div, div_div, ← pow_succ]
-    congr 1
-    calc
-      (∑ a, ∑ draws : Fin n → α, f (a :: List.ofFn draws)) =
-          ∑ p : α × (Fin n → α), f (p.1 :: List.ofFn p.2) :=
-        (Fintype.sum_prod_type (fun p : α × (Fin n → α) => f (p.1 :: List.ofFn p.2))).symm
-      _ = ∑ draws : Fin (n+1) → α, f (List.ofFn draws) := by
-        have he := (Fin.consEquiv (fun _ : Fin (n+1) => α)).sum_comp
-          (fun draws : Fin (n+1) → α => f (List.ofFn draws))
-        change (∑ p : α × (Fin n → α), f (List.ofFn (Fin.cons p.1 p.2))) =
-          ∑ draws : Fin (n+1) → α, f (List.ofFn draws) at he
-        simpa only [List.ofFn_cons] using he
-
-/-- Finite sample-space formulation of the exact first-minimum law. -/
-theorem uniform_vectors_first_minimum_probability {α : Type*} [Fintype α]
-    (v : α) (weak strict : α → Prop) (hv : ¬ strict v) (n : ℕ) :
-    (∑ draws : Fin n → α,
-      if FirstMinimumEvent v weak strict (List.ofFn draws) then (1 : ℝ) else 0) /
-        (Fintype.card α : ℝ)^n =
-      kernel n (fraction weak) (fraction strict) / Fintype.card α := by
-  classical
-  rw [← iidMean_eq_uniform_vectors n
-    (fun xs => if FirstMinimumEvent v weak strict xs then (1 : ℝ) else 0)]
-  exact iid_first_minimum_event_probability v weak strict hv n
-
-#print axioms iidMean_allPass
-#print axioms iid_first_minimum_probability
-#print axioms iid_first_minimum_event_probability
-#print axioms iidMean_eq_uniform_vectors
-#print axioms uniform_vectors_first_minimum_probability
-
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.ReplacementPosterior; SHA256 d3b5b0c82b03acfc2672e7ac92bca9a89aeb6a503685823102ff27dcb77efe53. -/
 section
 
 /-! One-coordinate Bayes bound for a signed first-minimum nonce. This module does
@@ -622,43 +362,6 @@ theorem weightedMass_nonneg {α : Type*} [Fintype α]
   apply Finset.sum_nonneg
   intro a ha
   split_ifs <;> simp [hw]
-
-/-- A constant target likelihood and a no-smaller likelihood throughout a
-survival event bound the posterior by prior target mass / prior survival mass. -/
-theorem finite_bayes_likelihood_bound {α : Type*} [Fintype α]
-    (weight likelihood : α → ℝ) (target survival : α → Prop) (c : ℝ)
-    (hw : ∀ a, 0 ≤ weight a) (hl : ∀ a, 0 ≤ likelihood a)
-    (htarget : ∀ a, target a → likelihood a = c)
-    (hsurvival : ∀ a, survival a → c ≤ likelihood a)
-    (hmass : 0 < weightedMass weight survival)
-    (hden : 0 < ∑ a, weight a * likelihood a) :
-    (∑ a, if target a then weight a * likelihood a else 0) /
-        (∑ a, weight a * likelihood a) ≤
-      weightedMass weight target / weightedMass weight survival := by
-  have hnum : (∑ a, if target a then weight a * likelihood a else 0) =
-      weightedMass weight target * c := by
-    rw [weightedMass, Finset.sum_mul]
-    apply Finset.sum_congr rfl
-    intro a ha
-    by_cases ht : target a
-    · simp [ht, htarget a ht]
-    · simp [ht]
-  have hlow : weightedMass weight survival * c ≤ ∑ a, weight a * likelihood a := by
-    rw [weightedMass, Finset.sum_mul]
-    apply Finset.sum_le_sum
-    intro a ha
-    by_cases hs : survival a
-    · simp only [if_pos hs]
-      exact mul_le_mul_of_nonneg_left (hsurvival a hs) (hw a)
-    · simp only [if_neg hs, zero_mul]
-      exact mul_nonneg (hw a) (hl a)
-  rw [hnum]
-  apply (div_le_div_iff₀ hden hmass).2
-  calc
-    (weightedMass weight target * c) * weightedMass weight survival =
-        weightedMass weight target * (weightedMass weight survival * c) := by ring
-    _ ≤ weightedMass weight target * (∑ a, weight a * likelihood a) :=
-      mul_le_mul_of_nonneg_left hlow (weightedMass_nonneg weight target hw)
 
 /-- The unknown coordinate contributes δ to A when weakly worse and to B when
 strictly worse. A and B contain only the other fixed nonce coordinates. -/
@@ -693,35 +396,9 @@ theorem coordinateLikelihood_survival {α : Type*} (L : ℕ) (A B δ N : ℝ)
   apply kernel_mono L (add_nonneg hA hδ) hB le_rfl
   split_ifs <;> linarith
 
-/-- Bayes posterior bound for one unknown coordinate, pointwise in all other
-fixed table entries. The target event is any particular class in the signed tier.
-There is no conditioning on a concentration/Good event. -/
-theorem coordinate_posterior_bound {α : Type*} [Fintype α]
-    (L : ℕ) (A B δ N : ℝ) (weight : α → ℝ) (target weak strict : α → Prop)
-    (hA : 0 ≤ A) (hB : 0 ≤ B) (hδ : 0 ≤ δ) (hN : 0 ≤ N)
-    (hw : ∀ a, 0 ≤ weight a) (ht : ∀ a, target a → weak a ∧ ¬ strict a)
-    (hmass : 0 < weightedMass weight weak)
-    (hden : 0 < ∑ a, weight a * coordinateLikelihood L A B δ N weak strict a) :
-    (∑ a, if target a then
-        weight a * coordinateLikelihood L A B δ N weak strict a else 0) /
-      (∑ a, weight a * coordinateLikelihood L A B δ N weak strict a) ≤
-        weightedMass weight target / weightedMass weight weak := by
-  apply finite_bayes_likelihood_bound weight _ target weak (kernel L (A+δ) B / N)
-    hw (coordinateLikelihood_nonneg L A B δ N weak strict hA hB hδ hN)
-  · intro a ha
-    exact coordinateLikelihood_same L A B δ N weak strict a (ht a ha).1 (ht a ha).2
-  · exact coordinateLikelihood_survival L A B δ N weak strict hA hB hδ hN
-  · exact hmass
-  · exact hden
-
-#print axioms finite_bayes_likelihood_bound
-#print axioms coordinateLikelihood_survival
-#print axioms coordinate_posterior_bound
-
 end WeightedReplacement
 end
 
-/- Original module: Submissions.UpperCompressions.BernsteinMGF; SHA256 c949a2f77c682b98587957a580669936759bc99db85ea2932c6ffea4958ea1e6. -/
 section
 
 /-! One-step Bernstein exponential moments from explicit positive expectation.
@@ -889,17 +566,10 @@ theorem compensated_mgf
     Real.exp (-b)*E (fun ω => Real.exp (θ*X ω)) ≤ Real.exp (-b)*Real.exp b := hm
     _ = 1 := by rw [← Real.exp_add]; simp
 
-#print axioms factorial_geometric
-#print axioms exp_bernstein
-#print axioms centered_mgf
-#print axioms nonnegative_centered_mgf
-#print axioms compensated_mgf
-
 end WeightedMGF
 end
 end
 
-/- Original module: Submissions.UpperCompressions.FiniteKernelConcentration; SHA256 168da6ca04563c82d6179781620bc64da7ab591126186777424d085a2828c951. -/
 section
 
 /-! Finite-horizon concentration algebra for explicit probability kernels.
@@ -910,58 +580,6 @@ noncomputable section
 namespace WeightedKernel
 
 variable {S : Type*}
-
-/-- A sequence of normalized positive expectation functionals, one per state.
-For finite S these can be ordinary finite probability sums. -/
-abbrev Kernels (S : Type*) := ℕ → S → ((S → ℝ) →ₗ[ℝ] ℝ)
-
-/-- Expected terminal payoff after n steps beginning at time t in state s. -/
-def iterate (K : Kernels S) : ℕ → ℕ → S → ((S → ℝ) →ₗ[ℝ] ℝ)
-  | 0, _, s => LinearMap.proj s
-  | n+1, t, s => (K t s).comp (LinearMap.pi (fun s' => iterate K n (t+1) s'))
-
-@[simp] theorem iterate_zero (K : Kernels S) (t : ℕ) (s : S) (f : S → ℝ) :
-    iterate K 0 t s f = f s := rfl
-
-@[simp] theorem iterate_succ (K : Kernels S) (n t : ℕ) (s : S) (f : S → ℝ) :
-    iterate K (n+1) t s f = K t s (fun s' => iterate K n (t+1) s' f) := rfl
-
-theorem iterate_mono (K : Kernels S)
-    (hmono : ∀ t s f g, (∀ s', f s' ≤ g s') → K t s f ≤ K t s g)
-    (n t : ℕ) (s : S) (f g : S → ℝ) (hfg : ∀ s', f s' ≤ g s') :
-    iterate K n t s f ≤ iterate K n t s g := by
-  induction n generalizing t s with
-  | zero => exact hfg s
-  | succ n ih =>
-    simp only [iterate_succ]
-    exact hmono t s _ _ (fun s' => ih (t+1) s')
-
-theorem iterate_one (K : Kernels S) (hnorm : ∀ t s, K t s (fun _ => 1) = 1)
-    (n t : ℕ) (s : S) : iterate K n t s (fun _ => 1) = 1 := by
-  induction n generalizing t s with
-  | zero => rfl
-  | succ n ih =>
-    simp only [iterate_succ]
-    have hf : (fun s' => iterate K n (t+1) s' (fun _ => 1)) = (fun _ => 1) := by
-      funext s'; exact ih (t+1) s'
-    rw [hf, hnorm]
-
-/-- Local supermartingale inequalities telescope for arbitrary adaptive
-state-dependent kernels. No independence of states or increments is assumed. -/
-theorem iterate_supermartingale (K : Kernels S)
-    (hmono : ∀ t s f g, (∀ s', f s' ≤ g s') → K t s f ≤ K t s g)
-    (Z : ℕ → S → ℝ) (hstep : ∀ t s, K t s (Z (t+1)) ≤ Z t s)
-    (n t : ℕ) (s : S) : iterate K n t s (Z (t+n)) ≤ Z t s := by
-  induction n generalizing t s with
-  | zero => simp
-  | succ n ih =>
-    rw [iterate_succ]
-    have hx : K t s (fun s' => iterate K n (t+1) s' (Z (t+(n+1)))) ≤
-        K t s (Z (t+1)) := by
-      apply hmono t s
-      intro s'
-      simpa only [show t+(n+1) = (t+1)+n by omega] using ih (t+1) s'
-    exact hx.trans (hstep t s)
 
 @[simp] theorem expect_mul (E : (S → ℝ) →ₗ[ℝ] ℝ) (a : ℝ) (f : S → ℝ) :
     E (fun s => a*f s) = a*E f := by
@@ -1025,386 +643,21 @@ theorem optimized_exponent (a v J : ℝ) (ha : 0 < a) (hv : 0 < v) (hJ : 0 ≤ J
   field_simp
   <;> ring
 
-/-- Terminal Bernstein/Freedman tail from the exponential potential bound.
-The variance proxy W may be random; the event includes W ≤ v. -/
-theorem freedman_tail
-    (E : (S → ℝ) →ₗ[ℝ] ℝ)
-    (hmono : ∀ f g, (∀ s, f s ≤ g s) → E f ≤ E g)
-    (bad : S → Prop) [DecidablePred bad]
-    (Z W : S → ℝ) (a v J : ℝ) (ha : 0 < a) (hv : 0 < v) (hJ : 0 ≤ J)
-    (hZ : ∀ s, bad s → a ≤ Z s) (hW : ∀ s, bad s → W s ≤ v)
-    (hmgf : ∀ θ, 0 < θ → θ*J < 3 →
-      E (fun s => Real.exp (θ*Z s-θ^2*W s/(2*(1-θ*J/3)))) ≤ 1) :
-    E (fun s => if bad s then 1 else 0) ≤ Real.exp (-a^2/(2*(v+J*a/3))) := by
-  let θ := a/(v+J*a/3)
-  obtain ⟨hθ, hθJ, heq⟩ := optimized_exponent a v J ha hv hJ
-  change 0 < θ at hθ
-  change θ*J < 3 at hθJ
-  change θ*a-θ^2*v/(2*(1-θ*J/3)) = a^2/(2*(v+J*a/3)) at heq
-  have hcoef : 0 ≤ θ^2/(2*(1-θ*J/3)) := by
-    apply div_nonneg (sq_nonneg θ)
-    linarith
-  have hbad (s : S) (hs : bad s) :
-      a^2/(2*(v+J*a/3)) ≤ θ*Z s-θ^2*W s/(2*(1-θ*J/3)) := by
-    have hz := mul_le_mul_of_nonneg_left (hZ s hs) hθ.le
-    have hw := mul_le_mul_of_nonneg_left (hW s hs) hcoef
-    calc
-      _ = θ*a-θ^2*v/(2*(1-θ*J/3)) := heq.symm
-      _ ≤ θ*Z s-(θ^2/(2*(1-θ*J/3)))*W s := by
-        have heqv : θ^2*v/(2*(1-θ*J/3)) = (θ^2/(2*(1-θ*J/3)))*v := by ring
-        rw [heqv]
-        linarith
-      _ = _ := by ring
-  have hx := exponential_tail E hmono bad
-    (fun s => θ*Z s-θ^2*W s/(2*(1-θ*J/3)))
-    (a^2/(2*(v+J*a/3))) hbad (hmgf θ hθ hθJ)
-  simpa only [neg_div] using hx
-
-/-- Chaining state-dependent exponential drift gives a finite-horizon
-Freedman tail. The caller supplies actual kernel drift, initialization, and the
-terminal event interpretation. -/
-theorem finite_kernel_freedman
-    (K : Kernels S)
-    (hmono : ∀ t s f g, (∀ s', f s' ≤ g s') → K t s f ≤ K t s g)
-    (Z W : ℕ → S → ℝ) (s₀ : S) (n : ℕ) (a v J : ℝ)
-    (ha : 0 < a) (hv : 0 < v) (hJ : 0 ≤ J)
-    (hZ0 : Z 0 s₀ = 0) (hW0 : W 0 s₀ = 0)
-    (hstep : ∀ θ, 0 < θ → θ*J < 3 → ∀ t s,
-      K t s (fun s' => Real.exp (θ*Z (t+1) s'-θ^2*W (t+1) s'/(2*(1-θ*J/3)))) ≤
-        Real.exp (θ*Z t s-θ^2*W t s/(2*(1-θ*J/3))))
-    (bad : S → Prop) [DecidablePred bad]
-    (hZ : ∀ s, bad s → a ≤ Z n s) (hW : ∀ s, bad s → W n s ≤ v) :
-    iterate K n 0 s₀ (fun s => if bad s then 1 else 0) ≤
-      Real.exp (-a^2/(2*(v+J*a/3))) := by
-  apply freedman_tail (iterate K n 0 s₀) (iterate_mono K hmono n 0 s₀)
-    bad (Z n) (W n) a v J ha hv hJ hZ hW
-  intro θ hθ hθJ
-  have hx := iterate_supermartingale K hmono
-    (fun t s => Real.exp (θ*Z t s-θ^2*W t s/(2*(1-θ*J/3))))
-    (hstep θ hθ hθJ) n 0 s₀
-  simpa only [zero_add, hZ0, hW0, mul_zero, zero_div, sub_zero, Real.exp_zero] using hx
-
-#print axioms iterate_mono
-#print axioms iterate_one
-#print axioms iterate_supermartingale
-#print axioms exponential_step
-#print axioms exponential_tail
-#print axioms optimized_exponent
-#print axioms freedman_tail
-#print axioms finite_kernel_freedman
-
 end WeightedKernel
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedConstants; SHA256 80a9d9f1c6217d0af321351d2e3b85fd2f19ff46d24194e37ee88851a7e8b9b1. -/
-section
-
-/-! Symbolic constants for the mixed72 schedule, avoiding million-degree
-rational evaluation. These lemmas concern the reference tier distribution. -/
-
-noncomputable section
-namespace WeightedConstants
-attribute [local irreducible] Nat.choose
-set_option maxRecDepth 10000
-set_option maxHeartbeats 1000000
-
-def L : ℕ := 2^20
-def q : ℝ := 19/(16*L)
-
-theorem truncated_binomial (x : ℝ) (hx : 0 ≤ x) (n d : ℕ) (hd : d ≤ n+1) :
-    (∑ i ∈ Finset.range d, x^i*(n.choose i : ℝ)) ≤ (1+x)^n := by
-  have h := Finset.sum_le_sum_of_subset_of_nonneg (Finset.range_mono hd)
-    (f := fun i => x^i*(1:ℝ)^(n-i)*(n.choose i : ℝ))
-    (by intro i hi hni; positivity)
-  rw [← add_pow] at h
-  simpa only [one_pow,mul_one,add_comm] using h
-
-theorem reciprocal_lower : (200:ℝ)/61 ≤ (1+(19:ℝ)/16777197)^L := by
-  have h := truncated_binomial ((19:ℝ)/16777197) (by norm_num) L 8 (by norm_num [L])
-  have hb : (200:ℝ)/61 ≤ ∑ i ∈ Finset.range 8, ((19:ℝ)/16777197)^i*(L.choose i : ℝ) := by
-    norm_num [L,Finset.sum_range_succ,Nat.choose_eq_descFactorial_div_factorial,
-      Nat.descFactorial_succ,Nat.factorial_succ]
-  exact hb.trans h
-
-theorem first_survival : (1-q)^L ≤ (61:ℝ)/200 := by
-  have hnonneg : 0 ≤ (1-q)^L := by apply pow_nonneg; norm_num [q,L]
-  have hid : (1-q)^L*(1+(19:ℝ)/16777197)^L = 1 := by
-    rw [← mul_pow]
-    have hb : (1-q)*(1+(19:ℝ)/16777197) = 1 := by norm_num [q,L]
-    rw [hb,one_pow]
-  have h := mul_le_mul_of_nonneg_left reciprocal_lower hnonneg
-  rw [hid] at h
-  linarith
-
-theorem penultimate_reciprocal_lower : (3:ℝ) ≤ (1+(19:ℝ)/16777197)^(L-1) := by
-  have h := truncated_binomial ((19:ℝ)/16777197) (by norm_num) (L-1) 4 (by norm_num [L])
-  have hb : (3:ℝ) ≤ ∑ i ∈ Finset.range 4,
-      ((19:ℝ)/16777197)^i*((L-1).choose i : ℝ) := by
-    norm_num [L,Finset.sum_range_succ,Nat.choose_eq_descFactorial_div_factorial,
-      Nat.descFactorial_succ,Nat.factorial_succ]
-  exact hb.trans h
-
-theorem penultimate_survival : (1-q)^(L-1) ≤ (1:ℝ)/3 := by
-  have hnonneg : 0 ≤ (1-q)^(L-1) := by apply pow_nonneg; norm_num [q,L]
-  have hid : (1-q)^(L-1)*(1+(19:ℝ)/16777197)^(L-1) = 1 := by
-    rw [← mul_pow]
-    have hb : (1-q)*(1+(19:ℝ)/16777197) = 1 := by norm_num [q,L]
-    rw [hb,one_pow]
-  have h := mul_le_mul_of_nonneg_left penultimate_reciprocal_lower hnonneg
-  rw [hid] at h
-  linarith
-
-theorem prefix_power (t : ℕ) (r : ℝ) (hb : (1-q)^t ≤ r)
-    (j : ℕ) (hj : j ≤ 71) : (1-(j:ℝ)*q)^t ≤ r^j := by
-  have hjr : (j:ℝ) ≤ 71 := by exact_mod_cast hj
-  have hq0 : 0 ≤ q := by norm_num [q,L]
-  have hq1 : q ≤ 1 := by norm_num [q,L]
-  have hbase : 0 ≤ 1-(j:ℝ)*q := by
-    have hp := mul_le_mul_of_nonneg_right hjr hq0
-    have hh : (71:ℝ)*q ≤ 1 := by norm_num [q,L]
-    linarith
-  have hbern : 1-(j:ℝ)*q ≤ (1-q)^j := by
-    have h := one_add_mul_le_pow (show (-2:ℝ) ≤ -q by linarith) j
-    simpa only [sub_eq_add_neg,mul_neg] using h
-  calc
-    _ ≤ ((1-q)^j)^t := pow_le_pow_left₀ hbase hbern t
-    _ = ((1-q)^t)^j := by rw [← pow_mul,← pow_mul,Nat.mul_comm j t]
-    _ ≤ r^j := pow_le_pow_left₀ (pow_nonneg (by linarith) _) hb j
-
-theorem weighted_telescope (u : ℕ → ℝ) (k : ℕ) :
-    (∑ j ∈ Finset.range k, (2:ℝ)^j*(u j-u (j+1))) =
-      u 0+(∑ j ∈ Finset.range k, (2:ℝ)^j*u (j+1))-(2:ℝ)^k*u k := by
-  induction k with
-  | zero => simp
-  | succ k ih =>
-    simp only [Finset.sum_range_succ,ih,pow_succ]
-    ring
-
-theorem geometric_identity (x : ℝ) (k : ℕ) :
-    (1-x)*(∑ j ∈ Finset.range k, x^j) = 1-x^k := by
-  induction k with
-  | zero => simp
-  | succ k ih =>
-    rw [Finset.sum_range_succ,mul_add,ih,pow_succ]
-    ring
-
-theorem geometric_upper (x : ℝ) (hx : 0 ≤ x) (hx1 : x < 1) (k : ℕ) :
-    (∑ j ∈ Finset.range k, x^j) ≤ 1/(1-x) := by
-  apply (le_div_iff₀ (by linarith)).2
-  rw [mul_comm,geometric_identity]
-  exact sub_le_self _ (pow_nonneg hx k)
-
-/-- The last tier may contain more aliases; only its failure tail is dropped.
-No equal-mass assumption is imposed on that last tier. -/
-theorem weighted_mean_bound (u : ℕ → ℝ) (tail : ℝ) (ht : 0 ≤ tail)
-    (h0 : u 0 ≤ 1) (hu : ∀ j, j ≤ 71 → u j ≤ ((61:ℝ)/200)^j) :
-    (1:ℝ)/2*((∑ j ∈ Finset.range 71, (2:ℝ)^j*(u j-u (j+1)))+
-      (2:ℝ)^71*(u 71-tail)) ≤ 139/156 := by
-  rw [weighted_telescope]
-  have hs : (∑ j ∈ Finset.range 71, (2:ℝ)^j*u (j+1)) ≤
-      (61:ℝ)/200*(∑ j ∈ Finset.range 71, ((61:ℝ)/100)^j) := by
-    rw [Finset.mul_sum]
-    apply Finset.sum_le_sum
-    intro j hj
-    have hp := mul_le_mul_of_nonneg_left (hu (j+1) (by have := Finset.mem_range.mp hj; omega))
-      (show (0:ℝ) ≤ 2^j by positivity)
-    calc
-      _ ≤ 2^j*((61:ℝ)/200)^(j+1) := hp
-      _ = (61:ℝ)/200*((61:ℝ)/100)^j := by
-        rw [pow_succ]
-        have hh : (2:ℝ)*((61:ℝ)/200) = (61:ℝ)/100 := by norm_num
-        rw [← hh,mul_pow]
-        ring
-  have hg := geometric_upper ((61:ℝ)/100) (by norm_num) (by norm_num) 71
-  have htail : (0:ℝ) ≤ 2^71*tail := by positivity
-  nlinarith
-
-def referenceMean (failure : ℝ) : ℝ :=
-  (1:ℝ)/2*((∑ j ∈ Finset.range 71,
-    (2:ℝ)^j*((1-(j:ℝ)*q)^L-(1-((j+1:ℕ):ℝ)*q)^L))+
-      (2:ℝ)^71*((1-(71:ℝ)*q)^L-failure))
-
-theorem referenceMean_le (failure : ℝ) (hf : 0 ≤ failure) :
-    referenceMean failure ≤ (223:ℝ)/250 := by
-  have h := weighted_mean_bound (fun j => (1-(j:ℝ)*q)^L) failure hf (by simp)
-    (fun j hj => prefix_power L ((61:ℝ)/200) first_survival j hj)
-  exact h.trans (by norm_num)
-
-theorem relative_peak_bound (j : ℕ) (hj : j ≤ 71) :
-    (2:ℝ)^j*(1-(j:ℝ)*q)^(L-1) ≤ 1 := by
-  have h := mul_le_mul_of_nonneg_left
-    (prefix_power (L-1) ((1:ℝ)/3) penultimate_survival j hj)
-    (show (0:ℝ) ≤ 2^j by positivity)
-  calc
-    _ ≤ (2:ℝ)^j*((1:ℝ)/3)^j := h
-    _ = ((2:ℝ)/3)^j := by rw [← mul_pow]; congr 1; norm_num
-    _ ≤ 1 := pow_le_one₀ (by norm_num) (by norm_num)
-
-theorem small_total_margin :
-    (99:ℝ)/98*(223/250)*(11/10)+2/1000 = 243337/245000 ∧
-      (243337:ℝ)/245000 < 1 := by norm_num
-
-#print axioms first_survival
-#print axioms penultimate_survival
-#print axioms referenceMean_le
-#print axioms relative_peak_bound
-end WeightedConstants
-end
-end
-
-/- Original module: Submissions.UpperCompressions.WeightedReference; SHA256 6b30143f0072065fe8bbaf00d7453fad2f0e29f1c4fb67bcbe86d1f5f906f201. -/
 section
 
 /-! Reference probabilities and symbolic security constants for mixed72.
 These are arithmetic lemmas, not a forgery-game theorem. -/
 noncomputable section
 namespace WeightedReference
-open WeightedConstants WeightedReplacement
+open WeightedReplacement
 set_option maxRecDepth 10000
 set_option maxHeartbeats 1000000
 
 def kappa : ℝ := 1/2^127
-def acceptance : ℝ := 45/524288
-def survival (j : ℕ) : ℝ := 1-(j:ℝ)*q
-def lower (j : ℕ) : ℝ := if j < 71 then survival (j+1) else 1-acceptance
-def mass (j : ℕ) : ℝ := survival j-lower j
-def probability (j : ℕ) : ℝ := kappa/2*2^j
-def weight (j : ℕ) : ℝ := probability j*kernel L (survival j) (lower j)
-def failure : ℝ := (1-acceptance)^L
-
-theorem survival_nonneg (j : ℕ) (hj : j ≤ 71) : 0 ≤ survival j := by
-  have hjr : (j:ℝ) ≤ 71 := by exact_mod_cast hj
-  have hh := mul_le_mul_of_nonneg_right hjr (show 0 ≤ q by norm_num [q,L])
-  have hn : (71:ℝ)*q ≤ 1 := by norm_num [q,L]
-  unfold survival
-  linarith
-
-theorem lower_nonneg (j : ℕ) (hj : j ≤ 71) : 0 ≤ lower j := by
-  unfold lower
-  split_ifs with h
-  · exact survival_nonneg _ (by omega)
-  · norm_num [acceptance]
-
-theorem lower_le_survival (j : ℕ) (hj : j ≤ 71) : lower j ≤ survival j := by
-  unfold lower
-  split_ifs with h
-  · have hq : 0 ≤ q := by norm_num [q,L]
-    simp only [survival,Nat.cast_add,Nat.cast_one]
-    nlinarith
-  · have he : j=71 := by omega
-    subst j
-    norm_num [survival,acceptance,q,L]
-
-theorem kernel_diagonal (n : ℕ) (A : ℝ) : kernel n A A = (n:ℝ)*A^(n-1) := by
-  unfold kernel
-  have hterm : ∀ k ∈ Finset.range n, A^k*A^(n-1-k) = A^(n-1) := by
-    intro k hk
-    rw [← pow_add]
-    congr 1
-    have := Finset.mem_range.mp hk
-    omega
-  simp only [Finset.sum_congr rfl hterm,Finset.sum_const,Finset.card_range,nsmul_eq_mul]
-
-theorem weight_nonneg (j : ℕ) (hj : j ≤ 71) : 0 ≤ weight j := by
-  exact mul_nonneg (by unfold probability kappa; positivity)
-    (kernel_nonneg L (survival_nonneg j hj) (lower_nonneg j hj))
-
-theorem weight_le (j : ℕ) (hj : j ≤ 71) : weight j ≤ (L:ℝ)*kappa/2 := by
-  have hm := kernel_mono L (survival_nonneg j hj) (lower_nonneg j hj)
-    (le_refl (survival j)) (lower_le_survival j hj)
-  rw [kernel_diagonal] at hm
-  have hp : 0 ≤ probability j := by unfold probability kappa; positivity
-  have h := mul_le_mul_of_nonneg_left hm hp
-  have ht := relative_peak_bound j hj
-  have hk : 0 ≤ (L:ℝ)*kappa/2 := by unfold kappa; positivity
-  have ht' := mul_le_mul_of_nonneg_left ht hk
-  unfold weight
-  calc
-    _ ≤ probability j*((L:ℝ)*survival j^(L-1)) := h
-    _ = ((L:ℝ)*kappa/2)*(2^j*(1-(j:ℝ)*q)^(L-1)) := by unfold probability survival; ring
-    _ ≤ (L:ℝ)*kappa/2 := by simpa only [mul_one] using ht'
-
-theorem failure_nonneg : 0 ≤ failure := by unfold failure acceptance; positivity
-
-theorem failure_le : failure ≤ (1:ℝ)/1000 := by
-  have hm : 1-acceptance ≤ survival 71 := by norm_num [acceptance,survival,q,L]
-  have h := pow_le_pow_left₀ (show 0 ≤ 1-acceptance by norm_num [acceptance]) hm L
-  have hp := prefix_power L ((61:ℝ)/200) first_survival 71 (by omega)
-  exact (h.trans hp).trans (by norm_num)
-
-theorem mass_weight (j : ℕ) :
-    mass j*weight j = kappa/2*(2^j*(survival j^L-lower j^L)) := by
-  have h := sub_mul_kernel L (survival j) (lower j)
-  unfold mass weight probability
-  calc
-    _ = kappa/2*2^j*((survival j-lower j)*kernel L (survival j) (lower j)) := by ring
-    _ = _ := by rw [h]; ring
-
-theorem reference_mean_identity :
-    (∑ j ∈ Finset.range 72, mass j*weight j) = kappa*referenceMean failure := by
-  rw [show 72=71+1 by omega,Finset.sum_range_succ]
-  have hs : (∑ j ∈ Finset.range 71, mass j*weight j) =
-      kappa/2*(∑ j ∈ Finset.range 71,2^j*(survival j^L-survival (j+1)^L)) := by
-    rw [Finset.mul_sum]
-    apply Finset.sum_congr rfl
-    intro j hj
-    rw [mass_weight,lower,if_pos (Finset.mem_range.mp hj)]
-  rw [hs,mass_weight]
-  simp only [lower,show ¬71<71 by omega,if_false]
-  unfold referenceMean failure survival
-  ring
-
-theorem reference_mean_le :
-    (∑ j ∈ Finset.range 72,mass j*weight j) ≤ kappa*(223/250) := by
-  rw [reference_mean_identity]
-  exact mul_le_mul_of_nonneg_left (referenceMean_le failure failure_nonneg)
-    (by unfold kappa; positivity)
-
-theorem telescope (u : ℕ → ℝ) (n : ℕ) :
-    (∑ j ∈ Finset.range n,(u j-u (j+1))) = u 0-u n := by
-  induction n with
-  | zero => simp
-  | succ n ih => rw [Finset.sum_range_succ,ih]; ring
-
-theorem total_mass : (∑ j ∈ Finset.range 72,mass j) = acceptance := by
-  rw [show 72=71+1 by omega,Finset.sum_range_succ]
-  have hs : (∑ j ∈ Finset.range 71,mass j) = survival 0-survival 71 := by
-    rw [← telescope survival 71]
-    apply Finset.sum_congr rfl
-    intro j hj
-    simp only [mass,lower,if_pos (Finset.mem_range.mp hj)]
-  rw [hs]
-  norm_num [mass,lower,survival]
-
-theorem total_winner_mass :
-    (∑ j ∈ Finset.range 72,mass j*kernel L (survival j) (lower j)) = 1-failure := by
-  rw [show 72=71+1 by omega,Finset.sum_range_succ]
-  have hs : (∑ j ∈ Finset.range 71,mass j*kernel L (survival j) (lower j)) =
-      survival 0^L-survival 71^L := by
-    rw [← telescope (fun j => survival j^L) 71]
-    apply Finset.sum_congr rfl
-    intro j hj
-    unfold mass
-    rw [sub_mul_kernel,lower,if_pos (Finset.mem_range.mp hj)]
-  rw [hs]
-  unfold mass
-  rw [sub_mul_kernel]
-  simp only [lower,show ¬71<71 by omega,if_false]
-  unfold failure
-  have h0 : survival 0=1 := by simp [survival]
-  rw [h0,one_pow]
-  ring
-
-theorem post_excess_le {h f : ℝ} (hh : h ≤ kappa*(223/250))
-    (hf : f ≤ 1/1000) : h/(1-acceptance)-kappa/2*(1-f) ≤ kappa*(2/5) := by
-  have hd : 0 < 1-acceptance := by norm_num [acceptance]
-  have h1 := div_le_div_of_nonneg_right hh hd.le
-  have hk : 0 ≤ kappa := by unfold kappa; positivity
-  have h2 := mul_le_mul_of_nonneg_left hf (div_nonneg hk (by norm_num : (0:ℝ) ≤ 2))
-  have hn : (kappa*(223/250))/(1-acceptance)-kappa/2*(1-1/1000) ≤ kappa*(2/5) := by
-    norm_num [kappa,acceptance]
-  linarith
 
 /-- A binomial upper bound that avoids expanding a large natural exponent. -/
 theorem pow_times_linear_le_one (x : ℝ) (hx : 0 ≤ x) (n : ℕ) :
@@ -1418,24 +671,10 @@ theorem pow_times_linear_le_one (x : ℝ) (hx : 0 ≤ x) (n : ℕ) :
     rw [pow_succ]
     nlinarith
 
-theorem common_envelope :
-    (1+(1/(100*(L:ℝ)))/(1-acceptance))^(L-1) ≤ (99:ℝ)/98 := by
-  let x : ℝ := (1/(100*(L:ℝ)))/(1-acceptance)
-  have hx : 0 ≤ x := by norm_num [x,L,acceptance]
-  have h := pow_times_linear_le_one x hx (L-1)
-  have hd : 0 < 1-((L-1:ℕ):ℝ)*x := by norm_num [x,L,acceptance]
-  have hb : 1/(1-((L-1:ℕ):ℝ)*x) ≤ (99:ℝ)/98 := by norm_num [x,L,acceptance]
-  exact ((le_div_iff₀ hd).2 h).trans hb
-
-#print axioms weight_le
-#print axioms reference_mean_le
-#print axioms post_excess_le
-#print axioms common_envelope
 end WeightedReference
 end
 end
 
-/- Original module: Submissions.UpperCompressions.ClippedDrift; SHA256 11fafc1385b7799976f278b952d40ee0148ed78bd3761531e1d49db97b366a01. -/
 section
 
 /-! One-query algebra for the clipped row hazard of weighted index sampling.
@@ -1641,7 +880,6 @@ theorem drift_inside (N : ℝ) (r : ℕ) (k row : ι → ℕ) :
   rw [hsum, ← Finset.sum_div, ← Finset.sum_mul]
   ring
 
-
 /-- The rejected-output atom is a nonnegative probability. -/
 theorem rejection_nonneg : 0 ≤ 1 - ∑ i, w.p i := sub_nonneg.mpr w.mass_le_one
 
@@ -1714,7 +952,6 @@ theorem drift_inside_le (N : ℝ) (hN : 0 < N) (r : ℕ)
       w.mean + η * κ := by
   rw [drift_inside]
   exact w.drift_expression_le N hN r hr k row η κ 1 zero_le_one hscore
-
 
 /-- Nonnegative part of an outside-row increment. -/
 def positiveOutside (N : ℝ) (r : ℕ) (k row : ι → ℕ) : Option ι → ℝ
@@ -1829,7 +1066,6 @@ theorem positiveInside_bounds (N : ℝ) (hN : 0 < N) (r : ℕ)
         · exact div_nonneg hgi hN.le
         · nlinarith
 
-
 /-- Elementary finite-distribution expectation rules, retaining rejection. -/
 theorem expect_const (a : ℝ) : w.expect (fun _ => a) = a := by
   simp only [expect, ← Finset.sum_mul]
@@ -1905,23 +1141,11 @@ theorem centered_abs_le (u : Option ι → ℝ) (d : ℝ)
   apply abs_le.mpr
   constructor <;> linarith [(hu x).1, (hu x).2]
 
-#print axioms drift_outside
-#print axioms drift_inside
-#print axioms drift_outside_le
-#print axioms drift_inside_le
-#print axioms expect_one
-#print axioms positiveOutside_bounds
-#print axioms positiveInside_bounds
-#print axioms centered_variance_le
-#print axioms centered_abs_le
-#print axioms center_predictable_shift
-
 end Weights
 end WeightedRow
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedMoments; SHA256 2d9dacb0c1c04a0d427e4091822ebab215ac335b64c7f82e4d612b2894d4cd20. -/
 section
 
 /-! Exact class-count moments. A fresh rejected index query advances q while
@@ -1995,18 +1219,6 @@ theorem pairScore_bump (k : ι → ℕ) (i : ι) :
   apply Finset.sum_congr rfl
   intro i _
   field_simp [(w.p_pos i).ne']
-
-/-- Direct fresh-query expected score increment. -/
-theorem score_drift (k : ι → ℕ) :
-    w.expect (fun x => w.score (advance k x)-w.score k) = w.mean := by
-  simp only [score_advance, add_sub_cancel_left]
-  exact w.mean_scoreJump
-
-/-- Direct fresh-query expected pair-energy increment. -/
-theorem pair_drift (k : ι → ℕ) :
-    w.expect (fun x => w.pairScore (advance k x)-w.pairScore k) = w.score k := by
-  simp only [pairScore_advance, add_sub_cancel_left]
-  exact w.mean_pairJump k
 
 theorem scoreJump_bounds (G : ℝ) (hG : 0 ≤ G) (hg : ∀ i, w.g i ≤ G)
     (x : Option ι) : 0 ≤ w.scoreJump x ∧ w.scoreJump x ≤ G := by
@@ -2135,20 +1347,6 @@ theorem M1_step_square_compensated (fresh : Bool) (G : ℝ)
   · simp only [step_not_fresh, expect_const, le_refl]
   · exact w.M1_compensated_square_next_le G hG hg q k
 
-#print axioms score_bump
-#print axioms pairScore_bump
-#print axioms score_drift
-#print axioms pair_drift
-#print axioms score_variance_le
-#print axioms M1_mean_next
-#print axioms M2_mean_next
-#print axioms M1_square_next_le
-#print axioms M1_compensated_square_next_le
-#print axioms uniform_decoder_expect
-#print axioms M1_step_mean
-#print axioms M2_step_mean
-#print axioms M1_step_square_compensated
-
 end WeightedRow.Weights
 
 namespace WeightedPublicCounts
@@ -2198,17 +1396,10 @@ theorem counts_insert_update (A : Finset Q) (answers : Q → Option ι)
     counts (insert q A) (Function.update answers q x) = advance (counts A answers) x := by
   rw [counts_insert _ _ _ hq, Function.update_self, counts_update_absent _ _ _ hq]
 
-/-- Repeating a public query with the same cached answer changes no count. -/
-theorem counts_cached (A : Finset Q) (answers : Q → Option ι) (q : Q) (hq : q ∈ A) :
-    counts (insert q A) answers = counts A answers := by rw [Finset.insert_eq_of_mem hq]
-
-#print axioms counts_insert_update
-#print axioms counts_cached
 end WeightedPublicCounts
 end
 end
 
-/- Original module: Submissions.UpperCompressions.FiniteCacheCounts; SHA256 dcd6df82ab26b4356af7b8014b4a1ded5c1afb1a98369536372427631377e68b. -/
 section
 noncomputable section
 open scoped Classical
@@ -2276,15 +1467,10 @@ theorem seen_card_update (A : Finset D) (cache : D → Option B) (q : D) (u : B)
 theorem seen_card_le (A : Finset D) (cache : D → Option B) : (seen A cache).card ≤ A.card :=
   Finset.card_le_card (Finset.filter_subset _ _)
 
-#print axioms classCounts_update_of_mem
-#print axioms classCounts_update_of_not_mem
-#print axioms seen_card_update
-#print axioms seen_card_le
 end WeightedCacheCounts
 end
 end
 
-/- Original module: Submissions.UpperCompressions.FirstHitFreedman; SHA256 1b842ae043498009825189176a13d630e553b7ea5b58116699e2547cb87ad21f. -/
 section
 
 /-! An explicit first-hit/absorbing-state construction over adaptive kernels.
@@ -2340,148 +1526,6 @@ def classify (hit kill : ℕ → S → Prop) (t : ℕ) (s : S) : StoppedState hi
     (hh : ¬hit t s) (hk : ¬kill t s) : (classify hit kill t s).status = .active := by
   simp [classify, hh, hk]
 
-/-- Active states take one original transition and classify the result; stopped
-states take a deterministic self-loop, freezing their clock and potential. -/
-def stoppedKernel (K : Kernels S) (hit kill : ℕ → S → Prop) : Kernels (StoppedState hit kill) :=
-  fun _ st => if st.status = .active then
-    (K st.clock st.value).comp
-      (LinearMap.pi (fun s' => LinearMap.proj (classify hit kill (st.clock+1) s')))
-    else LinearMap.proj st
-
-@[simp] theorem stoppedKernel_apply (K : Kernels S) (hit kill : ℕ → S → Prop)
-    (t : ℕ) (st : StoppedState hit kill) (f : StoppedState hit kill → ℝ) :
-    stoppedKernel K hit kill t st f =
-      if st.status = .active then
-        K st.clock st.value (fun s' => f (classify hit kill (st.clock+1) s'))
-      else f st := by
-  unfold stoppedKernel
-  split_ifs <;> rfl
-
-theorem stoppedKernel_mono (K : Kernels S)
-    (hmono : ∀ t s f g, (∀ s', f s' ≤ g s') → K t s f ≤ K t s g)
-    (hit kill : ℕ → S → Prop) (t : ℕ) (st : StoppedState hit kill)
-    (f g : StoppedState hit kill → ℝ) (hfg : ∀ s', f s' ≤ g s') :
-    stoppedKernel K hit kill t st f ≤ stoppedKernel K hit kill t st g := by
-  simp only [stoppedKernel_apply]
-  split_ifs
-  · exact hmono _ _ _ _ (fun s' => hfg _)
-  · exact hfg st
-
-theorem stoppedKernel_one (K : Kernels S)
-    (hnorm : ∀ t s, K t s (fun _ => 1) = 1)
-    (hit kill : ℕ → S → Prop) (t : ℕ) (st : StoppedState hit kill) :
-    stoppedKernel K hit kill t st (fun _ => 1) = 1 := by
-  simp only [stoppedKernel_apply]
-  split_ifs
-  · exact hnorm _ _
-  · rfl
-
-def hitIndicator (hit kill : ℕ → S → Prop) (st : StoppedState hit kill) : ℝ :=
-  if st.status = .hit then 1 else 0
-
-/-- Direct recursive event probability: hit has priority over kill. For the
-usual variance/good-event stopping, the predicates should be chosen disjoint. -/
-def firstHit (K : Kernels S) (hit kill : ℕ → S → Prop) : ℕ → ℕ → S → ℝ
-  | 0, t, s => if hit t s then 1 else 0
-  | n+1, t, s => if hit t s then 1 else if kill t s then 0
-      else K t s (fun s' => firstHit K hit kill n (t+1) s')
-
-theorem iterate_stopped (K : Kernels S) (hit kill : ℕ → S → Prop)
-    (st : StoppedState hit kill) (hstop : st.status ≠ .active)
-    (n t : ℕ) (f : StoppedState hit kill → ℝ) :
-    iterate (stoppedKernel K hit kill) n t st f = f st := by
-  induction n generalizing t with
-  | zero => rfl
-  | succ n ih =>
-    rw [iterate_succ, stoppedKernel_apply, if_neg hstop]
-    exact ih (t+1)
-
-/-- Exact equality between the absorbing construction and the first-hit-before-
-kill event, including the initial time and every time through the horizon. -/
-theorem iterate_hit_eq (K : Kernels S) (hit kill : ℕ → S → Prop)
-    (n t u : ℕ) (s : S) :
-    iterate (stoppedKernel K hit kill) n u (classify hit kill t s) (hitIndicator hit kill) =
-      firstHit K hit kill n t s := by
-  induction n generalizing t u s with
-  | zero =>
-    simp only [iterate_zero, firstHit, hitIndicator]
-    by_cases hh : hit t s
-    · simp [hh]
-    · by_cases hk : kill t s <;> simp [classify, hh, hk]
-  | succ n ih =>
-    by_cases hh : hit t s
-    · rw [iterate_stopped K hit kill _ (by simp [hh])]
-      simp [firstHit, hitIndicator, hh]
-    · by_cases hk : kill t s
-      · rw [iterate_stopped K hit kill _ (by simp [hh, hk])]
-        simp [firstHit, hitIndicator, hh, hk]
-      · simp only [iterate_succ, stoppedKernel_apply, classify_status_active _ _ _ _ hh hk,
-          if_true, classify_clock, classify_value, firstHit, if_neg hh, if_neg hk]
-        congr 1
-        funext s'
-        exact ih (t+1) (u+1) s'
-
-/-- Original exponential drift is preserved by the absorbing construction.
-Both score and variance proxy use the stored stopping time. -/
-theorem stopped_exponential_drift
-    (K : Kernels S) (hit kill : ℕ → S → Prop)
-    (Z W : ℕ → S → ℝ) (θ J : ℝ)
-    (hstep : ∀ t s, ¬hit t s → ¬kill t s →
-      K t s (fun s' => Real.exp (θ*Z (t+1) s'-θ^2*W (t+1) s'/(2*(1-θ*J/3)))) ≤
-        Real.exp (θ*Z t s-θ^2*W t s/(2*(1-θ*J/3))))
-    (t : ℕ) (st : StoppedState hit kill) :
-    stoppedKernel K hit kill t st
-      (fun st' => Real.exp (θ*Z st'.clock st'.value-θ^2*W st'.clock st'.value/(2*(1-θ*J/3)))) ≤
-      Real.exp (θ*Z st.clock st.value-θ^2*W st.clock st.value/(2*(1-θ*J/3))) := by
-  simp only [stoppedKernel_apply]
-  split_ifs with hs
-  · simpa only [classify_clock, classify_value] using
-      hstep st.clock st.value (st.safe hs).1 (st.safe hs).2
-  · exact le_rfl
-
-/-- Maximal Freedman bound for a hit before an arbitrary killing condition.
-There is no factor for the number of time prefixes. A hit can include W≤v;
-killing can include W>v or failure of the stopped cache-good predicate. -/
-theorem firstHit_freedman
-    (K : Kernels S)
-    (hmono : ∀ t s f g, (∀ s', f s' ≤ g s') → K t s f ≤ K t s g)
-    (Z W : ℕ → S → ℝ) (s₀ : S) (n : ℕ) (a v J : ℝ)
-    (ha : 0 < a) (hv : 0 < v) (hJ : 0 ≤ J)
-    (hZ0 : Z 0 s₀ = 0) (hW0 : W 0 s₀ = 0)
-    (hit kill : ℕ → S → Prop)
-    (hstep : ∀ θ, 0 < θ → θ*J < 3 → ∀ t s, ¬hit t s → ¬kill t s →
-      K t s (fun s' => Real.exp (θ*Z (t+1) s'-θ^2*W (t+1) s'/(2*(1-θ*J/3)))) ≤
-        Real.exp (θ*Z t s-θ^2*W t s/(2*(1-θ*J/3))))
-    (hZ : ∀ t s, hit t s → a ≤ Z t s) (hW : ∀ t s, hit t s → W t s ≤ v) :
-    firstHit K hit kill n 0 s₀ ≤ Real.exp (-a^2/(2*(v+J*a/3))) := by
-  let Ks := stoppedKernel K hit kill
-  let Zs : ℕ → StoppedState hit kill → ℝ := fun _ st => Z st.clock st.value
-  let Ws : ℕ → StoppedState hit kill → ℝ := fun _ st => W st.clock st.value
-  have hz0 : Zs 0 (classify hit kill 0 s₀) = 0 := by simpa [Zs] using hZ0
-  have hw0 : Ws 0 (classify hit kill 0 s₀) = 0 := by simpa [Ws] using hW0
-  have hstepS : ∀ θ, 0 < θ → θ*J < 3 → ∀ t st,
-      Ks t st (fun st' => Real.exp (θ*Zs (t+1) st'-θ^2*Ws (t+1) st'/(2*(1-θ*J/3)))) ≤
-        Real.exp (θ*Zs t st-θ^2*Ws t st/(2*(1-θ*J/3))) := by
-    intro θ hθ hθJ t st
-    exact stopped_exponential_drift K hit kill Z W θ J (hstep θ hθ hθJ) t st
-  have hx := finite_kernel_freedman Ks (stoppedKernel_mono K hmono hit kill)
-    Zs Ws (classify hit kill 0 s₀) n a v J ha hv hJ hz0 hw0 hstepS
-    (fun st => st.status = .hit)
-    (fun st hs => hZ st.clock st.value (st.valid hs))
-    (fun st hs => hW st.clock st.value (st.valid hs))
-  change iterate (stoppedKernel K hit kill) n 0 (classify hit kill 0 s₀)
-    (hitIndicator hit kill) ≤ _ at hx
-  rw [iterate_hit_eq] at hx
-  exact hx
-
-#print axioms stoppedKernel_mono
-#print axioms stoppedKernel_one
-#print axioms iterate_stopped
-#print axioms iterate_hit_eq
-#print axioms stopped_exponential_drift
-#print axioms firstHit_freedman
-
 end WeightedFirstHit
 end
 end
-

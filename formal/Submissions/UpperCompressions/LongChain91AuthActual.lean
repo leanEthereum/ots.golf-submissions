@@ -1,4 +1,67 @@
-import Submissions.UpperCompressions.LongChain91AuthCrossCut
+import Submissions.UpperCompressions.LongChain91AuthGame
+
+/-!
+# Cross-cut authentication for the cost-89 shared-DAG construction
+
+Every scheduled cut has reconstruction cost 88, so two distinct scheduled cuts
+differ at a hash node `u` that the forged cut reconstructs and the signed cut
+does not (`exists_hidden_of_ne`).  The descent of
+`LongChain91AuthClosure` gives either a spurious binding or the honest input
+of `u`, which is a hidden key-generation point of the signed cut.
+-/
+
+open OracleSpec OracleComp OracleComp.EvalDist ENNReal
+open scoped Classical BigOperators
+noncomputable section
+
+set_option maxHeartbeats 4000000
+set_option maxRecDepth 100000
+
+namespace OptimalOTS.WeightedConstruction.LongChain91
+
+open OptimalOTS.Dag
+open Name
+
+/-! ## The cross-cut event -/
+
+theorem events_ne {A A' : Finset Name} (hA : IsCut A) (hA' : IsCut A')
+    (hne : A ≠ A') {xi : Rec} {d : Cache}
+    {given y : graph.Assignment}
+    (hy : graph.ReconEqs d (fins A') given y)
+    (hacc : lowPk (yv y Name.rh) = pkOf xi) :
+    Spr d xi ∨ Cache.Hits d (fHid (some A) xi) := by
+  obtain ⟨c, hc, rfl⟩ := hA
+  obtain ⟨c', hc', rfl⟩ := hA'
+  obtain ⟨u, huE', huE, hu, -⟩ := exists_hidden_of_ne hc hc' hne
+  obtain ⟨p, hp⟩ := Option.isSome_iff_exists.1 ((hashParent_isSome_iff u).2 hu)
+  rcases descent_query ⟨c', hc', rfl⟩ hy hacc hp huE' with hs | hq
+  · exact Or.inl hs
+  · right
+    refine ⟨pointOf xi u p, ?_, hq⟩
+    rw [fHid_isSome_some_iff]
+    exact ⟨u, p, hp, huE, rfl⟩
+
+theorem crossCutAuthentication : CrossCutAuthentication := by
+  intro xi signedClass i d given y hic hy hacc
+  have hA := isCut_of_mem_family (setsName_mem signedClass)
+  have hA' := isCut_of_mem_family (setsName_mem i)
+  exact events_ne hA hA'
+    (fun he => hic (setsName_injective he.symm)) hy hacc
+
+theorem accepted_class_cases_actual
+    (xi : Rec) (signedClass : Fin M) (m : Message)
+    (sigma : WeightedScheme.Signature) (c d : Cache)
+    (h : (true, d) ∈ support (run (scheme.verify (pkOf xi) m sigma) c)) :
+    ∃ answer, d (encQuery (m, sigma.1)) = some answer ∧
+      ∃ i : Fin M, LongChain91Schedule.decode answer = some i ∧
+        ((i = signedClass ∧
+            sigma.2 = graph.encode (fins (setsName signedClass))
+              (graph.evalRec xi)) ∨
+          Spr d xi ∨
+          Cache.Hits d (fHid (some (setsName signedClass)) xi)) :=
+  accepted_class_cases crossCutAuthentication xi signedClass m sigma c d h
+
+end OptimalOTS.WeightedConstruction.LongChain91
 
 /-!
 # Actual authentication continuation for the cost-91 long-chain scheme
@@ -94,20 +157,6 @@ theorem stB_success (pk : PublicKey) (m1 : Message) (st : A.State)
   subst ok
   exact ⟨m2, sigma2, c1, hne, h2⟩
 
-theorem stB_events_some (xi : Rec) (i : Fin M) (eta : BitVec 86)
-    (m1 : Message) (st : A.State) (c : Cache) (p : Bool × Cache)
-    (hp : p ∈ support (run (stB A (pkOf xi) m1 st
-      (some (eta, revealed (setsName i) xi))) c))
-    (hok : p.1 = true) :
-    Spr p.2 xi ∨ Cache.Hits p.2 (fHid (some (setsName i)) xi) ∨
-      AlternateClass p.2 (m1, eta) i := by
-  obtain ⟨m2, sigma2, c1, hne, hv⟩ :=
-    stB_success A (pkOf xi) m1 st _ c p hp hok
-  apply accepted_strong_event_actual xi i (m1, eta) m2 sigma2 c1 p.2 hv
-  intro he
-  apply hne
-  exact congrArg some he.symm
-
 theorem stB_events_none (xi : Rec) (m1 : Message) (st : A.State)
     (c : Cache) (p : Bool × Cache)
     (hp : p ∈ support (run (stB A (pkOf xi) m1 st none) c))
@@ -142,35 +191,6 @@ theorem graph_iub (oa : OracleComp Spec Bool) (xi : Rec)
     exact disjoint_fExp_fHid _ xi q hq
   rw [hkc]
   exact iub oa (fHid Aq xi) successValue successValue_le_one _ hdisj
-
-theorem stB_iub_some (xi : Rec) (i : Fin M) (eta : BitVec 86)
-    (m1 : Message) (st : A.State) (d d' : Cache)
-    (hd' : IndexExtension d d') (hxi : ¬ Cache.Hits d (kc xi)) :
-    E (run (stB A (pkOf xi) m1 st
-      (some (eta, revealed (setsName i) xi)))
-      (Cache.extend d' (kc xi))) successValue ≤
-      E (run (stB A (pkOf xi) m1 st
-        (some (eta, revealed (setsName i) xi)))
-        (Cache.extend d' (fExp (some (setsName i)) xi)))
-        (fun p => ind (Cache.Hits p.2 (fHid (some (setsName i)) xi)) +
-          ind (Spr p.2 xi) + ind (AlternateClass p.2 (m1, eta) i)) := by
-  refine (graph_iub _ xi (some (setsName i)) d d' hd' hxi).trans ?_
-  apply expectedValue_mono_of_support
-  intro p hp
-  by_cases hh : Cache.Hits p.2 (fHid (some (setsName i)) xi)
-  · rw [if_pos hh, ind_of hh]
-    exact le_add_right le_self_add
-  · rw [if_neg hh]
-    by_cases hok : p.1 = true
-    · rw [successValue, if_pos hok]
-      rcases stB_events_some A xi i eta m1 st _ p hp hok with hs | hh' | hi
-      · rw [ind_of hs]
-        exact le_add_right le_add_self
-      · exact absurd hh' hh
-      · rw [ind_of hi]
-        exact le_add_self
-    · rw [successValue, if_neg hok]
-      exact zero_le
 
 /-! ## Retaining the forged message and signature -/
 
@@ -582,27 +602,6 @@ theorem postsign_auth_expected {alpha : Type} {Ac : Finset Name}
   exact fiber_costs_le Ac hT (fun dt =>
     expectedCharge (otherPaid isIndex) (K dt) (Cache.extend d' dt.2.2))
 
-theorem actual_sign_auth_expected {alpha : Type}
-    (x : scheme.graph.Assignment) (m : Message) (d : Cache)
-    (p : Option WeightedScheme.Signature × Cache)
-    (hp : p ∈ support (run (scheme.sign x m) d))
-    {Ac : Finset Name} (hAc : IsCut Ac)
-    (pk : BitVec 128) (T : Finset Rec) (hT : T ⊆ fiberA pk)
-    (hTd : ∀ xi ∈ T, ¬ Cache.Hits d (kc xi))
-    (isIndex : Spec.Domain → Prop)
-    (hindex : ∀ q, isIndex (.inr q) → ∃ u : EncInput, q = encQuery u)
-    (K : Data → OracleComp Spec alpha) :
-    (∑ xi ∈ T, w * E
-      (run (K (dataOf Ac xi)) (Cache.extend p.2 (fExp (some Ac) xi)))
-      (fun z => ind (Cache.Hits z.2 (fHid (some Ac) xi)) +
-        ind (Spr z.2 xi))) ≤
-      (∑ xi ∈ T, w * ind (Spr d xi)) +
-        authRate * ∑ xi ∈ fiberA pk, w *
-          expectedCharge (otherPaid isIndex) (K (dataOf Ac xi))
-            (Cache.extend p.2 (fExp (some Ac) xi)) :=
-  postsign_auth_expected hAc pk T hT d p.2
-    (sign_indexExtension scheme x m d p hp) hTd isIndex hindex K
-
 /-! ## Wire-query and signer adapters consumed by the game layer -/
 
 theorem isCut_setsName (i : Fin M) : IsCut (setsName i) :=
@@ -623,12 +622,5 @@ abbrev SignedWinner := Option (WeightedSampling.Winner 86 M)
 def signatureFromWinner (xi : Rec) (s : SignedWinner) :
     Option WeightedScheme.Signature :=
   s.map fun r => (r.1, revealed (setsName r.2) xi)
-
-#print axioms stB_iub_some
-#print axioms stBWithForgery_index_witness
-#print axioms stageA_auth_expected
-#print axioms failed_sign_success_expected
-#print axioms actual_sign_auth_expected
-#print axioms exists_encQuery_of_length
 
 end OptimalOTS.WeightedConstruction.LongChain91

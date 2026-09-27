@@ -3,14 +3,13 @@ import Submissions.UpperCompressions.LongChain91Continuation
 import Submissions.UpperCompressions.ProofBundle09
 
 /-!
-# Actual initial game for the cost-90 long-chain construction
+# Actual initial game for the cost-89 long-chain construction
 
 This is the concrete adaptive choose/sign/forge reduction.  It preserves the
 actual shared cache and the exact remaining query clock while averaging over
 the finite key-generation records.
 -/
 
-/- Original module: Submissions.UpperCompressions.LongChain91InitialGame; SHA256 80a0ff072e29eb3ab66f9910237c373c89d18391582a2d0e2a291da451b447e0. -/
 section
 
 /-! Actual chain18 keygen and adaptive message-choice decomposition. The
@@ -60,7 +59,6 @@ theorem publicKey_record (ξ : Rec) : scheme.publicKey (graph.evalRec ξ) = pkOf
   unfold val
   exact (lowPk_cast_eq (graph_len_fin rh) (graph.evalRec ξ rh.fin)).symm
 
-
 theorem E_keygen (F : (PublicKey × scheme.graph.Assignment) × Cache → ℝ≥0∞) :
     E (run scheme.keygen ∅) F = ∑ ξ : Rec, w*F ((pkOf ξ,graph.evalRec ξ),kc ξ) := by
   rw [WeightedScheme.Scheme.keygen, GraphKeygenBridge.E_run_keygen scheme.graph scheme.publicKey tagging F]
@@ -76,14 +74,14 @@ theorem E_experiment (F : Bool × Cache → ℝ≥0∞) :
 
 theorem keygen_remaining {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) :
-    1087 ≤ B ∧ ∀ ξ : Rec,
-      CostAtMost (afterKeygen A (pkOf ξ,graph.evalRec ξ)) (B-1087) := by
+    1101 ≤ B ∧ ∀ ξ : Rec,
+      CostAtMost (afterKeygen A (pkOf ξ,graph.evalRec ξ)) (B-1101) := by
   rw [experiment_eq,WeightedScheme.Scheme.keygen] at hB
   obtain ⟨hc,hr⟩ := GraphKeygenBridge.costAtMost_keygen_bind scheme.graph scheme.publicKey (afterKeygen A) hB
   rw [scheme_keygenCost] at hc hr
   refine ⟨hc,fun ξ => ?_⟩
   have hh := hr ξ
-  change CostAtMost (afterKeygen A (scheme.publicKey (graph.evalRec ξ),graph.evalRec ξ)) (B-1087) at hh
+  change CostAtMost (afterKeygen A (scheme.publicKey (graph.evalRec ξ),graph.evalRec ξ)) (B-1101) at hh
   rwa [publicKey_record] at hh
 
 theorem afterChoose_loop (pk : PublicKey) (ξ : Rec) (x : Message × A.State) :
@@ -137,59 +135,10 @@ def conditional (pk : PublicKey) (x : Message × A.State) (d : Cache) : ℝ≥0�
   ∑ ξ ∈ fiberA pk, w * (if Cache.Hits d (kc ξ) then 0 else
     E (run (afterChoose A pk (graph.evalRec ξ) x) (Cache.extend d (kc ξ))) successValue)
 
-/-- The actual global success decomposes into pre-sign graph authentication
-cost and the record-weighted actual conditional sign/post experiment. -/
-theorem global_reduced (isIndex : Spec.Domain → Prop)
-    (hindex : ∀ q, isIndex (.inr q) → ∃ u : LongChain91.EncInput, q=LongChain91.encQuery u) :
-    E (run (scheme.toAlgorithm.experiment A) ∅) successValue ≤
-      (∑ pk : PublicKey, (authRate*sumW (fiberA pk))*
-        expectedCharge (otherPaid isIndex) (A.choose pk) ∅) +
-      ∑ pk : PublicKey, E (run (A.choose pk) ∅) (fun p => conditional A pk p.1 p.2) := by
-  rw [E_experiment]
-  calc
-    _ ≤ ∑ ξ : Rec, w*E (run (A.choose (pkOf ξ)) ∅) (fun p =>
-        if Cache.Hits p.2 (kc ξ) then 1 else
-          E (run (afterChoose A (pkOf ξ) (graph.evalRec ξ) p.1)
-            (Cache.extend p.2 (kc ξ))) successValue) :=
-      Finset.sum_le_sum fun ξ _ => mul_le_mul' le_rfl (stageA_iub A ξ)
-    _ = ∑ pk : PublicKey, E (run (A.choose pk) ∅) (fun p =>
-        ∑ ξ ∈ fiberA pk, w*(if Cache.Hits p.2 (kc ξ) then 1 else
-          E (run (afterChoose A (pkOf ξ) (graph.evalRec ξ) p.1)
-            (Cache.extend p.2 (kc ξ))) successValue)) := regroup A _
-    _ ≤ ∑ pk : PublicKey, ((authRate*sumW (fiberA pk))*
-        expectedCharge (otherPaid isIndex) (A.choose pk) ∅ +
-        E (run (A.choose pk) ∅) (fun p => conditional A pk p.1 p.2)) := by
-      apply Finset.sum_le_sum
-      intro pk _
-      calc
-        _ ≤ E (run (A.choose pk) ∅) (fun p => authPotential (fiberA pk) none p.2 +
-            conditional A pk p.1 p.2) := by
-          apply E_mono
-          intro p
-          unfold conditional authPotential
-          simp only [← Finset.sum_add_distrib]
-          apply Finset.sum_le_sum
-          intro ξ hξ
-          have hpk : pkOf ξ = pk := pkOf_of_subset_fiberA (Finset.Subset.refl _) ξ hξ
-          rw [hpk,fHid_none]
-          by_cases hh : Cache.Hits p.2 (kc ξ)
-          · simp only [if_pos hh,ind_of hh,mul_zero,add_zero]
-            exact mul_le_mul' le_rfl (le_add_right (le_refl (1:ℝ≥0∞)))
-          · simp only [if_neg hh,ind_not hh,zero_add]
-            exact le_add_of_nonneg_left (bot_le : (0:ℝ≥0∞) ≤ _)
-        _ = E (run (A.choose pk) ∅) (fun p => authPotential (fiberA pk) none p.2) +
-            E (run (A.choose pk) ∅) (fun p => conditional A pk p.1 p.2) := expectedValue_add _ _ _
-        _ ≤ _ := add_le_add (stageA_auth_expected A pk isIndex hindex) le_rfl
-    _ = _ := Finset.sum_add_distrib
-
-#print axioms E_experiment
-#print axioms keygen_remaining
-#print axioms global_reduced
 end OptimalOTS.WeightedConstruction.LongChain91InitialGame
 end
 end
 
-/- Original module: Submissions.UpperCompressions.LongChain91InitialEager; SHA256 abd9b9930f1c6a86461b7ab47a79ae5a2609806e01361b3c758118bf0df46ad9. -/
 section
 
 /-! The reduced actual sign/post continuation as the full-table expectation
@@ -250,13 +199,10 @@ theorem conditional_eager (pk : PublicKey) (x : Message × A.State) (d : Cache) 
   · simp only [hh,if_false,not_false_eq_true,if_true]
     rw [afterChoose_eager]
 
-#print axioms afterChoose_eager
-#print axioms conditional_eager
 end OptimalOTS.WeightedConstruction.LongChain91InitialGame
 end
 end
 
-/- Original module: Submissions.UpperCompressions.LongChain91InitialBudget; SHA256 d4e30cf5d3f89f79bde728f1fa4014a1d43592c40c02c2c4925420cd48f24535. -/
 section
 
 /-! Pathwise budgets for the actual reduced adaptive choose run and all-L
@@ -320,50 +266,17 @@ theorem choose_supported_sign_reserve (pk : PublicKey) (b : ℕ)
 theorem experiment_choose_reserve {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B)
     (pk : PublicKey) (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1087))) :
-    signBudget ≤ r.2.2 ∧ r.2.2 ≤ B-1087 ∧
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1101))) :
+    signBudget ≤ r.2.2 ∧ r.2.2 ≤ B-1101 ∧
       ∀ ξ ∈ fiberA pk, ∀ c p,
         p ∈ support (run (loop 86 signedDecode signedTier r.1.1 signBudget) c) →
         CostAtMost (stBWithForgery A pk r.1.1 r.1.2 (signatureFromWinner ξ p.1)) (r.2.2-signBudget) :=
-  choose_supported_sign_reserve A pk (B-1087) (fun ξ _ => (keygen_remaining A hB).2 ξ) r hr
+  choose_supported_sign_reserve A pk (B-1101) (fun ξ _ => (keygen_remaining A hB).2 ξ) r hr
 
-theorem choose_spent_remaining_le {B : ℕ}
-    (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey) :
-    expectedCharge (fun t => queryCost t) (A.choose pk) ∅ +
-      E (runRemaining (A.choose pk) ∅ (B-1087)) (fun r => (r.2.2:ℝ≥0∞)) ≤ (B-1087:ℕ) := by
-  letI : Nonempty {ξ : Rec // ξ ∈ fiberA pk} := (fiber_nonempty pk).to_subtype
-  apply expected_spent_remaining_le (A.choose pk)
-    (fun j : {ξ : Rec // ξ ∈ fiberA pk} => afterChoose A pk (graph.evalRec j.1)) ∅ (B-1087)
-  intro j
-  have h := (keygen_remaining A hB).2 j.1
-  have hpk := pkOf_of_subset_fiberA (Finset.Subset.refl _) j.1 j.2
-  simpa only [afterKeygen,hpk] using h
-
-/-- The same global factorization with the actual remaining budget retained
-in the first-stage output, ready for a path-dependent continuation bound. -/
-theorem global_reduced_clock (b : ℕ) (isIndex : Spec.Domain → Prop)
-    (hindex : ∀ q, isIndex (.inr q) → ∃ u : LongChain91.EncInput, q=LongChain91.encQuery u) :
-    E (run (scheme.toAlgorithm.experiment A) ∅) successValue ≤
-      (∑ pk : PublicKey, (authRate*sumW (fiberA pk))*
-        expectedCharge (otherPaid isIndex) (A.choose pk) ∅) +
-      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ b)
-        (fun r => conditional A pk r.1 r.2.1) := by
-  have h := global_reduced A isIndex hindex
-  have he (pk : PublicKey) : E (run (A.choose pk) ∅) (fun p => conditional A pk p.1 p.2) =
-      E (runRemaining (A.choose pk) ∅ b) (fun r => conditional A pk r.1 r.2.1) := by
-    rw [← runRemaining_project (A.choose pk) ∅ b,E_map]
-  simp_rw [he] at h
-  exact h
-
-#print axioms global_reduced_clock
-#print axioms choose_supported_sign_reserve
-#print axioms experiment_choose_reserve
-#print axioms choose_spent_remaining_le
 end OptimalOTS.WeightedConstruction.LongChain91InitialGame
 end
 end
 
-/- Original module: Submissions.UpperCompressions.LongChain91InitialPayoff; SHA256 946aaa2a41d0a2f94c4dc225d8decbcda88b9f96b7ffcdb49b34beecc80f033f. -/
 section
 
 /-! Sharp initial authentication accounting: the surviving pre-sign Spr term
@@ -466,13 +379,10 @@ theorem global_payoff_clock (b : ℕ) (isIndex : Spec.Domain → Prop)
       Finset.sum_le_sum fun pk _ => add_le_add (stageA_auth_expected A pk isIndex hindex) le_rfl
     _ = _ := Finset.sum_add_distrib
 
-#print axioms global_reduced_hits
-#print axioms global_payoff_clock
 end OptimalOTS.WeightedConstruction.LongChain91InitialGame
 end
 end
 
-/- Original module: Submissions.UpperCompressions.ActualGamePayoff; SHA256 69ad9ff56c514eee27b52421264b229ad5654e73fdbfa1c6d8c14030256a0bc0. -/
 section
 
 /-! The actual complete chain18 experiment reduces to physical pre-sign-cache
@@ -517,41 +427,17 @@ theorem conditional_actual_master (A : scheme.toAlgorithm.Adversary) (pk : Publi
 theorem supportedPostBudget_of_experiment (A : scheme.toAlgorithm.Adversary) {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey)
     (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1087))) :
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1101))) :
     SupportedPostBudget A pk r.1.1 r.1.2 r.2.1 signBudget (r.2.2-signBudget) := by
   intro ξ hξ g p hp
   have h := (experiment_choose_reserve A hB pk r hr).2.2 ξ hξ _ p hp
   have hpk := pkOf_of_subset_fiberA (Finset.Subset.refl _) ξ hξ
   simpa only [hpk] using h
 
-def continuationPayoff (A : scheme.toAlgorithm.Adversary)
-    (pk : PublicKey) (r : (Message × A.State) × Cache × ℕ) : ℝ≥0∞ :=
-  sumW (fiberA pk) * (signerAverage r.1.1 r.2.1 signBudget (winnerReplay r.2.1 r.1.1) +
-    (r.2.2-signBudget : ℕ)*(authRate+signerAverage r.1.1 r.2.1 signBudget winnerExcess))
-
-/-- Full actual experiment-to-payoff bound. The public choose stage and all
-remaining sign/post stages use their actual shared-cache semantics and one
-residual budget. Pre-sign spurious loss is absorbed exactly once. -/
-theorem global_actual_game_payoff (A : scheme.toAlgorithm.Adversary) {B : ℕ}
-    (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) :
-    E (run (scheme.toAlgorithm.experiment A) ∅) successValue ≤
-      (∑ pk : PublicKey, (authRate*sumW (fiberA pk))*
-        expectedCharge (otherPaid (isIndexLength (msgBits+86))) (A.choose pk) ∅) +
-      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1087)) (continuationPayoff A pk) := by
-  apply global_payoff_clock A (B-1087) (isIndexLength (msgBits+86))
-    (fun q hq => exists_encQuery_of_length q hq) (continuationPayoff A)
-  intro pk r hr
-  exact conditional_actual_master A pk r.1.1 r.1.2 r.2.1 (r.2.2-signBudget)
-    (supportedPostBudget_of_experiment A hB pk r hr)
-
-#print axioms conditional_actual_master
-#print axioms supportedPostBudget_of_experiment
-#print axioms global_actual_game_payoff
 end OptimalOTS.WeightedConstruction.LongChain91
 end
 end
 
-/- Original module: Submissions.UpperCompressions.ActualGamePayoffGated; SHA256 9027d275dbb45ebb41fa88f25ed0c9113e5d65f370390a4264743b35bda4285e. -/
 section
 
 /-! Preserve the actual conditional success cap before expanding empirical
@@ -591,7 +477,7 @@ theorem conditional_supported_gated (A : scheme.toAlgorithm.Adversary) {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B)
     (good : PublicKey → ((Message × A.State) × Cache × ℕ) → Prop)
     (pk : PublicKey) (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1087))) :
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1101))) :
     conditional A pk r.1 r.2.1 ≤ survivingSpr pk r.2.1 + gatedContinuationPayoff A good pk r := by
   by_cases hg : good pk r
   · rw [gatedContinuationPayoff,if_pos hg]
@@ -609,14 +495,12 @@ theorem global_actual_game_payoff_gated (A : scheme.toAlgorithm.Adversary) {B : 
     E (run (scheme.toAlgorithm.experiment A) ∅) successValue ≤
       (∑ pk : PublicKey, (authRate*sumW (fiberA pk))*
         expectedCharge (otherPaid (isIndexLength (msgBits+86))) (A.choose pk) ∅) +
-      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1087))
+      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1101))
         (gatedContinuationPayoff A good pk) := by
-  apply global_payoff_clock A (B-1087) (isIndexLength (msgBits+86))
+  apply global_payoff_clock A (B-1101) (isIndexLength (msgBits+86))
     (fun q hq => exists_encQuery_of_length q hq) (gatedContinuationPayoff A good)
   exact conditional_supported_gated A hB good
 
-#print axioms conditional_le_fiber
-#print axioms global_actual_game_payoff_gated
 end OptimalOTS.WeightedConstruction.LongChain91
 end
 end

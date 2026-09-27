@@ -1,7 +1,6 @@
 import Submissions.UpperCompressions.ProofBundle00
 import Mathlib
 
-/- Original module: Submissions.UpperCompressions.WeightedScoreMGF; SHA256 83096b6d8c04aa7430bd05e7e55fce37d34560bace5f796a8eb8d0c94c2ab0a7. -/
 section
 
 noncomputable section
@@ -57,12 +56,10 @@ theorem score_step_mgf (w : WeightedRow.Weights ι) (G θ : ℝ)
     simpa only [mul_one] using mul_le_mul_of_nonneg_left hx
       (Real.exp_nonneg (θ*w.M1 q k-rate w θ G*(q:ℝ)))
 
-#print axioms score_step_mgf
 end WeightedEmpirical
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedLowerMGF; SHA256 0514182599438e70315dbeb5a47c3924ea60a02d458043c9bb77658d99ab778d. -/
 section
 noncomputable section
 open scoped Classical BigOperators
@@ -109,70 +106,10 @@ theorem lower_score_step_mgf (w : WeightedRow.Weights ι) (G θ : ℝ)
     simpa only [mul_one] using mul_le_mul_of_nonneg_left hx
       (Real.exp_nonneg (θ*(-w.M1 q k)-rate w θ G*(q:ℝ)))
 
-#print axioms lower_score_step_mgf
 end WeightedEmpirical
 end
 end
 
-/- Original module: Submissions.UpperCompressions.LinearBoundaryConstants; SHA256 ca2ac1bfdf7f4f9567f3e77f89f195eab94c002eb20ce8ccb4ecf45f3b1d7c8a. -/
-section
-noncomputable section
-open scoped BigOperators
-namespace WeightedEmpirical
-open WeightedRow.Weights
-variable {ι : Type} [Fintype ι] [DecidableEq ι]
-
-/-- A convenient conservative sufficient condition for the linear boundary. -/
-theorem rate_le_linear (w : WeightedRow.Weights ι) (G θ δ : ℝ)
-    (hG : 0 ≤ G) (hθ : 0 ≤ θ) (hθG : θ*G ≤ 1)
-    (hsmall : θ*G*w.mean ≤ δ/2) : rate w θ G ≤ θ*δ/2 := by
-  have hm : 0 ≤ w.mean := by
-    unfold mean
-    exact Finset.sum_nonneg (fun i _ => mul_nonneg (w.p_pos i).le (w.g_nonneg i))
-  have hn : 0 ≤ θ^2*(G*w.mean) := by positivity
-  have hd : 1 ≤ 2*(1-θ*G/3) := by linarith
-  calc
-    rate w θ G ≤ θ^2*(G*w.mean) := div_le_self hn hd
-    _ = θ*(θ*G*w.mean) := by ring
-    _ ≤ θ*(δ/2) := mul_le_mul_of_nonneg_left hsmall hθ
-    _ = θ*δ/2 := by ring
-
-def mixedTheta (κ : ℝ) : ℝ := 1/(1000*(2^20:ℝ)*κ)
-
-/-- Explicit mixed72 constants for global .01κ max(q,N/10) concentration.
-This deliberately leaves enormous exponent slack. -/
-theorem mixed_global_constants (w : WeightedRow.Weights ι) (κ : ℝ)
-    (hκ : 0 < κ) (hm : w.mean ≤ κ) :
-    0 < mixedTheta κ ∧
-    mixedTheta κ*((2^20:ℝ)*κ/2) < 3 ∧
-    rate w (mixedTheta κ) ((2^20:ℝ)*κ/2) ≤ mixedTheta κ*(κ/100)/2 ∧
-    (2^40:ℝ) ≤ mixedTheta κ*(κ/100)*((2^86:ℝ)/10)/2 := by
-  have hθ : 0 < mixedTheta κ := by unfold mixedTheta; positivity
-  have hp : mixedTheta κ*((2^20:ℝ)*κ/2) = 1/2000 := by
-    unfold mixedTheta
-    field_simp
-    <;> ring
-  refine ⟨hθ, ?_, ?_, ?_⟩
-  · rw [hp]
-    norm_num
-  · apply rate_le_linear w _ _ _ (by positivity) hθ.le
-    · rw [hp]; norm_num
-    · rw [hp]
-      nlinarith
-  · have he : mixedTheta κ*(κ/100)*((2^86:ℝ)/10)/2 = (2^66:ℝ)/2000000 := by
-      unfold mixedTheta
-      field_simp
-      <;> ring
-    rw [he]
-    norm_num
-
-#print axioms rate_le_linear
-#print axioms mixed_global_constants
-end WeightedEmpirical
-end
-end
-
-/- Original module: Submissions.UpperCompressions.RowConcentrationConstants; SHA256 a091dbb4288175f5ffb630df3b19eadaf87aff063eb5f99cfa125bce49e35cec. -/
 section
 noncomputable section
 namespace WeightedEmpirical
@@ -191,42 +128,10 @@ theorem mixed_row_exponent (G : ℝ) (hG : 0 < G) :
   norm_num
   nlinarith [sq_pos_of_pos hG]
 
-/-- Turn a deliberately loose exponential margin into a binary bound. -/
-theorem exp_neg_pow30_le : Real.exp (-(2^30:ℝ)) ≤ ((2:ℝ)^1024)⁻¹ := by
-  have he : (2:ℝ) ≤ Real.exp 1 := by linarith [Real.add_one_le_exp (1:ℝ)]
-  have hp : (2:ℝ)^1024 ≤ (Real.exp 1)^1024 := pow_le_pow_left₀ (by norm_num) he 1024
-  rw [← Real.exp_nat_mul, mul_one] at hp
-  have hc : (1024:ℝ) ≤ 2^30 := by norm_num
-  have hb := hp.trans (Real.exp_le_exp.mpr hc)
-  rw [Real.exp_neg]
-  exact (inv_le_inv₀ (Real.exp_pos _) (by positivity)).2 hb
-
-/-- A 256-bit message-row union over 72 prefix tests and two weighted scores,
-plus the global-score event, still fits within 2^-512. No time-prefix factor. -/
-theorem mixed_row_union_margin :
-    (74*(2^256:ℝ)+1)*Real.exp (-(2^30:ℝ)) ≤ ((2:ℝ)^512)⁻¹ := by
-  have hm := mul_le_mul_of_nonneg_left exp_neg_pow30_le
-    (show 0 ≤ 74*(2^256:ℝ)+1 by positivity)
-  have hbase : (75:ℝ) ≤ 2^256 := by norm_num
-  have hfactor : 74*(2^256:ℝ)+1 ≤ (2:ℝ)^512 := by
-    calc
-      74*(2^256:ℝ)+1 ≤ ((2:ℝ)^256)^2 := by nlinarith
-      _ = (2:ℝ)^512 := by rw [← pow_mul]
-  apply hm.trans
-  calc
-    (74*(2^256:ℝ)+1)*((2:ℝ)^1024)⁻¹ ≤ (2:ℝ)^512*((2:ℝ)^1024)⁻¹ := by gcongr
-    _ = ((2:ℝ)^512)⁻¹ := by
-      rw [show (1024:ℕ) = 512+512 from rfl, pow_add]
-      field_simp
-
-#print axioms mixed_row_exponent
-#print axioms exp_neg_pow30_le
-#print axioms mixed_row_union_margin
 end WeightedEmpirical
 end
 end
 
-/- Original module: Submissions.UpperCompressions.ReweightedScores; SHA256 f145a7987959605c6f45a9b5f09b54f62cb4998e5872119e5583d5c61e698e13. -/
 section
 noncomputable section
 open scoped Classical BigOperators
@@ -255,33 +160,10 @@ theorem prefix_weight_bound (w : WeightedRow.Weights ι) (C : Finset ι) (i : ι
   change (if i ∈ C then (1:ℝ) else 0) ≤ 1
   split_ifs <;> norm_num
 
-private theorem indicator_sum (C : Finset ι) (f : ι → ℝ) :
-    (∑ i, f i*(if i ∈ C then 1 else 0)) = ∑ i ∈ C, f i := by
-  simp only [mul_ite, mul_one, mul_zero]
-  rw [← Finset.sum_filter]
-  simp
-
-theorem prefix_mean (w : WeightedRow.Weights ι) (C : Finset ι) :
-    (w.prefixWeights C).mean = ∑ i ∈ C, w.p i := by
-  exact indicator_sum C w.p
-
-theorem prefix_score (w : WeightedRow.Weights ι) (C : Finset ι) (k : ι → ℕ) :
-    (w.prefixWeights C).score k = ∑ i ∈ C, (k i:ℝ) := by
-  exact indicator_sum C (fun i => (k i:ℝ))
-
-/-- Lower-tail M1 is exactly the empirical accepted-prefix deficit. -/
-theorem prefix_deficit (w : WeightedRow.Weights ι) (C : Finset ι) (q : ℕ) (k : ι → ℕ) :
-    -(w.prefixWeights C).M1 q k = (∑ i ∈ C, w.p i)*(q:ℝ)-∑ i ∈ C, (k i:ℝ) := by
-  rw [M1, prefix_score, prefix_mean]
-  ring
-
-#print axioms withScore_classMass
-#print axioms prefix_deficit
 end WeightedRow.Weights
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedCacheEvidence; SHA256 bb74060f4d853b3fd9a56427e1fac7ee0e1857878a22202c75c2bde7a43f741a. -/
 section
 noncomputable section
 namespace WeightedCacheEvidence
@@ -323,13 +205,10 @@ theorem two (A : Finset Q) (c : Q → Option W) (decode : W → Option I) (i : I
     rw [Finset.card_insert_of_notMem hn,Finset.card_singleton]
   rw [hcard] at h
   exact h
-#print axioms one
-#print axioms two
 end WeightedCacheEvidence
 end
 end
 
-/- Original module: Submissions.UpperCompressions.StoppingExpectation; SHA256 cfdbfca09b9fc52b05f6024401aa4eba6cdad6e00c02bec559ddb4a8c7c2f98f. -/
 section
 
 /-! Bounded-stopping expectation algebra for the weighted-index research.
@@ -500,58 +379,10 @@ theorem mixed72_covariance (C κ K g h : ℝ)
     _ ≤ κ*K*(1/1000) := htotal
     _ = _ := by ring
 
-/-- Endpoint plus explicit covariance error for the mixed72 budget branch.
-No stopping theorem is assumed implicitly: both zero means and the second
-moment inequality appear in this statement. -/
-theorem stopped_mixed72_payoff
-    (E : (Ω → ℝ) →ₗ[ℝ] ℝ)
-    (hmono : ∀ f g, (∀ ω, f ω ≤ g ω) → E f ≤ E g)
-    (hnorm : E (fun _ => 1) = 1)
-    (τ S P : Ω → ℝ) (C h d κ K g : ℝ)
-    (hC : 0 ≤ C) (hCmax : C ≤ 99/98) (hh : 0 ≤ h) (hκ : 0 < κ)
-    (hK : 0 ≤ K) (hg : 0 ≤ g) (hKN : K ≤ (2:ℝ)^86/10)
-    (hgmax : g ≤ (2:ℝ)^20*κ/2) (hhmean : h ≤ κ)
-    (hτ0 : ∀ ω, 0 ≤ τ ω) (hτK : ∀ ω, τ ω ≤ K)
-    (hmean1 : E (fun ω => S ω - h*τ ω) = 0)
-    (hmean2 : E (fun ω => P ω - τ ω*S ω + h*τ ω*(τ ω+1)/2) = 0)
-    (hsecond : E (fun ω => (S ω - h*τ ω)^2) ≤ K*g*h) :
-    E (fun ω => C*(S ω+2*P ω/(2:ℝ)^86)+d*(K-τ ω)) ≤
-      K*max d (11*C*h/10) + κ*K/1000 := by
-  have hN : 0 < (2:ℝ)^86 := by positivity
-  have hT : 0 < κ*(2:ℝ)^86/4096 := by positivity
-  have hx := stopped_payoff E hmono hnorm τ S P C h d ((2:ℝ)^86) K
-    (K*g*h) (κ*(2:ℝ)^86/4096) hC hh hN hK hT hτ0 hτK
-    hmean1 hmean2 hsecond
-  have hc := mixed72_covariance C κ K g h hC hCmax hκ hK hg hh hKN hgmax hhmean
-  have hratio : (K-1)/(2:ℝ)^86 ≤ 1/10 := (div_le_iff₀ hN).2 (by linarith)
-  have hpre : C*h*(1+(K-1)/(2:ℝ)^86) ≤ 11*C*h/10 := by
-    have hm := mul_le_mul_of_nonneg_left hratio (mul_nonneg hC hh)
-    nlinarith
-  have hend := mul_le_mul_of_nonneg_left (max_le_max_left d hpre) hK
-  exact hx.trans (add_le_add hend hc)
-
-/-- A uniform pre-signing authentication charge is absorbed by the continuation
-rate when alpha ≤ d. This is deterministic algebra only. -/
-theorem pre_authentication_domination (α d K q u : ℝ)
-    (hα : α ≤ d) (hu : 0 ≤ u) :
-    α*u+d*(K-q-u) ≤ d*(K-q) := by
-  have hx := mul_le_mul_of_nonneg_right hα hu
-  nlinarith
-
-#print axioms covariance_young
-#print axioms endpoint
-#print axioms stopped_payoff
-#print axioms mixed72_young_coefficient
-#print axioms covariance_coefficient
-#print axioms mixed72_covariance
-#print axioms stopped_mixed72_payoff
-#print axioms pre_authentication_domination
-
 end WeightedStopping
 end
 end
 
-/- Original module: Submissions.UpperCompressions.WeightedHazardPair; SHA256 aa845daa836ee1faba622e815f316b2a8ff867c5ddb9706d98b732a2ec7d5d51. -/
 section
 
 /-! Deterministic domination of the cached-replay hazard by the global first
@@ -615,8 +446,6 @@ theorem hazard_le_score_pair (N : ℝ) (hN : 0 < N) (r : ℕ)
   have hs := w.seen_le_score k
   nlinarith
 
-#print axioms hazard_le_score_pair
 end WeightedRow.Weights
 end
 end
-

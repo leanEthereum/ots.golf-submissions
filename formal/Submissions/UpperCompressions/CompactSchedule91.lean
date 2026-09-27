@@ -515,10 +515,6 @@ def kernelNumerators : List ℕ := [
   1
 ]
 
-@[simp] theorem classCounts_length : classCounts.length = 160 := by decide +kernel
-@[simp] theorem aliasCounts_length : aliasCounts.length = 160 := by decide +kernel
-@[simp] theorem kernelNumerators_length : kernelNumerators.length = 160 := by decide +kernel
-
 def classes (i : Tier) : ℕ := classCounts.getD i.val 0
 def aliases (i : Tier) : ℕ := aliasCounts.getD i.val 0
 def kernelNumerator (i : Tier) : ℕ := kernelNumerators.getD i.val 0
@@ -544,150 +540,12 @@ theorem acceptedAliases_bounds : 90 * 2^236 ≤ acceptedAliases ∧ acceptedAlia
   rw [acceptedAliases_exact]
   norm_num [R]
 
-theorem keygen_compressions : 7*(8*18+11)+2 = 1087 := rfl
-
-theorem signature_bits : 42*129+86 = 5504 := rfl
-
 /-- Every alias multiplicity is nonzero and fits in a 256-bit oracle-answer fiber. -/
 theorem aliases_valid (i : Tier) : 0 < aliases i ∧ aliases i < R := by
   revert i
   decide +kernel
 
-/-- The emitted aliases are strictly increasing with the tier number. -/
-theorem aliases_strict {i j : Tier} (h : i < j) : aliases i < aliases j := by
-  revert i j
-  decide +kernel
-
 /-! ## Concrete class and alias fibers -/
-
-abbrev Class := (j : Tier) × Fin (classes j)
-abbrev multiplicity (c : Class) : ℕ := aliases c.1
-abbrev Alias := (c : Class) × Fin (multiplicity c)
-abbrev M := familyCardinality
-abbrev A := acceptedAliases
-
-theorem card_class : Fintype.card Class = M := by
-  simp only [Class, Fintype.card_sigma, Fintype.card_fin]
-  rfl
-
-theorem card_alias : Fintype.card Alias = A := by
-  rw [Fintype.card_sigma]
-  simp only [Fintype.card_fin]
-  change (∑ c : Class, aliases c.1) = acceptedAliases
-  rw [Fintype.sum_sigma]
-  have hsum (j : Tier) : (∑ _k : Fin (classes j), aliases j) = classes j * aliases j := by
-    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, smul_eq_mul]
-  simp only [hsum]
-  rfl
-
-def classEquiv : Class ≃ Fin M := Fintype.equivFinOfCardEq card_class
-def aliasEquiv : Alias ≃ Fin A := Fintype.equivFinOfCardEq card_alias
-
-def classTier (i : Fin M) : Tier := (classEquiv.symm i).1
-
-theorem aliases_lt : A < 2^256 := acceptedAliases_bounds.2
-
-/-- The accepted prefix of 256-bit oracle outputs is in fixed bijection with aliases. -/
-def rawAlias (x : BitVec 256) : Option Alias :=
-  if h : x.toNat < A then some (aliasEquiv.symm ⟨x.toNat, h⟩) else none
-
-def rawClass (x : BitVec 256) : Option Class := (rawAlias x).map Sigma.fst
-def decode (x : BitVec 256) : Option (Fin M) := (rawClass x).map classEquiv
-def aliasRaw (a : Alias) : BitVec 256 := BitVec.ofNat 256 (aliasEquiv a).val
-
-theorem aliasRaw_toNat (a : Alias) : (aliasRaw a).toNat = (aliasEquiv a).val := by
-  rw [aliasRaw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
-  exact Nat.lt_trans (aliasEquiv a).isLt aliases_lt
-
-@[simp] theorem rawAlias_aliasRaw (a : Alias) : rawAlias (aliasRaw a) = some a := by
-  simp only [rawAlias, aliasRaw_toNat, dif_pos (aliasEquiv a).isLt]
-  rw [Equiv.symm_apply_apply]
-
-theorem aliasRaw_of_rawAlias {x : BitVec 256} {a : Alias} (h : rawAlias x = some a) :
-    aliasRaw a = x := by
-  unfold rawAlias at h
-  split_ifs at h with hx
-  · simp only [Option.some.injEq] at h
-    rw [← h]
-    apply BitVec.eq_of_toNat_eq
-    rw [aliasRaw_toNat, Equiv.apply_symm_apply]
-
-def aliasFiberEquiv (c : Class) : {a : Alias // a.1 = c} ≃ Fin (multiplicity c) where
-  toFun a := a.property ▸ a.val.2
-  invFun b := ⟨⟨c,b⟩,rfl⟩
-  left_inv := by rintro ⟨⟨d,b⟩,h⟩; cases h; rfl
-  right_inv _ := rfl
-
-def rawFiberEquiv (c : Class) :
-    {x : BitVec 256 // rawClass x = some c} ≃ {a : Alias // a.1 = c} :=
-  (Equiv.ofBijective
-    (fun a : {a : Alias // a.1 = c} =>
-      (⟨aliasRaw a.val, by simp [rawClass,a.property]⟩ :
-        {x : BitVec 256 // rawClass x = some c}))
-    (by
-      constructor
-      · intro a b h
-        apply Subtype.ext
-        have he := congrArg
-          (fun x : {x : BitVec 256 // rawClass x = some c} => rawAlias x.val) h
-        simpa using he
-      · intro x
-        have hx := x.property
-        rw [rawClass, Option.map_eq_some_iff] at hx
-        obtain ⟨a,ha,hc⟩ := hx
-        exact ⟨⟨a,hc⟩,Subtype.ext (aliasRaw_of_rawAlias ha)⟩)).symm
-
-theorem rawClass_fiber (c : Class) :
-    (Finset.univ.filter fun x : BitVec 256 => rawClass x = some c).card = multiplicity c := by
-  rw [← Fintype.card_subtype, Fintype.card_congr (rawFiberEquiv c),
-    Fintype.card_congr (aliasFiberEquiv c), Fintype.card_fin]
-
-theorem decode_eq_some (x : BitVec 256) (i : Fin M) :
-    decode x = some i ↔ rawClass x = some (classEquiv.symm i) := by
-  rw [decode, Option.map_eq_some_iff]
-  constructor
-  · rintro ⟨c,hc,hi⟩
-    have he : c = classEquiv.symm i := by
-      apply classEquiv.injective
-      simpa using hi
-    simpa [he] using hc
-  · intro h
-    exact ⟨classEquiv.symm i,h,classEquiv.apply_symm_apply i⟩
-
-theorem decode_fiber (i : Fin M) :
-    (Finset.univ.filter fun x : BitVec 256 => decode x = some i).card =
-      aliases (classTier i) := by
-  have he : (Finset.univ.filter fun x : BitVec 256 => decode x = some i) =
-      Finset.univ.filter fun x : BitVec 256 => rawClass x = some (classEquiv.symm i) := by
-    ext x
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and, decode_eq_some]
-  rw [he, rawClass_fiber]
-  rfl
-
-def acceptedEquiv : {x : BitVec 256 // (rawAlias x).isSome} ≃ Alias :=
-  (Equiv.ofBijective
-    (fun a : Alias => (⟨aliasRaw a, by simp⟩ : {x : BitVec 256 // (rawAlias x).isSome}))
-    (by
-      constructor
-      · intro a b h
-        have he := congrArg
-          (fun x : {x : BitVec 256 // (rawAlias x).isSome} => rawAlias x.val) h
-        simpa using he
-      · intro x
-        obtain ⟨a,ha⟩ := Option.isSome_iff_exists.mp x.property
-        exact ⟨a,Subtype.ext (aliasRaw_of_rawAlias ha)⟩)).symm
-
-theorem rawAlias_accepted_count :
-    (Finset.univ.filter fun x : BitVec 256 => (rawAlias x).isSome).card = A := by
-  rw [← Fintype.card_subtype, Fintype.card_congr acceptedEquiv, card_alias]
-
-theorem decode_isSome (x : BitVec 256) : (decode x).isSome = (rawAlias x).isSome := by
-  simp [decode,rawClass]
-
-theorem accepted_decode_count :
-    (Finset.univ.filter fun x : BitVec 256 => (decode x).isSome).card = A := by
-  simp only [decode_isSome]
-  exact rawAlias_accepted_count
 
 /-! ## Exact integer moment numerators -/
 
@@ -695,9 +553,6 @@ def wMax : ℕ := (kernelNumerators.foldl max 0)
 def gMax : ℕ := (List.zipWith (fun a k => a*k) aliasCounts kernelNumerators).foldl max 0
 def diagonalMax : ℕ :=
   (List.zipWith (fun a k => a*k^2) aliasCounts kernelNumerators).foldl max 0
-
-def sumGProxyNumerator : ℕ :=
-  ∑ i : Tier, classes i * aliases i * kernelNumerator i
 
 def cNumerator : ℕ :=
   ∑ i : Tier, classes i * aliases i^2 * kernelNumerator i^2
@@ -729,11 +584,6 @@ theorem diagonalMax_exact :
       352309922169199529095717430799163996063279887590569250824906269449627463006150171818954067772186624 := by
   decide +kernel
 
-theorem sumGProxyNumerator_exact :
-    sumGProxyNumerator =
-      139984046386112763159845082994843193628787476910003432326912310728099042595194327348412821162151774316 := by
-  decide +kernel
-
 theorem cNumerator_exact :
     cNumerator =
       38399330040078950555363360883962320251036151666450700371140276166266466981281695153859120172186420224993599411375687791846725699684668926874976038236085446572200254553248 := by
@@ -760,35 +610,6 @@ theorem positiveDenominator_exact :
   decide +kernel
 
 /-! These are the exact integer comparisons checked by the independent certificate. -/
-
-theorem w_envelope_integer : 5*wMax < 4*L*KQ := by
-  rw [wMax_exact]
-  norm_num [L,KQ]
-
-theorem g_envelope_integer : 40*gMax*2^127 < 17*L*R*KQ := by
-  rw [gMax_exact]
-  norm_num [L,R,KQ]
-
-theorem diagonal_envelope_integer :
-    40*diagonalMax*2^127 < 13*L^2*R*KQ^2 := by
-  rw [diagonalMax_exact]
-  norm_num [L,R,KQ]
-
-theorem c_envelope_integer : 25*cNumerator*2^127 < 8*L*R^2*KQ^2 := by
-  rw [cNumerator_exact]
-  norm_num [L,R,KQ]
-
-theorem a_envelope_integer : 4*aNumerator*2^254 < L*R^3*KQ^2 := by
-  rw [aNumerator_exact]
-  norm_num [L,R,KQ]
-
-theorem h_envelope_integer : 1000*hNumerator*2^127 < 967*R^2*KQ := by
-  rw [hNumerator_exact]
-  norm_num [R,KQ]
-
-theorem positive_envelope_integer : 100*positiveNumerator < 47*positiveDenominator := by
-  rw [positiveNumerator_exact, positiveDenominator_exact]
-  norm_num
 
 /-! Real-number forms used by the security proof. -/
 
@@ -835,13 +656,6 @@ theorem positiveRatio_lt : positiveRatio < 47/100 := by
   unfold positiveRatio
   rw [positiveNumerator_exact, positiveDenominator_exact]
   norm_num
-
-theorem moment_envelopes :
-    wRatio < 4/5 ∧ gRatio < 17/40 ∧ diagonalRatio < 13/40 ∧
-      cRatio < 8/25 ∧ aRatio < 1/4 ∧ hRatio < 967/1000 ∧
-      positiveRatio < 47/100 :=
-  ⟨wRatio_lt, gRatio_lt, diagonalRatio_lt, cRatio_lt, aRatio_lt,
-    hRatio_lt, positiveRatio_lt⟩
 
 def probability (i : Tier) : ℝ := (aliases i : ℝ)/(R:ℝ)
 def kernelUpper (i : Tier) : ℝ := (kernelNumerator i : ℝ)/(KQ:ℝ)
@@ -1096,11 +910,6 @@ theorem positive_value_lt {w : Tier → ℝ} (hw : KernelBounds w) :
 /-- The list of exclusive accepted masses, in full 256-bit alias units. -/
 def tierMasses : List ℕ := List.zipWith (·*·) classCounts aliasCounts
 
-@[simp] theorem tierMasses_length : tierMasses.length = 160 := by decide +kernel
-
-theorem tierMasses_sum : tierMasses.sum = acceptedAliases := by
-  decide +kernel
-
 def survival (pfx : ℕ) : ℝ := 1 - (pfx:ℝ)/(R:ℝ)
 
 def tierMass (i : Tier) : ℕ := classes i * aliases i
@@ -1298,7 +1107,6 @@ theorem actualKernel_bounds : KernelBounds actualKernel where
   nonneg := actualKernel_nonneg
   upper := actualKernel_le
 
-
 /-- The actual finite-difference kernels satisfy every checked moment envelope. -/
 theorem actual_h_lt : hValue actualKernel < (967/1000)*kappa :=
   h_value_lt actualKernel_bounds
@@ -1322,62 +1130,10 @@ theorem actual_diagonal_lt (i : Tier) :
 theorem actual_positive_lt : positiveValue actualKernel < 47/100 :=
   positive_value_lt actualKernel_bounds
 
-/-- Sum of the actual (not rounded) tier winner masses from a given prefix. -/
-def winnerMassSum (pfx : ℕ) : List ℕ → ℝ
-  | [] => 0
-  | m :: ms =>
-      (m:ℝ)/(R:ℝ) * kernel L (survival pfx) (survival (pfx+m)) +
-        winnerMassSum (pfx+m) ms
-
-theorem winnerMassSum_telescope (pfx : ℕ) (ms : List ℕ) :
-    winnerMassSum pfx ms =
-      survival pfx ^ L - survival (pfx + ms.sum) ^ L := by
-  induction ms generalizing pfx with
-  | nil => simp [winnerMassSum]
-  | cons m ms ih =>
-      rw [winnerMassSum, ih]
-      have hdiff : survival pfx - survival (pfx+m) = (m:ℝ)/(R:ℝ) := by
-        unfold survival R
-        norm_num
-        ring
-      have hk := sub_mul_kernel L (survival pfx) (survival (pfx+m))
-      rw [← hdiff, hk]
-      simp only [List.sum_cons, Nat.add_assoc]
-      ring
-
-/-- Exact telescoping bound `sum_i n_i g_i = 1 - failure < 1` for the true kernels. -/
-theorem exact_sum_g :
-    winnerMassSum 0 tierMasses =
-      1 - (1-(acceptedAliases:ℝ)/(R:ℝ))^L := by
-  rw [winnerMassSum_telescope, tierMasses_sum]
-  simp [survival]
-
-theorem exact_sum_g_lt_one : winnerMassSum 0 tierMasses < 1 := by
-  rw [exact_sum_g]
-  have hb : 0 < 1-(acceptedAliases:ℝ)/(R:ℝ) := by
-    rw [acceptedAliases_exact]
-    norm_num [R]
-  have hp : 0 < (1-(acceptedAliases:ℝ)/(R:ℝ))^L := pow_pos hb L
-  linarith
-
 /-! ## Collision-aware availability -/
-
-def collisionAliases : ℕ := 2^190
 
 def replacementBase : ℝ :=
   1 - (acceptedAliases:ℝ)/(R:ℝ) + (L:ℝ)/(2:ℝ)^86
-
-theorem collisionAliases_eq :
-    (L:ℝ)/(2:ℝ)^86 = (collisionAliases:ℝ)/(R:ℝ) := by
-  norm_num [L,R,collisionAliases]
-
-theorem replacementBase_effective :
-    replacementBase = 1-((acceptedAliases-collisionAliases:ℕ):ℝ)/(R:ℝ) := by
-  have hc : collisionAliases ≤ acceptedAliases := by
-    rw [acceptedAliases_exact]
-    norm_num [collisionAliases]
-  rw [replacementBase, collisionAliases_eq, Nat.cast_sub hc]
-  ring
 
 theorem replacementBase_nonneg : 0 ≤ replacementBase := by
   unfold replacementBase
@@ -1397,12 +1153,6 @@ theorem collisionAwareAvailability :
     pow_lt_pow_left₀ replacementBase_lt_reference replacementBase_nonneg (by norm_num [L])
   exact hpow.trans_le (by
     simpa only [L] using _root_.WeightedAvailability.empirical_failure)
-
-#print axioms familyCardinality_exact
-#print axioms acceptedAliases_exact
-#print axioms moment_envelopes
-#print axioms exact_sum_g
-#print axioms collisionAwareAvailability
 
 end
 end OptimalOTS.Chain18Compact

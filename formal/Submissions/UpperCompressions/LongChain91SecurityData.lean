@@ -31,11 +31,6 @@ theorem class_probability_real (i : Fin M) :
         2^256 = classProbability i := by
   exact LongChain91Schedule.class_probability_real i
 
-theorem decode_fiber (i : Fin M) :
-    (Finset.univ.filter fun x : BitVec 256 => LongChain91Schedule.decode x = some i).card =
-      Chain18Compact.aliases (LongChain91Schedule.tier i) :=
-  LongChain91Schedule.decode_fiber i
-
 /-- Reindex any real-valued class expression by the 160 compact tiers. -/
 theorem sum_tier (f : Tier → ℝ) :
     (∑ i : Fin M, f (LongChain91Schedule.tier i)) =
@@ -226,42 +221,6 @@ theorem securityWeights_mean :
     securityWeights.mean ≤ (967 / 1000) * Chain18Compact.kappa :=
   securityWeights_mean_lt.le
 
-theorem diagonal_lt (i : Fin M) :
-    classProbability i * (referenceWeight i / classProbability i)^2 <
-      (13 / 40) * (Chain18Compact.L : ℝ)^2 * Chain18Compact.kappa := by
-  rw [weight_ratio]
-  exact Chain18Compact.actual_diagonal_lt (LongChain91Schedule.tier i)
-
-theorem score_square_sum_eq :
-    (∑ i : Fin M, referenceWeight i ^ 2) = Chain18Compact.cValue Chain18Compact.actualKernel := by
-  unfold referenceWeight
-  rw [sum_tier (fun j => Chain18Compact.winner Chain18Compact.actualKernel j ^ 2)]
-  rfl
-
-theorem score_square_sum_lt :
-    (∑ i : Fin M, referenceWeight i ^ 2) <
-      (8 / 25) * (Chain18Compact.L : ℝ) * Chain18Compact.kappa := by
-  rw [score_square_sum_eq]
-  exact Chain18Compact.actual_c_lt
-
-theorem probability_score_square_sum_eq :
-    (∑ i : Fin M, classProbability i * referenceWeight i ^ 2) =
-      Chain18Compact.aValue Chain18Compact.actualKernel := by
-  unfold classProbability referenceWeight
-  rw [sum_tier (fun j =>
-    Chain18Compact.probability j *
-      Chain18Compact.winner Chain18Compact.actualKernel j ^ 2)]
-  unfold Chain18Compact.aValue
-  apply Finset.sum_congr rfl
-  intro j hj
-  ring
-
-theorem probability_score_square_sum_lt :
-    (∑ i : Fin M, classProbability i * referenceWeight i ^ 2) <
-      (1 / 4) * (Chain18Compact.L : ℝ) * Chain18Compact.kappa^2 := by
-  rw [probability_score_square_sum_eq]
-  exact Chain18Compact.actual_a_lt
-
 theorem card_decode_none :
     (Finset.univ.filter fun b : BitVec 256 => LongChain91Schedule.decode b = none).card =
       2^256 - Chain18Compact.acceptedAliases := by
@@ -297,96 +256,6 @@ theorem decoder_law (x : Option (Fin M)) :
 /-! The following natural endpoint facts are table facts, checked in the
 kernel.  They let the indexed reference weights telescope without replacing
 the actual kernels by their rounded certificates. -/
-
-theorem prefixMass_succ (j : Tier) :
-    Chain18Compact.prefixMass j + Chain18Compact.tierMass j =
-      (Chain18Compact.tierMasses.take (j.val + 1)).sum := by
-  revert j
-  decide +kernel
-
-theorem tier_winner_eq_difference (j : Tier) :
-    (Chain18Compact.classes j : ℝ) * Chain18Compact.winner Chain18Compact.actualKernel j =
-      Chain18Compact.survival (Chain18Compact.prefixMass j) ^ Chain18Compact.L -
-        Chain18Compact.survival (Chain18Compact.prefixMass j + Chain18Compact.tierMass j) ^ Chain18Compact.L := by
-  have hk := WeightedReplacement.sub_mul_kernel Chain18Compact.L
-    (Chain18Compact.survival (Chain18Compact.prefixMass j))
-    (Chain18Compact.survival (Chain18Compact.prefixMass j + Chain18Compact.tierMass j))
-  have hm :
-      (Chain18Compact.classes j : ℝ) * Chain18Compact.probability j =
-        (Chain18Compact.tierMass j : ℝ) / (Chain18Compact.R : ℝ) := by
-    unfold Chain18Compact.probability Chain18Compact.tierMass
-    push_cast
-    ring
-  rw [Chain18Compact.winner, Chain18Compact.actualKernel]
-  calc
-    (Chain18Compact.classes j : ℝ) *
-        (Chain18Compact.probability j *
-          WeightedReplacement.kernel Chain18Compact.L
-            (Chain18Compact.survival (Chain18Compact.prefixMass j))
-            (Chain18Compact.survival
-              (Chain18Compact.prefixMass j + Chain18Compact.tierMass j))) =
-      ((Chain18Compact.classes j : ℝ) * Chain18Compact.probability j) *
-        WeightedReplacement.kernel Chain18Compact.L
-          (Chain18Compact.survival (Chain18Compact.prefixMass j))
-          (Chain18Compact.survival
-            (Chain18Compact.prefixMass j + Chain18Compact.tierMass j)) := by ring
-    _ = ((Chain18Compact.tierMass j : ℝ) / (Chain18Compact.R : ℝ)) *
-        WeightedReplacement.kernel Chain18Compact.L
-          (Chain18Compact.survival (Chain18Compact.prefixMass j))
-          (Chain18Compact.survival
-            (Chain18Compact.prefixMass j + Chain18Compact.tierMass j)) := by rw [hm]
-    _ = _ := by
-      rw [← Chain18Compact.survival_sub j]
-      exact hk
-
-theorem tier_winner_eq_boundary_sub (j : Tier) :
-    (Chain18Compact.classes j : ℝ) * Chain18Compact.winner Chain18Compact.actualKernel j =
-      Chain18Compact.survival ((Chain18Compact.tierMasses.take j.val).sum) ^ Chain18Compact.L -
-        Chain18Compact.survival ((Chain18Compact.tierMasses.take (j.val + 1)).sum) ^ Chain18Compact.L := by
-  rw [tier_winner_eq_difference, prefixMass_succ, Chain18Compact.prefixMass]
-
-theorem totalWinnerMass_eq :
-    (∑ i : Fin M, referenceWeight i) =
-      1 - (1 - (Chain18Compact.acceptedAliases : ℝ) / (Chain18Compact.R : ℝ)) ^ Chain18Compact.L := by
-  rw [show (∑ i : Fin M, referenceWeight i) =
-      ∑ j : Tier, (Chain18Compact.classes j : ℝ) * Chain18Compact.winner Chain18Compact.actualKernel j by
-    exact sum_tier (Chain18Compact.winner Chain18Compact.actualKernel)]
-  simp_rw [tier_winner_eq_boundary_sub]
-  change (∑ j : Fin 160, (
-      Chain18Compact.survival ((Chain18Compact.tierMasses.take j.val).sum) ^
-          Chain18Compact.L -
-        Chain18Compact.survival ((Chain18Compact.tierMasses.take (j.val + 1)).sum) ^
-          Chain18Compact.L)) = _
-  rw [Fin.sum_univ_eq_sum_range
-    (fun n =>
-      Chain18Compact.survival ((Chain18Compact.tierMasses.take n).sum) ^
-          Chain18Compact.L -
-        Chain18Compact.survival ((Chain18Compact.tierMasses.take (n + 1)).sum) ^
-          Chain18Compact.L) 160,
-    Finset.sum_range_sub']
-  rw [show 160 = Chain18Compact.tierMasses.length from
-      Chain18Compact.tierMasses_length.symm,
-    List.take_length, Chain18Compact.tierMasses_sum]
-  simp [Chain18Compact.survival]
-
-theorem totalWinnerMass_lt_one :
-    (∑ i : Fin M, referenceWeight i) < 1 := by
-  rw [totalWinnerMass_eq]
-  have hb : 0 < 1 - (Chain18Compact.acceptedAliases : ℝ) / (Chain18Compact.R : ℝ) := by
-    exact sub_pos.mpr ((div_lt_one (by norm_num [Chain18Compact.R] : (0 : ℝ) < Chain18Compact.R)).2
-      (by exact_mod_cast Chain18Compact.acceptedAliases_bounds.2))
-  have hp : 0 < (1 - (Chain18Compact.acceptedAliases : ℝ) / (Chain18Compact.R : ℝ)) ^ Chain18Compact.L :=
-    pow_pos hb Chain18Compact.L
-  linarith
-
-/-- Exact miss probability after the `L` independent winner trials. -/
-def failure : ℝ :=
-  (1 - (Chain18Compact.acceptedAliases : ℝ) / (Chain18Compact.R : ℝ)) ^
-    Chain18Compact.L
-
-theorem referenceWeight_sum :
-    (∑ i : Fin M, referenceWeight i) = 1 - failure :=
-  totalWinnerMass_eq
 
 /-- The positive post-sign correction expressed directly on concrete classes. -/
 def postSignPositive : ℝ :=
@@ -495,16 +364,6 @@ theorem postSignExcess_lt :
     positivity
   have h := mul_lt_mul_of_pos_left postSignPositive_lt hk
   nlinarith
-
-#print axioms securityWeights
-#print axioms decoder_law
-#print axioms empirical_kernel_le
-#print axioms securityWeights_mean_lt
-#print axioms score_square_sum_lt
-#print axioms probability_score_square_sum_lt
-#print axioms totalWinnerMass_eq
-#print axioms postSignPositive_lt
-#print axioms postSignExcess_lt
 
 end
 end OptimalOTS.WeightedConstruction.LongChain91Security

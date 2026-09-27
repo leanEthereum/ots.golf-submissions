@@ -118,18 +118,6 @@ theorem inside_rowCount_succ_le (m : Message) (t : Spec.Domain)
       (congrArg (fun z : ℝ => (rowCount m c : ℝ) + z) Nat.cast_one)
   exact he.symm.trans_le (hb.trans_eq (by norm_num [N]))
 
-theorem primitive_delta_support (m : Message) (t : Spec.Domain)
-    (c : hashSpec.QueryCache)
-    (out : Spec.Range t × hashSpec.QueryCache)
-    (hout : out ∈ support ((oracleImpl t).run c)) :
-    ∃ x : Option (Fin M),
-      hazard m out.2 - hazard m c = delta (queryPhase m t c) m c x := by
-  obtain ⟨x, hx⟩ := actual_payoff_support
-    (WideDomains.rowDomain m) WideDomains.indexDomain
-    (WideDomains.row_subset m) decode t c
-    (securityWeights.hazard N) out hout
-  exact ⟨x, congrArg (fun z => z - hazard m c) hx⟩
-
 /-! ## Increment, drift, and jump bounds -/
 
 def gain (s : Phase) (m : Message) (c : hashSpec.QueryCache) :
@@ -744,12 +732,5 @@ theorem actual_stopped_self_collision { β : Type }
   exact actual_stopped_collision_freedman m oa initial hfresh
     (selfDeviation B) (selfVariance B)
     (selfDeviation_pos hB) (selfVariance_pos hB)
-
-#print axioms primitive_delta_law
-#print axioms equality_clock_envelope
-#print axioms gain_square_le
-#print axioms actual_potential_step
-#print axioms actual_stopped_large_hazard
-#print axioms actual_stopped_self_collision
 
 end OptimalOTS.WeightedConstruction.LongChain91LargeHazard

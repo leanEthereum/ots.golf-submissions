@@ -128,21 +128,6 @@ theorem verifyForgery_queries_chosen (pk : PublicKey) (m₁ : Message)
   rw [bind_assoc]
   exact publicHit_hash_target (z.1++z.2.1) _ c
 
-theorem stBWithForgery_selected_input_union (A : scheme.toAlgorithm.Adversary)
-    (pk : PublicKey) (m₁ : Message) (st : A.State) (σ : Option WeightedScheme.Signature)
-    (allowed good : EncInput → Prop) (c : Cache) :
-    E (run (A.forge st σ) c)
-      (fun p => if allowed (p.1.1,p.1.2.1) ∧ good (p.1.1,p.1.2.1) then 1 else 0) ≤
-    ∑ u : EncInput, if allowed u ∧ good u then
-      publicHit (encQuery u) (stBWithForgery A pk m₁ st σ) c else 0 := by
-  have h := selected_input_union encQuery (fun z : Message × WeightedScheme.Signature => (z.1,z.2.1))
-    allowed good (A.forge st σ) (verifyForgery pk m₁ σ) c
-    (verifyForgery_queries_chosen pk m₁ σ)
-  exact h.trans_eq (congrArg (fun oa => ∑ u : EncInput, if allowed u ∧ good u then
-    publicHit (encQuery u) oa c else 0) (stBWithForgery_bind A pk m₁ st σ).symm)
-
-#print axioms verifyForgery_queries_chosen
-#print axioms stBWithForgery_selected_input_union
 def forgedInput (z : Message × WeightedScheme.Signature) : EncInput := (z.1,z.2.1)
 
 theorem fExp_indexLength_none (A? : Option (Finset Name)) (ξ : Rec)
@@ -281,11 +266,6 @@ theorem signed_success_replay_fresh (A : scheme.toAlgorithm.Adversary)
     · rw [forgerySuccess, if_neg hok]
       exact zero_le
 
-#print axioms concrete_fresh_overlay
-#print axioms forgery_replay_or_fresh
-#print axioms signed_success_replay_fresh
-
-/- Original module: Submissions.UpperCompressions.ReplacementSignedBudget; SHA256 14acc066f362a0435f9db5a716e172fc8d46c9ec7b0905864ce9afdd86891669. -/
 theorem indexExtension_trans {c d e : Cache} (hcd : IndexExtension c d)
     (hde : IndexExtension d e) : IndexExtension c e := by
   refine ⟨fun q u h => hde.1 q u (hcd.1 q u h), ?_⟩
@@ -531,9 +511,6 @@ theorem signedAverage_graph_bound (A : scheme.toAlgorithm.Adversary)
     (fun dt => stBWithForgery A dt.1 m st (some (η,dt.2.1)))
   exact h
 
-#print axioms signedAverage_fresh_bound
-#print axioms signedAverage_graph_bound
-
 /-! The graph and index rates use the same actual continuation clock. -/
 
 theorem record_shared_paid_budget {alpha : Type} (Ac : Finset Name)
@@ -663,7 +640,6 @@ theorem signed_winner_master (A : scheme.toAlgorithm.Adversary) (pk : BitVec 128
         (posteriorRate i*(∑ ξ∈fiberA pk, w*CI ξ)+authRate*(∑ ξ∈fiberA pk, w*CO ξ)) := by ring
     _ ≤ _ := add_le_add le_rfl (signed_cost_budget A pk m st c k B η i hB)
 
-#print axioms signed_cost_budget
 def nonePost (A : scheme.toAlgorithm.Adversary) (ξ : Rec)
     (m : Message) (st : A.State) := stBWithForgery A (pkOf ξ) m st none
 
@@ -756,9 +732,6 @@ theorem signed_none_master (A : scheme.toAlgorithm.Adversary) (pk : BitVec 128)
         signedAverage m c k none (fun _ d => authRate*(∑ ξ∈fiberA pk, w*noneOtherCost A ξ m st d)) := by
       rw [signedAverage_add,signedAverage_const]
     _ ≤ _ := add_le_add le_rfl (none_cost_budget A pk m st c k B hB)
-
-#print axioms none_fiber_leaf
-#print axioms signed_none_master
 
 def winnerReplay (c : Cache) (m : Message) : SignedWinner → ℝ≥0∞
   | none => 0
@@ -908,9 +881,5 @@ theorem conditional_game_master (A : scheme.toAlgorithm.Adversary) (pk : BitVec 
       gcongr
       exact sumW_mono hT
     _ = _ := by dsimp only [P,Z]; ring
-
-#print axioms conditionalGame_partition
-#print axioms authRate_ofReal
-#print axioms conditional_game_master
 
 end OptimalOTS.WeightedConstruction.LongChain91
