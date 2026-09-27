@@ -97,6 +97,27 @@ research helper; the exported 1124 certificate still uses its original schedule.
 Further screens with heterogeneous aliases, wider cost bands, and conditional binary
 projections did not produce a passing 1110 candidate. These screens are not proofs.
 
+Omitting a finite nonce flag from the wire gives a more promising next step. The abstract
+verifier can try both values of an extra nonce bit, while a machine path executes the
+one selected index hash in its free-chain block. No signature-word permutation is needed.
+Packing the 64 free-chain lengths uses 2400 slots per flag value, including that index
+hash. Existing C5 and C6 provide distinct metadata, separated from chain and root domains.
+
+A full-128-bit-index, mixed-alias numerical model has an exact-arithmetic candidate at
+`126 + 87 * 10 + 120 = 1116`, with 260350 occupied bytecode slots and normalized schedule
+slope below 0.941283 for a 129-bit nonce row. Its 111 class-weight tiers include factors
+of three. An independent integer convolution agrees with the search evaluator, and
+outward-rounded rational checks pass for the proposed generalized numeric conditions.
+This is a research candidate, not a certificate: the nonce-row security theorem, the
+compression reduction, codec/count proofs, and machine implementation are still missing.
+The 1110 screens with layer84 and one or three omitted flag bits did not pass all bounds.
+
+`ImplicitNonce.lean` proves finite flag recovery's cost, determinism and fixed-oracle
+semantics; freshness after forgetting a flag; and arithmetic for absorbing a repeated
+verification into a larger fixed key-generation prefix. It also proves the 2400-slot
+sum. These helper results use only the allowed axioms and are not imported by Solution.
+They do not establish the complete security reduction. The exported claim remains 1124.
+
 Do not omit zero-digit copies or the hint-times-g checks when estimating a new machine.
 The latter prevent jumps into block interiors. Removing zero-binding exclusions leaves
 children unauthenticated. Weighted-rank ideas require an explicit implementation and a
