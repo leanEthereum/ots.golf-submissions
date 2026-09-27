@@ -11,18 +11,18 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
-def readNodes (k : Fin 32) : List Name :=
+def readNodes (k : Chain) : List Name :=
   src k :: (List.range (firstAt index k+1)).flatMap (tripleN k)
-def suffixNodes (k : Fin 32) : List Name :=
+def suffixNodes (k : Chain) : List Name :=
   (List.range' (firstAt index k+1) (32-(firstAt index k+1))).flatMap (tripleN k)
 
-theorem chain_split_first (k : Fin 32) (h : firstAt index k < 32) :
+theorem chain_split_first (k : Chain) (h : firstAt index k < 32) :
     chainNodes k = (readNodes index k ++ suffixNodes index k) ++ [top k] := by
   rw [chainNodes_eq, range_split (firstAt index k+1) (by omega), List.flatMap_append]
   rfl
 
 /-- A fully hidden chain: every level is a pure zero, before the top. -/
-theorem chain_split_hidden (k : Fin 32) :
+theorem chain_split_hidden (k : Chain) :
     chainNodes k = (src k :: (List.range 32).flatMap (tripleN k)) ++ [top k] :=
   chainNodes_eq k
 
@@ -32,7 +32,7 @@ theorem ofBits_take (payload : List Bool) (c n : ℕ) :
     ofBits_drop_take (payload.drop c) (cap := n) (start := 0) (len := n) (by omega)
 
 /-- The first chain hash includes the reader's pure prefix and its one disclosed input. -/
-theorem read_prefix_refines (k : Fin 32) (h32 : firstAt index k < 32) (tail : Code)
+theorem read_prefix_refines (k : Chain) (h32 : firstAt index k < 32) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
       HashInv index wire pk u z k (work k) →

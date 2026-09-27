@@ -7,7 +7,10 @@ open Riscv2Program (W Code laneBase hashBase)
 open OptimalOTS.Dag
 
 abbrev target : ℕ := OptimalOTS.target
-def blockZero : ℕ := 4096 + 4*31
+/-- The free dispatch, after the index phase. -/
+def freeStart : ℕ := 4096 + 4*34
+/-- Pair 0's prologue, after the free row. -/
+def blockZero : ℕ := 4096 + 4*101
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q
@@ -45,14 +48,13 @@ structure Ctx (s : MachineState) (index : RawIdx) (view : List Bool) (pk : Publi
   call : s.getReg .x5 = Riscv.hashCall
   lanes : ∀ q : Fin 16,
     (s.getHalfword (W (laneAddr q))).toNat = baseLane q - dispatch index q
-  /-- `x28` holds pair `q`'s dispatch halfword while `x12` addresses chain `2q + 1`, or chain `2q`
-  with `x10` at its value; the prologue loads it between those two pointer moves. -/
-  row : ∀ q : Fin 16, (s.getReg .x12 = W (outAddr (2*q.val+1)) ∨
-      (s.getReg .x12 = W (outAddr (2*q.val)) ∧ s.getReg .x10 = W (work (2*q.val)))) →
+  /-- `x28` holds pair `q`'s dispatch halfword while `x12` addresses chain `2q + 2`, or chain
+  `2q + 1` with `x10` at its value; the prologue loads it between those two pointer moves. -/
+  row : ∀ q : Fin 16, (s.getReg .x12 = W (outAddr (2*q.val+2)) ∨
+      (s.getReg .x12 = W (outAddr (2*q.val+1)) ∧ s.getReg .x10 = W (work (2*q.val+1)))) →
     (s.getReg .x28).toNat = baseLane q - dispatch index q
-  viewLen : s.getReg .x13 = BitVec.ofNat 64 (min view.length (RiscvHint.maxViewBits + 1))
-  /-- The honest view length, which pair 0 compares with `x13`. -/
-  lenWord : s.getReg .x6 = Riscv2Program.W honestViewBits
+  /-- The free base, from which the root length is computed. -/
+  base : s.getReg .x1 = W freeBase
   /-- No code at address 0: the decision's `JALR x0 x0 0` traps. -/
   null : s.code 0 = none
   code : Riscv.CodeAt s (W 4096) verifier

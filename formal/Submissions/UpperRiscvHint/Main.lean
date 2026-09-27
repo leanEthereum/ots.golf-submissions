@@ -5,10 +5,10 @@ import Submissions.UpperRiscvHint.Assembly
 
 `forestScheme_secure`: the bare-chain forest satisfies `GScheme.Secure`, the
 127-bit strong unforgeability requirement of `OptimalOTS.Dag`, and every signature verifies
-in `189` compressions (`forestScheme_verifyCost`).
+in `180` compressions (`forestScheme_verifyCost`).
 
-For a budget `B ≤ 2 ^ 127` the bound `probTrue ≤ 2 ε (B - 1038) + 2 δ` of `Forest.main_bound`
-applies, and `2 δ = 4 · 1025² · 2⁻¹⁴⁴ < 1038 · 2⁻¹²⁷` makes it smaller than `B / 2 ^ 127`; for larger
+For a budget `B ≤ 2 ^ 127` the bound `probTrue ≤ 2 ε (B - 1070) + 2 δ` of `Forest.main_bound`
+applies, and `2 δ = 4 · 1057² · 2⁻¹⁴⁴ < 1070 · 2⁻¹²⁷` makes it smaller than `B / 2 ^ 127`; for larger
 budgets the requirement holds trivially since probabilities are at most one.
 -/
 
@@ -36,7 +36,7 @@ theorem kappa_eq : κ = ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
     ENNReal.mul_inv_cancel (by simp) (by simp), one_mul]
 
 /-- The bad records cost less than the keygen budget saves. -/
-theorem two_δ_lt : 2 * δ < 1038 * κ := by
+theorem two_δ_lt : 2 * δ < 1070 * κ := by
   have h0 : (2 : ℝ≥0∞) ^ 17 ≠ 0 := by simp
   have ht : (2 : ℝ≥0∞) ^ 17 ≠ ⊤ := ENNReal.pow_ne_top ENNReal.ofNat_ne_top
   have h0' : ((2 : ℝ≥0∞) ^ 127)⁻¹ ≠ 0 := ENNReal.inv_ne_zero.2 (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)
@@ -45,25 +45,25 @@ theorem two_δ_lt : 2 * δ < 1038 * κ := by
     rw [ε₁, show (2 : ℝ≥0∞) ^ 144 = 2 ^ 17 * 2 ^ 127 by rw [← pow_add],
       ENNReal.mul_inv (Or.inl h0) (Or.inl ht)]
   rw [kappa_eq, δ, e]
-  calc 2 * (2 * (1025 * 1025) * (((2 : ℝ≥0∞) ^ 17)⁻¹ * ((2 : ℝ≥0∞) ^ 127)⁻¹))
-      = ((2 : ℝ≥0∞) ^ 127)⁻¹ * (2 * (2 * (1025 * 1025)) * ((2 : ℝ≥0∞) ^ 17)⁻¹) := by ring
-    _ < ((2 : ℝ≥0∞) ^ 127)⁻¹ * 1038 := by
+  calc 2 * (2 * (1057 * 1057) * (((2 : ℝ≥0∞) ^ 17)⁻¹ * ((2 : ℝ≥0∞) ^ 127)⁻¹))
+      = ((2 : ℝ≥0∞) ^ 127)⁻¹ * (2 * (2 * (1057 * 1057)) * ((2 : ℝ≥0∞) ^ 17)⁻¹) := by ring
+    _ < ((2 : ℝ≥0∞) ^ 127)⁻¹ * 1070 := by
         refine ENNReal.mul_lt_mul_right h0' ht' ?_
         rw [← div_eq_mul_inv, ENNReal.div_lt_iff (Or.inl h0) (Or.inl ht)]
-        exact_mod_cast (by norm_num : (2 * (2 * (1025 * 1025)) : ℕ) < 1038 * 2 ^ 17)
-    _ = 1038 * ((2 : ℝ≥0∞) ^ 127)⁻¹ := mul_comm _ _
+        exact_mod_cast (by norm_num : (2 * (2 * (1057 * 1057)) : ℕ) < 1070 * 2 ^ 17)
+    _ = 1070 * ((2 : ℝ≥0∞) ^ 127)⁻¹ := mul_comm _ _
 
-theorem kappa_mul_lt {B : ℕ} (h1038 : 1038 ≤ B) :
-    κ * ((B - 1038 : ℕ) : ℝ≥0∞) + 2 * δ < (B : ℝ≥0∞) / 2 ^ securityBits := by
-  have hfin : κ * ((B - 1038 : ℕ) : ℝ≥0∞) ≠ ⊤ := by
+theorem kappa_mul_lt {B : ℕ} (h1070 : 1070 ≤ B) :
+    κ * ((B - 1070 : ℕ) : ℝ≥0∞) + 2 * δ < (B : ℝ≥0∞) / 2 ^ securityBits := by
+  have hfin : κ * ((B - 1070 : ℕ) : ℝ≥0∞) ≠ ⊤ := by
     rw [kappa_eq]
     exact ENNReal.mul_ne_top (ENNReal.inv_ne_top.2 (by simp)) (ENNReal.natCast_ne_top _)
-  calc κ * ((B - 1038 : ℕ) : ℝ≥0∞) + 2 * δ
-      < κ * ((B - 1038 : ℕ) : ℝ≥0∞) + 1038 * κ := ENNReal.add_lt_add_left hfin two_δ_lt
-    _ = κ * (((B - 1038 : ℕ) : ℝ≥0∞) + 1038) := by ring
+  calc κ * ((B - 1070 : ℕ) : ℝ≥0∞) + 2 * δ
+      < κ * ((B - 1070 : ℕ) : ℝ≥0∞) + 1070 * κ := ENNReal.add_lt_add_left hfin two_δ_lt
+    _ = κ * (((B - 1070 : ℕ) : ℝ≥0∞) + 1070) := by ring
     _ = κ * (B : ℝ≥0∞) := by
         congr 1
-        exact_mod_cast Nat.sub_add_cancel h1038
+        exact_mod_cast Nat.sub_add_cancel h1070
     _ = (B : ℝ≥0∞) / 2 ^ securityBits := by
         rw [kappa_eq]
         show _ = (B : ℝ≥0∞) / 2 ^ 127

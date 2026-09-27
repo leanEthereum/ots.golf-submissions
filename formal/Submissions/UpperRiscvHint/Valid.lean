@@ -6,8 +6,9 @@ import Submissions.UpperRiscvHint.Digits
 # Accepted indices
 
 The index packs 32 chain digits into 128 bits: sixteen pairs of four-bit digits. An index is
-accepted when its digits sum to 158 and each pair satisfies its local cap.
-The accepted indices exceed the availability threshold `89 * 2 ^ 108`.
+accepted when its digit sum `S` lies in `[130, 145]` and each pair sums to at most 24. The
+free chain carries the count `145 - S`, so every accepted index discloses the same total
+`target = 145`. The accepted indices exceed the availability threshold `89 * 2 ^ 108`.
 
 The machine reads digit `k` from bits `fieldPos k, …` of the 256-bit index answer; `pack` is
 that reading.
@@ -17,8 +18,8 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-/-- The digit sum of every accepted index. -/
-def target : ℕ := 158
+/-- The digit sum of an accepted index plus its free count. -/
+def target : ℕ := 145
 
 /-- Thirty-two four-bit digits. -/
 def wid (k : ℕ) : ℕ := if k < 32 then 4 else 0
@@ -62,9 +63,16 @@ def PairAllowed (i q : ℕ) : Prop :=
 
 instance : DecidableRel PairAllowed := fun _ _ => by unfold PairAllowed; infer_instance
 
-/-- Accepted indices form a capped subset of one fixed-rank antichain. -/
+/-- The sum of the 32 index digits. -/
+def digitSum (i : ℕ) : ℕ := ∑ k ∈ Finset.range 32, digit i k
+
+/-- The free count: `target - S` on the window. For `c < 255`,
+`(S + c) % 255 = target` exactly when `c = freeDigit i`. -/
+def freeDigit (i : ℕ) : ℕ := (655 - digitSum i) % 255
+
+/-- Accepted indices: a window of sixteen digit sums below `target`, with every pair capped. -/
 def Accepted (i : ℕ) : Prop :=
-  (∑ k ∈ Finset.range 32, digit i k = target) ∧ ∀ q : Fin 16, PairAllowed i q.val
+  (130 ≤ digitSum i ∧ digitSum i ≤ target) ∧ ∀ q : Fin 16, PairAllowed i q.val
 
 instance : DecidablePred Accepted := fun i => by unfold Accepted; infer_instance
 
@@ -162,28 +170,31 @@ theorem idxBits_eq : 2 ^ idxBits = 2 ^ pos 32 := by rw [pos_32]; norm_num [idxBi
 
 attribute [local irreducible] validSet PairCode.tuples
 
-theorem card_validSet : (validSet).card = PairCode.count 16 target := by
+/-- Accepted indices with digit sum `s`. -/
+def validAt (s : ℕ) : Finset ℕ :=
+  (Finset.range (2 ^ idxBits)).filter fun i => digitSum i = s ∧ ∀ q : Fin 16, PairAllowed i q.val
+
+theorem card_validAt (s : ℕ) : (validAt s).card = PairCode.count 16 s := by
   rw [← PairCode.tuples_card]
   refine Finset.card_bij' (fun i _ => digitsOf i) (fun c _ => indexOf c) ?_ ?_ ?_ ?_
   · intro i hi
-    obtain ⟨_, hsum, hcap⟩ := mem_validSet.mp hi
+    obtain ⟨_, hsum, hcap⟩ := Finset.mem_filter.mp hi
     simp only [PairCode.tuples, Finset.mem_filter, Finset.mem_univ, true_and]
     refine ⟨hcap, ?_⟩
-    rw [← hsum, show 32 = 2*16 from rfl, sum_digit_pairs,
+    rw [← hsum, digitSum, show 32 = 2*16 from rfl, sum_digit_pairs,
       ← Fin.sum_univ_eq_sum_range]
     rfl
   · intro c hc
     simp only [PairCode.tuples, Finset.mem_filter, Finset.mem_univ, true_and] at hc
-    refine mem_validSet.mpr ⟨?_, ?_⟩
-    · rw [idxBits_eq]
+    refine Finset.mem_filter.mpr ⟨?_, ?_, ?_⟩
+    · rw [Finset.mem_range, idxBits_eq]
       exact ofDigits_lt _ (digitFun_lt c) 32
-    · refine ⟨?_, ?_⟩
-      · rw [show 32 = 2*16 from rfl, sum_digit_pairs, ← Fin.sum_univ_eq_sum_range]
-        simpa only [digit_indexOf_fst, digit_indexOf_snd, PairCode.weight] using hc.2
-      · intro q
-        simpa only [PairAllowed, digit_indexOf_fst, digit_indexOf_snd, PairCode.weight] using hc.1 q
+    · rw [digitSum, show 32 = 2*16 from rfl, sum_digit_pairs, ← Fin.sum_univ_eq_sum_range]
+      simpa only [digit_indexOf_fst, digit_indexOf_snd, PairCode.weight] using hc.2
+    · intro q
+      simpa only [PairAllowed, digit_indexOf_fst, digit_indexOf_snd, PairCode.weight] using hc.1 q
   · intro i hi
-    obtain ⟨lt, _⟩ := mem_validSet.mp hi
+    have lt := Finset.mem_range.mp (Finset.mem_filter.mp hi).1
     show ofDigits (digitFun (digitsOf i)) 32 = i
     have agree : ∀ k ∈ Finset.range 32,
         digitFun (digitsOf i) k * 2 ^ pos k = digit i k * 2 ^ pos k := by
@@ -205,10 +216,30 @@ theorem card_validSet : (validSet).card = PairCode.count 16 target := by
     · apply Fin.ext; exact digit_indexOf_fst c q
     · apply Fin.ext; exact digit_indexOf_snd c q
 
+theorem card_validSet :
+    (validSet).card = ∑ s ∈ Finset.range 16, PairCode.count 16 (130 + s) := by
+  rw [Finset.card_eq_sum_card_fiberwise (f := fun i => digitSum i - 130) (t := Finset.range 16)]
+  · refine Finset.sum_congr rfl fun s hs => ?_
+    rw [← card_validAt]
+    congr 1
+    ext i
+    have hs' := Finset.mem_range.mp hs
+    simp only [validSet, validAt, Accepted, target, Finset.mem_filter]
+    constructor
+    · rintro ⟨⟨hi, ⟨lo, hi'⟩, caps⟩, e⟩
+      exact ⟨hi, by omega, caps⟩
+    · rintro ⟨hi, e, caps⟩
+      exact ⟨⟨hi, ⟨by omega, by omega⟩, caps⟩, by omega⟩
+  · intro i hi
+    obtain ⟨_, ⟨lo, hi'⟩, _⟩ := mem_validSet.mp hi
+    simp only [Finset.coe_range, Set.mem_Iio]
+    unfold target at hi'
+    omega
+
 /-- A fresh index succeeds with probability at least `89 / 2 ^ 20`. -/
 theorem numValid_avail : 89 * 2 ^ 108 ≤ numValid := by
   rw [numValid, card_validSet]
-  exact PairCode.count_lower
+  exact PairCode.window_lower
 
 /-! ## The machine's reading of the digits -/
 
@@ -251,13 +282,9 @@ theorem pack_lt' (y : BitVec hashBits) : pack y < 2 ^ 128 := by
 attribute [irreducible] pack
 
 /-- Fewer than half of the indices are accepted. -/
-theorem compW_target_le : PairCode.count 16 target ≤ 2 ^ 127 := by
-  rw [target, PairCode.exact_count]
-  norm_num
-
 theorem numValid_le_half : numValid ≤ 2 ^ 127 := by
   rw [numValid, card_validSet]
-  exact compW_target_le
+  exact PairCode.window_le_half
 
 theorem two_numValid_le : 2 * numValid ≤ 2 ^ 128 := by
   have := numValid_le_half

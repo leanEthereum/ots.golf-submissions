@@ -6,12 +6,12 @@ open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name OracleComp
 open Riscv2Program
 
-/-- The pointer move from chain `2q` to chain `k = 2q + 1` preserves every value and slice. -/
+/-- The pointer move from chain `2q + 1` to chain `k = 2q + 2` preserves every value and slice. -/
 theorem move_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
-    (q : Fin 16) (k : Fin 32) (hk : k.val = 2*q.val+1)
+    (q : Fin 16) (k : Chain) (hk : k.val = 2*q.val+2)
     (s : MachineState) (x : graph.Assignment) (tail : Code)
     (ctx : Ctx s index wire pk) (input : s.getReg .x10 = W (prevInput k))
-    (out : s.getReg .x12 = W (outAddr (2*q.val)))
+    (out : s.getReg .x12 = W (outAddr (2*q.val+1)))
     (len : s.getReg .x11 = W (chainBits k)) (payload : PayloadFrom s wire k)
     (done : Completed s (tops x) k)
     (located : Riscv.CodeAt s s.pc (enter k (prevInput k) ++ tail))
@@ -23,8 +23,8 @@ theorem move_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
   have E := enter_effect s k input
   have ready := enter_ready s k (prevInput k)
   let u := (enter k (prevInput k)).foldl execInstrBr s
-  have prev : prevInput k = work (2*q.val) := by
-    unfold prevInput; rw [if_neg (by omega), hk, Nat.add_sub_cancel]
+  have prev : prevInput k = work (2*q.val+1) := by
+    unfold prevInput; rw [if_neg (by omega)]; congr 1; omega
   have uctx : Ctx u index wire pk :=
     ctx.enter q (input.trans (by rw [prev])) out (E.input.trans (by rw [hk]))
       (E.out.trans (by rw [hk])) E.regs E.mem E.code

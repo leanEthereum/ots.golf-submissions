@@ -1,11 +1,12 @@
 import Submissions.UpperRiscvHint.MixedVerifier
 import Submissions.UpperRiscvHint.HintTrap
 
-/-! In-place views of the cap-chain scheme's signatures. A view shorter than `rawViewBits` bits
-holds the nonce and every chain value at fixed positions, and `compress` extracts them in
-signature order. A longer view carries a raw signature after `rawViewBits` padding bits; the image
-rejects it at pair 0's length test, before its first possible trap. The honest prover lays out accepted signatures and
-hands every other signature over in the raw form (`HintTrap`). -/
+/-! In-place views of the free-chain scheme's signatures. A view whose free count (bits `2 … 7` of
+view byte 40) is below 16 holds the nonce and every chain value at fixed positions, and `compress`
+extracts them in signature order. A view with a larger count carries a raw signature after view
+byte 40; the image rejects it at the free dispatch, before its first possible trap. The honest
+prover lays out accepted signatures with the free count of their index, and hands every other
+signature over in the raw form (`HintTrap`). -/
 
 noncomputable section
 
@@ -18,16 +19,27 @@ open OptimalOTS.RiscvHint RiscvZkvm.Rv64
 
 -- Path equalities otherwise evaluate the checksum through the decision instance.
 set_option allowUnsafeReducibility true in
-attribute [local irreducible] stagedBlocks stagedRun instDecidablePredNatStagedRank
+attribute [local irreducible] stagedBlocks stagedRun freeBlocks freeRun instDecidablePredNatStagedRank
 
-/-- Views at least this long carry a raw signature. -/
-def rawViewBits : ℕ := 65536
+/-- A raw view carries its signature after these bits: view byte 40 is the free count. -/
+def rawFlagBits : ℕ := 328
 
 def viewCompress (view : List Bool) : List Bool :=
-  if rawViewBits ≤ view.length then view.drop rawViewBits
+  if 16 ≤ viewDigit view then view.drop rawFlagBits
   else viewNonce view ++ viewPayload view
 
-def rawView (σ : List Bool) : List Bool := List.replicate rawViewBits false ++ σ
+/-- The raw form: free count 63, then the signature. -/
+def rawView (σ : List Bool) : List Bool :=
+  List.replicate 320 false ++ List.replicate 8 true ++ σ
+
+/-- The index query of a signature. -/
+def indexQuery (pk : PublicKey) (m : Message) (σ : List Bool) :=
+  swapHalves (emsg m pk ++ ofBits nonceBits (σ.take 128))
+
+/-- The honest layout of a signature: its values in place, with its index's free count. -/
+def layoutView (pk : PublicKey) (m : Message) (σ : List Bool) : OracleComp Spec (List Bool) := do
+  let answer ← hash (indexQuery pk m σ)
+  pure (honestView σ (freeDigit (pack answer) % 16))
 
 theorem getLsbD_flipHi (pk : PublicKey) (i : ℕ) :
     (flipHi pk).getLsbD i = (pk.getLsbD i ^^ decide (i = 64)) := by
@@ -82,12 +94,69 @@ theorem decisionOutcome_eq_true (r pk : PublicKey) :
   rw [decisionOutcome_eq_true_iff]
   exact ⟨fun h => h ▸ flipHi_flipHi pk, fun h => h ▸ (flipHi_flipHi r).symm⟩
 
+/-! ## The free count of a view -/
+
+theorem honestView_free (σ : List Bool) (c b : ℕ) (hb : freeBit ≤ b ∧ b < freeBit + 8) :
+    (honestView σ c).getD b false = (4 * c).testBit (b - freeBit) := by
+  have hl : b < honestViewBits := by unfold freeBit honestViewBits at *; omega
+  unfold honestView
+  rw [List.getD_eq_getElem?_getD, List.getElem?_ofFn, dif_pos hl, Option.getD_some]
+  exact if_pos hb
+
+theorem viewDigit_honestView (σ : List Bool) (c : ℕ) (hc : c < 64) :
+    viewDigit (honestView σ c) = c := by
+  have e : ofBits 8 ((honestView σ c).drop 320) = BitVec.ofNat 8 (4 * c) := by
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    simp only [ofBits, BitVec.getLsbD_ofNat, hi, decide_true, Bool.true_and,
+      testBit_foldr_bits, List.getD_eq_getElem?_getD, List.getElem?_drop]
+    rw [← List.getD_eq_getElem?_getD, honestView_free σ c (320 + i) (by unfold freeBit; omega)]
+    unfold freeBit
+    rw [show 320 + i - 320 = i by omega]
+  unfold viewDigit
+  rw [e, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  omega
+
+theorem viewDigit_rawView (σ : List Bool) : viewDigit (rawView σ) = 63 := by
+  have e : ofBits 8 ((rawView σ).drop 320) = BitVec.ofNat 8 255 := by
+    apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    simp only [ofBits, BitVec.getLsbD_ofNat, hi, decide_true, Bool.true_and,
+      testBit_foldr_bits, List.getD_eq_getElem?_getD, List.getElem?_drop]
+    have hbit : (rawView σ)[320 + i]? = some true := by
+      unfold rawView
+      rw [List.getElem?_append_left (by simp only [List.length_append, List.length_replicate]; omega),
+        List.getElem?_append_right (by simp only [List.length_replicate]; omega),
+        List.getElem?_replicate]
+      simp only [List.length_replicate, show 320 + i - 320 < 8 by omega, if_true]
+    rw [hbit, Option.getD_some]
+    interval_cases i <;> decide
+  unfold viewDigit
+  rw [e]
+  decide
+
+theorem viewCompress_layout (σ : List Bool) (c : ℕ) (hc : c < 16) :
+    viewCompress (honestView σ c) = viewNonce (honestView σ c) ++ viewPayload (honestView σ c) :=
+  if_neg (by rw [viewDigit_honestView σ c (by omega)]; omega)
+
+theorem layout_compress (σ : List Bool) (len : σ.length = 5504) (c : ℕ) (hc : c < 16) :
+    viewCompress (honestView σ c) = σ := by
+  rw [viewCompress_layout σ c hc, viewNonce_honestView c len, viewPayload_honestView c len,
+    List.take_append_drop]
+
+theorem raw_compress (σ : List Bool) : viewCompress (rawView σ) = σ := by
+  unfold viewCompress
+  rw [if_pos (by rw [viewDigit_rawView]; omega), rawView]
+  exact List.drop_left' (by simp only [List.length_append, List.length_replicate, rawFlagBits])
+
+/-! ## The staged verifier on views -/
+
 /-- The staged verifier with its nonce and chain values given separately. -/
 def viewCore (pk : PublicKey) (m : Message) (nonce payload : List Bool) :
     OracleComp Spec Bool := do
   let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits nonce))
   if stagedRank (pack answer) then
-    stagedBlocks ⟨pack answer, pack_lt answer⟩ payload pk 16 0 (fun _ => 0) 0
+    freeBlocks ⟨pack answer, pack_lt answer⟩ payload pk (fun _ => 0)
   else pure false
 
 theorem stagedVerify_eq_viewCore (pk : PublicKey) (m : Message) (σ : List Bool)
@@ -105,26 +174,29 @@ theorem stagedVerify_short (pk : PublicKey) (m : Message) (σ : List Bool)
   rw [if_neg (fun h => len h.2), support_pure, Set.mem_singleton_iff] at hb
   exact hb
 
-theorem viewCompress_short (view : List Bool) (short : view.length < rawViewBits) :
-    viewCompress view = viewNonce view ++ viewPayload view :=
-  if_neg (by omega)
+theorem stagedVerify_length (pk : PublicKey) (m : Message) (σ : List Bool)
+    (h : true ∈ support (stagedVerify pk m σ)) : σ.length = 5504 := by
+  by_contra hl
+  exact absurd (stagedVerify_short pk m σ hl true h) (by simp)
 
 theorem stagedVerify_view (pk : PublicKey) (m : Message) (view : List Bool)
-    (short : view.length < rawViewBits) :
+    (short : viewDigit view < 16) :
     stagedVerify pk m (viewCompress view) = viewCore pk m (viewNonce view) (viewPayload view) := by
   have hn := viewNonce_length view
-  rw [stagedVerify_eq_viewCore, viewCompress_short view short, List.take_left' hn,
-    List.drop_left' hn]
-  rw [viewCompress_short view short, List.length_append, hn, viewPayload_length]
+  have hc : viewCompress view = viewNonce view ++ viewPayload view := if_neg (by omega)
+  rw [stagedVerify_eq_viewCore, hc, List.take_left' hn, List.drop_left' hn]
+  rw [hc, List.length_append, hn, viewPayload_length]
 
-theorem layout_compress (σ : List Bool) (len : σ.length = 5504) :
-    viewCompress (honestView σ) = σ := by
-  rw [viewCompress_short _ (by rw [honestView_length]; decide), viewNonce_honestView len,
-    viewPayload_honestView len, List.take_append_drop]
-
-theorem raw_compress (σ : List Bool) : viewCompress (rawView σ) = σ := by
-  unfold viewCompress rawView
-  rw [if_pos (by simp), List.drop_left' (List.length_replicate ..)]
+theorem layoutView_compress (pk : PublicKey) (m : Message) (σ : List Bool)
+    (h : true ∈ support (stagedVerify pk m σ)) :
+    ∀ view ∈ support (layoutView pk m σ), viewCompress view = σ := by
+  intro view hv
+  unfold layoutView at hv
+  rw [mem_support_bind_iff] at hv
+  obtain ⟨answer, -, hv⟩ := hv
+  rw [support_pure, Set.mem_singleton_iff] at hv
+  rw [hv]
+  exact layout_compress σ (stagedVerify_length pk m σ h) _ (Nat.mod_lt _ (by omega))
 
 theorem trap_raw (pk : PublicKey) (m : Message) (σ : List Bool) :
     ∀ o ∈ support (trapVerify pk m (rawView σ)), o = some false := by
@@ -132,11 +204,24 @@ theorem trap_raw (pk : PublicKey) (m : Message) (σ : List Bool) :
   unfold trapVerify at ho
   rw [mem_support_bind_iff] at ho
   obtain ⟨answer, -, ho⟩ := ho
-  have hlen : (rawView σ).length ≠ honestViewBits := by
-    simp only [rawView, List.length_append, List.length_replicate, rawViewBits, honestViewBits]
-    omega
-  rw [if_pos hlen, support_pure, Set.mem_singleton_iff] at ho
+  rw [if_pos (by rw [viewDigit_rawView]; omega), support_pure, Set.mem_singleton_iff] at ho
   exact ho
+
+/-- The verdict on a staged run accepts exactly when the verifier's decision does. -/
+theorem freeDecision_path (index : RawIdx) (payload : List Bool) (pk : PublicKey)
+    (c₀ c₁ : hashSpec.QueryCache)
+    (h : Riscv.cachedPaths.Path (freeDecision index payload pk) (some true) c₀ c₁) :
+    Riscv.cachedPaths.Path (freeBlocks index payload pk (fun _ => 0)) true c₀ c₁ := by
+  unfold freeDecision at h
+  rw [Riscv.cachedPaths.path_map] at h
+  obtain ⟨o, ho, he⟩ := h
+  obtain ⟨r, rfl⟩ : ∃ r, o = some r := by
+    cases o with
+    | none => simp at he
+    | some r => exact ⟨r, rfl⟩
+  have hflip : flipHi r = pk := (decisionOutcome_eq_true r pk).1 he
+  rw [freeBlocks_eq_freeRun, Riscv.cachedPaths.path_map]
+  exact ⟨some r, ho, by simp [hflip]⟩
 
 theorem trap_sound (pk : PublicKey) (m : Message) (view : List Bool)
     (c₀ c₁ : hashSpec.QueryCache)
@@ -146,41 +231,33 @@ theorem trap_sound (pk : PublicKey) (m : Message) (view : List Bool)
   rw [Riscv.cachedPaths.path_bind] at h
   obtain ⟨answer, ca, ha, h⟩ := h
   dsimp only [rawIdx] at h
-  by_cases hlen : view.length ≠ honestViewBits
-  · rw [if_pos hlen, Riscv.cachedPaths.path_pure] at h
+  by_cases big : 16 ≤ viewDigit view
+  · rw [if_pos big, Riscv.cachedPaths.path_pure] at h
     exact absurd h.1 (by simp)
-  have short : view.length < rawViewBits := by
-    unfold rawViewBits
-    unfold honestViewBits at hlen
-    omega
-  rw [if_neg hlen] at h
-  by_cases hr : stagedRank (pack answer)
+  rw [if_neg big] at h
+  by_cases rank : freeDigit (pack answer) = viewDigit view
   swap
-  · rw [if_neg hr] at h
+  · rw [if_neg rank] at h
     split_ifs at h <;> rw [Riscv.cachedPaths.path_pure] at h <;> exact absurd h.1 (by simp)
-  rw [if_pos hr, Riscv.cachedPaths.path_map] at h
-  obtain ⟨o, ho, he⟩ := h
-  obtain ⟨r, rfl⟩ : ∃ r, o = some r := by
-    cases o with
-    | none => simp at he
-    | some r => exact ⟨r, rfl⟩
-  have hflip : flipHi r = pk := (decisionOutcome_eq_true r pk).1 he
-  rw [stagedVerify_view pk m view short]
+  rw [if_pos rank] at h
+  rw [stagedVerify_view pk m view (by omega)]
   unfold viewCore
   rw [ofBits_viewNonce, Riscv.cachedPaths.path_bind]
   refine ⟨answer, ca, ha, ?_⟩
-  rw [if_pos hr, stagedBlocks_eq_stagedRun, Riscv.cachedPaths.path_map]
-  exact ⟨some r, ho, by simp [hflip]⟩
+  have hr : stagedRank (pack answer) := by unfold stagedRank; omega
+  rw [if_pos hr]
+  exact freeDecision_path _ _ pk ca c₁ h
 
+set_option maxRecDepth 100000 in
 theorem trap_accepts (pk : PublicKey) (m : Message) (σ : List Bool)
     (c₀ c₁ : hashSpec.QueryCache)
     (hv : Riscv.cachedPaths.Path (stagedVerify pk m σ) true c₀ c₁)
-    (o : Option Bool) (c₂ : hashSpec.QueryCache)
-    (h : Riscv.cachedPaths.Path (trapVerify pk m (honestView σ)) o c₁ c₂) : o = some true := by
-  have len : σ.length = 5504 := by
-    by_contra hl
-    exact absurd (stagedVerify_short pk m σ hl true (mem_support_of_mem_support_run _ _ c₀ c₁ hv))
-      (by simp)
+    (view : List Bool) (c₂ : hashSpec.QueryCache)
+    (hl : Riscv.cachedPaths.Path (layoutView pk m σ) view c₁ c₂)
+    (o : Option Bool) (c₃ : hashSpec.QueryCache)
+    (h : Riscv.cachedPaths.Path (trapVerify pk m view) o c₂ c₃) : o = some true := by
+  have len : σ.length = 5504 :=
+    stagedVerify_length pk m σ (mem_support_of_mem_support_run _ _ c₀ c₁ hv)
   rw [stagedVerify_eq_viewCore pk m σ len] at hv
   unfold viewCore at hv
   rw [Riscv.cachedPaths.path_bind] at hv
@@ -189,7 +266,7 @@ theorem trap_accepts (pk : PublicKey) (m : Message) (σ : List Bool)
   swap
   · rw [if_neg hr, Riscv.cachedPaths.path_pure] at hv
     exact absurd hv.1 (by simp)
-  rw [if_pos hr, stagedBlocks_eq_stagedRun, Riscv.cachedPaths.path_map] at hv
+  rw [if_pos hr, freeBlocks_eq_freeRun, Riscv.cachedPaths.path_map] at hv
   obtain ⟨o', ho', he'⟩ := hv
   obtain ⟨r, rfl⟩ : ∃ r, o' = some r := by
     cases o' with
@@ -197,24 +274,40 @@ theorem trap_accepts (pk : PublicKey) (m : Message) (σ : List Bool)
     | some r => exact ⟨r, rfl⟩
   have hflip : flipHi r = pk := by simpa using he'
   have hgrow := subcache_run_grow _ ca _ c₁ ho'
+  -- the layout's index query replays the verifier's
+  unfold layoutView indexQuery at hl
+  rw [Riscv.cachedPaths.path_bind] at hl
+  obtain ⟨a₁, cl, ha₁, hl⟩ := hl
+  have hreplay₁ := replay_deterministic _ (Deterministic.hash _) c₀ ca c₁ answer ha hgrow
+  change (a₁, cl) ∈ support ((simulateQ oracleImpl _).run c₁) at ha₁
+  rw [hreplay₁] at ha₁
+  simp only [support_pure, Set.mem_singleton_iff, Prod.mk.injEq] at ha₁
+  obtain ⟨rfl, rfl⟩ := ha₁
+  rw [Riscv.cachedPaths.path_pure] at hl
+  obtain ⟨rfl, hc12⟩ := hl
+  rw [hc12] at h
+  have hc : freeDigit (pack a₁) % 16 = freeDigit (pack a₁) := by
+    unfold stagedRank at hr; exact Nat.mod_eq_of_lt hr
+  generalize hcd : freeDigit (pack a₁) % 16 = c at h
+  have hd := viewDigit_honestView σ c (by omega)
+  -- the machine's index query replays it too
   unfold trapVerify at h
-  rw [← ofBits_viewNonce (honestView σ), viewNonce_honestView len,
+  rw [← ofBits_viewNonce (honestView σ c), viewNonce_honestView c len,
     Riscv.cachedPaths.path_bind] at h
   obtain ⟨a', cb, ha', h⟩ := h
-  have hreplay := replay_deterministic _ (Deterministic.hash _) c₀ ca c₁ answer ha hgrow
-  change (a', cb) ∈ support ((simulateQ oracleImpl _).run c₁) at ha'
-  rw [hreplay] at ha'
+  change (a', cb) ∈ support ((simulateQ oracleImpl _).run cl) at ha'
+  rw [hreplay₁] at ha'
   simp only [support_pure, Set.mem_singleton_iff, Prod.mk.injEq] at ha'
   obtain ⟨rfl, hcb⟩ := ha'
   rw [hcb] at h
   dsimp only [rawIdx] at h
-  have hlen : ¬ (honestView σ).length ≠ honestViewBits := by
-    rw [honestView_length]; exact not_not.mpr rfl
-  rw [if_neg hlen, if_pos hr, Riscv.cachedPaths.path_map, viewPayload_honestView len] at h
+  rw [hd, if_neg (by omega), if_pos (by omega), viewPayload_honestView c len] at h
+  unfold freeDecision at h
+  rw [Riscv.cachedPaths.path_map] at h
   obtain ⟨o'', ho'', rfl⟩ := h
-  have hrun := replay_deterministic _ (stagedRun_deterministic _ _ _ _ _ _) ca c₁ c₁ (some r) ho'
-    (Subcache.refl c₁)
-  change (o'', c₂) ∈ support ((simulateQ oracleImpl _).run c₁) at ho''
+  have hrun := replay_deterministic _ (freeRun_deterministic _ _ _) ca cl cl (some r) ho'
+    (Subcache.refl cl)
+  change (o'', c₃) ∈ support ((simulateQ oracleImpl _).run cl) at ho''
   rw [hrun] at ho''
   simp only [support_pure, Set.mem_singleton_iff, Prod.mk.injEq] at ho''
   obtain ⟨rfl, -⟩ := ho''

@@ -51,22 +51,22 @@ theorem runNodes'_append (l₁ l₂ : List Name) (x : graph.Assignment) (cursor 
     simp only [ih]
 
 /-- The disclosed position of chain `k`. -/
-abbrev pos (k : Fin 32) : ℕ := (fixedPositions index k).val
+abbrev pos (k : Chain) : ℕ := (fixedPositions index k).val
 
-theorem pos_le (k : Fin 32) : pos index k ≤ 31 := by
+theorem pos_le (k : Chain) : pos index k ≤ 31 := by
   show (fixedPositions index k).val ≤ 31
   have := (fixedPositions index k).isLt
   omega
 
 /-- The first evaluated level of chain `k`; `32` means the chain reveals its top. -/
-abbrev firstAt (k : Fin 32) : ℕ := firstEval k (fixedPositions index k)
+abbrev firstAt (k : Chain) : ℕ := firstEval k (fixedPositions index k)
 
-theorem cursorStep_src (k : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
+theorem cursorStep_src (k : Chain) (x : graph.Assignment) (cursor : ℕ) :
     cursorStep index payload x cursor (src k) = pure (Function.update x (src k).fin 0, cursor) := by
   unfold cursorStep
   simp only [disclosed, evaluated, Bool.false_eq_true, if_false]
 
-theorem cursorStep_ci (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
+theorem cursorStep_ci (k : Chain) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
     cursorStep index payload x cursor (ci k t) =
       if firstAt index k = t.val then
         pure (Function.update x (ci k t).fin
@@ -83,7 +83,7 @@ theorem cursorStep_ci (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor :
   · simp only [evalName, map_pure, detVal_ci]
   · rfl
 
-theorem cursorStep_ch (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
+theorem cursorStep_ch (k : Chain) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
     cursorStep index payload x cursor (ch k t) =
       if firstAt index k ≤ t.val then
         (fun y =>
@@ -96,7 +96,7 @@ theorem cursorStep_ch (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor :
   · simp only [evalName, Functor.map_map]
   · rfl
 
-theorem cursorStep_cv (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
+theorem cursorStep_cv (k : Chain) (t : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
     cursorStep index payload x cursor (cv k t) =
       if firstAt index k ≤ t.val then
         pure (Function.update x (cv k t).fin
@@ -110,7 +110,7 @@ theorem cursorStep_cv (k : Fin 32) (t : Fin 32) (x : graph.Assignment) (cursor :
 
 /-- A chain's top: read from the payload when the whole chain is hidden, else the low
 `topBits k` bits of its last level. -/
-theorem cursorStep_top (k : Fin 32) (x : graph.Assignment) (cursor : ℕ) :
+theorem cursorStep_top (k : Chain) (x : graph.Assignment) (cursor : ℕ) :
     cursorStep index payload x cursor (top k) =
       if 32 ≤ firstAt index k then
         pure (Function.update x (top k).fin

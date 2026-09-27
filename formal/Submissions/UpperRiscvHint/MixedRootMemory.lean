@@ -6,15 +6,14 @@ open RiscvZkvm.Rv64
 open Riscv2Program
 open Forest
 
-theorem slotWidth_aligned : ∀ s : Fin 32, slotWidth s % 8 = 0 := by decide
+theorem slotWidth_aligned : ∀ s : Fin 33, slotWidth s % 8 = 0 := by decide
 
-/-- Root slot `s + 1` starts where slots `0 … s` end: cap `j` at region byte `56 j`, normal
-`16 + j` at `56 j + 24`. -/
-theorem slot_address : ∀ s : Fin 31, outAddr (slotChain (s.val + 1)) = regionAddr + slotWidth s / 8 := by
+/-- Root slot `s + 1` starts where slots `0 … s` end. -/
+theorem slot_address : ∀ s : Fin 32, outAddr (slotChain (s.val + 1)) = regionAddr + slotWidth s / 8 := by
   decide
 
-theorem completed_slotCat (s : MachineState) (c : (k : Fin 32) → BitVec (topBits k))
-    (done : Completed s c 32) : ∀ n, n < 32 → MemBits s (W regionAddr) (slotCat c n) := by
+theorem completed_slotCat (s : MachineState) (c : (k : Chain) → BitVec (topBits k))
+    (done : Completed s c 33) : ∀ n, n < 33 → MemBits s (W regionAddr) (slotCat c n) := by
   intro n
   induction n with
   | zero =>
@@ -34,9 +33,9 @@ theorem completed_slotCat (s : MachineState) (c : (k : Fin 32) → BitVec (topBi
     exact h
 
 /-- The completed tops form exactly the graph's 7104-bit root input. -/
-theorem completed_root (s : MachineState) (c : (k : Fin 32) → BitVec (topBits k))
-    (done : Completed s c 32) : MemBits s (W regionAddr) (rootCat c) := by
+theorem completed_root (s : MachineState) (c : (k : Chain) → BitVec (topBits k))
+    (done : Completed s c 33) : MemBits s (W regionAddr) (rootCat c) := by
   unfold rootCat
-  exact (memBits_cast _ _ _ _).mpr (completed_slotCat s c done 31 (by decide))
+  exact (memBits_cast _ _ _ _).mpr (completed_slotCat s c done 32 (by decide))
 
 end OptimalOTS.RiscvMixedProgram

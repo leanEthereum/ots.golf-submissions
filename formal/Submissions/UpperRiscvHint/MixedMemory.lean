@@ -8,12 +8,12 @@ open Forest
 
 /-- Every chain from `k` on still has its view value at its working address. -/
 def PayloadFrom (s : MachineState) (view : List Bool) (k : ℕ) : Prop :=
-  ∀ j : Fin 32, k ≤ j.val →
+  ∀ j : Chain, k ≤ j.val →
     MemBits s (W (work j)) (ofBits (chainBits j) (view.drop (wireOffset j)))
 
 /-- Every chain below `k` has its committed top at its answer buffer. -/
-def Completed (s : MachineState) (tops : (k : Fin 32) → BitVec (topBits k)) (k : ℕ) : Prop :=
-  ∀ j : Fin 32, j.val < k → MemBits s (W (outAddr j)) (tops j)
+def Completed (s : MachineState) (tops : (k : Chain) → BitVec (topBits k)) (k : ℕ) : Prop :=
+  ∀ j : Chain, j.val < k → MemBits s (W (outAddr j)) (tops j)
 
 /-- The low bits of a represented vector are represented at the same address. -/
 theorem memBits_setWidth {n w : ℕ} {s : MachineState} {base : Word} {v : BitVec n}
@@ -23,7 +23,7 @@ theorem memBits_setWidth {n w : ℕ} {s : MachineState} {base : Word} {v : BitVe
   simp [hi]
 
 /-- A hash writes the chain's top as the low bits of its answer buffer. -/
-theorem top_of_answer {s : MachineState} (k : Fin 32) {y : BitVec 256}
+theorem top_of_answer {s : MachineState} (k : Chain) {y : BitVec 256}
     (answer : MemBits s (W (outAddr k)) y) : MemBits s (W (outAddr k)) (topOf k y) :=
   memBits_setWidth answer (topBits_le k)
 
@@ -44,7 +44,7 @@ theorem writeHash_preserves (s : MachineState) (y : BitVec 256) (base out n : �
   omega
 
 /-- A chain hash preserves the disclosed values of every later chain. -/
-theorem PayloadFrom.writeHash {s : MachineState} {payload : List Bool} (k : Fin 32)
+theorem PayloadFrom.writeHash {s : MachineState} {payload : List Bool} (k : Chain)
     (hp : PayloadFrom s payload (k.val+1)) (y : BitVec 256)
     (ho : s.getReg .x12 = W (outAddr k)) :
     PayloadFrom (Riscv.writeHash s y) payload (k.val+1) := by
@@ -60,8 +60,8 @@ theorem PayloadFrom.writeHash {s : MachineState} {payload : List Bool} (k : Fin 
   · exact unread_disjoint k j (by omega)
 
 /-- A chain hash preserves the committed tops of every earlier chain. -/
-theorem Completed.writeHash {s : MachineState} {tops : (k : Fin 32) → BitVec (topBits k)}
-    (k : Fin 32) (hp : Completed s tops k) (y : BitVec 256)
+theorem Completed.writeHash {s : MachineState} {tops : (k : Chain) → BitVec (topBits k)}
+    (k : Chain) (hp : Completed s tops k) (y : BitVec 256)
     (ho : s.getReg .x12 = W (outAddr k)) :
     Completed (Riscv.writeHash s y) tops k := by
   intro j hj

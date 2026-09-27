@@ -4,7 +4,7 @@ import Submissions.UpperRiscvHint.Count
 /-!
 # Disclosure sets of the chain forest
 
-A disclosure set is described by a *choice* `c : Fin 32 → Fin 32`: for every chain `k` a
+A disclosure set is described by a *choice* `c : Chain → Fin 32`: for every chain `k` a
 position `c k ∈ {0, …, 31}`. A normal chain reveals the input `ci k (c k)`; a cap reveals one
 level higher, `ci k (c k + 1)`, and position 31 of a cap reveals its top. `firstEval k (c k)` is
 the first level the verifier hashes. `cutOf c` is always a cut (`isCut_cutOf`), the choice is
@@ -31,45 +31,46 @@ open Name
 
 /-- The first level of chain `k` the verifier hashes when the chain is revealed at position `p`;
 `32` means none. -/
-def firstEval (k : Fin 32) (p : Fin 32) : ℕ := if k.val < 16 then p.val + 1 else p.val
+def firstEval (k : Chain) (p : Fin 32) : ℕ := if k.val < 13 then p.val + 1 else p.val
 
-theorem firstEval_le (k : Fin 32) (p : Fin 32) : firstEval k p ≤ 32 := by
+theorem firstEval_le (k : Chain) (p : Fin 32) : firstEval k p ≤ 32 := by
   unfold firstEval; split_ifs <;> omega
 
-theorem firstEval_injective (k : Fin 32) : Function.Injective (firstEval k) := by
+theorem firstEval_injective (k : Chain) : Function.Injective (firstEval k) := by
   intro p p' h
   unfold firstEval at h
   split_ifs at h <;> exact Fin.ext (by omega)
 
 /-- The revealed node of chain `k` at position `p`. -/
-def chainNode (k : Fin 32) (p : Fin 32) : Name :=
+def chainNode (k : Chain) (p : Fin 32) : Name :=
   if h : firstEval k p < 32 then ci k ⟨firstEval k p, h⟩ else top k
 
 /-- A choice of disclosure set: one position per chain. -/
-abbrev Choice := Fin 32 → Fin 32
+abbrev Choice := Chain → Fin 32
 
 /-- The disclosure set of a choice. -/
 def cutOf (c : Choice) : Finset Name := Finset.univ.image fun k => chainNode k (c k)
 
 /-! ### Membership in a disclosure set -/
 
-theorem cap_of_firstEval {k : Fin 32} {p : Fin 32} (h : ¬ firstEval k p < 32) : k.val < 16 := by
+theorem cap_of_firstEval {k : Chain} {p : Fin 32} (h : ¬ firstEval k p < 32) :
+    k.val < 13 := by
   unfold firstEval at h; split_ifs at h with hk <;> omega
 
-theorem chainNode_len (k : Fin 32) (p : Fin 32) : (chainNode k p).len = chainBits k := by
+theorem chainNode_len (k : Chain) (p : Fin 32) : (chainNode k p).len = chainBits k := by
   unfold chainNode
   split_ifs with h
   · rfl
   · exact topBits_of_cap (cap_of_firstEval h)
 
-theorem revealable_chainNode (k : Fin 32) (p : Fin 32) : Revealable (chainNode k p) := by
+theorem revealable_chainNode (k : Chain) (p : Fin 32) : Revealable (chainNode k p) := by
   unfold chainNode
   split_ifs with h
   · trivial
   · exact cap_of_firstEval h
 
 /-- The chain of a node. -/
-def chainOf : Name → Fin 32
+def chainOf : Name → Chain
   | src k | ci k _ | ch k _ | cv k _ | top k => k
   | rc | rh => 0
 
@@ -79,10 +80,10 @@ def levelOf : Name → ℕ
   | top _ => 32
   | _ => 0
 
-theorem chainOf_chainNode (k : Fin 32) (p : Fin 32) : chainOf (chainNode k p) = k := by
+theorem chainOf_chainNode (k : Chain) (p : Fin 32) : chainOf (chainNode k p) = k := by
   unfold chainNode; split_ifs <;> rfl
 
-theorem levelOf_chainNode (k : Fin 32) (p : Fin 32) : levelOf (chainNode k p) = firstEval k p := by
+theorem levelOf_chainNode (k : Chain) (p : Fin 32) : levelOf (chainNode k p) = firstEval k p := by
   unfold chainNode
   split_ifs with h
   · rfl
@@ -104,7 +105,7 @@ theorem mem_cutOf_revealable {c : Choice} {n : Name} (hn : n ∈ cutOf c) : Reve
   obtain ⟨k, rfl⟩ := hn
   exact revealable_chainNode k (c k)
 
-theorem ci_mem_cutOf_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
+theorem ci_mem_cutOf_iff (c : Choice) (k : Chain) (t : Fin 32) :
     ci k t ∈ cutOf c ↔ firstEval k (c k) = t.val := by
   rw [mem_cutOf_iff]
   constructor
@@ -117,7 +118,7 @@ theorem ci_mem_cutOf_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
     rw [dif_pos (by rw [h]; exact t.isLt)]
     exact congrArg (ci k) (Fin.ext h)
 
-theorem top_mem_cutOf_iff (c : Choice) (k : Fin 32) :
+theorem top_mem_cutOf_iff (c : Choice) (k : Chain) :
     top k ∈ cutOf c ↔ 32 ≤ firstEval k (c k) := by
   rw [mem_cutOf_iff]
   constructor
@@ -131,13 +132,13 @@ theorem top_mem_cutOf_iff (c : Choice) (k : Fin 32) :
     unfold chainNode
     rw [dif_neg (by omega)]
 
-theorem src_not_mem_cutOf (c : Choice) (k : Fin 32) : src k ∉ cutOf c :=
+theorem src_not_mem_cutOf (c : Choice) (k : Chain) : src k ∉ cutOf c :=
   fun h => mem_cutOf_revealable h
 
-theorem ch_not_mem_cutOf (c : Choice) (k : Fin 32) (t : Fin 32) : ch k t ∉ cutOf c :=
+theorem ch_not_mem_cutOf (c : Choice) (k : Chain) (t : Fin 32) : ch k t ∉ cutOf c :=
   fun h => mem_cutOf_revealable h
 
-theorem cv_not_mem_cutOf (c : Choice) (k : Fin 32) (t : Fin 32) : cv k t ∉ cutOf c :=
+theorem cv_not_mem_cutOf (c : Choice) (k : Chain) (t : Fin 32) : cv k t ∉ cutOf c :=
   fun h => mem_cutOf_revealable h
 
 theorem rc_not_mem_cutOf (c : Choice) : rc ∉ cutOf c :=
@@ -146,7 +147,7 @@ theorem rc_not_mem_cutOf (c : Choice) : rc ∉ cutOf c :=
 theorem rh_not_mem_cutOf (c : Choice) : rh ∉ cutOf c :=
   fun h => mem_cutOf_revealable h
 
-theorem card_cutOf (c : Choice) : (cutOf c).card = 32 := by
+theorem card_cutOf (c : Choice) : (cutOf c).card = 33 := by
   unfold cutOf
   rw [Finset.card_image_of_injective _ (chainNode_injective c), Finset.card_univ,
     Fintype.card_fin]
@@ -187,7 +188,7 @@ theorem evaluated_rh (c : Choice) : Evaluated (cutOf c) rh :=
 theorem evaluated_rc (c : Choice) : Evaluated (cutOf c) rc :=
   evaluated_of_child rfl (rc_not_mem_cutOf c) (evaluated_rh c)
 
-theorem evaluated_top_iff (c : Choice) (k : Fin 32) :
+theorem evaluated_top_iff (c : Choice) (k : Chain) :
     Evaluated (cutOf c) (top k) ↔ firstEval k (c k) < 32 := by
   constructor
   · intro h
@@ -197,7 +198,7 @@ theorem evaluated_top_iff (c : Choice) (k : Fin 32) :
     exact evaluated_of_child rfl (fun e => by have := (top_mem_cutOf_iff c k).mp e; omega)
       (evaluated_rc c)
 
-theorem evaluated_ch_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
+theorem evaluated_ch_iff (c : Choice) (k : Chain) (t : Fin 32) :
     Evaluated (cutOf c) (ch k t) ↔ firstEval k (c k) ≤ t.val := by
   unfold Evaluated
   simp only [above_iff_mem_ancSet, ancSet, Finset.forall_mem_union, Finset.forall_mem_image,
@@ -216,7 +217,7 @@ theorem evaluated_ch_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
 
 /-- The input of a chain hash is evaluated exactly when it lies strictly above the revealed
 position. -/
-theorem evaluated_ci_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
+theorem evaluated_ci_iff (c : Choice) (k : Chain) (t : Fin 32) :
     Evaluated (cutOf c) (ci k t) ↔ firstEval k (c k) < t.val := by
   constructor
   · intro h
@@ -229,12 +230,12 @@ theorem evaluated_ci_iff (c : Choice) (k : Fin 32) (t : Fin 32) :
     have := (ci_mem_cutOf_iff c k t).mp e
     omega
 
-theorem child_cv_of_lt (k : Fin 32) (t : Fin 32) (ht : t.val < 31) :
+theorem child_cv_of_lt (k : Chain) (t : Fin 32) (ht : t.val < 31) :
     child (cv k t) = some (ci k ⟨t.val + 1, by omega⟩) := by
   simp only [Name.child]
   rw [dif_neg (by omega)]
 
-theorem child_cv_of_eq (k : Fin 32) (t : Fin 32) (ht : t.val = 31) :
+theorem child_cv_of_eq (k : Chain) (t : Fin 32) (ht : t.val = 31) :
     child (cv k t) = some (top k) := by
   simp only [Name.child]
   rw [dif_pos ht]
@@ -264,12 +265,12 @@ theorem sum_fin32_ge (v : ℕ) : ∑ t : Fin 32, (if v ≤ t.val then 1 else 0) 
     omega
   rw [this, Nat.card_Ico]
 
-/-- Every cut reveals sixteen 192-bit and sixteen 144-bit states. -/
+/-- Every cut reveals thirteen 192-bit and twenty 144-bit states. -/
 theorem reveal_cutOf (c : Choice) : ∑ n ∈ cutOf c, n.len = 5376 := by
   unfold cutOf
   rw [Finset.sum_image]
   · simp only [chainNode_len]
-    change ∑ k : Fin 32, chainBits k = 5376
+    change ∑ k : Chain, chainBits k = 5376
     decide +kernel
   · intro a _ b _ h
     exact chainNode_injective c h

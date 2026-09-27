@@ -13,12 +13,12 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
 /-- A chain about to hash its value in place. -/
-structure Prepared (s : MachineState) (x : graph.Assignment) (k : Fin 32) : Prop where
+structure Prepared (s : MachineState) (x : graph.Assignment) (k : Chain) : Prop where
   inv : HashInv index wire pk s x k (work k)
   ready : MemBits s (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k)))
 
-/-- A fully hidden cap: its view value is its top, and no hash runs. -/
-theorem hidden_refines (k : Fin 32) (hidden : 32 ≤ firstAt index k)
+/-- A fully hidden cap or free chain: its view value is its top, and no hash runs. -/
+theorem hidden_refines (k : Chain) (hidden : 32 ≤ firstAt index k)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c : ℕ)
     (continuation : ∀ z : graph.Assignment, ChainsInv index wire pk s z (k.val+1) →
@@ -26,7 +26,7 @@ theorem hidden_refines (k : Fin 32) (hidden : 32 ≤ firstAt index k)
     (prep : Prepared index wire pk s x k) :
     Riscv.Refines fuel s
       (runNodes' index (viewPayload wire) (chainNodes k) x (cursor k) >>= K) c := by
-  have cap : k.val < 16 := by
+  have cap : k.val < 13 := by
     by_contra h
     have : firstAt index k ≤ 31 := by
       unfold firstAt firstEval; rw [if_neg h]; exact pos_le index k
@@ -66,7 +66,7 @@ theorem hidden_refines (k : Fin 32) (hidden : 32 ≤ firstAt index k)
 
 /-- The table row runs every hash of the chain, the first on its view value, then commits the
 top. -/
-theorem table_refines (k : Fin 32) (tail : Code)
+theorem table_refines (k : Chain) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
       ChainsInv index wire pk u z (k.val+1) → Riscv.CodeAt u u.pc tail →

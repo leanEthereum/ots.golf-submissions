@@ -3,10 +3,11 @@ import Submissions.UpperRiscvHint.RejectAdapter
 import Submissions.UpperRiscvHint.HintTransfer
 
 /-! Views for an image that may trap on invalid input. The honest prover runs the verifier
-first: it lays out accepted signatures and hands every other signature over in the raw form,
-which the image rejects before its first possible trap. Acceptance must still imply the
-verifier's acceptance on `compress view`, and fuel above the image's budget changes nothing.
-The machine may append constant-answer query suffixes to its specification (`Prunes`). -/
+first: it lays out accepted signatures, by a deterministic oracle computation, and hands every
+other signature over in the raw form, which the image rejects before its first possible trap.
+Acceptance must still imply the verifier's acceptance on `compress view`, and fuel above the
+image's budget changes nothing. The machine may append constant-answer query suffixes to its
+specification (`Prunes`), and only accepting runs are charged. -/
 
 noncomputable section
 
@@ -15,8 +16,9 @@ namespace OptimalOTS.HintTrap
 open OracleComp OptimalOTS.RiscvHint
 
 variable (S : OracleAlgorithm.Scheme) (image : Riscv.Image)
-  (compress : View → OracleAlgorithm.Signature) (layout raw : OracleAlgorithm.Signature → View)
-  (fuel : ℕ)
+  (compress : View → OracleAlgorithm.Signature)
+  (layout : PublicKey → Message → OracleAlgorithm.Signature → OracleComp Spec View)
+  (raw : OracleAlgorithm.Signature → View) (fuel : ℕ)
 
 /-- A path of a computation with appended constant-answer suffixes is a path of the pruned
 computation, which stops at a smaller cache. -/
@@ -44,22 +46,24 @@ def submission : RiscvHint.Submission where
   compress := compress
   expand := fun pk m σ => do
     let ok ← S.verify pk m σ
-    pure (if ok then layout σ else raw σ)
+    if ok then layout pk m σ else pure (raw σ)
   fuel := fun _ _ _ => fuel
 
 theorem certificate (q : PublicKey → Message → View → OracleComp Spec (Option Bool)) (c : ℕ)
     (admissible : S.Admissible) (secure : S.Secure) (valid : image.Valid)
     (prunes : ∀ pk m view n, fuel ≤ n →
       RejectAdapter.Prunes (q pk m view) (Riscv.observe n (loadView image pk m view)))
-    (bounded : ∀ pk m view n, fuel ≤ n → ∀ b k,
-      some (b, k) ∈ support (Riscv.execute n (loadView image pk m view)) → k ≤ c)
-    (layout_compress : ∀ pk m σ, true ∈ support (S.verify pk m σ) → compress (layout σ) = σ)
+    (bounded : ∀ pk m view n, fuel ≤ n → ∀ k,
+      some (true, k) ∈ support (Riscv.execute n (loadView image pk m view)) → k ≤ c)
+    (layout_compress : ∀ pk m σ, true ∈ support (S.verify pk m σ) →
+      ∀ view ∈ support (layout pk m σ), compress view = σ)
     (raw_compress : ∀ σ, compress (raw σ) = σ)
     (sound : ∀ pk m view c₀ c₁, Riscv.cachedPaths.Path (q pk m view) (some true) c₀ c₁ →
       Riscv.cachedPaths.Path (S.verify pk m (compress view)) true c₀ c₁)
     (raw_rejects : ∀ pk m σ, ∀ o ∈ support (q pk m (raw σ)), o = some false)
     (accepts : ∀ pk m σ c₀ c₁, Riscv.cachedPaths.Path (S.verify pk m σ) true c₀ c₁ →
-      ∀ o c₂, Riscv.cachedPaths.Path (q pk m (layout σ)) o c₁ c₂ → o = some true) :
+      ∀ view c₂, Riscv.cachedPaths.Path (layout pk m σ) view c₁ c₂ →
+      ∀ o c₃, Riscv.cachedPaths.Path (q pk m view) o c₂ c₃ → o = some true) :
     (submission S image compress layout raw fuel).Certificate c := by
   have observe_path : ∀ pk m view n o (c c' : hashSpec.QueryCache), fuel ≤ n →
       Riscv.cachedPaths.Path (Riscv.execute n (loadView image pk m view)) o c c' →
@@ -71,16 +75,16 @@ theorem certificate (q : PublicKey → Message → View → OracleComp Spec (Opt
   refine ⟨admissible, secure, valid, ?_, ?_, ?_, ?_⟩
   · -- Expands
     intro pk m σ view hview
-    change view ∈ support (S.verify pk m σ >>= fun ok => pure (if ok then layout σ else raw σ))
-      at hview
+    change view ∈ support (S.verify pk m σ >>= fun ok =>
+      if ok then layout pk m σ else pure (raw σ)) at hview
     rw [mem_support_bind_iff] at hview
     obtain ⟨ok, hok, hview⟩ := hview
-    rw [support_pure, Set.mem_singleton_iff] at hview
-    subst hview
-    change compress (if ok then layout σ else raw σ) = σ
     cases ok
-    · exact raw_compress σ
-    · exact layout_compress pk m σ hok
+    · rw [if_neg (by decide), support_pure, Set.mem_singleton_iff] at hview
+      subst hview
+      exact raw_compress σ
+    · rw [if_pos rfl] at hview
+      exact layout_compress pk m σ hok view hview
   · -- Faithful
     intro pk m σ
     rw [probTrue_eq_zero_iff]
@@ -97,16 +101,21 @@ theorem certificate (q : PublicKey → Message → View → OracleComp Spec (Opt
     rw [Riscv.cachedPaths.path_pure] at hpure
     have hne : d ≠ some acc := by simpa using hpure.1.symm
     change Riscv.cachedPaths.Path ((S.verify pk m σ >>= fun ok =>
-      pure (if ok then layout σ else raw σ)) >>= fun view =>
+      if ok then layout pk m σ else pure (raw σ)) >>= fun view =>
         decision <$> Riscv.execute fuel (loadView image pk m view)) d ∅ c₁ at hd
     rw [Riscv.cachedPaths.path_bind] at hd
     obtain ⟨view, cm, hexp, hrun⟩ := hd
     rw [Riscv.cachedPaths.path_bind] at hexp
     obtain ⟨ok, ca, hver, hview⟩ := hexp
-    rw [Riscv.cachedPaths.path_pure] at hview
-    obtain ⟨rfl, rfl⟩ := hview
-    have hgrow := subcache_run_grow _ _ _ _ hrun
-    have hreplay := replay_deterministic _ (admissible.verifyDeterministic pk m σ) ∅ cm c₁ ok
+    have hlay : Subcache ca cm := by
+      cases ok
+      · rw [if_neg (by decide), Riscv.cachedPaths.path_pure] at hview
+        obtain ⟨-, rfl⟩ := hview
+        exact Subcache.refl _
+      · rw [if_pos rfl] at hview
+        exact subcache_run_grow _ _ _ _ hview
+    have hgrow : Subcache ca c₁ := fun _ _ h => subcache_run_grow _ _ _ _ hrun (hlay h)
+    have hreplay := replay_deterministic _ (admissible.verifyDeterministic pk m σ) ∅ ca c₁ ok
       hver hgrow
     change (acc, c₂) ∈ support ((simulateQ oracleImpl (S.verify pk m σ)).run c₁) at hacc
     rw [hreplay] at hacc
@@ -116,8 +125,11 @@ theorem certificate (q : PublicKey → Message → View → OracleComp Spec (Opt
     obtain ⟨o, ho, rfl⟩ := hrun
     obtain ⟨c'', hq, -⟩ := observe_path pk m _ fuel o cm c₁ le_rfl ho
     cases ok
-    · exact hne (raw_rejects pk m σ _ (mem_support_of_mem_support_run _ _ cm c'' hq))
-    · exact hne (accepts pk m σ ∅ cm hver _ c'' hq)
+    · rw [if_neg (by decide), Riscv.cachedPaths.path_pure] at hview
+      obtain ⟨rfl, -⟩ := hview
+      exact hne (raw_rejects pk m σ _ (mem_support_of_mem_support_run _ _ cm c'' hq))
+    · rw [if_pos rfl] at hview
+      exact hne (accepts pk m σ ∅ ca hver view cm hview _ c'' hq)
   · -- Sound
     intro pk m view n
     rw [probTrue_eq_zero_iff]
@@ -156,6 +168,6 @@ theorem certificate (q : PublicKey → Message → View → OracleComp Spec (Opt
     intro pk m view n cycles hmem
     have hmono := Riscv.execute_fuel_mono Riscv.supportPaths n (max n fuel) _ (true, cycles) () ()
       hmem (le_max_left _ _)
-    exact bounded pk m view _ (le_max_right _ _) true cycles hmono
+    exact bounded pk m view _ (le_max_right _ _) cycles hmono
 
 end OptimalOTS.HintTrap

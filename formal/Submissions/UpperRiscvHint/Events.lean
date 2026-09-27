@@ -40,12 +40,12 @@ def yv (y : graph.Assignment) (n : Name) : BitVec n.len := (y n.fin).cast (graph
 theorem sigma_cast {a b : ℕ} (h : a = b) (x : BitVec a) :
     (⟨a, x⟩ : Σ k : ℕ, BitVec k) = ⟨b, x.cast h⟩ := by subst h; rfl
 
-theorem trunc_cast_eq (k : Fin 32) {a b : ℕ} (h : a = b) (x : BitVec a) : trunc k (x.cast h) = trunc k x := by
+theorem trunc_cast_eq (k : Chain) {a b : ℕ} (h : a = b) (x : BitVec a) : trunc k (x.cast h) = trunc k x := by
   subst h; rfl
 
-theorem trunc_state (k : Fin 32) (x : BitVec (chainBits k)) : trunc k x = x := trunc_eq_self k x
+theorem trunc_state (k : Chain) (x : BitVec (chainBits k)) : trunc k x = x := trunc_eq_self k x
 
-theorem trunc_src (k : Fin 32) (x : BitVec (src k).len) : trunc k x = x := trunc_eq_self k x
+theorem trunc_src (k : Chain) (x : BitVec (src k).len) : trunc k x = x := trunc_eq_self k x
 
 theorem cast_injective {n m : ℕ} (h : n = m) {x y : BitVec n} (e : x.cast h = y.cast h) :
     x = y := by
@@ -67,7 +67,7 @@ theorem bv_append_inj {n m : ℕ} {x x' : BitVec n} {y y' : BitVec m} (h : x ++ 
     have := key i
     simpa [hi] using this
 
-theorem slotCat_inj {a b : (k : Fin 32) → BitVec (topBits k)} :
+theorem slotCat_inj {a b : (k : Chain) → BitVec (topBits k)} :
     ∀ s, slotCat a s = slotCat b s → ∀ j ≤ s, a (slotChain j) = b (slotChain j)
   | 0, h, j, hj => by
     obtain rfl : j = 0 := by omega
@@ -80,19 +80,23 @@ theorem slotCat_inj {a b : (k : Fin 32) → BitVec (topBits k)} :
       exact h1
 
 /-- The root slot of chain `k`. -/
-def slotOf (k : Fin 32) : ℕ := if k.val < 16 then 2 * k.val else 2 * (k.val - 16) + 1
+def slotOf (k : Chain) : ℕ :=
+  if 13 ≤ k.val ∧ k.val < 25 then 2 * (k.val - 13) + 1 else if k.val < 13 then 2 * k.val
+  else k.val
 
-theorem slotChain_slotOf (k : Fin 32) : slotChain (slotOf k) = k := by
+theorem slotChain_slotOf (k : Chain) : slotChain (slotOf k) = k := by
+  have := k.isLt
   apply Fin.ext
   simp only [slotChain, slotOf]
-  split_ifs <;> omega
+  split_ifs <;> first | contradiction | omega
 
 /-- The root input determines every top. -/
-theorem rootCat_inj {a b : (k : Fin 32) → BitVec (topBits k)} (h : rootCat a = rootCat b) :
+theorem rootCat_inj {a b : (k : Chain) → BitVec (topBits k)} (h : rootCat a = rootCat b) :
     a = b := by
   unfold rootCat at h
   funext k
-  have key := slotCat_inj 31 (cast_injective _ h) (slotOf k) (by unfold slotOf; split_ifs <;> omega)
+  have := k.isLt
+  have key := slotCat_inj 32 (cast_injective _ h) (slotOf k) (by unfold slotOf; split_ifs <;> omega)
   rwa [slotChain_slotOf] at key
 
 /-! ## Names -/
@@ -107,34 +111,34 @@ theorem len_eq_of_hashParent {h p : Name} (hp : hashParent h = some p) : h.len =
 theorem cost_hashParent {h p : Name} (hp : hashParent h = some p) : p.cost = 0 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;> rfl
 
-theorem hashParent_ne_src {h p : Name} (hp : hashParent h = some p) (k : Fin 32) : p ≠ src k := by
+theorem hashParent_ne_src {h p : Name} (hp : hashParent h = some p) (k : Chain) : p ≠ src k := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;>
     exact fun e => nomatch e
 
-theorem prev_zero (k : Fin 32) : prev k 0 = src k := by
+theorem prev_zero (k : Chain) : prev k 0 = src k := by
   simp [prev]
 
-theorem prev_succ (k : Fin 32) (t : Fin 32) (ht : t.val < 31) :
+theorem prev_succ (k : Chain) (t : Fin 32) (ht : t.val < 31) :
     prev k ⟨t.val + 1, by omega⟩ = cv k t := by
   simp [prev]
 
-theorem prev_of_ne_zero (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 0) :
+theorem prev_of_ne_zero (k : Chain) (t : Fin 32) (ht : ¬ t.val = 0) :
     prev k t = cv k ⟨t.val - 1, by omega⟩ := by
   simp [prev, ht]
 
-theorem hashOf_of_ne_zero (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 0) :
+theorem hashOf_of_ne_zero (k : Chain) (t : Fin 32) (ht : ¬ t.val = 0) :
     hashOf (ci k t) = some (ch k ⟨t.val - 1, by omega⟩) := by
   simp [hashOf, ht]
 
-theorem child_cv_of_ne (k : Fin 32) (t : Fin 32) (ht : ¬ t.val = 31) :
+theorem child_cv_of_ne (k : Chain) (t : Fin 32) (ht : ¬ t.val = 31) :
     child (cv k t) = some (ci k ⟨t.val + 1, by omega⟩) := by
   simp [Name.child, ht]
 
-theorem child_cv_top (k : Fin 32) (t : Fin 32) (ht : t.val = 31) :
+theorem child_cv_top (k : Chain) (t : Fin 32) (ht : t.val = 31) :
     child (cv k t) = some (top k) := by
   simp [Name.child, ht]
 
-theorem val_top' (ξ : Rec) (k : Fin 32) : val ξ (top k) = topOf k (val ξ (cv k 31)) := by
+theorem val_top' (ξ : Rec) (k : Chain) : val ξ (top k) = topOf k (val ξ (cv k 31)) := by
   rw [val_top, val_cv]
 
 theorem val_rc' (ξ : Rec) : val ξ rc = rootCat fun k => val ξ (top k) := by
@@ -193,7 +197,7 @@ theorem yv_hash (hy : graph.ReconEqs d (fins A) given y) {h p : Name}
     rw [hyw]
     rfl
 
-theorem yv_hash_ch (hy : graph.ReconEqs d (fins A) given y) {k : Fin 32} {t : Fin 32}
+theorem yv_hash_ch (hy : graph.ReconEqs d (fins A) given y) {k : Chain} {t : Fin 32}
     (he : Evaluated A (ch k t)) :
     ∃ w : BitVec 256, d ⟨chainBits k, yv y (ci k t)⟩ = some w ∧ yv y (ch k t) = w := by
   obtain ⟨w, hd, hw⟩ := yv_hash hy (h := ch k t) (p := ci k t) rfl he
@@ -213,20 +217,20 @@ theorem yv_det (hy : graph.ReconEqs d (fins A) given y) {n : Name} (he : Evaluat
   rw [this]
   simp
 
-theorem yv_cv (hy : graph.ReconEqs d (fins A) given y) {k : Fin 32} {t : Fin 32}
+theorem yv_cv (hy : graph.ReconEqs d (fins A) given y) {k : Chain} {t : Fin 32}
     (he : Evaluated A (cv k t)) : yv y (cv k t) = yv y (ch k t) := by
   rw [yv_det hy he rfl (by simp)]
   rfl
 
 /-- The input of a chain hash: the truncated value before it. -/
-theorem yv_ci (hy : graph.ReconEqs d (fins A) given y) {k : Fin 32} {t : Fin 32}
+theorem yv_ci (hy : graph.ReconEqs d (fins A) given y) {k : Chain} {t : Fin 32}
     (he : Evaluated A (ci k t)) : yv y (ci k t) = trunc k (yv y (prev k t)) := by
   rw [yv_det hy he rfl (by simp)]
   show trunc k (y (prev k t).fin) = _
   unfold yv
   rw [trunc_cast_eq]
 
-theorem yv_top (hy : graph.ReconEqs d (fins A) given y) {k : Fin 32} (he : Evaluated A (top k)) :
+theorem yv_top (hy : graph.ReconEqs d (fins A) given y) {k : Chain} (he : Evaluated A (top k)) :
     yv y (top k) = topOf k (yv y (cv k 31)) := by
   rw [yv_det hy he rfl (by simp)]
   rfl
@@ -248,13 +252,13 @@ def Dif (ξ : Rec) : (v : Name) → BitVec v.len → Prop
       trunc k x ≠ trunc k (val ξ (cv k t))
   | v, x => x ≠ val ξ v
 
-theorem dif_src {ξ : Rec} {k : Fin 32} {x : BitVec (src k).len} (h : x ≠ val ξ (src k)) :
+theorem dif_src {ξ : Rec} {k : Chain} {x : BitVec (src k).len} (h : x ≠ val ξ (src k)) :
     Dif ξ (src k) x := h
 
-theorem dif_ci {ξ : Rec} {k : Fin 32} {t : Fin 32} {x : BitVec (ci k t).len}
+theorem dif_ci {ξ : Rec} {k : Chain} {t : Fin 32} {x : BitVec (ci k t).len}
     (h : x ≠ val ξ (ci k t)) : Dif ξ (ci k t) x := h
 
-theorem dif_top {ξ : Rec} {k : Fin 32} {x : BitVec (top k).len} (h : x ≠ val ξ (top k)) :
+theorem dif_top {ξ : Rec} {k : Chain} {x : BitVec (top k).len} (h : x ≠ val ξ (top k)) :
     Dif ξ (top k) x := h
 
 theorem dif_rc {ξ : Rec} {x : BitVec rc.len} (h : x ≠ val ξ rc) : Dif ξ rc x := h
@@ -266,17 +270,17 @@ theorem dif_of_revealable {ξ : Rec} {a : Name} (ha : Revealable a) {x : BitVec 
   | top _ => exact h
   | src _ | ch _ _ | cv _ _ | rc | rh => exact (ha : False).elim
 
-theorem dif_cv_of_lt {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : ¬ t.val = 31)
+theorem dif_cv_of_lt {ξ : Rec} {k : Chain} {t : Fin 32} (ht : ¬ t.val = 31)
     {x : BitVec (cv k t).len} : Dif ξ (cv k t) x ↔ trunc k x ≠ trunc k (val ξ (cv k t)) := by
   show (if t.val = 31 then _ else _) ↔ _
   rw [if_neg ht]
 
-theorem dif_cv_top {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : t.val = 31)
+theorem dif_cv_top {ξ : Rec} {k : Chain} {t : Fin 32} (ht : t.val = 31)
     {x : BitVec (cv k t).len} : Dif ξ (cv k t) x ↔ topOf k x ≠ topOf k (val ξ (cv k t)) := by
   show (if t.val = 31 then _ else _) ↔ _
   rw [if_pos ht]
 
-theorem sim_ch_of_topOf {ξ : Rec} {k : Fin 32} {t : Fin 32} (ht : t.val = 31) {w : BitVec 256}
+theorem sim_ch_of_topOf {ξ : Rec} {k : Chain} {t : Fin 32} (ht : t.val = 31) {w : BitVec 256}
     (hs : topOf k w = topOf k (ξ.2 (ch k t).fin)) : sim ξ (ch k t) w := by
   simpa [sim, ht] using hs
 
@@ -390,7 +394,7 @@ theorem events_none {A' : Finset Name} (hA' : IsCut A') {ξ : Rec} {d : Cache}
 /-- A chain hash evaluated by the verifier but hidden at the signed cut, whose recorded answer
 simulates the honest one: its input is a hidden keygen point or a fresh preimage. -/
 theorem hit_or_spr {A A' : Finset Name} {ξ : Rec} {d : Cache} {given y : graph.Assignment}
-    (hy : graph.ReconEqs d (fins A') given y) {k : Fin 32} {t : Fin 32}
+    (hy : graph.ReconEqs d (fins A') given y) {k : Chain} {t : Fin 32}
     (hhE : Evaluated A' (ch k t)) (hnE : ¬ Evaluated A (ch k t))
     (hsim : sim ξ (ch k t) (yv y (ch k t))) : Spr d ξ ∨ Cache.Hits d (fHid (some A) ξ) := by
   obtain ⟨w, hd, hw⟩ := yv_hash_ch hy hhE

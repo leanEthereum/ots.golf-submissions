@@ -26,7 +26,7 @@ theorem lengthSetup_ready (s : MachineState) (q : ℕ) : Riscv.LinearReady s (le
   unfold lengthSetup
   split_ifs <;> simp [Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
-theorem prevBits_left (q : Fin 16) (h8 : q.val ≠ 8) :
+theorem prevBits_left (q : Fin 16) (h8 : q.val ≠ 6) :
     prevBits (leftChain q) = chainBits (leftChain q) := by
   revert q; decide
 
@@ -36,8 +36,8 @@ theorem prevBits_right (q : Fin 16) : prevBits (rightChain q) = chainBits (right
 theorem lengthSetup_effect (s : MachineState) (q : Fin 16)
     (h : s.getReg .x11 = W (prevBits (leftChain q))) :
     LengthEffect s ((lengthSetup q).foldl execInstrBr s) q := by
-  by_cases hq : q.val=8
-  · have he : q=8 := Fin.ext hq
+  by_cases hq : q.val=6
+  · have he : q=6 := Fin.ext hq
     subst q
     refine ⟨?_, ?_, rfl, rfl⟩
     · simp [lengthSetup, execInstrBr, getReg_setReg_ite, chainBits, leftChain, W, getReg_x0']
@@ -48,7 +48,7 @@ theorem lengthSetup_effect (s : MachineState) (q : Fin 16)
     exact ⟨h.trans (congrArg W hw), fun _ _ => rfl, rfl, rfl⟩
 
 theorem pairCost_eq (q : Fin 16) : pairCost index q =
-    (lengthSetup q).length + (if q.val = 0 then 1 else 0) + 6 +
+    (lengthSetup q).length + 6 +
       remaining index (leftChain q) + remaining index (rightChain q) := by
   unfold pairCost
   rw [dispatchCode_length]
@@ -71,12 +71,11 @@ theorem after_lengthSetup (q : Fin 16) (s : MachineState) (x : graph.Assignment)
 /-- One pair runs its two graph chains and reaches the next block with all invariants restored. -/
 theorem pair_refines (q : Fin 16)
     (good : digit index.val (2*q.val)+coarseDigit index q ≤ pairCap q)
-    (short : wire.length = honestViewBits)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      ChainsInv index wire pk u z (2*(q.val+1)) →
+      ChainsInv index wire pk u z (2*q.val+3) →
       (∃ junk, Riscv.CodeAt u u.pc (nextCode q ++ junk)) →
-      ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursor (2*(q.val+1)))) c)
+      ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursor (2*q.val+3))) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (inv : ChainsInv index wire pk s x (leftChain q))
     (located : ∃ junk, Riscv.CodeAt s s.pc (prologue q ++ junk))
@@ -107,7 +106,7 @@ theorem pair_refines (q : Fin 16)
   apply Riscv.Refines.linear _ located.append_left ready
   rw [← hs1, runNodes'_append, bind_assoc]
   apply prologue_refines index wire pk q A rfl s1 x s1ctx s1input E.length s1payload s1done junk0
-    short s1loc _ (NA+(2+(NB+c))) (fuel-L) (by omega)
+    s1loc _ (NA+(2+(NB+c))) (fuel-L) (by omega)
   intro s3 prep3 pc3
   have loc3 := landing_located index s3 prep3.inv.ctx.code q good
   rw [← pc3] at loc3
@@ -126,14 +125,14 @@ theorem pair_refines (q : Fin 16)
     rw [inv4.length]
     congr 1
     exact prevBits_right q
-  have out4 : s4.getReg .x12 = W (outAddr (2*q.val)) := inv4.out (by omega)
+  have out4 : s4.getReg .x12 = W (outAddr (2*q.val+1)) := inv4.out (by omega)
   apply move_refines index wire pk q B rfl s4 x4 (List.replicate NB .ECALL ++ nextCode q)
     inv4.ctx inv4.input out4 lenB inv4.payload inv4.done loc4 _ (NB+c) left4 (by omega)
   intro s5 inv5 held5 loc5
   apply table_refines index wire pk B (nextCode q) K c rest ?_
     s5 x4 (left4-2) ⟨inv5, held5⟩ loc5 (by omega)
   intro s6 x6 inv6 loc6 left6 hleft6
-  have endIndex : B.val+1 = 2*(q.val+1) := by dsimp [B,rightChain]; omega
+  have endIndex : B.val+1 = 2*q.val+3 := by dsimp [B,rightChain]
   rw [endIndex] at inv6
   rw [← cursor_step B, endIndex]
   exact continuation s6 x6 inv6 ⟨[], by simpa only [List.append_nil] using loc6⟩ left6 hleft6
@@ -152,7 +151,6 @@ def stagedCost (index : RawIdx) : (n q : ℕ) → ℕ
 /-- A forbidden table entry rejects before any hash of the pair. -/
 theorem pair_bad_refines (q : Fin 16)
     (bad : pairCap q < digit index.val (2*q.val)+coarseDigit index q)
-    (short : wire.length = honestViewBits)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (inv : ChainsInv index wire pk s x (leftChain q))
     (located : ∃ junk, Riscv.CodeAt s s.pc (prologue q ++ junk))
@@ -174,7 +172,7 @@ theorem pair_bad_refines (q : Fin 16)
   apply Riscv.Refines.linear _ located.append_left ready
   rw [← hs1]
   apply prologue_refines index wire pk q (leftChain q) rfl s1 x s1ctx s1input E.length s1payload
-    s1done junk short loc _ 4 (fuel-L) (by omega)
+    s1done junk loc _ 4 (fuel-L) (by omega)
   intro s3 prep3 pc3
   exact landing_reject_refines index q s3 prep3.inv.ctx.code pc3 bad
     (fuel-L-(dispatchCode q).length) (by omega)

@@ -6,9 +6,7 @@ open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleCom
 open Riscv2Program
 
 def landingIP (q a d : ℕ) : ℕ :=
-  50 + groupOffset (group q) + 256*(15-d) + slotOffset q + (15-a+lead q)
-def rejectJump (ip : ℕ) : Instr :=
-  .BEQ .x0 .x0 (BitVec.ofInt 13 (4*((stubFor ip : ℤ)-ip)))
+  copiesIndex + groupOffset (group q) + 256*(15-d) + slotOffset q + (15-a+lead q)
 
 set_option maxRecDepth 100000 in
 theorem rejecting_landing_facts : ∀ q a d : Fin 16, pairCap q < a.val+d.val →
@@ -43,7 +41,7 @@ theorem landing_reject_refines (index : RawIdx) (q : Fin 16) (s : MachineState)
     simpa [fineWidth, a, d] using (pair_landing index q q.isLt).symm
   have ipc : 4096+4*ip = landing0 q+4*lead q-dispatch index q := by
     rw [← addr]
-    simp only [ip, landingIP, copyStart, copiesStart, copies]
+    simp only [ip, landingIP, copyStart, copiesStart, copiesIndex, copies]
     omega
   rw [head, hrow, W_add, addr, ← pc] at fetch
   have transition : step s = some (s.setPC (W (4096+4*stubFor ip))) := by
