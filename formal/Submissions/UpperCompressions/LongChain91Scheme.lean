@@ -3,10 +3,10 @@ import Submissions.UpperCompressions.LongChain91Codec
 import Submissions.UpperCompressions.ProofBundle04
 
 /-!
-# The concrete cost-89 long-chain scheme
+# The concrete cost-88 long-chain scheme
 
 This module selects the schedule's classes injectively from the certified
-cost-88 cut family, instantiates the generic 86-bit weighted signer, and
+cost-87 cut family, instantiates the generic 86-bit weighted signer, and
 discharges the honest-party resource and availability obligations.
 -/
 
@@ -53,14 +53,14 @@ def scheme : WeightedScheme.Scheme M where
     norm_num [keygenBudget]
 
 theorem scheme_reconstructCost (i : Fin M) :
-    scheme.graph.reconstructCost (scheme.sets i) ≤ 88 :=
+    scheme.graph.reconstructCost (scheme.sets i) ≤ 87 :=
   family_reconstructCost (setsName_mem i)
 
-theorem scheme_keygenCost : scheme.graph.keygenCost = 1101 := graph_keygenCost
+theorem scheme_keygenCost : scheme.graph.keygenCost = 820 := graph_keygenCost
 
 abbrev typed : TypedScheme := scheme.toAlgorithm
 
-theorem typed_cost : typed.VerifyCostAtMost 89 :=
+theorem typed_cost : typed.VerifyCostAtMost 88 :=
   scheme.verifyCost scheme_reconstructCost
 
 theorem typed_correct : typed.Correct := scheme.correct
@@ -110,8 +110,8 @@ theorem wire_canonical (pk : PublicKey) (m : Message) (bits : List Bool)
 
 def wireScheme : OracleAlgorithm.Scheme := WireAdapter.scheme typed decodeWire
 
-theorem wire_cost : wireScheme.VerifyCostAtMost 89 :=
-  WireAdapter.verifyCost typed decodeWire 89 typed_cost
+theorem wire_cost : wireScheme.VerifyCostAtMost 88 :=
+  WireAdapter.verifyCost typed decodeWire 88 typed_cost
 
 /-! ## Honest signing availability
 
@@ -198,11 +198,7 @@ theorem graph_hashInputsAvoid :
   intro v
   obtain ⟨n, rfl⟩ := Name.nameEquiv.surjective v
   erw [graph_kind_fin]
-  cases n
-  case hh b j =>
-    simp [kindOf, graph_len_fin, Name.len, msgBits]
-    omega
-  all_goals simp [kindOf, graph_len_fin, Name.len, msgBits]
+  cases n <;> simp [kindOf, graph_len_fin, Name.len, msgBits]
 
 theorem keygen_fresh
     (p : (PublicKey × scheme.graph.Assignment) × Cache)
