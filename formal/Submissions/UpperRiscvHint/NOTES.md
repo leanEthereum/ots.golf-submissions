@@ -1,18 +1,125 @@
-# Hinted RISC-V: identity port of the 349-cycle record
+# Hinted RISC-V: cap chains, 324 cycles
 
-This reuses Nicolas Consigny’s deterministic verifier from
-[PR #40](https://github.com/leanEthereum/ots.golf-submissions/pull/40), exact source
-`162d80e00c6f9263389c9d87bbdbfc799d60a582`. The OTS scheme, image and score are unchanged:
-349 cycles, 62,892 image bytes. There is no hinting optimization: compression is the identity,
-and honest expansion returns the signature unchanged.
+This entry changes the chain graph of the 337-cycle trap-mode entry below. Chains 0 to 15 are
+192-bit cap chains: the next state is answer bytes `[0,24)`, the top of a cap is its final state,
+and a cap with digit 0 reveals its top. Chains 16 to 31 are 144-bit normal chains (state answer
+bytes `[8,26)`, top the whole last answer; chain 31's top is its low 24 bytes). The root input is
+7104 bits: cap `j`'s top, then normal `16 + j`'s top, for `j = 0 … 15` (`Names.rootCat`). The
+accepted digit set, keygen apart from the extra root blocks (1038), and the availability proof
+are unchanged. The scheme side is `Wire.certificate` with verify cost 189.
 
-`HintTransfer.lean` supplies the general identity-port theorem from the contract’s checked
-regression proof. `HintPort.lean` proves the extra loader case: every view longer than 5,504
-bits takes the image’s rejecting length-check branch. This closes soundness for all views and
-all fuel budgets, including views that the deterministic loader could not expose.
+## Layout
 
-The natural next improvement is to provide useful hints and certify their checks. This entry
-only establishes a baseline with the existing best deterministic program.
+The view is at `0x400030`: the nonce, then the root region from `0x400040`. Cap `j` hashes in
+place at region byte `56 j` (`x10 = x12`). Normal chain `16 + j` has its answer buffer at region
+byte `56 j + 24` and its value eight bytes into it. A cap's 32-byte answer spills eight bytes into
+the normal buffer above it, which the normal chain later overwrites; nothing writes into a cap's
+24 bytes after the cap runs, so a count-0 top survives. The honest view is 7248 bits; the signature
+order is the graph order (16 caps × 192 bits, then 16 normals × 144 bits), with no permutation.
+The lanes move to `0x4003C0`, above the region and the view.
+
+## Machine changes
+
+- The index phase ends with `ADDI x11 x0 192`; pair 8's prologue sets 144.
+- A cap pair's first chain hashes `dA` times, so its landing is one row later (`jumpImm` adds 4);
+  its second chain has `dB` ECALLs. Entry 0 of a cap row is never a landing.
+- The raw-form test is `BNE x13 x6` in pair 0's prologue, with `x6 = 7248` loaded from the data
+  image (one more cycle than the 337 entry's `BGEU`). The root length is `ADDI x11 x13 -144`.
+- On a wrong checksum rank the first hash may come after several cap pairs with zero digits.
+  `trapVerify` therefore returns, on a wrong rank, `some false` if the first hashing pair
+  (`firstBusy`) breaks its cap and `none` otherwise; `MixedVerifier.walk_refines` walks the
+  zero pairs.
+
+Accounting: **324 = 31 index + 272 chains + 21 root/decision**. The chains are 174 hashes
+(158 digit units and one per normal chain), 64 pointer instructions, 32 dispatch instructions,
+the raw-form test and one width change; the root is 2 + 14 + 5.
+
+## Validation
+
+- `RVH_STAGE=B python3 .tmp/portrvh/rvh.py` is the generator; `compare.py` confirms that the
+  Lean image equals it (15,697 instructions, 64 data bytes).
+- `RVH_STAGE=B python3 .tmp/portrvh/transcript.py` passes 12,298 cases: all pair and digit
+  landings (including count-0 caps), sum aliases, every bit flip of one honest view, view lengths
+  around 7248, raw forms, and a wrong key and message. Honest runs never trap and every accepting
+  run costs exactly 324 cycles.
+- `lake build Submissions.UpperRiscvHint.Solution` passes; `certificate : submission.Certificate
+  324` depends on `propext`, `Classical.choice` and `Quot.sound` only.
+
+---
+
+# Hinted RISC-V: in-place views in trap mode, 337 cycles
+
+This entry keeps the 349-cycle signature, chain graph and security proof. The public key is the
+low 128 root bits with bit 64 flipped (`GScheme.flipHi`). The machine reads a view that holds the
+nonce and then every chain value in its own 24-byte cell, so no chain moves its value before it
+hashes. The machine rejects the raw form of a view before any trap is possible, and after that
+test it may trap on a bad input.
+
+It extends the hinted identity port of Nicolas Consigny's 349-cycle deterministic verifier,
+[PR #40](https://github.com/leanEthereum/ots.golf-submissions/pull/40), source
+`162d80e00c6f9263389c9d87bbdbfc799d60a582`. Design study and implementation: Claude Opus 5.5.
+
+## Layout
+
+The loader places the view at `0x400030`. View bits `[0,128)` are the nonce. Chain `k`, in
+execution order, has its cell at `0x400040 + 24k`. Its value starts at the cell, or six bytes
+into it for chains 6, 9, 12 and 15, whose state is answer bytes `[14,32)`. The honest view is
+6272 bits and is zero elsewhere. `ViewLayout.lean` has the readers `viewNonce` and `viewPayload`
+and the placement `honestView`. `compress` applies the 349 wire permutation to `viewPayload`.
+A view of at least 65536 bits is the raw form and carries any other signature after 65536 zero
+bits. The honest prover uses the raw form for every signature that the verifier rejects.
+
+## Machine changes
+
+- The 8 redirects `ADDI x10 x12 8` are gone: 8 cycles.
+- The length check `LD x6; BEQ x13 x6` is gone: 2 cycles. Pair 0's prologue has
+  `BGEU x13 x28` to the rejection stub at 600 in its place: the view length against pair 0's
+  dispatch halfword `halfword0`, which lies in `[6293, 21713]`. The honest view always passes and
+  the raw form always fails. No instruction before this test can trap.
+- The sum check is `REMU x5 x27 x2`. Lane 0 carries 1997 more, so the accepted residue is 1, the
+  HASH call number. Any other residue traps at the first chain hash (HALT with `x10` a pointer,
+  or an unknown call).
+- The root length is `SLLI x11 x11 5`, 192 shifted to 6144.
+- The decision is `LD x26; LD x27; XOR x5 x26 x30; XOR x10 x27 x31; ECALL; JALR x0 x0 0`. On the
+  honest root `x5 = 0` and `x10 = 1`: HALT accepts. When the root equals the stored key, HALT
+  rejects. Every other root traps, directly or at the `JALR` to address 0 after a HASH of
+  arbitrary memory.
+- The prologue order is `ADDI x12 x10; LHU x28 x12; [BGEU]; ADDI x10 x12; JALR`. The `Ctx.row`
+  invariant says that `x28` holds pair `q`'s halfword while `x12` addresses chain `2q + 1`, or
+  chain `2q` with `x10` at its value.
+- The lanes are at `0x400340`, above the root region. The data image keeps only the mask, 255
+  and the dispatch base: 56 bytes.
+
+Accounting: **337 = 30 index + 288 chains + 19 root/decision**. The chains are 190 hashes, 64
+pointer instructions, 32 dispatch instructions, the raw-form test and one width change. The
+image has 15,697 instructions and 56 data bytes, 62,844 bytes.
+
+## Proof
+
+`MixedVerifier.image_refines_trap` proves that the machine on every view, from
+`RiscvHint.loadView`, refines `trapVerify` for every fuel of at least 1337 instructions, and that
+every completed path costs at most 337 cycles. `trapVerify` hashes the index input, then returns
+`some false` on a long view (`halfword0 ≤ min |view| (2^20 + 1)`), `some false` on a forbidden
+pair 0, `none` (a trap) on a wrong checksum rank, and otherwise the staged run decided on the root
+by `decisionOutcome`. `Refines` is up to terminal pruning: the HASH before the `JALR` trap is
+omitted from `trapVerify`. The cycle envelope is `CappedCost.bound`: per pair 8 cycles, plus one
+before pair 8 and one for the raw-form test, and 19 for the root and decision: 307 after the
+index phase, which costs 30. `HintTrap.certificate` turns the refinement into `Expands`,
+`Faithful`, `Sound` and `CyclesAtMost 337`. `expand` runs `verify` first: accepted signatures get
+the in-place layout (`honestView`), all others the raw form (`rawView`). `HintView` proves the
+view-side facts: `layout_compress`, `raw_compress`, `trap_raw`, `trap_sound` and `trap_accepts`.
+
+## Validation
+
+- `.tmp/portrvh/rvh.py` is an independent generator and simulator. The Lean image, exported by
+  `.tmp/portrvh/Export.lean`, equals the generator (15,697 instructions, 56 data bytes).
+- `RVH_STAGE=A2 python3 .tmp/portrvh/transcript.py` runs 11,322 cases against a chain-level
+  verifier on `compress view`: all pair and digit landings, sum aliases, every bit flip of one
+  honest view, view lengths around 6272 and the halfword, raw forms, and a wrong key and message.
+  Honest runs never trap, raw forms halt rejecting, and every accepting run costs exactly 337
+  cycles.
+- `lake build Submissions.UpperRiscvHint.Solution` passes. `certificate` depends on `propext`,
+  `Classical.choice` and `Quot.sound` only.
 
 The original construction and optimization notes follow, with their original attribution.
 

@@ -159,7 +159,7 @@ theorem stB_support (pk : PublicKey) (m₁ : Message) (st : A.State) (σ : Optio
             σ₂.2.length = graph.revealBits (fins (setsName ⟨_, hi⟩)) ∧
             ∃ y : graph.Assignment,
               graph.ReconEqs p.2 (fins (setsName ⟨_, hi⟩))
-                (graph.decode (fins (setsName ⟨_, hi⟩)) σ₂.2) y ∧ trunc128 (yv y rh) = pk) := by
+                (graph.decode (fins (setsName ⟨_, hi⟩)) σ₂.2) y ∧ flipHi (trunc128 (yv y rh)) = pk) := by
   intro p hp
   unfold stB at hp
   rw [run_bind, support_bind] at hp
@@ -179,7 +179,7 @@ theorem stB_support (pk : PublicKey) (m₁ : Message) (st : A.State) (σ : Optio
   obtain ⟨hok, hne⟩ := hok
   obtain ⟨w, hw, hi, hlen, y, hy, hpk⟩ := hver hok
   refine ⟨m₂, σ₂, hne, w, hw, hi, hlen, y, hy, ?_⟩
-  exact (trunc128_cast_pot (graph_len_fin rh) (y rh.fin)).trans hpk
+  exact (congrArg flipHi (trunc128_cast_pot (graph_len_fin rh) (y rh.fin))).trans hpk
 
 /-- An accepted forgery is one of the charged events. -/
 theorem events_stB (ξ : Rec) (pk : PublicKey) (hpk : pkOf ξ = pk) (r : Option (Nonce × Idx))

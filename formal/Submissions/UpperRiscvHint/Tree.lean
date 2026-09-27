@@ -14,8 +14,8 @@ tree.  This file relates the generic notions of `OptimalOTS.Dag` (`Graph.Visited
 * `Evaluated A n`: `n ∉ A` and no strict ancestor of `n` lies in `A`;
 * `reconstructCost_eq`, `revealBits_eq`, `no_hidden_source_iff`: the scheme's quantities in
   tree terms;
-* cuts (`IsCut`): antichains of 192-bit nodes meeting every source path; distinct cuts of equal
-  cost are incomparable (`exists_mem_evaluated_of_ne`).
+* cuts (`IsCut`): antichains of chain inputs and cap tops meeting every source path; distinct
+  cuts of equal cost are incomparable (`exists_mem_evaluated_of_ne`).
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -40,10 +40,11 @@ inductive Above : Name → Name → Prop
 
 /-- Distance to the root. -/
 def height : Name → ℕ
-  | src _ => 98
-  | ci _ t => 97 - 3 * t
-  | ch _ t => 96 - 3 * t
-  | cv _ t => 95 - 3 * t
+  | src _ => 99
+  | ci _ t => 98 - 3 * t
+  | ch _ t => 97 - 3 * t
+  | cv _ t => 96 - 3 * t
+  | top _ => 2
   | rc => 1
   | rh => 0
 
@@ -78,17 +79,18 @@ theorem not_above_rh (m : Name) : ¬ Above m rh := by
 def ancSet : Name → Finset Name
   | rh => ∅
   | rc => {rh}
+  | top _ => {rc, rh}
   | cv k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
       (Finset.univ.filter fun t' : Fin 32 => t < t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 32 => t < t').image (cv k) ∪ {rc, rh}
+      (Finset.univ.filter fun t' : Fin 32 => t < t').image (cv k) ∪ {top k, rc, rh}
   | ch k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
       (Finset.univ.filter fun t' : Fin 32 => t < t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {rc, rh}
+      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {top k, rc, rh}
   | ci k t => (Finset.univ.filter fun t' : Fin 32 => t < t').image (ci k) ∪
       (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (ch k) ∪
-      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {rc, rh}
+      (Finset.univ.filter fun t' : Fin 32 => t ≤ t').image (cv k) ∪ {top k, rc, rh}
   | src k => Finset.univ.image (ci k) ∪ Finset.univ.image (ch k) ∪ Finset.univ.image (cv k) ∪
-      {rc, rh}
+      {top k, rc, rh}
 
 theorem child_eq_none {n : Name} (h : child n = none) : n = rh := by
   cases n <;> simp only [Name.child, reduceCtorEq] at h <;> try rfl
@@ -182,6 +184,7 @@ theorem ancSet_child {n p : Name} (h : child n = some p) : ancSet n = insert p (
         rw [filter_lt_eq_filter_le t (by omega)]]
       rw [filter_lt_succ t (by omega), Finset.image_insert, Finset.insert_union,
         Finset.insert_union, Finset.insert_union]
+  | top k => simp only [Name.child, Option.some.injEq] at h; subst h; rfl
   | rc => simp only [Name.child, Option.some.injEq] at h; subst h; simp [ancSet]
   | rh => simp [Name.child] at h
 
@@ -308,32 +311,33 @@ theorem no_hidden_source_iff (A : Finset Name) :
     · exact hvA' h1
     · exact hv' m hm hmA
 
-/-- The hash node whose output carries the value of a 192-bit node: `ch k (t-1)` for `ci k t`
-with `t ≥ 1` (none for sources and for `ci k 0`, whose value is the source). -/
+/-- The hash node whose output carries the value of a revealable node: `ch k (t-1)` for `ci k t`
+with `t ≥ 1` and `ch k 31` for `top k` (none for sources and for `ci k 0`, whose value is the
+source). -/
 def hashOf : Name → Option Name
   | ci k t => if h : t.val = 0 then none else some (ch k ⟨t.val - 1, by omega⟩)
+  | top k => some (ch k 31)
   | _ => none
 
-/-- The value node between the hash node and the input node it feeds. -/
+/-- The value node between the hash node and the node it feeds. -/
 theorem child_hashOf {a h : Name} (hh : hashOf a = some h) :
-    ∃ v, child h = some v ∧ child v = some a := by
+    ∃ v, child h = some v ∧ child v = some a ∧ v.len = 256 := by
   cases a with
   | ci k t =>
     simp only [hashOf] at hh
     split_ifs at hh with h0
     simp only [Option.some.injEq] at hh
     subst hh
-    refine ⟨cv k ⟨t.val - 1, by omega⟩, rfl, ?_⟩
+    refine ⟨cv k ⟨t.val - 1, by omega⟩, rfl, ?_, rfl⟩
     simp only [Name.child]
     rw [dif_neg (by omega)]
     congr 2
     exact Fin.ext (by simp; omega)
+  | top k =>
+    simp only [hashOf, Option.some.injEq] at hh
+    subst hh
+    exact ⟨cv k 31, rfl, rfl, rfl⟩
   | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hh
-
-theorem hashOf_isSome_iff (a : Name) :
-    (hashOf a).isSome ↔ ∃ k t, a = ci k t ∧ t.val ≠ 0 := by
-  cases a <;> simp only [hashOf]
-  all_goals try simp
 
 theorem len_of_hashOf {a p : Name} (hp : hashOf a = some p) : p.len = 256 := by
   cases a with
@@ -341,6 +345,9 @@ theorem len_of_hashOf {a p : Name} (hp : hashOf a = some p) : p.len = 256 := by
     simp only [hashOf] at hp
     split_ifs at hp
     simp only [Option.some.injEq] at hp
+    subst hp; rfl
+  | top k =>
+    simp only [hashOf, Option.some.injEq] at hp
     subst hp; rfl
   | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hp
 
@@ -351,25 +358,46 @@ theorem one_le_cost_of_hashOf {a p : Name} (hp : hashOf a = some p) : 1 ≤ p.co
     split_ifs at hp
     simp only [Option.some.injEq] at hp
     subst hp; simp [Name.cost]
+  | top k =>
+    simp only [hashOf, Option.some.injEq] at hp
+    subst hp; simp [Name.cost]
   | src _ | ch _ _ | cv _ _ | rc | rh => simp [hashOf] at hp
 
-/-- A cut: an antichain of chain input nodes meeting every source path. -/
+/-- The nodes a signature may reveal: chain inputs and the tops of the caps. -/
+def Revealable : Name → Prop
+  | ci _ _ => True
+  | top k => k.val < 16
+  | _ => False
+
+theorem Revealable.len_le {n : Name} (h : Revealable n) : n.len ≤ 192 := by
+  cases n with
+  | ci k _ => exact chainBits_le k
+  | top k =>
+    have hk : k.val < 16 := h
+    simp [Name.len, topBits, hk]
+  | src _ | ch _ _ | cv _ _ | rc | rh => exact (h : False).elim
+
+theorem Revealable.cost_eq {n : Name} (h : Revealable n) : n.cost = 0 := by
+  cases n with
+  | ci _ _ | top _ => rfl
+  | src _ | ch _ _ | cv _ _ | rc | rh => exact (h : False).elim
+
+/-- A cut: an antichain of revealable nodes meeting every source path. -/
 structure IsCut (A : Finset Name) : Prop where
-  values : ∀ n ∈ A, ∃ k t, n = ci k t
+  values : ∀ n ∈ A, Revealable n
   antichain : ∀ n ∈ A, ∀ m, Above m n → m ∉ A
   covers : ∀ k, src k ∈ A ∨ ∃ m ∈ A, Above m (src k)
 
-theorem IsCut.rh_not_mem {A : Finset Name} (h : IsCut A) : rh ∉ A := by
-  intro hm
-  obtain ⟨_, _, h'⟩ := h.values rh hm
-  cases h'
+theorem IsCut.not_mem {A : Finset Name} (h : IsCut A) {n : Name} (hn : ¬ Revealable n) : n ∉ A :=
+  fun hm => hn (h.values n hm)
 
-theorem IsCut.len_le {A : Finset Name} (h : IsCut A) {n : Name} (hn : n ∈ A) : n.len ≤ 192 := by
-  obtain ⟨k, _, rfl⟩ := h.values n hn
-  exact chainBits_le k
+theorem IsCut.rh_not_mem {A : Finset Name} (h : IsCut A) : rh ∉ A := h.not_mem id
+
+theorem IsCut.len_le {A : Finset Name} (h : IsCut A) {n : Name} (hn : n ∈ A) : n.len ≤ 192 :=
+  (h.values n hn).len_le
 
 theorem above_hashOf {a h : Name} (hh : hashOf a = some h) : Above a h := by
-  obtain ⟨v, hv, hva⟩ := child_hashOf hh
+  obtain ⟨v, hv, hva, -⟩ := child_hashOf hh
   exact Above.step hv (Above.child hva)
 
 /-- The parent hash node of a cut node is not evaluated. -/
@@ -377,10 +405,29 @@ theorem IsCut.not_evaluated_hashOf {A : Finset Name} (hA : IsCut A) {a h : Name}
     (hh : hashOf a = some h) : ¬ Evaluated A h :=
   fun he => he.2 a (above_hashOf hh) ha
 
+/-- A revealable node evaluated at a cut has a hash node below it: the cut does not stop at the
+source. -/
+theorem IsCut.exists_hashOf {A : Finset Name} (hA : IsCut A) {a : Name} (ha : Revealable a)
+    (haE : Evaluated A a) : ∃ p, hashOf a = some p := by
+  cases a with
+  | ci k t =>
+    by_cases ht : t.val = 0
+    · exfalso
+      obtain rfl : t = 0 := Fin.ext ht
+      rcases hA.covers k with h | ⟨m, hmA, hm⟩
+      · exact hA.values _ h
+      · rw [above_of_child (show child (src k) = some (ci k 0) from rfl)] at hm
+        rcases hm with rfl | hm
+        · exact haE.1 hmA
+        · exact haE.2 m hm hmA
+    · exact ⟨_, dif_neg ht⟩
+  | top k => exact ⟨_, rfl⟩
+  | src _ | ch _ _ | cv _ _ | rc | rh => exact (ha : False).elim
+
 section
 
 /- Unifying or normalising a hypothesis of the form `p ∈ evaluatedSet A` makes Lean unfold
-`Finset.univ : Finset Name` through the `Fintype` instance (1474 elements), which exhausts the
+`Finset.univ : Finset Name` through the `Fintype` instance (3138 elements), which exhausts the
 recursion depth; `evaluatedSet` is therefore kept opaque in this section. -/
 attribute [local irreducible] evaluatedSet
 
@@ -425,32 +472,11 @@ theorem exists_mem_evaluated_of_ne {A A' : Finset Name} (hA : IsCut A) (hA' : Is
       · exact ⟨a', ha'A', hA.antichain v hvA a' ha',
           fun m hm hmA => hA.antichain v hvA m (hm.trans ha') hmA⟩
   obtain ⟨a, haA', haE⟩ := hex
-  -- `a` is a chain input above its source, so it has a hash node `p` below it
-  obtain ⟨k, t, rfl⟩ := hA'.values a haA'
-  have ht0 : t.val ≠ 0 := by
-    intro h0
-    have ht : t = 0 := Fin.ext h0
-    subst ht
-    rcases hA.covers k with h | ⟨m, hmA, hm⟩
-    · obtain ⟨_, _, h'⟩ := hA.values _ h; cases h'
-    · rw [above_of_child (show child (src k) = some (ci k 0) from rfl)] at hm
-      rcases hm with rfl | hm
-      · exact haE.1 hmA
-      · exact haE.2 m hm hmA
-  set p : Name := ch k ⟨t.val - 1, by omega⟩ with hpdef
-  have hp : hashOf (ci k t) = some p := by
-    simp only [hashOf]
-    rw [dif_neg ht0]
-  obtain ⟨v, hpv, hva⟩ := child_hashOf hp
-  have hpA : p ∉ A := fun h => by
-    obtain ⟨_, _, h'⟩ := hA.values _ h
-    rw [hpdef] at h'
-    cases h'
-  have hvA : v ∉ A := fun h => by
-    obtain ⟨_, _, h'⟩ := hA.values _ h
-    simp only [hpdef, Name.child, Option.some.injEq] at hpv
-    rw [← hpv] at h'
-    cases h'
+  -- `a` is revealable and evaluated at `A`, so it has a hash node `p` below it
+  obtain ⟨p, hp⟩ := hA.exists_hashOf (hA'.values a haA') haE
+  obtain ⟨v, hpv, hva, hvl⟩ := child_hashOf hp
+  have hpA : p ∉ A := fun h => by have := hA.len_le h; rw [len_of_hashOf hp] at this; omega
+  have hvA : v ∉ A := fun h => by have := hA.len_le h; rw [hvl] at this; omega
   have hpE : Evaluated A p := by
     refine ⟨hpA, fun m hm => ?_⟩
     rw [above_of_child hpv] at hm
