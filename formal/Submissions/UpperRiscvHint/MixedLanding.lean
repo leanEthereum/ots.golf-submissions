@@ -5,11 +5,11 @@ open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
 open Riscv2Program
 
-def leftChain (q : Fin 16) : Fin 32 := ⟨2*q.val, by have := q.isLt; omega⟩
-def rightChain (q : Fin 16) : Fin 32 := ⟨2*q.val+1, by have := q.isLt; omega⟩
+def leftChain (q : Fin 16) : Chain := ⟨2*q.val+1, by have := q.isLt; omega⟩
+def rightChain (q : Fin 16) : Chain := ⟨2*q.val+2, by have := q.isLt; omega⟩
 def nextCode (q : ℕ) : Code := if q=15 then root ++ decision else prologue (q+1)
 def lengthSetup (q : ℕ) : Code :=
-  if q=8 then [.ADDI .x11 .x0 144] else []
+  if q=6 then [.ADDI .x11 .x0 144] else []
 
 theorem hashRow_length (q d : ℕ) : (hashRow q d).length = 2^fineWidth q := by
   simp [hashRow]
@@ -20,13 +20,25 @@ theorem hashRow_drop : ∀ q a d : Fin 16, a.val+d.val ≤ pairCap q →
   decide +kernel
 
 theorem prologue_parts (q : Fin 16) : prologue q = lengthSetup q ++ dispatchCode q := by
-  unfold prologue lengthSetup dispatchCode dispatchFront rawCheck prevInput laneAddr
-  have he : (2*q.val=0) ↔ (q.val=0) := by omega
-  simp only [he, Nat.cast_add, Nat.cast_mul, Nat.cast_ofNat, List.append_assoc]
+  unfold prologue lengthSetup dispatchCode dispatchFront prevInput laneAddr
+  simp only [show 2*q.val+1 ≠ 0 by omega, if_false, Nat.add_sub_cancel, Nat.cast_add,
+    Nat.cast_mul, Nat.cast_ofNat, List.append_assoc, List.cons_append, List.nil_append]
 
 theorem right_previous (q : Fin 16) : prevInput (rightChain q) = work (leftChain q) := by
   unfold prevInput leftChain rightChain
-  rw [if_neg (by omega : 2*q.val+1 ≠ 0), Nat.add_sub_cancel]
+  rw [if_neg (by omega : 2*q.val+2 ≠ 0)]
+  congr 1
+
+theorem remaining_left (index : RawIdx) (q : Fin 16) :
+    remaining index (leftChain q) = digit index.val (2*q.val) + 1 - lead q := by
+  rw [steps_eq_digit, ← lead_pair q.val 0 (by omega)]
+  simp only [leftChain, Nat.add_zero, chainDigit_succ]
+  rfl
+
+theorem remaining_right (index : RawIdx) (q : Fin 16) :
+    remaining index (rightChain q) = digit index.val (2*q.val+1) + 1 - lead q := by
+  rw [steps_eq_digit, ← lead_pair q.val 1 (by omega)]
+  simp only [rightChain, show 2*q.val+2 = (2*q.val+1)+1 by omega, chainDigit_succ]
 
 /-- Code reached by the packed two-digit jump, including the second chain and next prologue. -/
 theorem landing_located (index : RawIdx) (s : MachineState)
@@ -39,20 +51,16 @@ theorem landing_located (index : RawIdx) (s : MachineState)
   let d := coarseDigit index q
   have hd : d < copies q := coarseDigit_lt_copies index q q.isLt
   have ha := fineDigit_lt index q q.isLt
-  have hA := steps_eq_digit index (leftChain q)
-  have hB := steps_eq_digit index (rightChain q)
   have hl := lead_le q
   let off := 2^fineWidth q-1-digit index.val (2*q.val)+lead q
   have hOff : off ≤ 2^fineWidth q := by
     have : digit index.val (2*q.val) < 16 := by simpa [fineWidth] using ha
     dsimp only [off, fineWidth]
     omega
-  have hRemain : digit index.val (2*q.val)+1-lead q = remaining index (leftChain q) := by
-    rw [hA, ← lead_pair q.val 0 (by omega)]
-    rfl
-  have hSecond : d+1-lead q = remaining index (rightChain q) := by
-    rw [hB, ← lead_pair q.val 1 (by omega)]
-    rfl
+  have hRemain : digit index.val (2*q.val)+1-lead q = remaining index (leftChain q) :=
+    (remaining_left index q).symm
+  have hSecond : d+1-lead q = remaining index (rightChain q) :=
+    (remaining_right index q).symm
   have located := copy_located s global q ⟨d,hd⟩
   have h := CodeAt.drop located off
   change Riscv.CodeAt s (W (copyStart q d)+W (4*off)) ((copyCode q d).drop off) at h

@@ -4,16 +4,17 @@ import Submissions.UpperRiscvHint.Semantics
 /-!
 # The mixed-width chain graph
 
-There are 32 chains of 32 hash steps, indexed in execution order. Chains 0–15 are *caps* with
-192-bit states; chains 16–31 are *normals* with 144-bit states. Every hash returns 256 bits; the
+There are 33 chains of 32 hash steps, indexed in execution order. Chain 0 is the *free chain*,
+which carries the free count; chain `k + 1` carries index digit `k`. Chains 0–12 are *caps* with
+192-bit states, chains 13–32 are *normals* with 144-bit states. Every hash returns 256 bits; the
 next state starts at bit `truncOff k`: 0 for a cap, 64 for a normal. A source is already
 state-width.
 
-Each chain ends in a `top` node read by the root. A cap's top is its final 192-bit state; a normal
-chain commits its whole last answer (256 bits), except chain 31, which commits its low 192 bits.
-The root input interleaves the tops in memory order, cap `j` below normal `16 + j`, for 7104 bits
-(`rootCat`). The key-generation input lengths 144, 192 and 7104 differ from the 512-bit index
-input.
+Each chain ends in a `top` node read by the root. A cap's top is its final 192-bit state; normals
+13–24 commit their whole last answer (256 bits), normals 25–32 their low 192 bits. The root input
+lists the tops in memory order: the free chain, then normal `13 + j` below cap `1 + j` for
+`j = 0 … 11`, then normals 25–32, for 7104 bits (`rootCat`). The key-generation input lengths
+144, 192 and 7104 differ from the 512-bit index input.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -28,64 +29,68 @@ open OptimalOTS.Dag
 
 namespace Forest
 
-/-- Width of chain states, indexed in execution order: caps first. -/
-def chainBits (k : Fin 32) : ℕ :=
-  if k.val < 16 then 192 else 144
+/-- A chain: chain 0 is the free chain, chain `k + 1` carries index digit `k`. -/
+abbrev Chain := Fin 33
 
-theorem chainBits_cases (k : Fin 32) :
+/-- Width of chain states: 192 for the caps 0–12, 144 for the normals. -/
+def chainBits (k : Chain) : ℕ :=
+  if k.val < 13 then 192 else 144
+
+theorem chainBits_cases (k : Chain) :
     chainBits k = 144 ∨ chainBits k = 192 := by
   unfold chainBits; split_ifs <;> simp
 
-theorem chainBits_ge (k : Fin 32) : 144 ≤ chainBits k := by
+theorem chainBits_ge (k : Chain) : 144 ≤ chainBits k := by
   rcases chainBits_cases k with h | h <;> omega
 
-theorem chainBits_le (k : Fin 32) : chainBits k ≤ 192 := by
+theorem chainBits_le (k : Chain) : chainBits k ≤ 192 := by
   rcases chainBits_cases k with h | h <;> omega
 
 /-- Bit offset of a chain's next state inside a 256-bit answer: a cap keeps answer bytes
 `[0, 24)`, a normal answer bytes `[8, 26)`. -/
-def truncOff (k : Fin 32) : ℕ :=
-  if k.val < 16 then 0 else 64
+def truncOff (k : Chain) : ℕ :=
+  if k.val < 13 then 0 else 64
 
-theorem truncOff_add_le' : ∀ k : Fin 32, truncOff k + chainBits k ≤ 256 := by
+theorem truncOff_add_le' : ∀ k : Chain, truncOff k + chainBits k ≤ 256 := by
   decide +kernel
 
-theorem truncOff_add_le (k : Fin 32) : truncOff k + chainBits k ≤ 256 := truncOff_add_le' k
+theorem truncOff_add_le (k : Chain) : truncOff k + chainBits k ≤ 256 := truncOff_add_le' k
 
-theorem truncOff_mod8' : ∀ k : Fin 32, truncOff k % 8 = 0 := by
+theorem truncOff_mod8' : ∀ k : Chain, truncOff k % 8 = 0 := by
   decide +kernel
 
-theorem truncOff_mod8 (k : Fin 32) : truncOff k % 8 = 0 := truncOff_mod8' k
+theorem truncOff_mod8 (k : Chain) : truncOff k % 8 = 0 := truncOff_mod8' k
 
 /-- Width of the value the root commits for chain `k`. -/
-def topBits (k : Fin 32) : ℕ :=
-  if k.val < 16 ∨ k.val = 31 then 192 else 256
+def topBits (k : Chain) : ℕ :=
+  if 13 ≤ k.val ∧ k.val < 25 then 256 else 192
 
-theorem topBits_ge (k : Fin 32) : 192 ≤ topBits k := by
+theorem topBits_ge (k : Chain) : 192 ≤ topBits k := by
   unfold topBits; split_ifs <;> omega
 
-theorem topBits_le (k : Fin 32) : topBits k ≤ 256 := by
+theorem topBits_le (k : Chain) : topBits k ≤ 256 := by
   unfold topBits; split_ifs <;> omega
 
-theorem topBits_of_cap {k : Fin 32} (hk : k.val < 16) : topBits k = chainBits k := by
-  simp [topBits, chainBits, hk]
+theorem topBits_of_cap {k : Chain} (hk : k.val < 13) : topBits k = chainBits k := by
+  unfold topBits chainBits
+  rw [if_pos hk, if_neg (by omega)]
 
 /-- The committed part of a chain's last answer: its low `topBits k` bits. -/
-def topOf (k : Fin 32) (w : BitVec 256) : BitVec (topBits k) := w.setWidth (topBits k)
+def topOf (k : Chain) (w : BitVec 256) : BitVec (topBits k) := w.setWidth (topBits k)
 
 /-- Node names. -/
 inductive Name where
-  | src (k : Fin 32)
-  | ci (k : Fin 32) (t : Fin 32)
-  | ch (k : Fin 32) (t : Fin 32)
-  | cv (k : Fin 32) (t : Fin 32)
-  | top (k : Fin 32)
+  | src (k : Chain)
+  | ci (k : Chain) (t : Fin 32)
+  | ch (k : Chain) (t : Fin 32)
+  | cv (k : Chain) (t : Fin 32)
+  | top (k : Chain)
   | rc
   | rh
   deriving DecidableEq
 
 /-- Number of nodes. -/
-def N : ℕ := 3138
+def N : ℕ := 3236
 
 namespace Name
 
@@ -97,8 +102,8 @@ def idx : Name → ℕ
   | ch k t => 98 * k + 2 + 3 * t
   | cv k t => 98 * k + 3 + 3 * t
   | top k => 98 * k + 97
-  | rc => 3136
-  | rh => 3137
+  | rc => 3234
+  | rh => 3235
 
 theorem idx_lt (n : Name) : n.idx < N := by
   cases n <;> simp only [idx, N] <;> omega
@@ -122,7 +127,7 @@ def cost : Name → ℕ
   | _ => 0
 
 /-- The value node feeding the chain input `ci k t`: the source for `t = 0`, else `cv k (t-1)`. -/
-def prev (k : Fin 32) (t : Fin 32) : Name :=
+def prev (k : Chain) (t : Fin 32) : Name :=
   if h : t.val = 0 then src k else cv k ⟨t.val - 1, by omega⟩
 
 /-- The unique node reading the value of a node (`none` for the root). -/
@@ -166,8 +171,8 @@ end Name
 
 /-- The inverse of `Name.fin`. -/
 def ofFin (v : Fin N) : Name :=
-  if h₁ : v.val < 3136 then
-    let k : Fin 32 := ⟨v.val / 98, by omega⟩
+  if h₁ : v.val < 3234 then
+    let k : Chain := ⟨v.val / 98, by omega⟩
     let r := v.val % 98
     if h₂ : r = 0 then .src k
     else if h₄ : r = 97 then .top k
@@ -176,7 +181,7 @@ def ofFin (v : Fin N) : Name :=
       if h₃ : (r - 1) % 3 = 0 then .ci k t
       else if h₃' : (r - 1) % 3 = 1 then .ch k t
       else .cv k t
-  else if h₁₀ : v.val < 3137 then .rc
+  else if h₁₀ : v.val < 3235 then .rc
   else .rh
 
 theorem Name.idx_injective : Function.Injective Name.idx := by
@@ -187,7 +192,7 @@ theorem Name.idx_injective : Function.Injective Name.idx := by
     omega
 
 theorem fin_ofFin_aux (v : Fin N) : (ofFin v).fin = v := by
-  have hv : v.val < 3138 := v.isLt
+  have hv : v.val < 3236 := v.isLt
   rw [Fin.ext_iff]
   simp only [ofFin]
   split_ifs <;> simp only [Name.fin, Name.idx] <;> omega
@@ -205,8 +210,8 @@ def nameEquiv : Name ≃ Fin N where
 
 theorem Name.fin_injective : Function.Injective Name.fin := nameEquiv.injective
 
-abbrev NameSum := Fin 32 ⊕ (Fin 32 × Fin 32) ⊕ (Fin 32 × Fin 32) ⊕ (Fin 32 × Fin 32) ⊕
-  Fin 32 ⊕ Unit ⊕ Unit
+abbrev NameSum := Chain ⊕ (Chain × Fin 32) ⊕ (Chain × Fin 32) ⊕ (Chain × Fin 32) ⊕
+  Chain ⊕ Unit ⊕ Unit
 
 def Name.toSum : Name → NameSum
   | src k => .inl k
@@ -244,8 +249,11 @@ theorem Name.sum_eq {M : Type} [AddCommMonoid M] (f : Name → M) :
 
 /-! ## The root input -/
 
-/-- The chain in root slot `s`: slot `2 j` holds cap `j`, slot `2 j + 1` normal `16 + j`. -/
-def slotChain (s : ℕ) : Fin 32 := ⟨s % 2 * 16 + s / 2 % 16, by omega⟩
+/-- The chain in root slot `s`: slot 0 holds the free chain, slot `2 j + 1` normal `13 + j` and
+slot `2 j + 2` cap `1 + j` for `j < 12`, slot `s ≥ 25` normal `s`. -/
+def slotChain (s : ℕ) : Chain :=
+  ⟨(if s = 0 then 0 else if s ≤ 24 then (if s % 2 = 1 then 13 + s / 2 else s / 2) else s) % 33,
+    Nat.mod_lt _ (by decide)⟩
 
 /-- Total width of root slots `0 … s`. -/
 def slotWidth : ℕ → ℕ
@@ -253,16 +261,17 @@ def slotWidth : ℕ → ℕ
   | s + 1 => topBits (slotChain (s + 1)) + slotWidth s
 
 /-- The tops of slots `0 … s`, slot `0` in the low bits, as they lie in memory. -/
-def slotCat (c : (k : Fin 32) → BitVec (topBits k)) : (s : ℕ) → BitVec (slotWidth s)
+def slotCat (c : (k : Chain) → BitVec (topBits k)) : (s : ℕ) → BitVec (slotWidth s)
   | 0 => c (slotChain 0)
   | s + 1 => c (slotChain (s + 1)) ++ slotCat c s
 
-theorem slotWidth_31 : slotWidth 31 = 7104 := by decide
+theorem slotWidth_32 : slotWidth 32 = 7104 := by decide
 
-/-- The 888-byte root input: cap `j`'s 24-byte top, then normal `16 + j`'s 32-byte top (24 bytes
-for chain 31), for `j = 0, …, 15`, from low to high bits. -/
-def rootCat (c : (k : Fin 32) → BitVec (topBits k)) : BitVec 7104 :=
-  (slotCat c 31).cast slotWidth_31
+/-- The 888-byte root input, from low to high bits: the free chain's 24-byte top; then normal
+`12 + j`'s 32-byte top and cap `j`'s 24-byte top for `j = 0, …, 11`; then the low 24 bytes of
+normals 24–31. -/
+def rootCat (c : (k : Chain) → BitVec (topBits k)) : BitVec 7104 :=
+  (slotCat c 32).cast slotWidth_32
 
 /-! ## The graph -/
 
@@ -273,12 +282,12 @@ theorem lenF_fin (n : Name) : lenF n.fin = n.len := by
 
 /-- Retain the state slice starting `truncOff k` bits into a hash output, or the entire
 state when the input already has the chain's width. -/
-def trunc (k : Fin 32) {w : ℕ} (x : BitVec w) : BitVec (chainBits k) :=
+def trunc (k : Chain) {w : ℕ} (x : BitVec w) : BitVec (chainBits k) :=
   x.extractLsb' (min (truncOff k) (w - chainBits k)) (chainBits k)
 
 abbrev Asg := (v : Fin N) → BitVec (lenF v)
 
-theorem lenF_ch (k : Fin 32) (t : Fin 32) : lenF (Name.ch k t).fin = (Name.cv k t).len := lenF_fin _
+theorem lenF_ch (k : Chain) (t : Fin 32) : lenF (Name.ch k t).fin = (Name.cv k t).len := lenF_fin _
 
 /-- The deterministic value of a node, as a function of the assignment. -/
 def detVal (n : Name) (x : Asg) : BitVec n.len :=
@@ -289,13 +298,13 @@ def detVal (n : Name) (x : Asg) : BitVec n.len :=
   | .rc => rootCat fun k => (x (Name.top k).fin).cast (lenF_fin _)
   | _ => 0
 
-theorem detVal_ci (k : Fin 32) (t : Fin 32) (x : Asg) :
+theorem detVal_ci (k : Chain) (t : Fin 32) (x : Asg) :
     detVal (.ci k t) x = trunc k (x (Name.prev k t).fin) := rfl
 
-theorem detVal_cv (k : Fin 32) (t : Fin 32) (x : Asg) :
+theorem detVal_cv (k : Chain) (t : Fin 32) (x : Asg) :
     detVal (.cv k t) x = (x (Name.ch k t).fin).cast (lenF_ch k t) := rfl
 
-theorem detVal_top (k : Fin 32) (x : Asg) :
+theorem detVal_top (k : Chain) (x : Asg) :
     detVal (.top k) x = topOf k ((x (Name.cv k 31).fin).cast (lenF_fin _)) := rfl
 
 theorem detVal_rc (x : Asg) :
@@ -404,7 +413,7 @@ theorem graph_isSource_fin (n : Name) :
     (graph.kind n.fin).IsSource ↔ ∃ k, n = .src k := by
   rw [graph_kind_fin]; exact kindOf_isSource _ _ _
 
-theorem Name.len_prev (k : Fin 32) (t : Fin 32) : (Name.prev k t).len = if t.val = 0 then chainBits k else 256 := by
+theorem Name.len_prev (k : Chain) (t : Fin 32) : (Name.prev k t).len = if t.val = 0 then chainBits k else 256 := by
   unfold Name.prev; split_ifs <;> rfl
 
 theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
@@ -414,8 +423,8 @@ theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
     simp [Name.cost, Name.len, blockCost, blockBits, chainBits]
   split_ifs <;> norm_num
 
-theorem graph_keygenCost : graph.keygenCost = 1038 := by
-  show ∑ v : Fin N, graph.nodeCost v = 1038
+theorem graph_keygenCost : graph.keygenCost = 1070 := by
+  show ∑ v : Fin N, graph.nodeCost v = 1070
   rw [← Fintype.sum_equiv nameEquiv (fun n => graph.nodeCost n.fin) (fun v => graph.nodeCost v)
     (fun _ => rfl)]
   simp only [graph_nodeCost_fin]

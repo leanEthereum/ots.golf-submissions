@@ -5,8 +5,7 @@ import Submissions.UpperRiscvHint.MixedProgram
 # The address-word checksum of the index phase
 
 Each word is masked, subtracted from the packed jump base, accumulated into `x27`, and stored.
-The register and stored dispatch words thus share the same address arithmetic. The old fold
-lemmas are retained as independent helpers, but the 349-cycle image does not execute a fold.
+The register and stored dispatch words thus share the same address arithmetic.
 -/
 
 namespace OptimalOTS.RiscvMixedProgram
@@ -196,30 +195,5 @@ theorem lanesUpTo_effect (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
         rfl
     · intro addr hout
       rw [e.mem, if_neg (hout n (by omega)), eff.frame addr (fun g hg' => hout g (by omega))]
-
-/-! ## The fold -/
-
-/-- The machine's fold of the lane sum with the fold mask `m`. -/
-def foldValue (x m : Word) : Word := (x + (x >>> 8)) &&& m
-
-structure FoldEffect (a b : MachineState) : Prop where
-  acc : b.getReg .x27 = foldValue (a.getReg .x27) (a.getReg .x1)
-  regs : ∀ r, r ≠ .x26 → r ≠ .x27 → b.getReg r = a.getReg r
-  mem : ∀ addr, b.getMem addr = a.getMem addr
-
-theorem fold_ready (a : MachineState) : Riscv.LinearReady a fold := by
-  simp [fold, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
-
-theorem fold_effect (a : MachineState) : FoldEffect a (fold.foldl execInstrBr a) := by
-  refine ⟨?_, ?_, ?_⟩
-  · simp only [fold, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
-      getReg_setReg_ite, foldValue]
-    simp [BitVec.add_comm]
-  · intro r h26 h27
-    simp only [fold, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
-      getReg_setReg_ite]
-    simp [h26, h27]
-  · intro addr
-    simp [fold, execInstrBr]
 
 end OptimalOTS.RiscvMixedProgram

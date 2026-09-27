@@ -13,7 +13,7 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
 /-- Invariant at a chain hash, with either its wire or expanded input address. -/
-structure HashInv (s : MachineState) (x : graph.Assignment) (k : Fin 32) (base : ℕ) : Prop where
+structure HashInv (s : MachineState) (x : graph.Assignment) (k : Chain) (base : ℕ) : Prop where
   ctx : Ctx s index wire pk
   input : s.getReg .x10 = W base
   inputRange : 32 ≤ base ∧ base+24 ≤ 0x78000000
@@ -22,7 +22,7 @@ structure HashInv (s : MachineState) (x : graph.Assignment) (k : Fin 32) (base :
   payload : PayloadFrom s wire (k.val+1)
   done : Completed s (tops x) k
 
-theorem HashInv.writeHash {s : MachineState} {x : graph.Assignment} {k : Fin 32} {base : ℕ}
+theorem HashInv.writeHash {s : MachineState} {x : graph.Assignment} {k : Chain} {base : ℕ}
     (inv : HashInv index wire pk s x k base) (t : Fin 32)
     (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) :
     HashInv index wire pk (Riscv.writeHash s y) (tripleUpdate x k t v y) k base := by
@@ -35,7 +35,7 @@ theorem HashInv.writeHash {s : MachineState} {x : graph.Assignment} {k : Fin 32}
     exact inv.done.writeHash k y inv.out
 
 /-- A graph hash triple and one actual HASH have the same oracle input and state effect. -/
-theorem step_refines (k : Fin 32) (t : Fin 32) (base : ℕ)
+theorem step_refines (k : Chain) (t : Fin 32) (base : ℕ)
     (tail : Code) (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool))
     (c budget cursor cursor' : ℕ) (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (v : BitVec (graph.len (ci k t).fin))
@@ -72,17 +72,17 @@ theorem step_refines (k : Fin 32) (t : Fin 32) (base : ℕ)
     (located.tail.code_eq (writeHash_code s y)) (fuel-1) (by omega)
 
 /-- What the working address holds before level t, or the full last answer after level 31. -/
-def HoldsAt (s : MachineState) (x : graph.Assignment) (k : Fin 32) (t : ℕ) : Prop :=
+def HoldsAt (s : MachineState) (x : graph.Assignment) (k : Chain) (t : ℕ) : Prop :=
   if h : t < 32 then
     MemBits s (W (work k))
       ((Forest.trunc k (x (prev k ⟨t,h⟩).fin)).cast (graph_len_fin (ci k ⟨t,h⟩)).symm)
   else MemBits s (W (outAddr k)) (lastOut x k)
 
-theorem prev_succ (k : Fin 32) (t : Fin 32) (ht : t.val < 31) :
+theorem prev_succ (k : Chain) (t : Fin 32) (ht : t.val < 31) :
     prev k ⟨t.val+1, by omega⟩ = cv k t := by simp [prev]
 
 /-- A full answer represents the next state at the chain's working address. -/
-theorem holds_of_memAnswer {u : MachineState} (k : Fin 32) {y : BitVec 256}
+theorem holds_of_memAnswer {u : MachineState} (k : Chain) {y : BitVec 256}
     (answer : MemBits u (W (outAddr k)) y) : MemBits u (W (work k)) (Forest.trunc k y) := by
   have h := memBits_extract (start := truncOff k) (len := chainBits k) answer
     (truncOff_mod8 k) (truncOff_add_le k)
@@ -91,7 +91,7 @@ theorem holds_of_memAnswer {u : MachineState} (k : Fin 32) {y : BitVec 256}
   rw [Nat.min_eq_left (by have := truncOff_add_le k; omega : truncOff k ≤ 256-chainBits k)]
   exact h
 
-theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Fin 32} {t : Fin 32}
+theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Chain} {t : Fin 32}
     {v : BitVec (graph.len (ci k t).fin)} {y : BitVec hashBits}
     (answer : MemBits u (W (outAddr k)) y) :
     HoldsAt u (tripleUpdate x k t v y) k (t.val+1) := by
@@ -113,7 +113,7 @@ theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Fin 32} {t :
     exact answer
 
 /-- Levels `t` to `31` of chain `k`, above the disclosed level. -/
-theorem steps_refines (k : Fin 32) (tail : Code)
+theorem steps_refines (k : Chain) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest' cursor : ℕ)
     (continuation : ∀ (u : MachineState) (y : graph.Assignment),
       HashInv index wire pk u y k (work k) → MemBits u (W (outAddr k)) (lastOut y k) →

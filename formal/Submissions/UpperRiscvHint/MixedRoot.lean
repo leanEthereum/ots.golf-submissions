@@ -4,11 +4,10 @@ import Submissions.UpperRiscvHint.MixedIndexPhase
 /-!
 # The root and the decision
 
-The 888 bytes from chain `0`'s cell are the 7104-bit root input: cap `j`'s 24-byte top, then
-normal chain `16 + j`'s 32-byte top (24 bytes for chain 31). Its hash, charged fourteen cycles, is
-written into the last chain's answer buffer, and the low 128 bits of the answer are compared with
-the public key saved in `x30`/`x31`, whose high word has bit 0 flipped. The root length is the
-honest view length, which pair 0 checked, less 144. The decision costs five cycles on every
+The 888 bytes from the free chain's cell are the 7104-bit root input (`rootCat`). Its hash,
+charged fourteen cycles, is written into the last chain's answer buffer, and the low 128 bits of
+the answer are compared with the public key saved in `x30`/`x31`, whose high word has bit 0
+flipped. The root length is the free base in `x1` plus 960. The decision costs five cycles on every
 completed path.
 -/
 
@@ -26,10 +25,11 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 variable (index : RawIdx) (payload : List Bool) (view : List Bool) (pk : PublicKey)
 
 def rootLin : Code :=
-  [.ADDI .x10 .x10 (imm12 ((outAddr 0 : ℤ) - work 31)), .ADDI .x11 .x13 (imm12 (-144))]
+  [.ADDI .x10 .x10 (imm12 ((outAddr 0 : ℤ) - work 32)),
+   .ADDI .x11 .x1 (imm12 (7104 - (freeBase : ℤ)))]
 
 /-- Where the root answer is written: the answer buffer of the last chain. -/
-def rootOut : ℕ := outAddr 31
+def rootOut : ℕ := outAddr 32
 
 theorem root_parts : root = rootLin ++ [.ECALL] := rfl
 
@@ -158,8 +158,7 @@ theorem decision_refines (s : MachineState) (answer : BitVec hashBits) (fuel : �
 /-- Machine state at the root after all chains have completed. -/
 structure RootInv (s : MachineState) (x : graph.Assignment) : Prop where
   ctx : Ctx s index view pk
-  input : s.getReg .x10 = W (work 31)
-  len13 : s.getReg .x13 = W honestViewBits
+  input : s.getReg .x10 = W (work 32)
   out : s.getReg .x12 = W rootOut
   root : MemBits s (W regionAddr) (rootCat (tops x))
 
@@ -191,7 +190,7 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
     simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
     simp [Ne.symm h10, Ne.symm h11, h10, h11]
-  have s10 : s.getReg .x10 = W (work 31) := inv.input
+  have s10 : s.getReg .x10 = W (work 32) := inv.input
   have w10 : w.getReg .x10 = W regionAddr := by
     rw [hw]
     simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
@@ -208,8 +207,8 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
       getReg_setReg_ite]
     simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true, false_and, if_false,
       show ¬ (Reg.x11 = Reg.x10) by decide, show ¬ (Reg.x10 = Reg.x11) by decide,
-      show ¬ (Reg.x13 = Reg.x10) by decide]
-    rw [inv.len13]
+      show ¬ (Reg.x1 = Reg.x10) by decide]
+    rw [inv.ctx.base]
     decide
   have w12 : w.getReg .x12 = W rootOut := by
     rw [wRegs .x12 (by decide) (by decide)]

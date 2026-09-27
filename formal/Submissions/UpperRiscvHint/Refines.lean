@@ -6,7 +6,7 @@ import Submissions.UpperRiscvHint.RejectAdapter
 
 `Refines fuel s q c` states that the machine's observed decision from `s` is the oracle
 computation `q`, up to terminal oracle queries after which the decision is already fixed, and
-that every completed execution path costs at most `c` cycles. The only such queries are a HASH
+that every accepting execution path costs at most `c` cycles. The only such queries are a HASH
 that the decision `ECALL` issues on a wrong low key word before the machine traps: its input is
 arbitrary memory, so `q` states the trap and omits the query.
 The composition rules mirror the observation rules and add the cost of each region.
@@ -19,11 +19,33 @@ open RiscvZkvm.Rv64 OracleComp
 def Refines (fuel : ℕ) (s : MachineState) (q : OracleComp Spec (Option Bool))
     (c : ℕ) : Prop :=
   RejectAdapter.Prunes q (observe fuel s) ∧
-    ∀ b cycles, some (b, cycles) ∈ support (execute fuel s) → cycles ≤ c
+    ∀ cycles, some (true, cycles) ∈ support (execute fuel s) → cycles ≤ c
 
 theorem Refines.mono {fuel : ℕ} {s : MachineState} {q : OracleComp Spec (Option Bool)}
     {c c' : ℕ} (h : Refines fuel s q c) (hc : c ≤ c') : Refines fuel s q c' :=
-  ⟨h.1, fun b cycles hm => (h.2 b cycles hm).trans hc⟩
+  ⟨h.1, fun cycles hm => (h.2 cycles hm).trans hc⟩
+
+/-- Without an accepting outcome of `q`, the machine never accepts, so any cost bound holds. -/
+theorem Refines.anyCost {fuel : ℕ} {s : MachineState} {q : OracleComp Spec (Option Bool)}
+    {c c' : ℕ} (h : Refines fuel s q c) (never : some true ∉ support q) : Refines fuel s q c' := by
+  refine ⟨h.1, fun cycles hm => absurd (RejectAdapter.Prunes.support_subset h.1 ?_) never⟩
+  rw [observe, support_map]
+  exact ⟨some (true, cycles), hm, rfl⟩
+
+theorem addCycles_accept_bound (computation : OracleComp Spec Outcome) (a b : ℕ)
+    (bound : ∀ cycles, some (true, cycles) ∈ support computation → cycles ≤ b) (cycles : ℕ)
+    (h : some (true, cycles) ∈ support (addCycles a <$> computation)) : cycles ≤ a + b := by
+  rw [support_map] at h
+  obtain ⟨result, hr, equal⟩ := h
+  cases result with
+  | none => cases equal
+  | some result =>
+    rcases result with ⟨decision', cycles'⟩
+    have hc : a + cycles' = cycles := congrArg (fun v : Outcome => (v.getD (false, 0)).2) equal
+    have hd : decision' = true := congrArg (fun v : Outcome => (v.getD (false, 0)).1) equal
+    subst hd
+    have hb := bound cycles' hr
+    omega
 
 theorem Refines.congr {fuel : ℕ} {s : MachineState} {q q' : OracleComp Spec (Option Bool)}
     {c : ℕ} (h : Refines fuel s q c) (hq : q = q') : Refines fuel s q' c := hq ▸ h
@@ -61,9 +83,9 @@ theorem Refines.steps {n : ℕ} {s final : MachineState} (steps : PureSteps n s 
   refine ⟨?_, ?_⟩
   · rw [steps.observe fuel]
     exact h.1
-  · intro b cycles hm
+  · intro cycles hm
     rw [steps.execute] at hm
-    exact addCycles_bound _ n c h.2 b cycles hm
+    exact addCycles_accept_bound _ n c h.2 cycles hm
 
 theorem Refines.linear {s : MachineState} (code : List Instr)
     (located : CodeAt s s.pc code) (ready : LinearReady s code)
@@ -93,11 +115,11 @@ theorem Refines.hash {fuel : ℕ} {s : MachineState}
   refine ⟨?_, ?_⟩
   · rw [observe_hash fuel s fetch call valid]
     exact RejectAdapter.Prunes.bind_left _ _ _ (fun answer => (h answer).1)
-  · intro b cycles hm
+  · intro cycles hm
     rw [execute_hash fuel s fetch call valid, support_bind] at hm
     simp only [Set.mem_iUnion] at hm
     obtain ⟨answer, _, hm⟩ := hm
-    exact addCycles_bound _ _ c (h answer).2 b cycles hm
+    exact addCycles_accept_bound _ _ c (h answer).2 cycles hm
 
 /-- HALT costs one cycle. -/
 theorem Refines.halt {fuel : ℕ} {s : MachineState} (decision : Bool)
@@ -105,7 +127,7 @@ theorem Refines.halt {fuel : ℕ} {s : MachineState} (decision : Bool)
     (result : s.getReg .x10 = BitVec.ofNat 64 decision.toNat) :
     Refines (fuel + 1) s (pure (some decision)) 1 := by
   refine ⟨by rw [observe_halt fuel s decision fetch call result]; exact .refl _, ?_⟩
-  intro b cycles hm
+  intro cycles hm
   cases decision <;> simp [execute, fetch, call, result, admittedInstruction] at hm <;> omega
 
 /-- A forward conditional branch costs one cycle. -/
@@ -121,7 +143,7 @@ theorem Refines.branch {s next : MachineState} {i : Instr}
 theorem Refines.trap {fuel : ℕ} {s : MachineState} {c : ℕ} (h : execute fuel s = pure none) :
     Refines fuel s (pure none) c := by
   refine ⟨by rw [observe, h]; exact .refl _, ?_⟩
-  intro b cycles hm
+  intro cycles hm
   rw [h] at hm
   simp at hm
 
@@ -175,7 +197,7 @@ theorem Refines.junkHash {fuel : ℕ} {s : MachineState} {c : ℕ}
         funext answer; rw [observe, next answer]; rfl
       rw [e]
       exact .stop _ none
-    · intro b cycles hm
+    · intro cycles hm
       rw [execute_hash fuel s fetch call valid, support_bind] at hm
       simp only [Set.mem_iUnion] at hm
       obtain ⟨answer, _, hm⟩ := hm

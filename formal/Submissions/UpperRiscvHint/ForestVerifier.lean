@@ -23,12 +23,12 @@ attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.setsName Forest.fixedChoice Forest.fixedPositions Forest.fixedDigits
 
 /-- The nodes of chain `k`, in topological order. -/
-def chainNodes (k : Fin 32) : List Name :=
+def chainNodes (k : Chain) : List Name :=
   src k :: (List.finRange 32).flatMap (fun t => [ci k t, ch k t, cv k t]) ++ [top k]
 
 /-- Topological order: the chains one after the other, then the root. -/
 def order : List Name :=
-  (List.finRange 32).flatMap chainNodes ++ [rc, rh]
+  (List.finRange 33).flatMap chainNodes ++ [rc, rh]
 
 set_option maxRecDepth 100000 in
 theorem order_fin : order.map Name.fin = List.finRange N := by decide +kernel
@@ -119,14 +119,14 @@ theorem verify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     · rfl
   · rw [dif_neg hi, dif_neg hi]
 
-/-- Whether a node supplies one of the 32 signature values. -/
-def disclosed (positions : Fin 32 → Fin 32) : Name → Bool
+/-- Whether a node supplies one of the 33 signature values. -/
+def disclosed (positions : Chain → Fin 32) : Name → Bool
   | .ci k t => decide (firstEval k (positions k) = t.val)
   | .top k => decide (32 ≤ firstEval k (positions k))
   | _ => false
 
 /-- Whether a node is computed from earlier nodes rather than read from the signature. -/
-def evaluated (positions : Fin 32 → Fin 32) : Name → Bool
+def evaluated (positions : Chain → Fin 32) : Name → Bool
   | .src _ => false
   | .ci k t => decide (firstEval k (positions k) < t.val)
   | .ch k t | .cv k t => decide (firstEval k (positions k) ≤ t.val)
@@ -158,7 +158,7 @@ private theorem evaluated_child {A : Finset Name} {n p : Name} (hc : child n = s
 theorem evaluated_eq (i : Idx) (n : Name) :
     evaluated (fixedPositions i) n = true ↔ Evaluated (Forest.setsName i) n := by
   rw [Forest.setsName]
-  have chain (k : Fin 32) (t : Fin 32) :
+  have chain (k : Chain) (t : Fin 32) :
       Evaluated (cutOf (fixedChoice i)) (ch k t) ↔ firstEval k (fixedPositions i k) ≤ t.val := by
     rw [evaluated_ch_iff]
     simp only [fixedChoice]

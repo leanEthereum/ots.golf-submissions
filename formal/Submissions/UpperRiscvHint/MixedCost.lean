@@ -10,18 +10,19 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-/-- The hashes of chain `k`: its digit for a cap, its digit plus one for a normal chain. -/
-def remaining (index : RawIdx) (k : Fin 32) : ℕ := 32-firstAt index k
+/-- The hashes of chain `k`: its digit for the free chain and a cap, its digit plus one for a
+normal chain. -/
+def remaining (index : RawIdx) (k : Chain) : ℕ := 32-firstAt index k
 
-theorem steps_eq_digit (index : RawIdx) (k : Fin 32) :
-    remaining index k = digit index.val k + 1 - if k.val < 16 then 1 else 0 := by
-  have h := digit_lt_32' index.val k
+theorem steps_eq_digit (index : RawIdx) (k : Chain) :
+    remaining index k = chainDigit index.val k + 1 - if k.val < 13 then 1 else 0 := by
+  have h := chainDigit_lt_32 index.val k
   unfold remaining firstAt firstEval
   rw [fixedPositions_val]
   split_ifs <;> omega
 
 theorem lead_pair (q : ℕ) (j : ℕ) (hj : j < 2) :
-    (if 2*q+j < 16 then 1 else 0) = lead q := by
+    (if 2*q+1+j < 13 then 1 else 0) = lead q := by
   unfold lead; split_ifs <;> omega
 
 theorem fineDigit_lt (index : RawIdx) (q : ℕ) (hq : q < 16) :
@@ -51,10 +52,5 @@ theorem pair_landing (index : RawIdx) (q : ℕ) (hq : q < 16) :
   unfold landing0 dispatch
   rw [e]
   omega
-
-/-- Hash work is fixed by the accepted digit sum: 158 digit units and one extra hash for each of
-the sixteen normal chains. -/
-theorem all_chain_hashes (index : Idx) : ∑ k : Fin 32, remaining index k = 174 :=
-  fixedPositions_sum index
 
 end OptimalOTS.RiscvMixedProgram

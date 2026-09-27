@@ -366,15 +366,16 @@ theorem one_le_cost_of_hashOf {a p : Name} (hp : hashOf a = some p) : 1 ≤ p.co
 /-- The nodes a signature may reveal: chain inputs and the tops of the caps. -/
 def Revealable : Name → Prop
   | ci _ _ => True
-  | top k => k.val < 16
+  | top k => k.val < 13
   | _ => False
 
 theorem Revealable.len_le {n : Name} (h : Revealable n) : n.len ≤ 192 := by
   cases n with
   | ci k _ => exact chainBits_le k
   | top k =>
-    have hk : k.val < 16 := h
-    simp [Name.len, topBits, hk]
+    have hk : k.val < 13 := h
+    simp only [Name.len, topBits]
+    rw [if_neg (by omega)]
   | src _ | ch _ _ | cv _ _ | rc | rh => exact (h : False).elim
 
 theorem Revealable.cost_eq {n : Name} (h : Revealable n) : n.cost = 0 := by
