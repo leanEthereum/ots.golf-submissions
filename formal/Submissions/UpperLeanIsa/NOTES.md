@@ -123,6 +123,39 @@ The latter prevent jumps into block interiors. Removing zero-binding exclusions 
 children unauthenticated. Weighted-rank ideas require an explicit implementation and a
 budget for all extra field constants. The suggested 1010 figure is not a proved lower bound.
 
+## Affine-frame 1110 candidate (not yet a complete certificate)
+
+The `Affine*` modules develop a direct fourteen-cycle saving from 1124. For stage
+`u` and destination `s`, an XOR computes the frame `g^s + a^u`; the following JUMP
+enters the body directly. A block beginning at `e` encodes each cell operand as
+`g^c / (g^e + a^u)`. This removes all fourteen entry JUMPs. The fourteen powers
+`a^1` through `a^14` reuse the thirteen cost initializers and the old in-memory `g`
+initializer. The VM's address generator remains the pinned `g`.
+
+`AffineSelect` proves that one fixed base avoids every incorrect first read for
+all target slots and memory sizes up to 2^32. Each collision gives a nonzero
+polynomial of degree at most 300; the sum of the degrees of all constraints is
+strictly less than 2^64. Further constraints keep frames nonzero, prevent a
+dispatch from halting, separate the first 301 powers, and force any checksum
+landing in the bytecode to be the correct halt. The base depends only on the
+fixed layout, never the runtime input, committed image, or oracle.
+
+`AffineCodec` proves full admissibility and security with these domain words,
+using the existing layer-86 tables and signing schedule. `AffineProgram` defines
+the fixed bytecode and proves bytecode validity and the row bound. `AffineDecode`
+connects the wrong-landing guard to that program. `AffineSemantics` proves exact
+rebased hash queries and control instructions. `AffineLength` proves the existing
+single-instruction length check still works. `AffineCost` proves that a valid
+layer-86 path executes 198 instructions and costs 990 + 120 = 1110 cycles.
+
+These modules build with the pinned toolchain, and their main declarations passed
+an audit allowing only propext, Classical.choice, and Quot.sound. They are not
+imported by `Solution.lean`: its complete certificate and claim remain 1124.
+The remaining work is to connect every raw block to the costed lists, prove that
+every completing execution follows a valid layer-86 path, and construct and
+verify the honest memory witness. A full 1110 export, comparison, kernel replay,
+and hosted verification have not been performed.
+
 ## Credits
 
 - The user's 1332-cycle Group3 baseline, developed with Claude Opus 5.5, supplies the grouped
@@ -161,3 +194,5 @@ budget for all extra field constants. The suggested 1010 figure is not a proved 
   proofs, address layout, security proof and 1125-cycle machine certificate were prepared with Codex.
 - The validated-length frame and shifted checksum, reducing the machine to 1124 cycles,
   were prepared with Codex.
+- The affine-frame candidate and its polynomial avoidance, secure codec, instruction
+  semantics, length check and conditional 1110 path bound were prepared with Codex.
