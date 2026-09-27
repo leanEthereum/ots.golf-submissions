@@ -5,7 +5,7 @@ import Submissions.UpperLeanIsa.FusionMachineHonestChain
 
 Every op of every block on the honest path holds on the loaded honest image (`honest_blk`), so
 the relations along the path of `hxs T I` hold (`honest_path`), and the machine completes in
-`214` instructions at cost `1006` (`honest_run`).
+`213` instructions at cost `1005` (`honest_run`).
 -/
 
 set_option maxRecDepth 4000
@@ -41,7 +41,7 @@ theorem honest_free : ∀ y ∈ fbody (XF P T f pk m bits 0), y.Rel f (hv P T f 
   have hd0 : hd T (y0F P f pk m bits) 0 = XF P T f pk m bits 0 := by
     rw [hd_XF]; unfold dg; rw [if_pos rfl]
   have hseed : (CInstr.setc (gpCell 0)
-      (ofK (LeanIsaFieldRescale.initialProduct 82 (XF P T f pk m bits 0)))).Rel f
+      (ofK (LeanIsaFieldRescale.initialProduct 81 (XF P T f pk m bits 0)))).Rel f
         (hv P T f pk m bits) := by
     show hv P T f pk m bits (gpCell 0) = _
     rw [honest_gp (by omega)]
@@ -113,14 +113,38 @@ include hT hC hacc in
 /-- **The honest landing product.** -/
 theorem honest_prod {u : ℕ} (hu : u < 13) :
     (prodOp T u (XF P T f pk m bits (u + 1))).Rel f (hv P T f pk m bits) := by
-  show hv P T f pk m bits (gpCell (u + 1)) = hv P T f pk m bits (gpCell u) *
-    hv P T f pk m bits (cCell (pcost T u (XF P T f pk m bits (u + 1))))
-  rw [honest_gp (by omega), honest_gp (by omega),
-    hv_cc (pcost_spec hT hu (XF_lt_W hC hacc hu)).2, cV]
-  unfold gpV
-  rw [← ofK_mul, Finset.sum_range_succ]
-  change ofK (_ * LeanIsaFieldRescale.costFactor (_ + _)) =
-    ofK ((_ * LeanIsaFieldRescale.costFactor _) * LeanIsaFieldRescale.costFactor _)
+  have hsp := pcost_spec hT hu (XF_lt_W hC hacc hu)
+  unfold prodOp
+  split_ifs with h15
+  · show hv P T f pk m bits (tpCell u) = hv P T f pk m bits (gpCell u) *
+      hv P T f pk m bits (cCell 14)
+    rw [hv_tp hu, honest_gp (by omega), hv_cc (by omega) (by omega), cV]
+    unfold gpV tpV
+    rw [← ofK_mul]
+    change ofK (_ * LeanIsaFieldRescale.costFactor (_ + 14)) =
+      ofK ((_ * LeanIsaFieldRescale.costFactor _) * LeanIsaFieldRescale.costFactor 14)
+    rw [mul_assoc, LeanIsaFieldRescale.factor_add]
+  · show hv P T f pk m bits (gpCell (u + 1)) = hv P T f pk m bits (gpCell u) *
+      hv P T f pk m bits (cCell (pcost T u (XF P T f pk m bits (u + 1))))
+    rw [honest_gp (by omega), honest_gp (by omega), hv_cc hsp.2 h15, cV]
+    unfold gpV
+    rw [← ofK_mul, Finset.sum_range_succ]
+    change ofK (_ * LeanIsaFieldRescale.costFactor (_ + _)) =
+      ofK ((_ * LeanIsaFieldRescale.costFactor _) * LeanIsaFieldRescale.costFactor _)
+    rw [mul_assoc, LeanIsaFieldRescale.factor_add]
+
+include hT hC hacc in
+/-- **The honest second factor** of a product exponent `15`. -/
+theorem honest_fix {u : ℕ} (hu : u < 13) (h15 : pcost T u (XF P T f pk m bits (u + 1)) = 15) :
+    (fixOp u).Rel f (hv P T f pk m bits) := by
+  show hv P T f pk m bits (gpCell (u + 1)) = hv P T f pk m bits (tpCell u) *
+    hv P T f pk m bits (cCell 1)
+  have h15' : pcost T u (hxs T (IF P f pk m bits) (u + 1)) = 15 := h15
+  rw [honest_gp (by omega), hv_tp hu, hv_cc (by omega) (by omega), cV]
+  unfold gpV tpV
+  rw [← ofK_mul, Finset.sum_range_succ, h15']
+  change ofK (_ * LeanIsaFieldRescale.costFactor (_ + 15)) =
+    ofK ((_ * LeanIsaFieldRescale.costFactor (_ + 14)) * LeanIsaFieldRescale.costFactor 1)
   rw [mul_assoc, LeanIsaFieldRescale.factor_add]
 
 include hT hC hlen hacc in
@@ -198,7 +222,7 @@ theorem honest_rootCall {r : ℕ} (hr : r<1) :
     intro r
     have he : rootMdCell r.val = cCell (Fusion.rootIndex r).val := by fin_cases r; rfl
     have hi : (Fusion.rootIndex r).val≤16 := by fin_cases r; decide
-    rw [he,hv_cc hi,hC.rootMd]
+    rw [he,hv_cc hi (by fin_cases r; decide),hC.rootMd]
   refine blake_rel (a:=RAF P T f pk m bits r)
     (hv_canonical ..) (hv_canonical ..) (hv_canonical ..) (hv_canonical ..)
     (hv_canonical ..) (hv_canonical ..) (hv_canonical ..) ?_ (hv_st hr).1 (hv_st hr).2
@@ -251,13 +275,19 @@ theorem honest_blk : ∀ r < 14, ∀ y ∈ bodyF T (frU (XF P T f pk m bits 0) r
   · obtain ⟨u, rfl⟩ : ∃ u, r = u + 1 := ⟨r - 1, by omega⟩
     have hu : u < 13 := by omega
     rw [bodyF_frU_succ T _ hu] at hy
-    unfold body at hy
+    unfold body padOps at hy
     simp only [List.mem_append, List.mem_singleton, List.mem_replicate] at hy
-    rcases hy with ((((h | h) | h) | h) | h) | h
+    rcases hy with ((((h | h) | h) | h) | h | h) | h
     · exact honest_tie hu y h
     · subst h; exact honest_prod hT hC hacc hu
     · exact honest_segs hT hC hlen hacc hu y h
     · exact honest_rootIns hC hlen hu y h
+    · rw [h.2]
+      have h1 := h.1
+      unfold split15 at h1
+      split_ifs at h1 with h15
+      · exact honest_fix hT hC hacc hu h15
+      · exact absurd rfl h1
     · rw [h.2]
       show hv P T f pk m bits oneCell = hv P T f pk m bits oneCell * hv P T f pk m bits oneCell
       rw [hv_one, mul_oneV]
@@ -267,17 +297,17 @@ include hT hC hlen hacc hroot in
 /-- **The honest path.** Every op on the path of the honest index vector holds on the loaded
 honest image. -/
 theorem honest_path : PathFacts T (oracleRel f) (hv P T f pk m bits) (XF P T f pk m bits) :=
-  ⟨honest_pro hC hlen hacc, fun r hr => honest_dispatch hC hacc hr, honest_blk hT hC hlen hacc hroot,
+  ⟨honest_pro hT hC hlen hacc, fun r hr => honest_dispatch hC hacc hr, honest_blk hT hC hlen hacc hroot,
     by show IsInK (hv P T f pk m bits (gpCell 13)); rw [honest_gp13 hT hC hacc]; exact isInK_ofK _,
     honest_gp13 hT hC hacc⟩
 
 include hT hC hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`214` instructions. -/
+`213` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 214
-          Regs.initial) = pure (some 1006) := by
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 213
+          Regs.initial) = pure (some 1005) := by
   obtain ⟨n, c, hw⟩ := walk_mk hT (hxs_valid T _ (hlive hC hacc)) (honest_path hT hC hlen hacc hroot)
     (fun r hr => by rw [hv_h1 (frU_lt _ hr), XFr_frU hr])
   have hpin : Pinned (hv P T f pk m bits) := by

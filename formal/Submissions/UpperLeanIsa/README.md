@@ -1,10 +1,10 @@
-# 1126-cycle leanISA construction
+# 1125-cycle leanISA construction
 
-This root exports `Submission.Certificate 1126`. Nine groups use final chain hashes to bind
+This root exports `Submission.Certificate 1125`. Nine groups use final chain hashes to bind
 dependency tops: five with five-dep packets and four with three-dep packets. One root hash
 remains. The complete proof covers admissibility, 127-bit strong security, bytecode validity,
 honest-prover equivalence, soundness against any committed image, and the cycle bound. The
-score is `126 + 88 × 10 + 120 = 1126`.
+score is `125 + 88 × 10 + 120 = 1125`.
 
 See [NOTES.md](NOTES.md) for the construction, validation status, and credits.
 
@@ -15,5 +15,3 @@ lake build Submissions.UpperLeanIsa.Solution
 ```
 
 `Solution.lean` is the competition entry point and `claim.txt` contains the score.
-The root keeps the 1149 revision's consolidated length certificates and adjacent ordering
-checks. Clean-build timing and a hosted run for 1126 remain to be measured.

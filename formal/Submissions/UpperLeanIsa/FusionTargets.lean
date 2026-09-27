@@ -45,11 +45,6 @@ theorem ind_le_one (p : Prop) : ind p ≤ 1 := by
   · exact le_of_eq (ind_of h)
   · exact (ind_not h).trans_le zero_le
 
-theorem ind_mono {p q : Prop} (h : p → q) : ind p ≤ ind q := by
-  by_cases hp : p
-  · rw [ind_of hp, ind_of (h hp)]
-  · rw [ind_not hp]; exact zero_le
-
 theorem ind_or_le (p q : Prop) : ind (p ∨ q) ≤ ind p + ind q := by
   by_cases hp : p
   · rw [ind_of (Or.inl hp : p ∨ q), ind_of hp]

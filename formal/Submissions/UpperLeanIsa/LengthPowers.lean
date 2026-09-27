@@ -1,4 +1,44 @@
-import Submissions.UpperLeanIsa.MachineLayout
+import Submissions.UpperLeanIsa.ConstraintMath
+import Submissions.UpperLeanIsa.FieldRescale
+
+/-!
+# Layout and interfaces for the 1198-cycle Group3 machine
+
+The raw 128-bit index has widths [10,9,9,9,9,11,11,10,10,10,10,10,10]. Two adjacent entries
+of its first field share a tuple; the tie still checks every raw bit. MachineTable proves
+that these raw fields implement the 127-bit effective scheme index.
+
+Cost-banded blocks follow the prologue and padding slots 0 … 21, one block per live field
+value (aliases of a tuple have separate blocks). Every table fills its field: group `u` has `VF u` blocks. A second copy of the first
+group's region (frame 14, used when the free digit is 0) follows at `gEnd … zEnd`. Free entries
+are 255615+68*s for s<64.
+Frames reuse C_(f+1), where C_c=g^(2^60*c); C_16=g and C_0=ONE. Compat states the
+scheme's lengths, digits, selected output halves, tags, metadata, and 87-step layer.
+-/
+
+namespace OptimalOTS.HLG3
+
+open LeanerVM.Parameters LeanerVM.Semantics
+open OptimalOTS.LeanIsaBaseline.Layer
+open OptimalOTS.LeanIsa (cellBits cellOfBits)
+
+/-! ## Exponent arithmetic -/
+
+/-- The order of `g`, `2 ^ 64 - 1`, as a literal (so `omega` can reduce modulo it). -/
+def ordG : ℕ := 18446744073709551615
+
+theorem ordG_eq : ordG = 2 ^ 64 - 1 := by norm_num [ordG]
+
+theorem gpow_mod (n : ℕ) : gpow (n % ordG) = gpow n := by
+  rw [ordG_eq, ← orderOf_g]; exact pow_mod_orderOf g n
+
+theorem gpow_mul_gpow (a b : ℕ) : gpow a * gpow b = gpow (a + b) := (pow_add g a b).symm
+
+/-- `gpow` is injective below the group order. -/
+theorem gpow_inj {a b : ℕ} (ha : a < 2 ^ 64 - 1) (hb : b < 2 ^ 64 - 1) (h : gpow a = gpow b) :
+    a = b := gpow_injOn (Set.mem_Iio.mpr ha) (Set.mem_Iio.mpr hb) h
+
+end OptimalOTS.HLG3
 
 /-! Shared power certificates for the signature-length guard.
 The arithmetic statements and certificates are unchanged from the split development.

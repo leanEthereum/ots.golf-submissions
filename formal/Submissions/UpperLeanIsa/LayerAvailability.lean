@@ -37,175 +37,10 @@ variable (P : Params)
 /-- A cache without index entries. -/
 def NoIdx (c : Cache) : Prop := ∀ m η pk, c ⟨896, P.idxInput m η pk⟩ = none
 
-/-- Running `oa` from a cache without index entries reaches only such caches. -/
-def KeepsNoIdx {α : Type} (oa : OracleComp Spec α) : Prop :=
-  ∀ c, P.NoIdx c → ∀ p ∈ support (run oa c), P.NoIdx p.2
-
-theorem keepsNoIdx_pure {α : Type} (x : α) : P.KeepsNoIdx (pure x) := by
-  intro c hc p hp
-  rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
-  subst hp
-  exact hc
-
-theorem keepsNoIdx_bind {α β : Type} {oa : OracleComp Spec α} {ob : α → OracleComp Spec β}
-    (ha : P.KeepsNoIdx oa) (hb : ∀ x, P.KeepsNoIdx (ob x)) : P.KeepsNoIdx (oa >>= ob) := by
-  intro c hc p hp
-  rw [run_bind, support_bind] at hp
-  simp only [Set.mem_iUnion] at hp
-  obtain ⟨q, hq, hp⟩ := hp
-  exact hb q.1 q.2 (ha c hc q hq) p hp
-
-theorem keepsNoIdx_map {α β : Type} {oa : OracleComp Spec α} (f : α → β)
-    (ha : P.KeepsNoIdx oa) : P.KeepsNoIdx (f <$> oa) := by
-  rw [map_eq_bind_pure_comp]
-  exact P.keepsNoIdx_bind ha fun x => P.keepsNoIdx_pure _
-
-theorem keepsNoIdx_liftM {α : Type} (pc : ProbComp α) :
-    P.KeepsNoIdx (liftM pc : OracleComp Spec α) := by
-  intro c hc p hp
-  rw [run_liftM, support_map] at hp
-  obtain ⟨x, -, rfl⟩ := hp
-  exact hc
-
-/-- A hash whose metadata is not `idxMd` keeps the cache free of index entries. -/
-theorem keepsNoIdx_hash {cv : BitVec 256} {block : BitVec 512} {md : BitVec 128}
-    (hmd : md ≠ P.idxMd) : P.KeepsNoIdx (hash (LeanIsa.hashInput cv block md)) := by
-  intro c hc p hp
-  have e : hash (LeanIsa.hashInput cv block md) =
-      (liftM (Spec.query (.inr ⟨896, LeanIsa.hashInput cv block md⟩)) :
-        OracleComp Spec (BitVec hashBits)) >>= pure := by
-    rw [bind_pure]; rfl
-  rw [e, run_query_bind] at hp
-  rcases hq : c ⟨896, LeanIsa.hashInput cv block md⟩ with _ | v
-  · rw [oracleImpl_run_inr_none hq, bind_assoc, support_bind] at hp
-    simp only [Set.mem_iUnion, pure_bind, run_pure, support_pure, Set.mem_singleton_iff] at hp
-    obtain ⟨w, -, rfl⟩ := hp
-    intro m η pk
-    have hne : (⟨896, P.idxInput m η pk⟩ : Query) ≠ ⟨896, LeanIsa.hashInput cv block md⟩ :=
-      hashInput_ne_of_md_ne (Ne.symm hmd)
-    dsimp only
-    rw [QueryCache.cacheQuery_of_ne _ _ hne]
-    exact hc m η pk
-  · rw [oracleImpl_run_inr_some hq, pure_bind, run_pure, support_pure,
-      Set.mem_singleton_iff] at hp
-    subst hp
-    exact hc
-
-theorem keepsNoIdx_chainList (hc : P.chainMd ≠ P.idxMd) (k : Fin numChains) :
-    ∀ j n x, P.KeepsNoIdx (P.chainList k j n x) := by
-  intro j n
-  induction n generalizing j with
-  | zero => intro x; exact P.keepsNoIdx_pure _
-  | succ n ih =>
-    intro x
-    exact P.keepsNoIdx_bind (P.keepsNoIdx_map _ (P.keepsNoIdx_hash hc))
-      fun y => P.keepsNoIdx_bind (ih (j + 1) y) fun _ => P.keepsNoIdx_pure _
-
-theorem keepsNoIdx_rootFrom (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd) (t : Fin numChains → Word) :
-    ∀ n r st, r + n ≤ 9 → P.KeepsNoIdx (P.rootFrom t r n st) := by
-  intro n
-  induction n with
-  | zero => intro r st _; exact P.keepsNoIdx_pure _
-  | succ n ih =>
-    intro r st h
-    exact P.keepsNoIdx_bind (P.keepsNoIdx_hash (hr r (by omega)))
-      fun st' => ih (r + 1) st' (by omega)
-
-theorem keepsNoIdx_tabulate {α : Type} :
-    ∀ {n : ℕ} (f : Fin n → OracleComp Spec α), (∀ i, P.KeepsNoIdx (f i)) →
-      P.KeepsNoIdx (tabulate f)
-  | 0, _, _ => P.keepsNoIdx_pure _
-  | n + 1, f, h => by
-    exact P.keepsNoIdx_bind (h 0) fun x =>
-      P.keepsNoIdx_bind (keepsNoIdx_tabulate (fun i : Fin n => f i.succ) fun i => h i.succ)
-        fun _ => P.keepsNoIdx_pure _
-
 /-- A cache with at most one index entry, at the query `q₀`. -/
 def NoIdxBut (c : Cache) : Prop :=
   ∃ q₀ : Query, ∀ m η pk, (⟨896, P.idxInput m η pk⟩ : Query) ≠ q₀ →
     c ⟨896, P.idxInput m η pk⟩ = none
-
-/-- Running `oa` from a cache without index entries reaches caches with at most one. -/
-def KeepsNoIdxBut {α : Type} (oa : OracleComp Spec α) : Prop :=
-  ∀ c, P.NoIdx c → ∀ p ∈ support (run oa c), P.NoIdxBut p.2
-
-theorem keepsNoIdxBut_bind {α β : Type} {oa : OracleComp Spec α} {ob : α → OracleComp Spec β}
-    (ha : P.KeepsNoIdx oa) (hb : ∀ x, P.KeepsNoIdxBut (ob x)) :
-    P.KeepsNoIdxBut (oa >>= ob) := by
-  intro c hc p hp
-  rw [run_bind, support_bind] at hp
-  simp only [Set.mem_iUnion] at hp
-  obtain ⟨q, hq, hp⟩ := hp
-  exact hb q.1 q.2 (ha c hc q hq) p hp
-
-theorem keepsNoIdxBut_bind_pure {α β : Type} {oa : OracleComp Spec α} (f : α → β)
-    (ha : P.KeepsNoIdxBut oa) : P.KeepsNoIdxBut (oa >>= fun x => pure (f x)) := by
-  intro c hc p hp
-  rw [run_bind, support_bind] at hp
-  simp only [Set.mem_iUnion] at hp
-  obtain ⟨q, hq, hp⟩ := hp
-  rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
-  subst hp
-  exact ha c hc q hq
-
-theorem keepsNoIdxBut_map {α β : Type} {oa : OracleComp Spec α} (f : α → β)
-    (ha : P.KeepsNoIdxBut oa) : P.KeepsNoIdxBut (f <$> oa) := by
-  rw [map_eq_bind_pure_comp]
-  exact P.keepsNoIdxBut_bind_pure f ha
-
-/-- Any single hash adds at most one index entry. -/
-theorem keepsNoIdxBut_hash (x : BitVec 896) : P.KeepsNoIdxBut (hash x) := by
-  intro c hc p hp
-  refine ⟨⟨896, x⟩, fun m η pk hne => ?_⟩
-  have e : hash x = (liftM (Spec.query (.inr ⟨896, x⟩)) :
-      OracleComp Spec (BitVec hashBits)) >>= pure := by
-    rw [bind_pure]; rfl
-  rw [e, run_query_bind] at hp
-  rcases hq : c ⟨896, x⟩ with _ | v
-  · rw [oracleImpl_run_inr_none hq, bind_assoc, support_bind] at hp
-    simp only [Set.mem_iUnion, pure_bind, run_pure, support_pure, Set.mem_singleton_iff] at hp
-    obtain ⟨w, -, rfl⟩ := hp
-    dsimp only
-    rw [QueryCache.cacheQuery_of_ne _ _ hne]
-    exact hc m η pk
-  · rw [oracleImpl_run_inr_some hq, pure_bind, run_pure, support_pure,
-      Set.mem_singleton_iff] at hp
-    subst hp
-    exact hc m η pk
-
-theorem rootFrom_split' (t : Fin numChains → Word) (st : BitVec 256) :
-    P.rootFrom t 0 9 st = P.rootFrom t 0 8 st >>= fun st' =>
-      hash (P.rootInput t 8 st') >>= fun y => pure y := by
-  have h : ∀ (a r : ℕ) (st : BitVec 256), P.rootFrom t r (a + 1) st =
-      P.rootFrom t r a st >>= fun st' => hash (P.rootInput t (r + a) st') >>= fun y => pure y := by
-    intro a
-    induction a with
-    | zero => intro r st; rfl
-    | succ a ih =>
-      intro r st
-      rw [show a + 1 + 1 = (a + 1) + 1 from rfl]
-      simp only [rootFrom] at ih ⊢
-      simp only [bind_assoc]
-      refine bind_congr fun st' => ?_
-      rw [ih (r + 1) st', show r + 1 + a = r + (a + 1) by omega]
-  exact h 8 0 st
-
-/-- Key generation leaves at most one index entry (at its last root call). -/
-theorem keepsNoIdxBut_keygen (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd) :
-    P.KeepsNoIdxBut P.keygen := by
-  unfold keygen
-  refine P.keepsNoIdxBut_bind (P.keepsNoIdx_tabulate _ fun _ => P.keepsNoIdx_liftM _)
-    fun seeds => ?_
-  refine P.keepsNoIdxBut_bind (P.keepsNoIdx_tabulate _ fun k => P.keepsNoIdx_chainList hc k _ _ _)
-    fun tables => ?_
-  unfold root
-  refine P.keepsNoIdxBut_bind_pure _ ?_
-  refine P.keepsNoIdxBut_map _ ?_
-  rw [rootFrom_split']
-  exact P.keepsNoIdxBut_bind (P.keepsNoIdx_rootFrom hr _ 8 0 _ (by norm_num))
-    fun st' => P.keepsNoIdxBut_bind_pure id (P.keepsNoIdxBut_hash _)
-
-theorem noIdx_empty : P.NoIdx ∅ := fun _ _ _ => rfl
 
 /-! ## One trial -/
 
@@ -234,12 +69,6 @@ def miss : ℝ≥0∞ := ((2 ^ 256 - P.numValid * 2 ^ 129 : ℕ) : ℝ≥0∞) *
 theorem numValid_le : P.numValid ≤ 2 ^ 127 := by
   unfold numValid
   exact (Finset.card_filter_le _ _).trans (by rw [Finset.card_univ, Fintype.card_bitVec])
-
-theorem append_extract (w : BitVec 256) :
-    (w.extractLsb' 128 128 ++ w.extractLsb' 0 128 : BitVec (128 + 128)) = w := by
-  rw [BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (x := w) (start₁ := 0) (len₁ := 128)
-    (start₂ := 128) (len₂ := 128) rfl]
-  exact BitVec.extractLsb'_eq_self
 
 /-- The accepted effective indices each have 2^129 full-answer preimages. -/
 theorem card_acceptedOut :
@@ -601,19 +430,6 @@ theorem sign_isNone_le' {S : Tier.Sched} (hS : S.Valid) (hT : P.TierHyp S) (sk :
   rw [run_bind, E_bind]
   simp only [run_pure, E_pure]
   exact (P.sign_failure_le sk m c hc).trans (miss_trials_pred_le hS hT)
-
-/-- **Signing availability.** For every message chosen from the public key, signing fails with
-probability at most `2 ^ -128`, given the metadata separation and the availability condition of a
-tier schedule of the scheme. -/
-theorem signingFailure (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd)
-    {S : Tier.Sched} (hS : S.Valid) (hT : P.TierHyp S) :
-    P.scheme.SigningFailureAtMost (1 / 2 ^ signingFailureBits) := by
-  intro message
-  rw [probTrue_eq_E_run, run_bind, E_bind]
-  refine E_le_of_support _ fun q hq => ?_
-  have hno := P.keepsNoIdxBut_keygen hc hr ∅ P.noIdx_empty q hq
-  rcases q with ⟨⟨pk, sk⟩, c⟩
-  exact P.sign_isNone_le' hS hT sk (message pk) c hno
 
 end Params
 

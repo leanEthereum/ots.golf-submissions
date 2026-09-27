@@ -72,23 +72,4 @@ theorem hashInput_eq_iff (cv cv' : BitVec 256) (block block' : BitVec 512)
   · rintro ⟨rfl, rfl, rfl⟩
     rfl
 
-/-- Queries with different metadata are different. -/
-theorem hashInput_ne_of_md_ne {cv cv' : BitVec 256} {block block' : BitVec 512}
-    {md md' : BitVec 128} (h : md ≠ md') :
-    (⟨896, LeanIsa.hashInput cv block md⟩ : Query) ≠ ⟨896, LeanIsa.hashInput cv' block' md'⟩ := by
-  intro hq
-  have := ((hashInput_eq_iff _ _ _ _ _ _).mp (eq_of_heq (Sigma.mk.inj hq).2)).2.2
-  exact h this
-
-/-- An expectation is bounded by a bound on its support. -/
-theorem E_le_of_support {α : Type} (p : ProbComp α) {g : α → ℝ≥0∞} {c : ℝ≥0∞}
-    (h : ∀ x ∈ support p, g x ≤ c) : E p g ≤ c := by
-  calc E p g ≤ E p (fun _ => c) := by
-        rw [E, E, expectedValue_def, expectedValue_def]
-        refine ENNReal.tsum_le_tsum fun x => ?_
-        by_cases hx : x ∈ support p
-        · exact mul_le_mul_right (h x hx) _
-        · rw [probOutput_eq_zero_of_not_mem_support hx]; simp
-    _ ≤ c := E_const_le p c
-
 end OptimalOTS.LeanIsaBaseline.Layer

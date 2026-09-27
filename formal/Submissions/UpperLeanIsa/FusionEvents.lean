@@ -200,7 +200,6 @@ theorem upper_chain (hP : P.SecurityHyp) (d : Cut) (ζ : Record P) (c : Cache)
     have hcached := Params.ChainPath.cached P hpath (i := i) hji (by omega)
     exact chain_spi_targetHit hP d ζ c hc k i hi (by omega) _ hne hcached hstep
 
-
 namespace Params
 variable (P : Params)
 

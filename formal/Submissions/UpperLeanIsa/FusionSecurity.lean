@@ -1,5 +1,75 @@
+import Submissions.UpperLeanIsa.Resources
+import Submissions.UpperLeanIsa.Master
 import Submissions.UpperLeanIsa.FusionStageA
-import Submissions.UpperLeanIsa.CostPrefix
+
+/-! Retain the compression cost already paid by a prefix of an experiment. -/
+
+open OracleSpec OracleComp OracleComp.EvalDist
+
+noncomputable section
+
+namespace OptimalOTS.LeanIsaBaseline.Layer
+
+open scoped Classical
+
+/-- Every supported execution of this prefix pays at least `n`, leaving the
+continuation at most the original budget minus `n`. -/
+structure Spends {α : Type} (oa : OracleComp Spec α) (n : ℕ) : Prop where
+  run_budget : ∀ {β : Type} (k : α → OracleComp Spec β) {B : ℕ} (c : Cache) (p : α × Cache),
+    p ∈ support (run oa c) → CostAtMost (oa >>= k) B →
+      n ≤ B ∧ CostAtMost (k p.1) (B - n)
+
+theorem spends_zero {α : Type} (oa : OracleComp Spec α) : Spends oa 0 := by
+  induction oa using OracleComp.inductionOn with
+  | pure x =>
+    constructor
+    intro β k B c p hp h
+    rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
+    subst hp
+    rw [pure_bind] at h
+    exact ⟨Nat.zero_le _, h⟩
+  | query_bind t f ih =>
+    constructor
+    intro β k B c p hp h
+    rw [bind_assoc, costAtMost_query_bind_iff] at h
+    rw [run_query_bind, support_bind] at hp
+    simp only [Set.mem_iUnion] at hp
+    obtain ⟨⟨u, c'⟩, -, hp⟩ := hp
+    have hh := ((ih u).run_budget k c' p hp (h.2 u)).2
+    exact ⟨Nat.zero_le _, CostAtMost.mono hh (by omega)⟩
+
+theorem spends_bind {α β : Type} {oa : OracleComp Spec α} {f : α → OracleComp Spec β}
+    {a b : ℕ} (ha : Spends oa a) (hb : ∀ x, Spends (f x) b) :
+    Spends (oa >>= f) (a + b) := by
+  constructor
+  intro γ k B c p hp h
+  rw [run_bind, support_bind] at hp
+  simp only [Set.mem_iUnion] at hp
+  obtain ⟨q, hq, hp⟩ := hp
+  rw [bind_assoc] at h
+  obtain ⟨hab, hx⟩ := ha.run_budget (fun x => f x >>= k) c q hq h
+  obtain ⟨hbb, hy⟩ := (hb q.1).run_budget k q.2 p hp hx
+  exact ⟨by omega, by simpa only [Nat.sub_sub] using hy⟩
+
+theorem spends_hash (x : BitVec 896) : Spends (hash x) 2 := by
+  constructor
+  intro β k B c p _ h
+  unfold hash at h
+  rw [costAtMost_query_bind_iff] at h
+  have hc : queryCost (.inr (⟨896, x⟩ : Query)) = 2 := by
+    norm_num [queryCost, blockCost, blockBits]
+  rw [hc] at h
+  exact ⟨h.1, h.2 p.1⟩
+
+namespace Params
+
+variable (P : Params)
+
+end Params
+
+end OptimalOTS.LeanIsaBaseline.Layer
+
+end
 
 /-!
 # Strong unforgeability of a layer scheme
@@ -120,8 +190,6 @@ theorem stageA_iub (hP : P.SecurityHyp) (ξ : Record P) :
 /-! ## Regrouping by public data before signing -/
 
 local instance instDecEqPublicData : DecidableEq (PublicData P) := Classical.decEq _
-
-local instance instDecEqRecord : DecidableEq (Record P) := Classical.decEq _
 
 /-- The public data before signing of all records. -/
 def dataSet₀ : Finset (PublicData P) := Finset.univ.image (publicData (beforeSigning P))

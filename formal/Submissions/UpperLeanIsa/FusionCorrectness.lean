@@ -61,17 +61,9 @@ theorem fixed_reconFrom (f : HashTable) (I : Index) (bits : List Bool)
     simp only [reconFrom,simulateQ_bind,fixed_chain,pure_bind,ih]
     rfl
 
-theorem fixed_rootFrom (f : HashTable) (t : Tops) (l : List (Fin 1)) (st : BitVec 256) :
-    simulateQ (unifFwdAnswerImpl f) (P.rootFrom t l st) = pure (P.rootFromValue f t l st) := by
-  induction l generalizing st with
-  | nil => rfl
-  | cons r l ih =>
-    rw [rootFrom,simulateQ_bind,Layer.Params.fixed_hash,pure_bind]
-    exact ih _
-
 theorem fixed_root (f : HashTable) (t : Tops) :
     simulateQ (unifFwdAnswerImpl f) (P.root t) = pure (P.rootValue f t) := by
-  simp only [root,simulateQ_map,fixed_rootFrom,map_pure]
+  simp only [root,simulateQ_map,map_pure]
   rfl
 
 theorem fixed_verify (f : HashTable) (pk : PublicKey) (m : Message) (bits : List Bool) :
@@ -240,9 +232,6 @@ theorem correct (hP : P.codec.Hyp) (hl : P.locationOrder.Pairwise Earlier) : P.s
     cases hmem
 
 end Params
-
-theorem concrete_correct : params.scheme.Correct :=
-  params.correct params_hyp.codec concrete_ordered
 
 end
 end OptimalOTS.LeanIsaBaseline.Layer.Fusion

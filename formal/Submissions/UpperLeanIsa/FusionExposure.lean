@@ -123,9 +123,6 @@ def Hidden (d : Cut) : Loc P → Prop
   | .inl a => a.2.val < d a.1
   | .inr _ => False
 
-theorem hidden_inl (d : Cut) (k : Fin numChains) (j : Fin (P.codec.len k - 1)) :
-    Hidden d (.inl ⟨k, j⟩) ↔ j.val < d k := Iff.rfl
-
 theorem not_hidden_inr (d : Cut) (r : Fin 1) : ¬ Hidden (P := P) d (.inr r) := fun h => h
 
 variable (P) in
@@ -373,22 +370,6 @@ theorem exposedCache_data_eq (hP : P.Hyp) {d : Cut} (hd : ValidCut P d) (ξ ζ :
   · rintro ⟨a, ha, hq, hu⟩
     exact ⟨a, ha, (exposed_query_eq hd ξ ζ h a ha).trans hq,
       (exposed_answer_eq d ξ ζ h a ha).trans hu⟩
-
-/-- The exposed and hidden caches of a record are its programmed points: none at index
-queries. -/
-theorem hiddenCache_idx (hP : P.Hyp) (d : Cut) (ξ : Record P) (m : Message) (η : Nonce)
-    (pk : PublicKey) : hiddenCache d ξ ⟨896, P.codec.idxInput m η pk⟩ = none := by
-  rcases h : hiddenCache d ξ ⟨896, P.codec.idxInput m η pk⟩ with _ | u
-  · rfl
-  · obtain ⟨a, -, ha, -⟩ := (hiddenCache_some_iff hP d ξ _ u).mp h
-    exact absurd ha (ξ.query_ne_idx hP a m η pk)
-
-theorem exposedCache_idx (hP : P.Hyp) (d : Cut) (ξ : Record P) (m : Message) (η : Nonce)
-    (pk : PublicKey) : exposedCache d ξ ⟨896, P.codec.idxInput m η pk⟩ = none := by
-  rcases h : exposedCache d ξ ⟨896, P.codec.idxInput m η pk⟩ with _ | u
-  · rfl
-  · obtain ⟨a, -, ha, -⟩ := (exposedCache_some_iff hP d ξ _ u).mp h
-    exact absurd ha (ξ.query_ne_idx hP a m η pk)
 
 /-! ## Guessing a hidden word -/
 

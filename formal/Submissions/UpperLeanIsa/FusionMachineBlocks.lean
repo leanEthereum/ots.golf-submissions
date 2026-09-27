@@ -75,13 +75,14 @@ theorem nextOp_straight (u : ℕ) : (nextOp u).straight = true := by
 /-- Every op of a group block's straight part is straight. -/
 theorem body_straight (T : Tab) (u v : ℕ) (z : Bool) : ∀ x ∈ body T u v z, x.straight = true := by
   intro x hx
-  unfold body at hx
+  unfold body padOps at hx
   simp only [List.mem_append, List.mem_singleton, List.mem_replicate] at hx
-  rcases hx with ((((h | h) | h) | h) | h) | h
+  rcases hx with ((((h | h) | h) | h) | h | h) | h
   · exact tie_straight x h
-  · subst h; rfl
+  · subst h; unfold prodOp; split_ifs <;> rfl
   · obtain ⟨i, -, hi⟩ := mem_segs.mp h; exact seg_straight T x hi
   · exact rootIns_straight T x h
+  · rw [h.2]; rfl
   · rw [h.2]; rfl
   · subst h; exact nextOp_straight u
 
@@ -157,7 +158,7 @@ theorem fbody_len (s : ℕ) : (fbody s).length = 3+s := by
 theorem fbody_lcost (s : ℕ) : lcost (fbody s) = 3+10*s := by
   unfold fbody
   rw [lcost_append,lcost_append,chainOps_lcost]
-  have h1 : lcost [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 82 s))] = 1 := rfl
+  have h1 : lcost [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 81 s))] = 1 := rfl
   have h2 : lcost [copy (if s = 0 then wCell 0 else tfCell) tfCell,.mul (hCell 1) gCell (h1Cell 1)] = 2 := rfl
   rw [h1,h2]
   omega
@@ -174,7 +175,6 @@ theorem fbody_straight (s : ℕ) : ∀ x ∈ fbody s, x.straight = true := by
   · rfl
 
 theorem origin_count : ∀ u < 13, pn u 0 ≤ 1 := by decide
-
 
 /-- A nonzero raw field cannot encode an origin tuple. -/
 theorem band_pos {u v : ℕ} (hu : u < 13) (hv : v < VF u) (hz : v ≠ 0) :
@@ -203,7 +203,7 @@ theorem bind_cost_pos {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hb : u =
   rw [hT.cost_eq u hu v hv]; exact bind_band_pos hu hb hv
 
 /-- The fixed ordinary-instruction allowance includes all zero-digit copies. -/
-theorem pad_fit {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
+theorem pad_fit0 {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
     (tie u v).length + zexp T u v + 4 ≤ gcu u := by
   rw [tie_len]
   have hgcu : gcu u = if u = 0 then 7 else if u = 6 then 9 else if u = 5 then 6 else 8 := by
@@ -227,10 +227,53 @@ theorem pad_fit {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u)
       rw [hgk] at hh
       split_ifs at * <;> omega
 
+/-- Unshifted units stay below cost `15`. -/
+theorem nb_unshifted : ∀ u < 13, ¬ shifted u → nb u ≤ 15 := by decide
+
+/-- A product exponent `15` occurs only at cost `16` of a shifted unit, whose digits are at most
+`15`, so the block has at most one zero digit. -/
+theorem split15_spec {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u)
+    (h : split15 T u v = 1) : shifted u ∧ zexp T u v ≤ 1 := by
+  have hp : pcost T u v = 15 := by unfold split15 at h; split_ifs at h with h' <;> omega
+  have hb := (band_spec hu hv).1
+  have hc := hT.cost_eq u hu v hv
+  by_cases hs : shifted u
+  · refine ⟨hs, ?_⟩
+    have h7 : 7 ≤ u := by unfold shifted at hs; omega
+    have hgk : gk u = 3 := by unfold gk; rw [if_neg (by omega)]
+    have hVF := VF_le u hu
+    have hd := fun i hi => hT.coord_lt16 u hu h7 v (by omega) i hi
+    have h0 := hd 0 (by omega); have h1 := hd 1 (by omega); have h2 := hd 2 (by omega)
+    unfold pcost at hp; rw [if_pos hs] at hp
+    unfold cost at hp; unfold zexp
+    rw [hgk] at hp ⊢
+    simp only [show List.range 3 = [0, 1, 2] from rfl, List.map_cons, List.map_nil,
+      List.sum_cons, List.sum_nil] at hp ⊢
+    split_ifs <;> omega
+  · unfold pcost at hp; rw [if_neg hs] at hp
+    have := nb_unshifted u hu hs
+    omega
+
+/-- The fixed ordinary-instruction allowance includes all zero-digit copies and the second
+product factor. -/
+theorem pad_fit {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
+    (tie u v).length + zexp T u v + split15 T u v + 4 ≤ gcu u := by
+  by_cases h15 : split15 T u v = 1
+  · obtain ⟨hs, hz⟩ := split15_spec hT hu hv h15
+    have ht := tie_len u v
+    have hg : gcu u = 8 := by
+      unfold shifted at hs; unfold gcu isExp
+      rcases hs with rfl | rfl | rfl | rfl | rfl <;> rfl
+    split_ifs at ht <;> omega
+  · have h0 : split15 T u v = 0 := by unfold split15 at *; split_ifs at * <;> omega
+    rw [h0]
+    have := pad_fit0 hT hu hv
+    omega
+
 theorem body_len {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (hv : v < VF u) :
     (body T u v z).length = gcu u - 2 + cost T u v + hm u := by
   have hfit := pad_fit hT hu hv
-  unfold body npad
+  unfold body padOps npad
   simp only [List.length_append, List.length_singleton, List.length_replicate, segs_len,
     rootIns_len]
   omega
@@ -238,19 +281,19 @@ theorem body_len {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (hv
 theorem body_lcost {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (hv : v < VF u) :
     lcost (body T u v z) = gcu u - 2 + 10 * (cost T u v + hm u) := by
   have hfit := pad_fit hT hu hv
-  unfold body npad
-  rw [lcost_append, lcost_append, lcost_append, lcost_append, lcost_append, tie_lcost,
-    segs_lcost, rootIns_lcost, lcost_replicate]
-  have h1 : lcost [prodOp T u v] = 1 := rfl
+  unfold body padOps npad
+  rw [lcost_append, lcost_append, lcost_append, lcost_append, lcost_append, lcost_append, tie_lcost,
+    segs_lcost, rootIns_lcost, lcost_replicate, lcost_replicate]
+  have h1 : lcost [prodOp T u v] = 1 := by unfold prodOp; split_ifs <;> rfl
+  have h4 : (fixOp u).cost = 1 := rfl
   have h2 : lcost [nextOp u] = 1 := by unfold nextOp; split_ifs <;> rfl
   have h3 : NOP.cost = 1 := rfl
-  rw [h1, h2, h3]
+  rw [h1, h2, h3, h4]
   omega
 
+theorem proList_length : proList.length = 18 := by unfold proList; rfl
 
-theorem proList_length : proList.length = 19 := by unfold proList; rfl
-
-theorem proList_lcost : lcost proList = 28 := by unfold proList lcost; rfl
+theorem proList_lcost : lcost proList = 27 := by unfold proList lcost; rfl
 
 theorem cinstrAt_sentinel (T : Tab) : cinstrAt T sentinel = .pad := by
   unfold cinstrAt
@@ -261,49 +304,5 @@ theorem valid (T : Tab) : LeanIsa.BytecodeValid (program T) := by
   show (cinstrAt T (2^18-1)).toInstr.opcode ≠ .jump
   rw [show 2^18-1 = sentinel from rfl,cinstrAt_sentinel]
   decide
-
-/-- This is the cost of the intended walk, with dispatch charging its landing entry. -/
-def canonicalCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  lcost proList + 2 + lcost (fbody (xs 0)) + 2 +
-    ∑ u ∈ Finset.range 13, (lcost (body T u (xs (u+1)) false) + (ctlF (u+1)).cost)
-
-def canonicalSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  proList.length + 2 + (fbody (xs 0)).length + 2 +
-    ∑ u ∈ Finset.range 13, ((body T u (xs (u+1)) false).length + (ctlF (u+1)).steps)
-
-theorem sum_ordinary_bodies : (∑ u ∈ Finset.range 13, (gcu u - 2)) = 76 := by decide
-theorem sum_roots : (∑ u ∈ Finset.range 13, hm u) = 1 := by decide
-theorem sum_controls : (∑ u ∈ Finset.range 13, (ctlF (u+1)).cost) = 25 := by decide
-theorem sum_control_steps : (∑ u ∈ Finset.range 13, (ctlF (u+1)).steps) = 25 := by decide
-
-theorem canonical_cost (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
-    (hx : ∀ u < 13, xs (u+1) < VF u)
-    (hlayer : xs 0 + ∑ u ∈ Finset.range 13, cost T u (xs (u+1)) = 86) :
-    canonicalCost T xs + 120 = 1126 := by
-  have hb : ∀ u ∈ Finset.range 13, lcost (body T u (xs (u+1)) false) =
-      gcu u - 2 + 10 * cost T u (xs (u+1)) + 10 * hm u := by
-    intro u hu
-    rw [body_lcost hT (Finset.mem_range.mp hu) (hx u (Finset.mem_range.mp hu))]
-    omega
-  unfold canonicalCost
-  rw [proList_lcost,fbody_lcost]
-  simp_rw [Finset.sum_add_distrib]
-  rw [Finset.sum_congr rfl hb]
-  simp only [Finset.sum_add_distrib,← Finset.mul_sum,sum_ordinary_bodies,sum_roots,sum_controls]
-  omega
-
-theorem canonical_steps (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
-    (hx : ∀ u < 13, xs (u+1) < VF u)
-    (hlayer : xs 0 + ∑ u ∈ Finset.range 13, cost T u (xs (u+1)) = 86) :
-    canonicalSteps T xs = 214 := by
-  have hb : ∀ u ∈ Finset.range 13, (body T u (xs (u+1)) false).length =
-      gcu u - 2 + cost T u (xs (u+1)) + hm u :=
-    fun u hu => body_len hT (Finset.mem_range.mp hu) (hx u (Finset.mem_range.mp hu))
-  unfold canonicalSteps
-  rw [proList_length,fbody_len,Finset.sum_add_distrib,Finset.sum_congr rfl hb]
-  simp only [Finset.sum_add_distrib,sum_ordinary_bodies,sum_roots,sum_control_steps]
-  omega
-
-theorem seeded_size : 2 ^ (program fusionTab).logSize + 2 ^ 16 < LeanIsa.maxSeededRows := by decide
 
 end OptimalOTS.HLFusion

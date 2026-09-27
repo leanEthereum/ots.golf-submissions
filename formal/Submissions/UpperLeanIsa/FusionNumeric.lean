@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.TierNumeric
 
-/-! Exact rational conditions for the 1126-cycle candidate's 17-tier schedule.
+/-! Exact rational conditions for the 1125-cycle construction's 17-tier schedule.
 The separate codec proof must establish that these counts describe the accepted indices. -/
 
 set_option linter.constructorNameAsVariable false
@@ -17,7 +17,7 @@ def tierA : List ℕ :=
 
 /-- Classes per tier. -/
 def tierN : List ℕ :=
-  [586059168825967220503869936247225, 225147591650264611783475280271136, 120954872951725277019767524280388, 31325366320505199505634758408824, 57133146884687464708165801018158, 17812128586964487070339292256900, 8854160434526473227054418677444, 40349309059229540697179394416982, 12456380551407731332951415142696, 6118241757575575227915602443824, 1304141987154798412506269145144, 3015153931851281431558367597556, 768656158915408775406625852044, 348012945561215323812480505524, 58560815427150584353398987960, 2795072752774262541987184032, 30628852715996861657761440]
+  [585866506654998063573797756527210, 225066183706054836231968205101765, 120914153225552665419232803454611, 31314662532852325263760702192350, 57109347746584067352477632994288, 17803816481459061660386645166168, 8850336442900076438203683764196, 40331921171780873320169063968719, 12450446610066368534713644508542, 6115556392171631249638010013612, 1303555004168707041809861554182, 3013501780156867549238293532838, 768184404671152911651808067370, 347818350382049014500180083814, 58527074928621238083434883312, 2793427383521510727675976440, 30613314220628413368742560]
 
 def tA (t : ℕ) : ℕ := tierA.getD t 0
 def tN (t : ℕ) : ℕ := tierN.getD t 0
@@ -93,7 +93,7 @@ def rest (t : ℕ) : ℕ := prec - cum t * 2 ^ 129
 def m0u (t : ℕ) : ℕ := rest t + etaUp
 def m0l (t : ℕ) : ℕ := rest t + etaDn
 
-/-- The rarest-cut schedule of the layer-86 Group3 tables. -/
+/-- The rarest-cut schedule of the layer-86 fusion tables. -/
 def schedule : Sched where
   T := 17
   K := 127
@@ -102,9 +102,9 @@ def schedule : Sched where
   Yu t := (iterUp 19 (m0u t) : ℚ) / prec
   Yl t := (iterDn 19 (m0l t) : ℚ) / prec
   yl t := (m0l t : ℚ) / prec
-  hp := 1455152844958 / 2 ^ 40 / 2 ^ 127
-  k1 := 727576585389 / 2 ^ 40 / 2 ^ 127
-  b0 := 38095929638710986492724218760267
+  hp := 1455516033378 / 2 ^ 40 / 2 ^ 127
+  k1 := 727758180568 / 2 ^ 40 / 2 ^ 127
+  b0 := 38312964426242204025790222380575
 
 /-! ## The conditions -/
 
@@ -160,7 +160,6 @@ theorem avail : (1 - schedule.mass 17) ^ (2 ^ 19 - 1) ≤ 1 / 2 ^ 128 := by
 set_option maxRecDepth 100000 in
 /-- **The layer-86 schedule meets every numeric condition.** -/
 theorem schedule_valid : schedule.Valid where
-  K_le := by decide
   T_le := by decide
   a_pos := by decide +kernel
   a_lt := by
@@ -178,7 +177,6 @@ theorem schedule_valid : schedule.Valid where
   hp_ge := by decide +kernel
   k1_post := by decide +kernel
   k1_sc := by decide +kernel
-  b0_pos := by decide
   b0_le := by decide +kernel
   kmax_le := by decide +kernel
   avail := avail

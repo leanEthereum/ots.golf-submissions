@@ -152,12 +152,12 @@ theorem hv_c {c : ℕ} (h1 : 47 ≤ c) (h2 : c < 2 ^ 16) {x : E}
 
 theorem hv_one : hv P T f pk m bits oneCell = oneV := hv_c (by decide) (by decide) (hc_one ..)
 theorem hv_g : hv P T f pk m bits gCell = gV := hv_c (by decide) (by decide) (hc_g ..)
-theorem hv_cc {c : ℕ} (hc : c ≤ 16) : hv P T f pk m bits (cCell c) = cV c := by
+theorem hv_cc {c : ℕ} (hc : c ≤ 16) (h15 : c ≠ 15) : hv P T f pk m bits (cCell c) = cV c := by
   rcases Nat.eq_zero_or_pos c with rfl | h0
   · rw [cV_zero]; exact hv_one
   · exact hv_c (by unfold cCell; split_ifs <;> omega)
-      (by unfold cCell; split_ifs <;> omega) (hc_c _ _ _ _ _ h0 hc)
-theorem hv_frame {r : ℕ} (hr : r < 15) : hv P T f pk m bits (fCell r) = frameV r := by
+      (by unfold cCell; split_ifs <;> omega) (hc_c _ _ _ _ _ h0 hc h15)
+theorem hv_frame {r : ℕ} (hr : r < 14) : hv P T f pk m bits (fCell r) = frameV r := by
   apply hv_c (by unfold fCell cCell; split_ifs <;> omega)
     (by unfold fCell cCell; split_ifs <;> omega)
   exact hc_frame _ _ _ _ _ hr
@@ -186,8 +186,12 @@ theorem hv_h1 {r : ℕ} (hr : r<14) :
 
 theorem hv_gpl {u : ℕ} (hu : u ≤ 13) :
     hv P T f pk m bits (gpCell u) = gpV T (IF P f pk m bits) u :=
-  hv_c (by unfold gpCell; omega)
-    (by unfold gpCell; omega) (hc_gp _ _ _ _ _ hu)
+  hv_c (by unfold gpCell; split_ifs <;> omega)
+    (by unfold gpCell; split_ifs <;> omega) (hc_gp _ _ _ _ _ hu)
+
+theorem hv_tp {u : ℕ} (hu : u < 13) :
+    hv P T f pk m bits (tpCell u) = tpV T (IF P f pk m bits) u :=
+  hv_c (by unfold tpCell; omega) (by unfold tpCell; omega) (hc_tp _ _ _ _ _ hu)
 
 theorem hv_tf : hv P T f pk m bits tfCell =
     cellOfBits (topOf T bits (y0F P f pk m bits) (AF P T f pk m bits) 0) :=
@@ -306,26 +310,6 @@ theorem honest_hmul {r : ℕ} (hr : r < 14) :
   show hv P T f pk m bits (h1Cell r) = hv P T f pk m bits (hCell r) * hv P T f pk m bits gCell
   rw [hv_h1 hr, hv_h hr, hv_g, gV, ← ofK_mul, mul_comm, g_mul_gpow]
 
-include hC hlen in
-/-- The index query of the honest image. -/
-theorem honest_idx_query :
-    blake2sQuery ![hv P T f pk m bits msgLo, hv P T f pk m bits msgHi,
-      hv P T f pk m bits nonceCell, hv P T f pk m bits pkCell] (hv P T f pk m bits oneCell)
-      (hv P T f pk m bits (oneCell + 1)) (hv P T f pk m bits gCell) =
-      P.codec.idxInput m (decodeNonce bits) pk := by
-  have hpk : cellBits (hv P T f pk m bits pkCell) = pk := by
-    rw [show pkCell = 0 from rfl, hv_lt P T f pk m bits (by omega), inputWord_pk]
-    exact cellBits_cellOfBits pk
-  rw [blake2sQuery_eq, show oneCell + 1 = gCell from rfl, hv_one, hv_g,
-    show nonceCell = 46 from rfl, show msgHi = 2 from rfl, show msgLo = 1 from rfl,
-    hv_lt P T f pk m bits (show 46 < 47 by omega), hv_lt P T f pk m bits (show 2 < 47 by omega),
-    hv_lt P T f pk m bits (show 1 < 47 by omega), inputWord_nonce pk m bits hlen, inputWord_two,
-    inputWord_one, cellBits_cellOfBits (nonceWord (decodeNonce bits)),
-    cellBits_cellOfBits (m.extractLsb' 128 128), cellBits_cellOfBits (m.extractLsb' 0 128),
-    msg_split, hpk]
-  unfold Params.idxInput
-  rw [hC.cv, hC.idxMd]
-
 /-- The honest landing product before group `u`. -/
 theorem honest_gp {u : ℕ} (hu : u ≤ 13) :
     hv P T f pk m bits (gpCell u) = gpV T (IF P f pk m bits) u := hv_gpl hu
@@ -341,7 +325,29 @@ theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
     cost T w (hxs T (IF P f pk m bits) (w + 1)) = 86 at hs
   rw [landing_total hT (hxs_valid T _ (hlive hC hacc)), hs, seedExp_86]
 
-include hC hlen hacc in
+include hT hC hlen hacc in
+/-- The index query of the honest image. -/
+theorem honest_idx_query :
+    blake2sQuery ![hv P T f pk m bits msgLo, hv P T f pk m bits msgHi,
+      hv P T f pk m bits nonceCell, hv P T f pk m bits pkCell] (hv P T f pk m bits (cCell 14))
+      (hv P T f pk m bits (cCell 14 + 1)) (hv P T f pk m bits oneCell) =
+      P.codec.idxInput m (decodeNonce bits) pk := by
+  have hpk : cellBits (hv P T f pk m bits pkCell) = pk := by
+    rw [show pkCell = 0 from rfl, hv_lt P T f pk m bits (by omega), inputWord_pk]
+    exact cellBits_cellOfBits pk
+  rw [blake2sQuery_eq, show cCell 14 + 1 = gpCell 13 from rfl, hv_one,
+    hv_cc (c := 14) (by omega) (by omega), honest_gp13 hT hC hacc,
+    show nonceCell = 46 from rfl, show msgHi = 2 from rfl, show msgLo = 1 from rfl,
+    hv_lt P T f pk m bits (show 46 < 47 by omega), hv_lt P T f pk m bits (show 2 < 47 by omega),
+    hv_lt P T f pk m bits (show 1 < 47 by omega), inputWord_nonce pk m bits hlen, inputWord_two,
+    inputWord_one, cellBits_cellOfBits (nonceWord (decodeNonce bits)),
+    cellBits_cellOfBits (m.extractLsb' 128 128), cellBits_cellOfBits (m.extractLsb' 0 128),
+    msg_split, hpk]
+  unfold Params.idxInput
+  rw [hC.idxCv, hC.idxMd]
+  rfl
+
+include hT hC hlen hacc in
 /-- **The honest prologue.** -/
 theorem honest_pro : ∀ y ∈ proList, y.Rel f (hv P T f pk m bits) := by
   intro y hy
@@ -353,7 +359,7 @@ theorem honest_pro : ∀ y ∈ proList, y.Rel f (hv P T f pk m bits) := by
     show hv P T f pk m bits 3 = natV 5503
     rw [hv_lt P T f pk m bits (by omega)]; exact inputWord_len_of pk m bits hlen
   · subst h; exact hv_g
-  · exact hv_cc (by omega)
+  · exact hv_cc (by omega) (by omega)
   · subst h
     refine blake_rel (a := y0F P f pk m bits) ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hv_idx hv_idx1
     · rw [show msgLo = 1 from rfl, hv_lt P T f pk m bits (by omega), inputWord_one]
@@ -365,10 +371,10 @@ theorem honest_pro : ∀ y ∈ proList, y.Rel f (hv P T f pk m bits) := by
       exact canon_cellOfBits _
     · rw [show pkCell = 0 from rfl, hv_lt P T f pk m bits (by omega), inputWord_pk]
       exact canon_cellOfBits _
+    · rw [hv_cc (c := 14) (by omega) (by omega)]; exact canon_ofK _
+    · rw [show cCell 14 + 1 = gpCell 13 from rfl, honest_gp13 hT hC hacc]; exact canon_ofK _
     · rw [hv_one]; exact canon_ofK 1
-    · rw [show oneCell + 1 = gCell from rfl, hv_g]; exact canon_ofK _
-    · rw [hv_g]; exact canon_ofK _
-    · rw [honest_idx_query hC hlen]; rfl
+    · rw [honest_idx_query hT hC hlen hacc]; rfl
   · subst h; exact honest_hmul (by omega)
 
 end Accepted

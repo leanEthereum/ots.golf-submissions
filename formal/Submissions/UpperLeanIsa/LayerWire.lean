@@ -49,15 +49,4 @@ theorem decodeNonce_encode (xs : Fin numChains → Word) (η : Nonce) :
   rw [decodeNonce, encode, ← h, List.drop_left, List.take_of_length_le (by rw [length_bits]),
     ofBits_bits]
 
-/-- Verification rejects every string of the wrong length, on every path. -/
-theorem verify_of_length_ne (P : Params) (pk : PublicKey) (m : Message) (bits : List Bool)
-    (h : bits.length ≠ sigBits) : P.verify pk m bits = pure false := by
-  rw [Params.verify, if_pos h]
-
-theorem rejectsOversized (P : Params) : P.scheme.RejectsOversized maxSignatureBits := by
-  intro pk m σ hσ
-  change true ∉ support (P.verify pk m σ)
-  rw [verify_of_length_ne P pk m σ (by unfold sigBits maxSignatureBits at *; omega)]
-  simp
-
 end OptimalOTS.LeanIsaBaseline.Layer
