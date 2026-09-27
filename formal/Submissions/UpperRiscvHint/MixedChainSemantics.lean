@@ -8,7 +8,12 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-def tops (x : graph.Assignment) (k : Fin 32) : BitVec 256 :=
+/-- The committed tops, as the root input reads them. -/
+def tops (x : graph.Assignment) (k : Fin 32) : BitVec (topBits k) :=
+  (x (top k).fin).cast (lenF_fin _)
+
+/-- The last answer of chain `k`. -/
+def lastOut (x : graph.Assignment) (k : Fin 32) : BitVec 256 :=
   (x (cv k 31).fin).cast (lenF_fin _)
 
 variable (index : RawIdx) (payload : List Bool)
@@ -36,27 +41,27 @@ def tripleUpdate (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
       (graph_len_fin (cv k t)).symm)
 
 /-- The disclosed level: the input is read from the payload. -/
-theorem triple_run_read (k : Fin 32) (t : Fin 32) (ht : RiscvUpperForest.ForestVerifier.pos index k = t.val)
+theorem triple_run_read (k : Fin 32) (t : Fin 32) (ht : firstAt index k = t.val)
     (x : graph.Assignment) (cursor : ℕ) :
     runNodes' index payload [ci k t, ch k t, cv k t] x cursor =
       hash (ofBits (graph.len (ci k t).fin) ((payload.drop cursor).take (graph.len (ci k t).fin)))
         >>= fun y => pure (tripleUpdate x k t
           (ofBits (graph.len (ci k t).fin) ((payload.drop cursor).take (graph.len (ci k t).fin))) y,
           cursor + chainBits k) := by
-  have hle : RiscvUpperForest.ForestVerifier.pos index k ≤ t.val := le_of_eq ht
+  have hle : firstAt index k ≤ t.val := le_of_eq ht
   simp only [runNodes', cursorStep_ci, cursorStep_ch, cursorStep_cv, if_pos ht, if_pos hle,
     pure_bind, bind_assoc, map_eq_bind_pure_comp, Function.comp_def, Function.update_self,
     tripleUpdate]
 
 /-- A level above the disclosed one: the input is the previous value. -/
-theorem triple_run_step (k : Fin 32) (t : Fin 32) (ht : RiscvUpperForest.ForestVerifier.pos index k < t.val)
+theorem triple_run_step (k : Fin 32) (t : Fin 32) (ht : firstAt index k < t.val)
     (x : graph.Assignment) (cursor : ℕ) :
     runNodes' index payload [ci k t, ch k t, cv k t] x cursor =
       hash ((Forest.trunc k (x (prev k t).fin)).cast (graph_len_fin (ci k t)).symm)
         >>= fun y => pure (tripleUpdate x k t
           ((Forest.trunc k (x (prev k t).fin)).cast (graph_len_fin (ci k t)).symm) y, cursor) := by
-  have hne : ¬ RiscvUpperForest.ForestVerifier.pos index k = t.val := by omega
-  have hle : RiscvUpperForest.ForestVerifier.pos index k ≤ t.val := le_of_lt ht
+  have hne : ¬ firstAt index k = t.val := by omega
+  have hle : firstAt index k ≤ t.val := le_of_lt ht
   simp only [runNodes', cursorStep_ci, cursorStep_ch, cursorStep_cv, if_neg hne, if_pos ht,
     if_pos hle, pure_bind, bind_assoc, map_eq_bind_pure_comp, Function.comp_def,
     Function.update_self, tripleUpdate]
@@ -86,17 +91,17 @@ theorem trunc_tripleUpdate_cv (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
   rfl
 
 theorem tops_tripleUpdate (x : graph.Assignment) (k : Fin 32) (t : Fin 32)
-    (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) (k' : Fin 32) (hk : k' ≠ k) :
-    tops (tripleUpdate x k t v y) k' = tops x k' := by
+    (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) :
+    tops (tripleUpdate x k t v y) = tops x := by
+  funext k'
   unfold tops
-  rw [tripleUpdate_other x k t v y (cv k' 31) (by simp) (by simp)
-    (fun e => hk (Name.cv.inj e).1)]
+  rw [tripleUpdate_other x k t v y (top k') (by simp) (by simp) (by simp)]
 
 def tripleN (k : Fin 32) (t : ℕ) : List Name :=
   if h : t < 32 then [ci k ⟨t, h⟩, ch k ⟨t, h⟩, cv k ⟨t, h⟩] else []
 
 theorem chainNodes_eq (k : Fin 32) :
-    chainNodes k = src k :: (List.range 32).flatMap (tripleN k) := by
+    chainNodes k = (src k :: (List.range 32).flatMap (tripleN k)) ++ [top k] := by
   simp only [chainNodes, List.finRange, List.range]
   rfl
 
@@ -106,13 +111,12 @@ theorem range_split (p : ℕ) (hp : p ≤ 32) :
   rw [Nat.zero_add, Nat.add_sub_cancel' hp] at h
   rw [List.range_eq_range', List.range_eq_range', h]
 
-/-- Before its disclosed level, a chain's nodes are pure zeros. -/
+/-- Below its first evaluated level, a chain's nodes are pure zeros. -/
 theorem prefix_run (k : Fin 32) :
-    ∀ (q : ℕ), q ≤ RiscvUpperForest.ForestVerifier.pos index k → ∀ (x : graph.Assignment) (cursor : ℕ),
+    ∀ (q : ℕ), q ≤ firstAt index k → ∀ (x : graph.Assignment) (cursor : ℕ),
     ∃ x' : graph.Assignment,
       runNodes' index payload (src k :: (List.range q).flatMap (tripleN k)) x cursor =
-        pure (x', cursor) ∧
-      (∀ k' : Fin 32, k' ≠ k → x' (cv k' 31).fin = x (cv k' 31).fin) := by
+        pure (x', cursor) ∧ tops x' = tops x := by
   intro q
   induction q with
   | zero =>
@@ -122,17 +126,18 @@ theorem prefix_run (k : Fin 32) :
       simp only [List.range_zero, List.flatMap_nil, runNodes', Prod.mk.eta, bind_pure]
     rw [run, cursorStep_src]
     refine ⟨_, rfl, ?_⟩
-    intro k' _
-    exact Function.update_of_ne (fin_ne_of_ne (by simp)) _ _
+    funext k'
+    unfold tops
+    rw [Function.update_of_ne (fin_ne_of_ne (by simp))]
   | succ q ih =>
     intro hq x cursor
     obtain ⟨x₁, run₁, frame₁⟩ := ih (by omega) x cursor
     have hq32 : q < 32 := by
-      have := pos_le index k
+      have : firstAt index k ≤ 32 := firstEval_le k (fixedPositions index k)
       omega
-    have hne : ¬ (RiscvUpperForest.ForestVerifier.pos index k = q) := by omega
-    have hlt : ¬ (RiscvUpperForest.ForestVerifier.pos index k < q) := by omega
-    have hle : ¬ (RiscvUpperForest.ForestVerifier.pos index k ≤ q) := by omega
+    have hne : ¬ (firstAt index k = q) := by omega
+    have hlt : ¬ (firstAt index k < q) := by omega
+    have hle : ¬ (firstAt index k ≤ q) := by omega
     have triple : tripleN k q = [ci k ⟨q, hq32⟩, ch k ⟨q, hq32⟩, cv k ⟨q, hq32⟩] := by
       simp [tripleN, hq32]
     have run : runNodes' index payload (src k :: (List.range (q + 1)).flatMap (tripleN k)) x cursor =
@@ -143,11 +148,41 @@ theorem prefix_run (k : Fin 32) :
     simp only [runNodes', cursorStep_ci, cursorStep_ch, cursorStep_cv, if_neg hne, if_neg hlt,
       if_neg hle, pure_bind, Prod.mk.eta, bind_pure]
     refine ⟨_, rfl, ?_⟩
-    intro k' hk'
-    rw [Function.update_of_ne (fin_ne_of_ne (fun h => hk' (Name.cv.inj h).1)),
+    rw [← frame₁]
+    funext k'
+    unfold tops
+    rw [Function.update_of_ne (fin_ne_of_ne (by simp)),
       Function.update_of_ne (fin_ne_of_ne (by simp)),
       Function.update_of_ne (fin_ne_of_ne (by simp))]
-    exact frame₁ k' hk'
 
+/-- The top of a chain with an evaluated level is the low part of its last answer. -/
+theorem top_run_eval (k : Fin 32) (h : firstAt index k < 32) (x : graph.Assignment) (cursor : ℕ) :
+    runNodes' index payload [top k] x cursor =
+      pure (Function.update x (top k).fin
+        ((topOf k (lastOut x k)).cast (graph_len_fin (top k)).symm), cursor) := by
+  simp only [runNodes', cursorStep_top, if_neg (show ¬ 32 ≤ firstAt index k by omega),
+    pure_bind, Prod.mk.eta]
+  rfl
+
+/-- A fully hidden cap reads its top from the payload. -/
+theorem top_run_read (k : Fin 32) (h : 32 ≤ firstAt index k) (x : graph.Assignment)
+    (cursor : ℕ) :
+    runNodes' index payload [top k] x cursor =
+      pure (Function.update x (top k).fin
+        (ofBits (graph.len (top k).fin) ((payload.drop cursor).take (graph.len (top k).fin))),
+        cursor + topBits k) := by
+  simp only [runNodes', cursorStep_top, if_pos h, pure_bind, Prod.mk.eta]
+
+theorem tops_update_top (x : graph.Assignment) (k : Fin 32) (v : BitVec (graph.len (top k).fin)) :
+    tops (Function.update x (top k).fin v) k = v.cast (lenF_fin _) := by
+  unfold tops
+  rw [Function.update_self]
+  rfl
+
+theorem tops_update_top_other (x : graph.Assignment) (k j : Fin 32) (hjk : j ≠ k)
+    (v : BitVec (graph.len (top k).fin)) :
+    tops (Function.update x (top k).fin v) j = tops x j := by
+  unfold tops
+  rw [Function.update_of_ne (fin_ne_of_ne (fun e => hjk (Name.top.inj e)))]
 
 end OptimalOTS.RiscvMixedProgram

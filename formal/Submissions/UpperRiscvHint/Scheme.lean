@@ -4,8 +4,8 @@ import Submissions.UpperRiscvHint.GScheme
 /-!
 # The bare-chain forest
 
-A family of cuts indexed by the accepted indices, with sixteen 144-bit and sixteen 192-bit values. Verification
-costs 203 compressions.
+A family of cuts indexed by the accepted indices, with sixteen 192-bit and sixteen 144-bit
+values. Verification costs 189 compressions.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -54,12 +54,12 @@ def forestScheme : GScheme where
 theorem isCut_setsName (i : Idx) : IsCut (setsName i) :=
   fixedCut_isCut i
 
-theorem cost_setsName (i : Idx) : ∑ n ∈ evaluatedSet (setsName i), n.cost = 202 :=
+theorem cost_setsName (i : Idx) : ∑ n ∈ evaluatedSet (setsName i), n.cost = 188 :=
   fixedCut_cost i
 
-/-- Every signature verifies in `203` compressions. -/
-theorem forestScheme_verifyCost (i : Idx) : forestScheme.verifyCost i = 203 := by
-  show idxCost + graph.reconstructCost (fins (setsName i)) = 203
+/-- Every signature verifies in `189` compressions. -/
+theorem forestScheme_verifyCost (i : Idx) : forestScheme.verifyCost i = 189 := by
+  show idxCost + graph.reconstructCost (fins (setsName i)) = 189
   have hidx : idxCost = 1 := by decide
   rw [reconstructCost_eq, hidx]
   have h := cost_setsName i

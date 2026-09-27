@@ -320,7 +320,7 @@ theorem addressSum_toNat (a : MachineState) (hm : MasksLoaded a)
     decide +kernel
   rw [BitVec.toNat_sub_of_le, eb]
   rw [BitVec.le_def, eb]
-  have en : baseWord 0 = 18445835621712285080 := by decide +kernel
+  have en : baseWord 0 = 18445835621712286929 := by decide +kernel
   rw [en]
   omega
 
@@ -341,7 +341,7 @@ theorem raw_sum_mod (a : MachineState) (hm : MasksLoaded a) (answer : BitVec has
 theorem address_remainder_iff (a : MachineState) (hm : MasksLoaded a)
     (answer : BitVec hashBits) (hw : WordsLoaded a answer)
     (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) :
-    (addressSum a 4).toNat % 255 = 0 ↔ IndexRank (pack answer) := by
+    (addressSum a 4).toNat % 255 = 1 ↔ IndexRank (pack answer) := by
   have congruence := raw_sum_mod a hm answer hw
   have bound : (laneSum a 4).toNat ≤ 4 * 4340410370284600380 := by
     rw [laneSum_toNat a hm 4 le_rfl]
@@ -359,7 +359,7 @@ theorem address_remainder_iff (a : MachineState) (hm : MasksLoaded a)
         omega
       _ = 480 := by norm_num
   rw [addressSum_toNat a hm hb, indexRank_iff]
-  have en : baseWord 0 = 18445835621712285080 := by decide +kernel
+  have en : baseWord 0 = 18445835621712286929 := by decide +kernel
   rw [en]
   omega
 

@@ -1,6 +1,7 @@
+import OptimalOTS.RiscvHint
 import Submissions.UpperRiscvHint.MachineMemory
 
-/-! Exact raw-memory contents installed by the competition loader. -/
+/-! Exact memory contents installed by the hinted loader `RiscvHint.loadView`. -/
 
 namespace OptimalOTS.Riscv2Program
 
@@ -50,33 +51,6 @@ def loaderMessage (image : Riscv.Image) (pk : PublicKey)
     (m : Message) : MachineState :=
   (loaderPublic image pk).writeBytesAsWords Riscv.messageBase (Riscv.bytesOfVector m)
 
-/-- Register initialization leaves the loaded memory unchanged. -/
-theorem initialState_getMem (image : Riscv.Image) (pk : PublicKey)
-    (m : Message) (bits : List Bool) (addr : Word) :
-    (Riscv.initialState image pk m bits).getMem addr =
-      ((loaderMessage image pk m).writeBytesAsWords Riscv.signatureBase
-        (Riscv.bytesOfBits (bits.take 5504))).getMem addr := rfl
-
-/-- The public key occupies its two prescribed doublewords. -/
-theorem initialState_publicKey_word (image : Riscv.Image) (pk : PublicKey)
-    (m : Message) (bits : List Bool) (j : ℕ) (hj : j < 2) :
-    (Riscv.initialState image pk m bits).getMem (Riscv.publicKeyBase + BitVec.ofNat 64 (8 * j)) =
-      pk.extractLsb' (64 * j) 64 := by
-  rw [initialState_getMem, getMem_load_outside, loaderMessage, getMem_load_outside, loaderPublic,
-    getMem_writeBytesAsWords, bytesToWordLE_bytesOfVector]
-  all_goals
-    norm_num [Riscv.bytesOfVector, Riscv.bytesOfBits, hashBits, blockBits, pkBits, msgBits, securityBits, maxSignatureBits, keygenBudget, signBudget, BitVec.toNat_add] <;> omega
-
-/-- The message occupies its four prescribed doublewords. -/
-theorem initialState_message_word (image : Riscv.Image) (pk : PublicKey)
-    (m : Message) (bits : List Bool) (j : ℕ) (hj : j < 4) :
-    (Riscv.initialState image pk m bits).getMem (Riscv.messageBase + BitVec.ofNat 64 (8 * j)) =
-      m.extractLsb' (64 * j) 64 := by
-  rw [initialState_getMem, getMem_load_outside, loaderMessage, getMem_writeBytesAsWords,
-    bytesToWordLE_bytesOfVector]
-  all_goals
-    norm_num [Riscv.bytesOfVector, Riscv.bytesOfBits, hashBits, blockBits, pkBits, msgBits, securityBits, maxSignatureBits, keygenBudget, signBudget, BitVec.toNat_add] <;> omega
-
 /-- Packing raw signature bytes agrees with the specification's zero-extending bit decoder. -/
 theorem bytesToWordLE_bytesOfBits (bits : List Bool) (j : ℕ) :
     bytesToWordLE (((Riscv.bytesOfBits bits).drop (8 * j)).take 8) =
@@ -110,23 +84,6 @@ theorem loaderMessage_zero (image : Riscv.Image) (pk : PublicKey)
   · rfl
   all_goals norm_num [Riscv.bytesOfVector, hashBits, blockBits, pkBits, msgBits, securityBits, maxSignatureBits, keygenBudget, signBudget] <;> omega
 
-/-- The signature buffer contains its first 5504 bits, with zero padding for short inputs. -/
-theorem initialState_signature_word (image : Riscv.Image) (pk : PublicKey)
-    (m : Message) (bits : List Bool) (hdata : image.data.length ≤ 1048576)
-    (j : ℕ) (hj : j < 86) :
-    (Riscv.initialState image pk m bits).getMem (Riscv.signatureBase + BitVec.ofNat 64 (8 * j)) =
-      ofBits 64 ((bits.take 5504).drop (64 * j)) := by
-  rw [initialState_getMem]
-  by_cases hb : j < ((Riscv.bytesOfBits (bits.take 5504)).length + 7) / 8
-  · rw [getMem_writeBytesAsWords _ _ _ (by simp; omega) j hb, bytesToWordLE_bytesOfBits]
-  · rw [getMem_load_outside, loaderMessage_zero _ _ _ hdata]
-    · have hlen : (bits.take 5504).length ≤ 64 * j := by simp only [bytesOfBits_length] at hb; omega
-      rw [List.drop_eq_nil_iff.mpr hlen]
-      rfl
-    all_goals
-      norm_num [Riscv.bytesOfBits, BitVec.toNat_add] at hb ⊢
-      omega
-
 /-- Consecutive aligned words determine exactly the vector read by HASH. -/
 theorem memBits_of_words {n : ℕ} (s : MachineState) (base : Word) (v : BitVec n)
     (ha : alignToDword base = base)
@@ -156,13 +113,6 @@ theorem memBits_of_words {n : ℕ} (s : MachineState) (base : Word) (v : BitVec 
   congr 1
   omega
 
-theorem initialState_publicKey (image : Riscv.Image) (pk : PublicKey)
-    (m : Message) (bits : List Bool) :
-    MemBits (Riscv.initialState image pk m bits) Riscv.publicKeyBase pk := by
-  apply memBits_of_words _ _ _ (by decide +kernel)
-  intro j hj
-  exact initialState_publicKey_word image pk m bits j hj
-
 /-- Decoding and taking a fully contained slice commute. -/
 theorem ofBits_extract {n start len : ℕ} (bits : List Bool) (contained : start + len ≤ n) :
     (ofBits n bits).extractLsb' start len = ofBits len (bits.drop start) := by
@@ -172,15 +122,6 @@ theorem ofBits_extract {n start len : ℕ} (bits : List Bool) (contained : start
   simp only [BitVec.getLsbD_extractLsb', ofBits, BitVec.getLsbD_ofNat, hi, hn,
     decide_true, Bool.true_and, testBit_foldr_bits, List.getD_eq_getElem?_getD,
     List.getElem?_drop]
-
-/-- Every 64-bit signature chunk is available through the exact zero-extended full vector. -/
-theorem initialState_signature (image : Riscv.Image) (pk : PublicKey)
-    (m : Message) (bits : List Bool) (hdata : image.data.length ≤ 1048576) :
-    MemBits (Riscv.initialState image pk m bits) Riscv.signatureBase
-      (ofBits 5504 (bits.take 5504)) := by
-  apply memBits_of_words _ _ _ (by decide +kernel)
-  intro j hj
-  rw [initialState_signature_word image pk m bits hdata j hj, ofBits_extract _ (by omega)]
 
 /-- A byte-aligned slice of a represented vector occupies the corresponding address interval. -/
 theorem memBits_extract {n start len : ℕ} {s : MachineState} {base : Word} {v : BitVec n}
@@ -206,5 +147,60 @@ theorem ofBits_drop_take (bits : List Bool) {cap start len : ℕ}
   simp only [ofBits, BitVec.getLsbD_ofNat, hi, decide_true, Bool.true_and,
     testBit_foldr_bits, List.getD_eq_getElem?_getD, List.getElem?_drop,
     List.getElem?_take, hcap, ↓reduceIte]
+
+/-! ## The view loader -/
+
+theorem loadView_getMem (image : Riscv.Image) (pk : PublicKey) (m : Message) (view : List Bool)
+    (addr : Word) :
+    (RiscvHint.loadView image pk m view).getMem addr =
+      ((loaderMessage image pk m).writeBytesAsWords Riscv.signatureBase
+        (Riscv.bytesOfBits (view.take RiscvHint.maxViewBits))).getMem addr := rfl
+
+theorem loadView_publicKey_word (image : Riscv.Image) (pk : PublicKey)
+    (m : Message) (view : List Bool) (j : ℕ) (hj : j < 2) :
+    (RiscvHint.loadView image pk m view).getMem (Riscv.publicKeyBase + BitVec.ofNat 64 (8 * j)) =
+      pk.extractLsb' (64 * j) 64 := by
+  rw [loadView_getMem, getMem_load_outside, loaderMessage, getMem_load_outside, loaderPublic,
+    getMem_writeBytesAsWords, bytesToWordLE_bytesOfVector]
+  all_goals
+    norm_num [Riscv.bytesOfVector, Riscv.bytesOfBits, hashBits, blockBits, pkBits, msgBits,
+      securityBits, RiscvHint.maxViewBits, BitVec.toNat_add] <;> omega
+
+theorem loadView_message_word (image : Riscv.Image) (pk : PublicKey)
+    (m : Message) (view : List Bool) (j : ℕ) (hj : j < 4) :
+    (RiscvHint.loadView image pk m view).getMem (Riscv.messageBase + BitVec.ofNat 64 (8 * j)) =
+      m.extractLsb' (64 * j) 64 := by
+  rw [loadView_getMem, getMem_load_outside, loaderMessage, getMem_writeBytesAsWords,
+    bytesToWordLE_bytesOfVector]
+  all_goals
+    norm_num [Riscv.bytesOfVector, Riscv.bytesOfBits, hashBits, blockBits, pkBits, msgBits,
+      securityBits, RiscvHint.maxViewBits, BitVec.toNat_add] <;> omega
+
+/-- The view buffer holds the view's first `maxViewBits` bits, with zero padding. -/
+theorem loadView_word (image : Riscv.Image) (pk : PublicKey) (m : Message) (view : List Bool)
+    (hdata : image.data.length ≤ 1048576) (j : ℕ) (hj : j < 16384) :
+    (RiscvHint.loadView image pk m view).getMem (Riscv.signatureBase + BitVec.ofNat 64 (8 * j)) =
+      ofBits 64 ((view.take RiscvHint.maxViewBits).drop (64 * j)) := by
+  rw [loadView_getMem]
+  by_cases hb : j < ((Riscv.bytesOfBits (view.take RiscvHint.maxViewBits)).length + 7) / 8
+  · rw [getMem_writeBytesAsWords _ _ _ (by simp [RiscvHint.maxViewBits]; omega) j hb,
+      bytesToWordLE_bytesOfBits]
+  · rw [getMem_load_outside, loaderMessage_zero _ _ _ hdata]
+    · have hlen : (view.take RiscvHint.maxViewBits).length ≤ 64 * j := by
+        simp only [bytesOfBits_length] at hb; omega
+      rw [List.drop_eq_nil_iff.mpr hlen]
+      rfl
+    all_goals
+      norm_num [Riscv.bytesOfBits, RiscvHint.maxViewBits, BitVec.toNat_add] at hb ⊢
+      omega
+
+/-- The first 7296 view bits, a whole number of words covering the nonce and every chain value. -/
+theorem loadView_memBits (image : Riscv.Image) (pk : PublicKey) (m : Message) (view : List Bool)
+    (hdata : image.data.length ≤ 1048576) :
+    MemBits (RiscvHint.loadView image pk m view) Riscv.signatureBase (ofBits 7296 view) := by
+  apply memBits_of_words _ _ _ (by decide +kernel)
+  intro j hj
+  rw [loadView_word image pk m view hdata j (by omega), ofBits_extract _ (by omega),
+    ofBits_drop_take _ (by unfold RiscvHint.maxViewBits; omega)]
 
 end OptimalOTS.Riscv2Program

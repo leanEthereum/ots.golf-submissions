@@ -4,10 +4,11 @@ import Submissions.UpperRiscvHint.Valid
 /-!
 # The digit layout
 
-Reveal one input from each of the 32 chains: chain `k` is revealed at position `31 - d_k`, where
-`d_k` is digit `k` of the accepted index, so that the verifier makes `d_k + 1` hash steps on
-chain `k`. The digits sum to `target`, so every disclosure set is a cut of the same cost, and
-distinct indices give distinct cuts.
+Reveal one node from each of the 32 chains: chain `k` is revealed at position `31 - d_k`, where
+`d_k` is digit `k` of the accepted index, so that the verifier makes `d_k + 1` hash steps on a
+normal chain and `d_k` on a cap (digit 0 reveals the cap's top). The digits sum to `target` and
+the caps are fixed, so every disclosure set is a cut of the same cost, and distinct indices give
+distinct cuts.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -55,14 +56,16 @@ theorem fixedPositions_val (i : RawIdx) (k : Fin 32) :
     (fixedPositions i k).val = 31 - digit i.val k := by
   simp [fixedPositions, fixedDigits, Fin.val_rev]
 
-theorem fixedPositions_sum (i : Idx) : ∑ k, (32 - (fixedPositions i k).val) = target + 32 := by
-  have : ∑ k : Fin 32, (32 - (fixedPositions i k).val) = ∑ k : Fin 32, ((fixedDigits i k).val + 1) := by
+theorem fixedPositions_sum (i : Idx) :
+    ∑ k, (32 - firstEval k (fixedPositions i k)) = target + 16 := by
+  have : ∑ k : Fin 32, (32 - firstEval k (fixedPositions i k)) =
+      ∑ k : Fin 32, ((fixedDigits i k).val + if k.val < 16 then 0 else 1) := by
     refine Finset.sum_congr rfl fun k _ => ?_
-    simp only [fixedPositions, Fin.val_rev]
+    simp only [firstEval, fixedPositions, Fin.val_rev]
     have := (fixedDigits i k).isLt
-    omega
+    split_ifs <;> omega
   rw [this, Finset.sum_add_distrib, fixedDigits_sum]
-  simp
+  congr 1
 
 /-- The disclosure set of an accepted index. -/
 def fixedChoice (i : RawIdx) : Choice := fixedPositions i
@@ -83,11 +86,11 @@ theorem fixedCut_isCut (i : RawIdx) : IsCut (cutOf (fixedChoice i)) := isCut_cut
 
 theorem fixedCut_card (i : RawIdx) : (cutOf (fixedChoice i)).card = 32 := card_cutOf _
 
-/-- Every disclosure set costs `target + 32 + 12 = 202` compressions to reconstruct. -/
+/-- Every disclosure set costs `target + 16 + 14 = 188` compressions to reconstruct. -/
 theorem fixedCut_cost (i : Idx) :
-    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 202 := by
+    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 188 := by
   rw [cost_cutOf]
-  change ∑ k, (32 - (fixedPositions i k).val) + 12 = 202
+  change ∑ k, (32 - firstEval k (fixedPositions i k)) + 14 = 188
   rw [fixedPositions_sum]
   rfl
 

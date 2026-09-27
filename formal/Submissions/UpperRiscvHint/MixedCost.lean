@@ -10,16 +10,19 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-def earlyHash (k : ℕ) : ℕ := if expands k then 1 else 0
-
-theorem earlyHash_cases (k : ℕ) : earlyHash k = 0 ∨ earlyHash k = 1 := by
-  unfold earlyHash; split_ifs <;> simp
+/-- The hashes of chain `k`: its digit for a cap, its digit plus one for a normal chain. -/
+def remaining (index : RawIdx) (k : Fin 32) : ℕ := 32-firstAt index k
 
 theorem steps_eq_digit (index : RawIdx) (k : Fin 32) :
-    32-RiscvUpperForest.ForestVerifier.pos index k = digit index.val k + 1 := by
+    remaining index k = digit index.val k + 1 - if k.val < 16 then 1 else 0 := by
   have h := digit_lt_32' index.val k
-  rw [RiscvUpperForest.ForestVerifier.pos, fixedPositions_val]
-  omega
+  unfold remaining firstAt firstEval
+  rw [fixedPositions_val]
+  split_ifs <;> omega
+
+theorem lead_pair (q : ℕ) (j : ℕ) (hj : j < 2) :
+    (if 2*q+j < 16 then 1 else 0) = lead q := by
+  unfold lead; split_ifs <;> omega
 
 theorem fineDigit_lt (index : RawIdx) (q : ℕ) (hq : q < 16) :
     digit index.val (2*q) < 2^fineWidth q := by
@@ -35,10 +38,11 @@ theorem coarseDigit_lt_copies (index : RawIdx) (q : ℕ) (hq : q < 16) :
     simp [wid, copies, show 2*q+1 < 32 by omega]
   rw [he] at h; exact h
 
-/-- The packed subtraction selects the coarse copy and the fine table entry. -/
+/-- The packed subtraction selects the coarse copy and the fine table entry, one row later for a
+cap pair. -/
 theorem pair_landing (index : RawIdx) (q : ℕ) (hq : q < 16) :
-    landing0 q-dispatch index q = copyStart q (coarseDigit index q) +
-      4*(2^fineWidth q-1-digit index.val (2*q)) := by
+    landing0 q+4*lead q-dispatch index q = copyStart q (coarseDigit index q) +
+      4*(2^fineWidth q-1-digit index.val (2*q)+lead q) := by
   have hc := coarseDigit_lt_copies index q hq
   have hf := fineDigit_lt index q hq
   have e : copyStart q 0 = copyStart q (coarseDigit index q)+1024*coarseDigit index q := by
@@ -48,21 +52,9 @@ theorem pair_landing (index : RawIdx) (q : ℕ) (hq : q < 16) :
   rw [e]
   omega
 
-/-- Hash work is fixed by the accepted digit sum. -/
-theorem all_chain_hashes (index : Idx) :
-    ∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k) = 190 := by
-  exact fixedPositions_sum index
-
-/-- Chain work plus all pointer updates, dispatches, redirects, and the single length change. -/
-def chainsCost (index : Idx) : ℕ :=
-  (∑ k : Fin 32, (32-RiscvUpperForest.ForestVerifier.pos index k)) +
-    2*32 + 2*16 + (∑ k : Fin 32, earlyHash k) + 1
-
-theorem chainsCost_eq (index : Idx) : chainsCost index = 295 := by
-  have he : ∑ k : Fin 32, earlyHash k = 8 := by decide +kernel
-  rw [chainsCost, all_chain_hashes, he]
-
-theorem totalCost (index : Idx) : 33+chainsCost index+21 = 349 := by
-  rw [chainsCost_eq]
+/-- Hash work is fixed by the accepted digit sum: 158 digit units and one extra hash for each of
+the sixteen normal chains. -/
+theorem all_chain_hashes (index : Idx) : ∑ k : Fin 32, remaining index k = 174 :=
+  fixedPositions_sum index
 
 end OptimalOTS.RiscvMixedProgram

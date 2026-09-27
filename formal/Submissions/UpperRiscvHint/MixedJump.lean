@@ -36,21 +36,26 @@ theorem landing0_mod' : ∀ q : Fin 16, landing0 q % 4 = 0 := by decide +kernel
 
 theorem landing0_mod (q : ℕ) (hq : q < 16) : landing0 q % 4 = 0 := landing0_mod' ⟨q, hq⟩
 
-/-- The computed jump lands on `landing0 q` less the dispatch value. -/
+theorem lead_le (q : ℕ) : lead q ≤ 1 := by unfold lead; split_ifs <;> omega
+
+/-- The computed jump lands on `landing0 q`, one row later for a cap pair, less the dispatch
+value. -/
 theorem jump_target (index : RawIdx) (q : ℕ) (hq : q < 16) (v : Word)
     (hv : v.toNat = baseLane q - dispatch index q) :
-    (v + signExtend12 (imm12 (jumpImm q))) &&& ~~~(1#64) = W (landing0 q - dispatch index q) := by
+    (v + signExtend12 (imm12 (jumpImm q))) &&& ~~~(1#64) =
+      W (landing0 q + 4 * lead q - dispatch index q) := by
   obtain ⟨r1, r2⟩ := jump_offset_range q hq
   have hb := baseLane_bounds q hq
   have hl := landing0_bounds q hq
   have hm := landing0_mod q hq
   have hd := dispatch_le index q
+  have h1 := lead_le q
   have hv' : v = W (baseLane q - dispatch index q) := by
     apply BitVec.eq_of_toNat_eq
     rw [hv, W_toNat _ (by omega)]
   rw [hv', W_add_imm _ _ r1 r2 (by unfold jumpImm at *; omega) (by omega)]
   have e : (((baseLane q - dispatch index q : ℕ) : ℤ) + jumpImm q).toNat =
-      landing0 q - dispatch index q := by
+      landing0 q + 4 * lead q - dispatch index q := by
     unfold jumpImm at *
     omega
   rw [e]

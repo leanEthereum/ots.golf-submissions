@@ -9,32 +9,83 @@ open Riscv2Program
 set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 
-def CtxReg (r : Reg) : Prop := r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x13
+def CtxReg (r : Reg) : Prop :=
+  r = .x30 ∨ r = .x31 ∨ r = .x5 ∨ r = .x13 ∨ r = .x6 ∨ r = .x10 ∨ r = .x12 ∨ r = .x28
 
-theorem Ctx.frame {s t : MachineState} {index : RawIdx} {pk : PublicKey} (ctx : Ctx s index pk)
+theorem Ctx.frame {s t : MachineState} {index : RawIdx} {view : List Bool} {pk : PublicKey}
+    (ctx : Ctx s index view pk)
     (regs : ∀ r, CtxReg r → t.getReg r = s.getReg r) (mem : t.mem = s.mem)
-    (code : t.code = s.code) : Ctx t index pk := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ctx.code.code_eq code⟩
+    (code : t.code = s.code) : Ctx t index view pk := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, by rw [code]; exact ctx.null, ctx.code.code_eq code⟩
   · rw [regs .x30 (by simp [CtxReg])]; exact ctx.pk0
   · rw [regs .x31 (by simp [CtxReg])]; exact ctx.pk1
   · rw [regs .x5 (by simp [CtxReg])]; exact ctx.call
   · intro q
     simpa only [MachineState.getHalfword, MachineState.getMem, mem] using ctx.lanes q
-  · rw [regs .x13 (by simp [CtxReg])]; exact ctx.sigLen
+  · intro q h
+    rw [regs .x10 (by simp [CtxReg]), regs .x12 (by simp [CtxReg])] at h
+    rw [regs .x28 (by simp [CtxReg])]
+    exact ctx.row q h
+  · rw [regs .x13 (by simp [CtxReg])]; exact ctx.viewLen
+  · rw [regs .x6 (by simp [CtxReg])]; exact ctx.lenWord
+
+/-- Moving the pointers from chain `2q` to chain `2q + 1` keeps pair `q`'s halfword in `x28`. -/
+theorem Ctx.enter {s t : MachineState} {index : RawIdx} {view : List Bool} {pk : PublicKey}
+    (ctx : Ctx s index view pk) (q : Fin 16)
+    (s10 : s.getReg .x10 = W (work (2*q.val))) (s12 : s.getReg .x12 = W (outAddr (2*q.val)))
+    (t10 : t.getReg .x10 = W (work (2*q.val+1)))
+    (t12 : t.getReg .x12 = W (outAddr (2*q.val+1)))
+    (regs : ∀ r, r ≠ .x10 → r ≠ .x12 → t.getReg r = s.getReg r) (mem : t.mem = s.mem)
+    (code : t.code = s.code) : Ctx t index view pk := by
+  have hq := q.isLt
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, by rw [code]; exact ctx.null, ctx.code.code_eq code⟩
+  · rw [regs .x30 (by decide) (by decide)]; exact ctx.pk0
+  · rw [regs .x31 (by decide) (by decide)]; exact ctx.pk1
+  · rw [regs .x5 (by decide) (by decide)]; exact ctx.call
+  · intro q
+    simpa only [MachineState.getHalfword, MachineState.getMem, mem] using ctx.lanes q
+  · intro q' h
+    have hq' := q'.isLt
+    rw [regs .x28 (by decide) (by decide)]
+    rw [t12] at h
+    rcases h with h | ⟨h, _⟩
+    · have e := outAddr_inj (by omega) (by omega) h
+      have : q' = q := Fin.ext (by omega)
+      subst this
+      exact ctx.row q' (Or.inr ⟨s12, s10⟩)
+    · have e := outAddr_inj (by omega) (by omega) h
+      omega
+  · rw [regs .x13 (by decide) (by decide)]; exact ctx.viewLen
+  · rw [regs .x6 (by decide) (by decide)]; exact ctx.lenWord
+
+/-- The prologue of pair `q` points at chain `2q` and loads the pair's halfword into `x28`. -/
+theorem Ctx.prologue {s t : MachineState} {index : RawIdx} {view : List Bool} {pk : PublicKey}
+    (ctx : Ctx s index view pk) (q : Fin 16)
+    (t10 : t.getReg .x10 = W (work (2*q.val))) (t12 : t.getReg .x12 = W (outAddr (2*q.val)))
+    (t28 : (t.getReg .x28).toNat = baseLane q - dispatch index q)
+    (regs : ∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → t.getReg r = s.getReg r)
+    (mem : t.mem = s.mem) (code : t.code = s.code) : Ctx t index view pk := by
+  have hq := q.isLt
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, by rw [code]; exact ctx.null, ctx.code.code_eq code⟩
+  · rw [regs .x30 (by decide) (by decide) (by decide)]; exact ctx.pk0
+  · rw [regs .x31 (by decide) (by decide) (by decide)]; exact ctx.pk1
+  · rw [regs .x5 (by decide) (by decide) (by decide)]; exact ctx.call
+  · intro q
+    simpa only [MachineState.getHalfword, MachineState.getMem, mem] using ctx.lanes q
+  · intro q' h
+    have hq' := q'.isLt
+    rw [t12] at h
+    rcases h with h | ⟨h, _⟩
+    · have e := outAddr_inj (by omega) (by omega) h
+      omega
+    · have e := outAddr_inj (by omega) (by omega) h
+      have : q' = q := Fin.ext (by omega)
+      subst this
+      exact t28
+  · rw [regs .x13 (by decide) (by decide) (by decide)]; exact ctx.viewLen
+  · rw [regs .x6 (by decide) (by decide) (by decide)]; exact ctx.lenWord
 
 variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
-
-theorem HashInv.frame {s t : MachineState} {x : graph.Assignment} {k : Fin 32} {base : ℕ}
-    (inv : HashInv index wire pk s x k base) (next : ℕ) (hp : t.getReg .x10 = W next)
-    (hb : 32 ≤ next ∧ next+24 ≤ 0x78000000)
-    (regs : ∀ r, r ≠ .x10 → r ≠ .x28 → t.getReg r = s.getReg r)
-    (mem : t.mem = s.mem) (code : t.code = s.code) : HashInv index wire pk t x k next := by
-  refine ⟨inv.ctx.frame (fun r hr => ?_) mem code, hp, hb, ?_, ?_, ?_, ?_⟩
-  · rcases hr with rfl | rfl | rfl | rfl <;> exact regs _ (by decide) (by decide)
-  · rw [regs .x11 (by decide) (by decide)]; exact inv.length
-  · rw [regs .x12 (by decide) (by decide)]; exact inv.out
-  · intro j hj; exact memBits_of_mem_eq mem (inv.payload j hj)
-  · intro j hj; exact memBits_of_mem_eq mem (inv.done j hj)
 
 theorem holdsAt_frame {s t : MachineState} {x : graph.Assignment} {k : Fin 32} {level : ℕ}
     (mem : t.mem = s.mem) (held : HoldsAt s x k level) : HoldsAt t x k level := by
@@ -42,23 +93,16 @@ theorem holdsAt_frame {s t : MachineState} {x : graph.Assignment} {k : Fin 32} {
   split_ifs at * <;> exact memBits_of_mem_eq mem held
 
 /-- Hash-input width in `x11` at the boundary before chain `k`: the previous chain's width. -/
-def prevBits (k : ℕ) : ℕ := if k ≤ 16 then 144 else 192
+def prevBits (k : ℕ) : ℕ := if k ≤ 16 then 192 else 144
 
 /-- State at a boundary between complete chains. -/
 structure ChainsInv (s : MachineState) (x : graph.Assignment) (k : ℕ) : Prop where
-  ctx : Ctx s index pk
+  ctx : Ctx s index wire pk
   input : s.getReg .x10 = W (prevInput k)
   out : 1 ≤ k → s.getReg .x12 = W (outAddr (k-1))
   length : s.getReg .x11 = W (prevBits k)
   payload : PayloadFrom s wire k
   done : Completed s (tops x) k
-
-theorem rootSlice_of_memAnswer {s : MachineState} (k : Fin 32) {y : BitVec 256}
-    (answer : MemBits s (W (outAddr k)) y) :
-    MemBits s (W (rootSliceAddr k)) (rootSlice k y) := by
-  have h := memBits_extract answer (rootSlice_aligned k) (rootSlice_contained k)
-  rw [W_add, ← rootSlice_address k] at h
-  exact h
 
 theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Fin 32}
     (inv : HashInv index wire pk s x k (work k))
@@ -74,15 +118,14 @@ theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Fin 32}
     congr 1
   · intro j hj
     by_cases he : j = k
-    · subst j; exact rootSlice_of_memAnswer k answer
+    · subst j; exact answer
     · exact inv.done j (by have hne : j.val ≠ k.val := fun h => he (Fin.ext h); omega)
 
-/-- After the last chain (which is on the grid), `x10` is its cell. -/
-theorem prevInput_32 : prevInput 32 = slot 31 := by decide +kernel
-
 theorem final_root {s : MachineState} {x : graph.Assignment}
-    (inv : ChainsInv index wire pk s x 32) : RootInv index pk s x := by
-  refine ⟨inv.ctx, ?_, inv.out (by decide), completed_root s (tops x) inv.done⟩
-  rw [inv.input, prevInput_32]
+    (hlen : wire.length = honestViewBits) (inv : ChainsInv index wire pk s x 32) :
+    RootInv index wire pk s x := by
+  refine ⟨inv.ctx, inv.input, ?_, inv.out (by decide), completed_root s (tops x) inv.done⟩
+  rw [inv.ctx.viewLen, hlen]
+  rfl
 
 end OptimalOTS.RiscvMixedProgram

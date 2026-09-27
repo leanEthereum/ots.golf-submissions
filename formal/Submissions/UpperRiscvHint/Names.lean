@@ -4,16 +4,16 @@ import Submissions.UpperRiscvHint.Semantics
 /-!
 # The mixed-width chain graph
 
-There are 32 chains of 32 hash steps. Chains 0–15 carry 144-bit states and chains
-16–31 carry 192-bit states. Chains are indexed in execution order, which is also
-the order of their 24-byte working cells. Twenty wire values sit on that grid;
-four more (chains 6, 9, 12, 15) are hashed in place six bytes above their cells.
-Every hash returns 256 bits; the next state starts at bit `truncOff k`: 64, or 112
-for the four chains hashed in place above their cells. A source is already state-width.
+There are 32 chains of 32 hash steps, indexed in execution order. Chains 0–15 are *caps* with
+192-bit states; chains 16–31 are *normals* with 144-bit states. Every hash returns 256 bits; the
+next state starts at bit `truncOff k`: 0 for a cap, 64 for a normal. A source is already
+state-width.
 
-The root commits to the low 192 bits of all 32 tops, in cell order, for 6144 bits
-(`rootCat`). The key-generation input lengths 144, 192 and 6144 differ from the
-512-bit index input.
+Each chain ends in a `top` node read by the root. A cap's top is its final 192-bit state; a normal
+chain commits its whole last answer (256 bits), except chain 31, which commits its low 192 bits.
+The root input interleaves the tops in memory order, cap `j` below normal `16 + j`, for 7104 bits
+(`rootCat`). The key-generation input lengths 144, 192 and 7104 differ from the 512-bit index
+input.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -28,9 +28,9 @@ open OptimalOTS.Dag
 
 namespace Forest
 
-/-- Width of chain states, indexed in execution order. -/
+/-- Width of chain states, indexed in execution order: caps first. -/
 def chainBits (k : Fin 32) : ℕ :=
-  if k.val < 16 then 144 else 192
+  if k.val < 16 then 192 else 144
 
 theorem chainBits_cases (k : Fin 32) :
     chainBits k = 144 ∨ chainBits k = 192 := by
@@ -42,10 +42,10 @@ theorem chainBits_ge (k : Fin 32) : 144 ≤ chainBits k := by
 theorem chainBits_le (k : Fin 32) : chainBits k ≤ 192 := by
   rcases chainBits_cases k with h | h <;> omega
 
-/-- Bit offset of a chain's next state inside a 256-bit answer: the answer is written eight
-bytes below the state, except for chains 6, 9, 12 and 15, whose answer starts fourteen bytes below it. -/
+/-- Bit offset of a chain's next state inside a 256-bit answer: a cap keeps answer bytes
+`[0, 24)`, a normal answer bytes `[8, 26)`. -/
 def truncOff (k : Fin 32) : ℕ :=
-  if k.val = 6 ∨ k.val = 9 ∨ k.val = 12 ∨ k.val = 15 then 112 else 64
+  if k.val < 16 then 0 else 64
 
 theorem truncOff_add_le' : ∀ k : Fin 32, truncOff k + chainBits k ≤ 256 := by
   decide +kernel
@@ -57,30 +57,48 @@ theorem truncOff_mod8' : ∀ k : Fin 32, truncOff k % 8 = 0 := by
 
 theorem truncOff_mod8 (k : Fin 32) : truncOff k % 8 = 0 := truncOff_mod8' k
 
+/-- Width of the value the root commits for chain `k`. -/
+def topBits (k : Fin 32) : ℕ :=
+  if k.val < 16 ∨ k.val = 31 then 192 else 256
+
+theorem topBits_ge (k : Fin 32) : 192 ≤ topBits k := by
+  unfold topBits; split_ifs <;> omega
+
+theorem topBits_le (k : Fin 32) : topBits k ≤ 256 := by
+  unfold topBits; split_ifs <;> omega
+
+theorem topBits_of_cap {k : Fin 32} (hk : k.val < 16) : topBits k = chainBits k := by
+  simp [topBits, chainBits, hk]
+
+/-- The committed part of a chain's last answer: its low `topBits k` bits. -/
+def topOf (k : Fin 32) (w : BitVec 256) : BitVec (topBits k) := w.setWidth (topBits k)
+
 /-- Node names. -/
 inductive Name where
   | src (k : Fin 32)
   | ci (k : Fin 32) (t : Fin 32)
   | ch (k : Fin 32) (t : Fin 32)
   | cv (k : Fin 32) (t : Fin 32)
+  | top (k : Fin 32)
   | rc
   | rh
   deriving DecidableEq
 
 /-- Number of nodes. -/
-def N : ℕ := 3106
+def N : ℕ := 3138
 
 namespace Name
 
-/-- Topological index. Chain `k` occupies `97 k, …, 97 k + 96`: its source, then input, hash and
-value of each of its 32 levels. -/
+/-- Topological index. Chain `k` occupies `98 k, …, 98 k + 97`: its source, then input, hash and
+value of each of its 32 levels, then its top. -/
 def idx : Name → ℕ
-  | src k => 97 * k
-  | ci k t => 97 * k + 1 + 3 * t
-  | ch k t => 97 * k + 2 + 3 * t
-  | cv k t => 97 * k + 3 + 3 * t
-  | rc => 3104
-  | rh => 3105
+  | src k => 98 * k
+  | ci k t => 98 * k + 1 + 3 * t
+  | ch k t => 98 * k + 2 + 3 * t
+  | cv k t => 98 * k + 3 + 3 * t
+  | top k => 98 * k + 97
+  | rc => 3136
+  | rh => 3137
 
 theorem idx_lt (n : Name) : n.idx < N := by
   cases n <;> simp only [idx, N] <;> omega
@@ -93,13 +111,14 @@ def len : Name → ℕ
   | ci k _ => chainBits k
   | ch _ _ => 256
   | cv _ _ => 256
-  | rc => 6144
+  | top k => topBits k
+  | rc => 7104
   | rh => 256
 
-/-- Query cost of a node: one compression for every chain hash, thirteen for the root. -/
+/-- Query cost of a node: one compression for every chain hash, fourteen for the root. -/
 def cost : Name → ℕ
   | ch _ _ => 1
-  | rh => 12
+  | rh => 14
   | _ => 0
 
 /-- The value node feeding the chain input `ci k t`: the source for `t = 0`, else `cv k (t-1)`. -/
@@ -111,7 +130,8 @@ def child : Name → Option Name
   | src k => some (ci k 0)
   | ci k t => some (ch k t)
   | ch k t => some (cv k t)
-  | cv k t => if h : t.val = 31 then some rc else some (ci k ⟨t + 1, by omega⟩)
+  | cv k t => if h : t.val = 31 then some (top k) else some (ci k ⟨t + 1, by omega⟩)
+  | top _ => some rc
   | rc => some rh
   | rh => none
 
@@ -121,18 +141,19 @@ def parents : Name → Finset Name
   | ci k t => {prev k t}
   | ch k t => {ci k t}
   | cv k t => {ch k t}
-  | rc => Finset.univ.image fun k => cv k 31
+  | top k => {cv k 31}
+  | rc => Finset.univ.image top
   | rh => {rc}
 
 theorem mem_parents_iff (m n : Name) : m ∈ parents n ↔ child m = some n := by
   cases n <;> cases m <;>
     simp only [parents, child, prev, Finset.mem_insert, Finset.mem_singleton,
       Finset.mem_image, Finset.mem_univ, true_and, Finset.notMem_empty, Option.some.injEq,
-      reduceCtorEq, Name.ci.injEq, Name.ch.injEq, Name.cv.injEq, Fin.ext_iff,
+      reduceCtorEq, Name.ci.injEq, Name.ch.injEq, Name.cv.injEq, Name.top.injEq, Fin.ext_iff,
       Fin.val_zero, iff_true, iff_false, false_iff, or_false, exists_false] <;>
     (try split_ifs) <;>
     (try simp only [Option.some.injEq, reduceCtorEq, Name.src.injEq, Name.ci.injEq,
-      Name.cv.injEq, Fin.ext_iff, iff_false, false_iff, not_false_eq_true]) <;>
+      Name.cv.injEq, Name.top.injEq, Fin.ext_iff, iff_false, false_iff, not_false_eq_true]) <;>
     first | omega | exact ⟨_, rfl⟩ | (constructor <;> intro h <;> first | trivial | omega | (obtain ⟨_, h1, h2⟩ := h; omega) | exact ⟨_, rfl, by omega⟩)
 
 theorem idx_lt_of_mem_parents {m n : Name} (h : m ∈ parents n) : m.idx < n.idx := by
@@ -145,27 +166,28 @@ end Name
 
 /-- The inverse of `Name.fin`. -/
 def ofFin (v : Fin N) : Name :=
-  if h₁ : v.val < 3104 then
-    let k : Fin 32 := ⟨v.val / 97, by omega⟩
-    let r := v.val % 97
+  if h₁ : v.val < 3136 then
+    let k : Fin 32 := ⟨v.val / 98, by omega⟩
+    let r := v.val % 98
     if h₂ : r = 0 then .src k
+    else if h₄ : r = 97 then .top k
     else
       let t : Fin 32 := ⟨(r - 1) / 3, by omega⟩
       if h₃ : (r - 1) % 3 = 0 then .ci k t
       else if h₃' : (r - 1) % 3 = 1 then .ch k t
       else .cv k t
-  else if h₁₀ : v.val < 3105 then .rc
+  else if h₁₀ : v.val < 3137 then .rc
   else .rh
 
 theorem Name.idx_injective : Function.Injective Name.idx := by
   intro m n h
   cases m <;> cases n <;> simp only [Name.idx] at h <;>
-    (try simp only [Name.src.injEq, Name.ci.injEq, Name.ch.injEq, Name.cv.injEq, Fin.ext_iff,
-      reduceCtorEq]) <;>
+    (try simp only [Name.src.injEq, Name.ci.injEq, Name.ch.injEq, Name.cv.injEq, Name.top.injEq,
+      Fin.ext_iff, reduceCtorEq]) <;>
     omega
 
 theorem fin_ofFin_aux (v : Fin N) : (ofFin v).fin = v := by
-  have hv : v.val < 3106 := v.isLt
+  have hv : v.val < 3138 := v.isLt
   rw [Fin.ext_iff]
   simp only [ofFin]
   split_ifs <;> simp only [Name.fin, Name.idx] <;> omega
@@ -184,58 +206,63 @@ def nameEquiv : Name ≃ Fin N where
 theorem Name.fin_injective : Function.Injective Name.fin := nameEquiv.injective
 
 abbrev NameSum := Fin 32 ⊕ (Fin 32 × Fin 32) ⊕ (Fin 32 × Fin 32) ⊕ (Fin 32 × Fin 32) ⊕
-  Unit ⊕ Unit
+  Fin 32 ⊕ Unit ⊕ Unit
 
 def Name.toSum : Name → NameSum
   | src k => .inl k
   | ci k t => .inr (.inl (k, t))
   | ch k t => .inr (.inr (.inl (k, t)))
   | cv k t => .inr (.inr (.inr (.inl (k, t))))
-  | rc => .inr (.inr (.inr (.inr (.inl ()))))
-  | rh => .inr (.inr (.inr (.inr (.inr ()))))
+  | top k => .inr (.inr (.inr (.inr (.inl k))))
+  | rc => .inr (.inr (.inr (.inr (.inr (.inl ())))))
+  | rh => .inr (.inr (.inr (.inr (.inr (.inr ())))))
 
 def Name.ofSum : NameSum → Name
   | .inl k => src k
   | .inr (.inl (k, t)) => ci k t
   | .inr (.inr (.inl (k, t))) => ch k t
   | .inr (.inr (.inr (.inl (k, t)))) => cv k t
-  | .inr (.inr (.inr (.inr (.inl ())))) => rc
-  | .inr (.inr (.inr (.inr (.inr ())))) => rh
+  | .inr (.inr (.inr (.inr (.inl k)))) => top k
+  | .inr (.inr (.inr (.inr (.inr (.inl ()))))) => rc
+  | .inr (.inr (.inr (.inr (.inr (.inr ()))))) => rh
 
 def Name.sumEquiv : Name ≃ NameSum where
   toFun := Name.toSum
   invFun := Name.ofSum
   left_inv n := by cases n <;> rfl
   right_inv s := by
-    rcases s with k | ⟨k, t⟩ | ⟨k, t⟩ | ⟨k, t⟩ | ⟨⟩ | ⟨⟩ <;> rfl
+    rcases s with k | ⟨k, t⟩ | ⟨k, t⟩ | ⟨k, t⟩ | k | ⟨⟩ | ⟨⟩ <;> rfl
 
 instance : Fintype Name := Fintype.ofEquiv NameSum Name.sumEquiv.symm
 
 theorem Name.sum_eq {M : Type} [AddCommMonoid M] (f : Name → M) :
     ∑ n, f n = (∑ k, f (src k)) + (∑ k, ∑ t, f (ci k t)) + (∑ k, ∑ t, f (ch k t)) +
-      (∑ k, ∑ t, f (cv k t)) + f rc + f rh := by
+      (∑ k, ∑ t, f (cv k t)) + (∑ k, f (top k)) + f rc + f rh := by
   rw [← Fintype.sum_equiv Name.sumEquiv.symm (fun s => f (Name.ofSum s)) f (fun _ => rfl)]
   simp only [Fintype.sum_sum_type, Fintype.sum_prod_type, Fintype.sum_unique, Name.ofSum,
     add_assoc]
 
 /-! ## The root input -/
 
-/-- The low 192 bits of a top. -/
-def lo192 (x : BitVec 256) : BitVec 192 := x.setWidth 192
+/-- The chain in root slot `s`: slot `2 j` holds cap `j`, slot `2 j + 1` normal `16 + j`. -/
+def slotChain (s : ℕ) : Fin 32 := ⟨s % 2 * 16 + s / 2 % 16, by omega⟩
 
-/-- The low 192 bits of the tops of chains `0 … j`: `lo192 (c j) ‖ ⋯ ‖ lo192 (c 0)`, with
-`c 0` in the low bits, as the tops lie in memory. -/
-def lowCat (c : ℕ → BitVec 256) : (j : ℕ) → BitVec (192 * (j + 1))
-  | 0 => lo192 (c 0)
-  | j + 1 => (lo192 (c (j + 1)) ++ lowCat c j).cast (by omega)
+/-- Total width of root slots `0 … s`. -/
+def slotWidth : ℕ → ℕ
+  | 0 => topBits (slotChain 0)
+  | s + 1 => topBits (slotChain (s + 1)) + slotWidth s
 
-/-- The chain tops as a function on naturals. -/
-def topFun (c : Fin 32 → BitVec 256) (j : ℕ) : BitVec 256 := if h : j < 32 then c ⟨j, h⟩ else 0
+/-- The tops of slots `0 … s`, slot `0` in the low bits, as they lie in memory. -/
+def slotCat (c : (k : Fin 32) → BitVec (topBits k)) : (s : ℕ) → BitVec (slotWidth s)
+  | 0 => c (slotChain 0)
+  | s + 1 => c (slotChain (s + 1)) ++ slotCat c s
 
-/-- The 768 bytes of the working grid: the low 192 bits of every top, chain `0`
-lowest, exactly as the cells lie in memory. -/
-def rootCat (c : Fin 32 → BitVec 256) : BitVec 6144 :=
-  (lowCat (topFun c) 31).cast (by norm_num)
+theorem slotWidth_31 : slotWidth 31 = 7104 := by decide
+
+/-- The 888-byte root input: cap `j`'s 24-byte top, then normal `16 + j`'s 32-byte top (24 bytes
+for chain 31), for `j = 0, …, 15`, from low to high bits. -/
+def rootCat (c : (k : Fin 32) → BitVec (topBits k)) : BitVec 7104 :=
+  (slotCat c 31).cast slotWidth_31
 
 /-! ## The graph -/
 
@@ -258,7 +285,8 @@ def detVal (n : Name) (x : Asg) : BitVec n.len :=
   match n with
   | .ci k t => trunc k (x (Name.prev k t).fin)
   | .cv k t => (x (Name.ch k t).fin).cast (lenF_ch k t)
-  | .rc => rootCat fun k => (x (Name.cv k 31).fin).cast (lenF_fin _)
+  | .top k => topOf k ((x (Name.cv k 31).fin).cast (lenF_fin _))
+  | .rc => rootCat fun k => (x (Name.top k).fin).cast (lenF_fin _)
   | _ => 0
 
 theorem detVal_ci (k : Fin 32) (t : Fin 32) (x : Asg) :
@@ -267,8 +295,11 @@ theorem detVal_ci (k : Fin 32) (t : Fin 32) (x : Asg) :
 theorem detVal_cv (k : Fin 32) (t : Fin 32) (x : Asg) :
     detVal (.cv k t) x = (x (Name.ch k t).fin).cast (lenF_ch k t) := rfl
 
+theorem detVal_top (k : Fin 32) (x : Asg) :
+    detVal (.top k) x = topOf k ((x (Name.cv k 31).fin).cast (lenF_fin _)) := rfl
+
 theorem detVal_rc (x : Asg) :
-    detVal .rc x = rootCat fun k => (x (Name.cv k 31).fin).cast (lenF_fin _) := rfl
+    detVal .rc x = rootCat fun k => (x (Name.top k).fin).cast (lenF_fin _) := rfl
 
 theorem eq_fin_of_ofFin_eq {v : Fin N} {n : Name} (h : ofFin v = n) : v = n.fin := by
   rw [← h, fin_ofFin]
@@ -300,11 +331,15 @@ theorem detVal_local (n : Name) (x y : Asg)
   | cv k t =>
     show (x (Name.ch k t).fin).cast (lenF_ch k t) = (y (Name.ch k t).fin).cast (lenF_ch k t)
     rw [key (Name.ch k t) (by simp [Name.parents])]
+  | top k =>
+    show topOf k ((x (Name.cv k 31).fin).cast (lenF_fin _)) =
+      topOf k ((y (Name.cv k 31).fin).cast (lenF_fin _))
+    rw [key (Name.cv k 31) (by simp [Name.parents])]
   | rc =>
-    show rootCat (fun k => (x (Name.cv k 31).fin).cast (lenF_fin _)) =
-      rootCat (fun k => (y (Name.cv k 31).fin).cast (lenF_fin _))
+    show rootCat (fun k => (x (Name.top k).fin).cast (lenF_fin _)) =
+      rootCat (fun k => (y (Name.top k).fin).cast (lenF_fin _))
     exact congrArg rootCat (funext fun k => by
-      rw [key (Name.cv k 31) (Finset.mem_image_of_mem _ (Finset.mem_univ _))])
+      rw [key (Name.top k) (Finset.mem_image_of_mem _ (Finset.mem_univ _))])
   | src _ => rfl
   | ch _ _ => rfl
   | rh => rfl
@@ -321,6 +356,10 @@ def kindOf (v : Fin N) : (n : Name) → ofFin v = n → NodeKind N lenF v
   | .cv k t, h => .det ((Name.parents (.cv k t)).map nameEquiv.toEmbedding)
       (by exact det_parents_lt h)
       (fun x => (detVal (.cv k t) x).cast (by rw [lenF, h]))
+      (by intro x y hxy; exact congrArg _ (detVal_local _ x y hxy))
+  | .top k, h => .det ((Name.parents (.top k)).map nameEquiv.toEmbedding)
+      (by exact det_parents_lt h)
+      (fun x => (detVal (.top k) x).cast (by rw [lenF, h]))
       (by intro x y hxy; exact congrArg _ (detVal_local _ x y hxy))
   | .rc, h => .det ((Name.parents .rc).map nameEquiv.toEmbedding)
       (by exact det_parents_lt h)
@@ -375,8 +414,8 @@ theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
     simp [Name.cost, Name.len, blockCost, blockBits, chainBits]
   split_ifs <;> norm_num
 
-theorem graph_keygenCost : graph.keygenCost = 1036 := by
-  show ∑ v : Fin N, graph.nodeCost v = 1036
+theorem graph_keygenCost : graph.keygenCost = 1038 := by
+  show ∑ v : Fin N, graph.nodeCost v = 1038
   rw [← Fintype.sum_equiv nameEquiv (fun n => graph.nodeCost n.fin) (fun v => graph.nodeCost v)
     (fun _ => rfl)]
   simp only [graph_nodeCost_fin]

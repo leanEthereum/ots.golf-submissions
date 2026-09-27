@@ -6,14 +6,14 @@ open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleCom
 open Riscv2Program
 
 def landingIP (q a d : ℕ) : ℕ :=
-  50 + groupOffset (group q) + 256*(15-d) + slotOffset q + (15-a)
+  50 + groupOffset (group q) + 256*(15-d) + slotOffset q + (15-a+lead q)
 def rejectJump (ip : ℕ) : Instr :=
   .BEQ .x0 .x0 (BitVec.ofInt 13 (4*((stubFor ip : ℤ)-ip)))
 
 set_option maxRecDepth 100000 in
 theorem rejecting_landing_facts : ∀ q a d : Fin 16, pairCap q < a.val+d.val →
-    (15-a.val < (hashRow q d).length) ∧
-    rowInstr q d (15-a.val) = rejectJump (landingIP q a d) ∧
+    (15-a.val+lead q < (hashRow q d).length) ∧
+    rowInstr q d (15-a.val+lead q) = rejectJump (landingIP q a d) ∧
     stubFor (landingIP q a d) ∈ rejectStubs ∧
     Riscv.admittedInstruction (rejectJump (landingIP q a d)) = true ∧
     W (4096+4*landingIP q a d) +
@@ -23,7 +23,7 @@ theorem rejecting_landing_facts : ∀ q a d : Fin 16, pairCap q < a.val+d.val �
 
 theorem landing_reject_refines (index : RawIdx) (q : Fin 16) (s : MachineState)
     (global : Riscv.CodeAt s (W 4096) verifier)
-    (pc : s.pc = W (landing0 q-dispatch index q))
+    (pc : s.pc = W (landing0 q+4*lead q-dispatch index q))
     (bad : pairCap q < digit index.val (2*q.val)+coarseDigit index q)
     (fuel : ℕ) (bound : 4 ≤ fuel) :
     Riscv.Refines fuel s (pure (some false)) 4 := by
@@ -33,16 +33,15 @@ theorem landing_reject_refines (index : RawIdx) (q : Fin 16) (s : MachineState)
   let ip := landingIP q a d
   obtain ⟨hlen, hrow, hstub, hadmit, htarget⟩ := rejecting_landing_facts q a d bad
   have loc := copy_located s global q ⟨d.val, by simpa [copies] using d.isLt⟩
-  have fetch := loc (15-a.val) (by
-    simp only [copyCode, copyBody, List.length_append]; omega)
-  have head : (copyCode q d)[15-a.val]? = some (rowInstr q d (15-a.val)) := by
-    simp only [copyCode, copyBody, List.append_assoc, List.getElem?_append, hlen, ↓reduceIte]
-    simp only [hashRow, List.getElem?_map, List.getElem?_range, hlen,
-      show 15-a.val < 2^fineWidth q-(if expands (2*q.val) then 1 else 0) by
-        simpa [hashRow] using hlen, ↓reduceIte, Option.map_some]
-  have addr : copyStart q d+4*(15-a.val) = landing0 q-dispatch index q := by
+  have fetch := loc (15-a.val+lead q) (by
+    simp only [copyCode, List.length_append]; omega)
+  have head : (copyCode q d)[15-a.val+lead q]? = some (rowInstr q d (15-a.val+lead q)) := by
+    simp only [copyCode, List.append_assoc, List.getElem?_append, hlen, ↓reduceIte]
+    simp only [hashRow, List.getElem?_map, List.getElem?_range,
+      show 15-a.val+lead q < 2^fineWidth q by simpa [hashRow] using hlen, ↓reduceIte, Option.map_some]
+  have addr : copyStart q d+4*(15-a.val+lead q) = landing0 q+4*lead q-dispatch index q := by
     simpa [fineWidth, a, d] using (pair_landing index q q.isLt).symm
-  have ipc : 4096+4*ip = landing0 q-dispatch index q := by
+  have ipc : 4096+4*ip = landing0 q+4*lead q-dispatch index q := by
     rw [← addr]
     simp only [ip, landingIP, copyStart, copiesStart, copies]
     omega

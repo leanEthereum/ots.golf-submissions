@@ -12,9 +12,9 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
-def pairCost (q : Fin 16) : ℕ := (lengthSetup q).length +
-  (2+2*earlyHash (leftChain q)) + 2 + remaining index (leftChain q) +
-  (2+2*earlyHash (rightChain q)) + remaining index (rightChain q)
+/-- Length setup, prologue, both chains' hashes and the pointer move between them. -/
+def pairCost (q : Fin 16) : ℕ := (lengthSetup q).length + (dispatchCode q).length +
+  remaining index (leftChain q) + 2 + remaining index (rightChain q)
 
 structure LengthEffect (s u : MachineState) (q : Fin 16) : Prop where
   length : u.getReg .x11 = W (chainBits (leftChain q))
@@ -48,21 +48,31 @@ theorem lengthSetup_effect (s : MachineState) (q : Fin 16)
     exact ⟨h.trans (congrArg W hw), fun _ _ => rfl, rfl, rfl⟩
 
 theorem pairCost_eq (q : Fin 16) : pairCost index q =
-    (lengthSetup q).length+6+earlyHash (leftChain q)+earlyHash (rightChain q) +
-      (32-RiscvUpperForest.ForestVerifier.pos index (leftChain q)) +
-      (32-RiscvUpperForest.ForestVerifier.pos index (rightChain q)) := by
-  have ha := pos_le index (leftChain q)
-  have hb := pos_le index (rightChain q)
-  have ba := earlyHash_cases (leftChain q)
-  have bb := earlyHash_cases (rightChain q)
-  unfold pairCost remaining
+    (lengthSetup q).length + (if q.val = 0 then 1 else 0) + 6 +
+      remaining index (leftChain q) + remaining index (rightChain q) := by
+  unfold pairCost
+  rw [dispatchCode_length]
   omega
+
+/-- The state after a pair's length setup, ready for its prologue. -/
+theorem after_lengthSetup (q : Fin 16) (s : MachineState) (x : graph.Assignment)
+    (inv : ChainsInv index wire pk s x (leftChain q)) :
+    let s1 := (lengthSetup q).foldl execInstrBr s
+    LengthEffect s s1 q ∧ Ctx s1 index wire pk ∧ s1.getReg .x10 = W (prevInput (leftChain q)) ∧
+      PayloadFrom s1 wire (leftChain q) ∧ Completed s1 (tops x) (leftChain q) := by
+  intro s1
+  have E := lengthSetup_effect s q inv.length
+  refine ⟨E, inv.ctx.frame (fun r hr => by
+    rcases hr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code,
+    by rw [E.regs .x10 (by decide)]; exact inv.input,
+    fun j hj => memBits_of_mem_eq E.mem (inv.payload j hj),
+    fun j hj => memBits_of_mem_eq E.mem (inv.done j hj)⟩
 
 /-- One pair runs its two graph chains and reaches the next block with all invariants restored. -/
 theorem pair_refines (q : Fin 16)
     (good : digit index.val (2*q.val)+coarseDigit index q ≤ pairCap q)
+    (short : wire.length = honestViewBits)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
-    (hlen : wire.length = 5376)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
       ChainsInv index wire pk u z (2*(q.val+1)) →
       (∃ junk, Riscv.CodeAt u u.pc (nextCode q ++ junk)) →
@@ -72,83 +82,64 @@ theorem pair_refines (q : Fin 16)
     (located : ∃ junk, Riscv.CodeAt s s.pc (prologue q ++ junk))
     (bound : pairCost index q+rest ≤ fuel) :
     Riscv.Refines fuel s
-      (runNodes' index (Payload.permute wire) (chainNodes (leftChain q) ++ chainNodes (rightChain q))
+      (runNodes' index (viewPayload wire) (chainNodes (leftChain q) ++ chainNodes (rightChain q))
         x (cursor (leftChain q)) >>= K) (pairCost index q+c) := by
   let A := leftChain q
   let B := rightChain q
-  let EA := 2+2*earlyHash A
-  let EB := 2+2*earlyHash B
   let NA := remaining index A
   let NB := remaining index B
   let L := (lengthSetup q).length
-  have cost : pairCost index q = L+(EA+(2+(NA+(EB+NB)))) := by
-    unfold pairCost; dsimp [L,EA,EB,NA,NB,A,B]; omega
+  have cost : pairCost index q = L+((dispatchCode q).length+(NA+(2+NB))) := by
+    unfold pairCost; dsimp [L,NA,NB,A,B]; omega
   rw [cost] at bound ⊢
   obtain ⟨junk0, located⟩ := located
   rw [prologue_parts] at located
   simp only [List.append_assoc] at located
   have ready := lengthSetup_ready s q
   set s1 := (lengthSetup q).foldl execInstrBr s with hs1
-  have E := lengthSetup_effect s q inv.length
-  have s1ctx : Ctx s1 index pk := inv.ctx.frame (fun r hr => by
-    rcases hr with rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code
-  have s1input : s1.getReg .x10 = W (prevInput A) := by rw [E.regs .x10 (by decide)]; exact inv.input
-  have s1payload : PayloadFrom s1 wire A := fun j hj => memBits_of_mem_eq E.mem (inv.payload j hj)
-  have s1done : Completed s1 (tops x) A := fun j hj => memBits_of_mem_eq E.mem (inv.done j hj)
-  have s1loc : Riscv.CodeAt s1 s1.pc
-      (enter A (prevInput A) ++ (dispatchCode q ++ junk0)) := by
+  obtain ⟨E, s1ctx, s1input, s1payload, s1done⟩ := after_lengthSetup index wire pk q s x inv
+  have s1loc : Riscv.CodeAt s1 s1.pc (dispatchCode q ++ junk0) := by
     rw [show s1.pc=s.pc+W (4*L) from Riscv.linear_fold_pc s _ ready]
     exact located.append_right.code_eq E.code
   rw [show fuel=L+(fuel-L) by omega,
-    show L+(EA+(2+(NA+(EB+NB))))+c = L+(EA+(2+(NA+(EB+(NB+c))))) by omega]
+    show L+((dispatchCode q).length+(NA+(2+NB)))+c =
+      L+((dispatchCode q).length+(NA+(2+(NB+c)))) by omega]
   apply Riscv.Refines.linear _ located.append_left ready
-  rw [← hs1]
-  rw [runNodes'_append, chain_entry_split index A, runNodes'_append]
-  simp only [bind_assoc]
-  apply enter_refines index wire pk A (dispatchCode q ++ junk0)
-    (fun r => runNodes' index (Payload.permute wire) (tableNodes index A) r.1 r.2 >>= fun r =>
-      runNodes' index (Payload.permute wire) (chainNodes B) r.1 r.2 >>= K)
-    (2+(NA+(EB+(NB+c)))) (2+(NA+(EB+(NB+rest)))) hlen ?_
-    s1 x (fuel-L) s1ctx s1input E.length s1payload s1done s1loc (by dsimp [EA] at *; omega)
-  intro s2 x2 prep2 loc2 left2 hleft2
-  dsimp only
-  apply dispatch_refines index wire pk q A rfl s2 x2 prep2.inv junk0 loc2 _
-    (NA+(EB+(NB+c))) left2 (by omega)
-  intro s3 inv3 mem3 pc3
-  have prep3 := prep2.frame inv3 mem3
-  obtain ⟨junk, loc3⟩ := landing_located index s3 inv3.ctx.code q good
+  rw [← hs1, runNodes'_append, bind_assoc]
+  apply prologue_refines index wire pk q A rfl s1 x s1ctx s1input E.length s1payload s1done junk0
+    short s1loc _ (NA+(2+(NB+c))) (fuel-L) (by omega)
+  intro s3 prep3 pc3
+  have loc3 := landing_located index s3 prep3.inv.ctx.code q good
   rw [← pc3] at loc3
   apply table_refines index wire pk A
-    (enter B (prevInput B) ++ (List.replicate NB .ECALL ++ (nextCode q ++ junk)))
-    (fun r => runNodes' index (Payload.permute wire) (chainNodes B) r.1 r.2 >>= K)
-    (EB+(NB+c)) (EB+(NB+rest)) hlen ?_
-    s3 x2 (left2-2) prep3 (by simpa only [List.append_assoc] using loc3) (by omega)
+    (enter B (prevInput B) ++ (List.replicate NB .ECALL ++ nextCode q))
+    (fun r => runNodes' index (viewPayload wire) (chainNodes B) r.1 r.2 >>= K)
+    (2+(NB+c)) (2+(NB+rest)) ?_
+    s3 x (fuel-L-(dispatchCode q).length) prep3 (by simpa only [List.append_assoc] using loc3)
+    (by omega)
   intro s4 x4 inv4 loc4 left4 hleft4
   dsimp only
   rw [← cursor_step A]
   change Riscv.Refines left4 s4
-    (runNodes' index (Payload.permute wire) (chainNodes B) x4 (cursor B) >>= K) (EB+(NB+c))
-  rw [chain_entry_split index B, runNodes'_append, bind_assoc]
+    (runNodes' index (viewPayload wire) (chainNodes B) x4 (cursor B) >>= K) (2+(NB+c))
   have lenB : s4.getReg .x11 = W (chainBits B) := by
     rw [inv4.length]
     congr 1
     exact prevBits_right q
-  apply enter_refines index wire pk B (List.replicate NB .ECALL ++ (nextCode q ++ junk))
-    (fun r => runNodes' index (Payload.permute wire) (tableNodes index B) r.1 r.2 >>= K)
-    (NB+c) (NB+rest) hlen ?_ s4 x4 left4 inv4.ctx inv4.input lenB inv4.payload inv4.done loc4
-    (by dsimp [EB] at *; omega)
-  intro s5 x5 prep5 loc5 left5 hleft5
-  dsimp only
-  apply table_refines index wire pk B (nextCode q ++ junk) K c rest hlen ?_
-    s5 x5 left5 prep5 loc5 hleft5
+  have out4 : s4.getReg .x12 = W (outAddr (2*q.val)) := inv4.out (by omega)
+  apply move_refines index wire pk q B rfl s4 x4 (List.replicate NB .ECALL ++ nextCode q)
+    inv4.ctx inv4.input out4 lenB inv4.payload inv4.done loc4 _ (NB+c) left4 (by omega)
+  intro s5 inv5 held5 loc5
+  apply table_refines index wire pk B (nextCode q) K c rest ?_
+    s5 x4 (left4-2) ⟨inv5, held5⟩ loc5 (by omega)
   intro s6 x6 inv6 loc6 left6 hleft6
   have endIndex : B.val+1 = 2*(q.val+1) := by dsimp [B,rightChain]; omega
   rw [endIndex] at inv6
   rw [← cursor_step B, endIndex]
-  exact continuation s6 x6 inv6 ⟨junk,loc6⟩ left6 hleft6
+  exact continuation s6 x6 inv6 ⟨[], by simpa only [List.append_nil] using loc6⟩ left6 hleft6
 
-def badPairCost (q : Fin 16) : ℕ :=
-  (lengthSetup q).length + (2+2*earlyHash (leftChain q)) + 2 + 4
+/-- Length setup, prologue, and the landing's jump to a rejection stub. -/
+def badPairCost (q : Fin 16) : ℕ := (lengthSetup q).length + (dispatchCode q).length + 4
 
 /-- Exact charge of the staged chain/root program, including rejecting paths. -/
 def stagedCost (index : RawIdx) : (n q : ℕ) → ℕ
@@ -158,47 +149,34 @@ def stagedCost (index : RawIdx) : (n q : ℕ) → ℕ
       else badPairCost ⟨q,hq⟩
     else 0
 
-/-- A forbidden table entry rejects after precisely the first entry hash, if any. -/
+/-- A forbidden table entry rejects before any hash of the pair. -/
 theorem pair_bad_refines (q : Fin 16)
     (bad : pairCap q < digit index.val (2*q.val)+coarseDigit index q)
-    (hlen : wire.length = 5376)
+    (short : wire.length = honestViewBits)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (inv : ChainsInv index wire pk s x (leftChain q))
     (located : ∃ junk, Riscv.CodeAt s s.pc (prologue q ++ junk))
     (bound : badPairCost q ≤ fuel) :
-    Riscv.Refines fuel s
-      (runNodes' index (Payload.permute wire) (entryNodes index (leftChain q)) x
-        (cursor (leftChain q)) >>= fun _ => pure (some false)) (badPairCost q) := by
-  let A := leftChain q
+    Riscv.Refines fuel s (pure (some false)) (badPairCost q) := by
   let L := (lengthSetup q).length
-  let EA := 2+2*earlyHash A
-  have cost : badPairCost q = L+(EA+(2+4)) := by
-    unfold badPairCost; dsimp [L,EA,A]; omega
-  rw [cost] at bound ⊢
   obtain ⟨junk, located⟩ := located
   rw [prologue_parts] at located
   simp only [List.append_assoc] at located
   have ready := lengthSetup_ready s q
   set s1 := (lengthSetup q).foldl execInstrBr s with hs1
-  have E := lengthSetup_effect s q inv.length
-  have ctx : Ctx s1 index pk := inv.ctx.frame (fun r hr => by
-    rcases hr with rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code
-  have input : s1.getReg .x10 = W (prevInput A) := by
-    rw [E.regs .x10 (by decide)]; exact inv.input
-  have payload : PayloadFrom s1 wire A := fun j hj => memBits_of_mem_eq E.mem (inv.payload j hj)
-  have done : Completed s1 (tops x) A := fun j hj => memBits_of_mem_eq E.mem (inv.done j hj)
-  have loc : Riscv.CodeAt s1 s1.pc (enter A (prevInput A) ++ (dispatchCode q ++ junk)) := by
+  obtain ⟨E, s1ctx, s1input, s1payload, s1done⟩ := after_lengthSetup index wire pk q s x inv
+  have loc : Riscv.CodeAt s1 s1.pc (dispatchCode q ++ junk) := by
     rw [show s1.pc=s.pc+W (4*L) from Riscv.linear_fold_pc s _ ready]
     exact located.append_right.code_eq E.code
-  rw [show fuel=L+(fuel-L) by omega]
+  unfold badPairCost at bound ⊢
+  rw [show fuel=L+(fuel-L) by omega,
+    show L+(dispatchCode q).length+4 = L+((dispatchCode q).length+4) by omega]
   apply Riscv.Refines.linear _ located.append_left ready
   rw [← hs1]
-  apply enter_refines index wire pk A (dispatchCode q ++ junk)
-    (fun _ => pure (some false)) (2+4) (2+4) hlen ?_
-    s1 x (fuel-L) ctx input E.length payload done loc (by dsimp [EA] at *; omega)
-  intro s2 x2 prep loc2 left hleft
-  apply dispatch_refines index wire pk q A rfl s2 x2 prep.inv junk loc2 _ 4 left (by omega)
-  intro s3 inv3 _ pc3
-  exact landing_reject_refines index q s3 inv3.ctx.code pc3 bad (left-2) (by omega)
+  apply prologue_refines index wire pk q (leftChain q) rfl s1 x s1ctx s1input E.length s1payload
+    s1done junk short loc _ 4 (fuel-L) (by omega)
+  intro s3 prep3 pc3
+  exact landing_reject_refines index q s3 prep3.inv.ctx.code pc3 bad
+    (fuel-L-(dispatchCode q).length) (by omega)
 
 end OptimalOTS.RiscvMixedProgram

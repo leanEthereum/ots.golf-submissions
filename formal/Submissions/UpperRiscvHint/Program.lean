@@ -53,8 +53,8 @@ def imm12 (z : ℤ) : BitVec 12 := BitVec.ofInt 12 z
 store base of the lane area (`x10` through the index phase). -/
 def hashBase : ℕ := 0x400000
 
-/-- The lane area: four words below the public key. -/
-def laneBase : ℕ := 0x4002E0
+/-- The lane area: four words above the root region and the honest view. -/
+def laneBase : ℕ := 0x4003C0
 
 /-- The address of lane word `g`. -/
 def laneWordAddr (g : ℕ) : ℕ := laneBase + 8 * g
@@ -181,9 +181,12 @@ def singlesCode : Code := (List.range 4).flatMap singleBlock
 answer buffer already points. -/
 def root : Code := [.ADDI .x10 .x10 (imm12 (-656)), .ADDI .x11 .x13 (imm12 (-64)), .ECALL]
 
+/-- `x5` is the low-word difference and `x10` the high-word difference from the stored key, whose
+high word has bit 0 flipped: HALT accepts exactly on the root. Every other case halts rejecting,
+traps, or hashes and then traps at the `JALR` to address 0. -/
 def decision : Code :=
-  [.LD .x26 .x12 0, .BNE .x26 .x30 24, .LD .x28 .x12 8, .BNE .x28 .x31 16,
-   .ADDI .x10 .x0 1, .ADDI .x5 .x0 0, .ECALL] ++ reject
+  [.LD .x26 .x12 0, .LD .x27 .x12 8, .XOR .x5 .x26 .x30, .XOR .x10 .x27 .x31, .ECALL,
+   .JALR .x0 .x0 0]
 
 def verifier : Code := indexPhase ++ prologue 0 ++ pairsCode ++ singlesCode ++ root ++ decision
 

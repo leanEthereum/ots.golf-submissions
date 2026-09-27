@@ -1,3 +1,38 @@
+# Hinted RISC-V upper bound: 324 cycles with cap chains
+
+The sixteen 192-bit chains are cap chains: each keeps answer bytes `[0,24)` as its state and hashes
+in place, so its top is its final state. A digit `d` costs `d` hashes, and digit 0 reveals the top
+itself, which the root commits directly. The caps run first, then the sixteen 144-bit chains. The
+root reads 888 bytes (14 compression blocks). The accepted digit set and its availability proof
+are the 349 record's. Pair 0 rejects every view whose length is not the honest 7248 bits
+(`LD x6` and `BNE x13 x6`), before any trap is possible, and the root length is `x13 - 144`.
+
+Proved accounting: **324 = 31 index + 272 chains + 21 root/decision** cycles, on every
+completed path. The image is 15,697 instructions and 64 data bytes, 62,852 bytes. The signature
+is 5504 bits; the honest view is 7248 bits.
+
+The Lean image equals the independent generator, and 12,298 transcript cases pass. See
+`NOTES.md` for the layout, the proof and the validation.
+
+---
+
+# Hinted RISC-V upper bound: 337 cycles in trap mode
+
+The scheme and signature are the 349-cycle record's, except that the public key has bit 64
+flipped. The machine reads a view in which every chain value sits in its own cell, so the eight
+redirects disappear. It rejects the raw form of a view by one `BGEU` in pair 0's prologue, before
+any trap is possible. After that test it may trap on a bad input: the checksum leaves its residue
+in `x5` for the first chain hash, and the decision is two `XOR`s into the HALT registers.
+
+Proved accounting: **337 = 30 index + 288 chains + 19 root/decision** cycles, on every
+completed path. The image is 15,697 instructions and 56 data bytes, 62,844 bytes. The signature
+is 5504 bits; the honest view is 6272 bits.
+
+The Lean image equals the independent generator, and 11,322 transcript cases pass. See
+`NOTES.md` for the layout, the proof and the validation.
+
+---
+
 # RISC-V upper bound: 349-cycle capped-rank candidate
 
 This extends Nicolas Consigny's officially verified 353-cycle record in PR #34

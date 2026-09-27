@@ -20,15 +20,8 @@ abbrev W (n : ℕ) : Word := BitVec.ofNat 64 n
 /-- The data base, where the index answer, the lane constants and the lane words lie. -/
 def dataAddr : ℕ := 0x200000
 
-/-- The disclosed values start after the 128-bit nonce; chain `k`'s 192-bit value is at
-`slotAddr k`. -/
-def payloadAddr : ℕ := 0x400040
-
-def slotAddr (k : ℕ) : ℕ := payloadAddr + 24 * k
-
-/-- The root input starts eight bytes below chain `0`'s value: the 32-byte answer of chain `k`
-is written at `slotAddr k - 8`. -/
-def regionAddr : ℕ := 0x3FFFD8
+/-- The root input region: it starts right after the 128-bit nonce. -/
+def regionAddr : ℕ := 0x400040
 
 theorem W_toNat (n : ℕ) (h : n < 2 ^ 64) : (W n).toNat = n := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]
