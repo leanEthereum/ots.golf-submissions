@@ -158,10 +158,15 @@ theorem hv_cc {c : ℕ} (hc : c ≤ 21) : hv P T f pk m bits (cCell c) = cV c :=
   · rw [cV_zero]; exact hv_one
   · exact hv_c (by unfold cCell; split_ifs <;> omega)
       (by unfold cCell; split_ifs <;> omega) (hc_c _ _ _ _ _ h0 hc)
-theorem hv_frame {r : ℕ} (hr : r < 14) : hv P T f pk m bits (fCell r) = frameV r := by
-  apply hv_c (by unfold fCell cCell; split_ifs <;> omega)
-    (by unfold fCell cCell; split_ifs <;> omega)
-  exact hc_frame _ _ _ _ _ hr
+theorem hv_frame (hlen : bits.length = 5504) {r : ℕ} (hr : r < 14) :
+    hv P T f pk m bits (fCell r) = frameV r := by
+  by_cases hn : r = 1
+  · subst r
+    rw [fCell, if_pos rfl, frameV_one]
+    rw [hv_lt P T f pk m bits (by decide)]
+    exact inputWord_len_of pk m bits hlen
+  · rw [fCell, if_neg hn, frameV_eq_cV hn]
+    exact hv_cc (by split_ifs <;> omega)
 
 theorem hv_idx : hv P T f pk m bits idxCell = loC (y0F P f pk m bits) :=
   hv_c (by decide) (by decide) (hc_idx ..)
@@ -331,11 +336,12 @@ theorem honest_idx_query :
 theorem honest_gp {u : ℕ} (hu : u ≤ 13) :
     hv P T f pk m bits (gpCell u) = gpV T (IF P f pk m bits) u := hv_gpl hu
 
-include hC hacc in
+include hT hC hacc in
 /-- On an accepted index the last landing product is `g ^ sentinel`: the exit target. -/
 theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   rw [honest_gp (by omega)]
   unfold gpV
+  rw [LengthFrame.shifted_product, charged_sum hT (hxs_valid T _ (hlive hC hacc))]
   apply congrArg ofK
   have hs := hsum hC hacc
   change hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,

@@ -1,8 +1,8 @@
 import Submissions.UpperLeanIsa.FourMachineLayout
 import Submissions.UpperLeanIsa.LengthGate128
 
-/-! Research lemmas for reusing the validated signature length as a landing frame.
-The active 1125-cycle machine does not yet use this frame schedule. -/
+/-! Lemmas for reusing the validated signature length as a landing frame.
+The 1124-cycle machine uses this schedule and the nine-unit checksum shift. -/
 
 namespace OptimalOTS.HLFour.LengthFrame
 

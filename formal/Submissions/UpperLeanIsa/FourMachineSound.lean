@@ -48,7 +48,7 @@ def rootMsg (T : Tab) (xs : ℕ → ℕ) (r j : ℕ) : ℕ :=
 include hP in
 theorem rootMd_cell (hC : Compat P T) (r : Fin 1) : cellBits (v (rootMdCell r.val)) = P.rootMd r := by
   have he : rootMdCell r.val = cCell (FourFusion.rootIndex r).val := by fin_cases r <;> rfl
-  have hi : (FourFusion.rootIndex r).val ≤ 14 := by fin_cases r <;> decide
+  have hi : (FourFusion.rootIndex r).val ≤ 13 := by fin_cases r <;> decide
   rw [he,v_c hP hi,hC.rootMd]
 
 theorem root_query_of (hone : v oneCell = oneV)

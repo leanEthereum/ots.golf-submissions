@@ -1,8 +1,8 @@
 import OptimalOTS.LeanIsa
-import Submissions.UpperLeanIsa.FourMachineLayout
+import Submissions.UpperLeanIsa.LengthFrame
 import Submissions.UpperLeanIsa.LengthGate128
 
-/-! The 1125-cycle model bytecode and its local instruction algebra. The complete machine
+/-! The 1124-cycle model bytecode and its local instruction algebra. The complete machine
 certificate is assembled in `FourMachine.lean`. -/
 
 namespace OptimalOTS.HLFour
@@ -61,8 +61,8 @@ def cCell (c : ℕ) : ℕ :=
   else if c = 1 then 105 else if c = 2 then 106 else if c = 3 then 47
   else if c = 4 then 107 else 50 + c
 
-/-- The frame constant of frame `f`: frame f reuses cost factor C_(f+1). -/
-def fCell (f : ℕ) : ℕ := cCell (f + 1)
+/-- Frame 1 is the validated length; the other frames reuse C1..C13. -/
+def fCell (f : ℕ) : ℕ := if f = 1 then lenCell else cCell (if f = 0 then 1 else f)
 
 /-- The index output pair. -/
 def idxCell : ℕ := 80
@@ -334,16 +334,16 @@ def chainOp (k d t dst : ℕ) : CInstr :=
 /-- The `d` steps of chain `k`. -/
 def chainOps (k d dst : ℕ) : List CInstr := (List.range d).map (fun t => chainOp k d t dst)
 
-/-- The straight part of the prologue (slots `0 … 17`). -/
+/-- The straight part of the prologue (slots `0 … 16`). -/
 def proList : List CInstr :=
-  ((List.range 14).map (fun c => .setc (cCell (c+1)) (cV (c+1)))) ++
+  ((List.range 13).map (fun c => .setc (cCell (c+1)) (cV (c+1)))) ++
     [.init,.setc gCell gV,
       .blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell,
       .mul (hCell 0) gCell (h1Cell 0)]
 
-/-- Slots `0 … 26`: the straight prologue, the free dispatch at 18, and eight pads. -/
+/-- Slots `0 … 26`: the straight prologue, the free dispatch at 17, and nine pads. -/
 def prologue (s : ℕ) : CInstr :=
-  if s < 18 then proList.getD s .pad else if s = 18 then .dispatch 0 else .pad
+  if s < 17 then proList.getD s .pad else if s = 17 then .dispatch 0 else .pad
 
 /-- The control op after the block of group `f - 1`: the next dispatch, or the exit. -/
 def ctlF (f : ℕ) : CInstr := if f < 13 then .dispatch (f + 1) else .exit
@@ -353,7 +353,7 @@ def frG0 (_s : ℕ) : ℕ := 1
 
 /-- The free block: seed, `s` chain steps, top materialization, and the next hint product. -/
 def fbody (s : ℕ) : List CInstr :=
-  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 86 s))] ++
+  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 77 s))] ++
   chainOps 0 s tfCell ++ [copy (if s = 0 then wCell 0 else tfCell) tfCell,
     .mul (hCell 1) gCell (h1Cell 1)]
 
@@ -398,8 +398,11 @@ def npad (T : Tab) (u v : ℕ) : ℕ := gcu u - 4 - (tie u v).length - zexp T u 
 def nextOp (u : ℕ) : CInstr :=
   if u < 12 then .mul (hCell (u+2)) gCell (h1Cell (u+2)) else copy (stCell 0) pkCell
 
+/-- The cost multiplier omits one guaranteed hash in every binding group. -/
+def chargedCost (T : Tab) (u v : ℕ) : ℕ := cost T u v - LengthFrame.deduction u
+
 /-- The product op of the block of `v` in group `u`. -/
-def prodOp (T : Tab) (u v : ℕ) : CInstr := .mul (gpCell u) (cCell (cost T u v)) (gpCell (u + 1))
+def prodOp (T : Tab) (u v : ℕ) : CInstr := .mul (gpCell u) (cCell (chargedCost T u v)) (gpCell (u + 1))
 
 /-- The straight part of the block of `v` in group `u`, variant `z`. -/
 def body (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=

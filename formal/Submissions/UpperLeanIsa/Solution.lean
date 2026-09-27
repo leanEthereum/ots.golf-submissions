@@ -2,9 +2,9 @@ import Submissions.UpperLeanIsa.FourSecurity
 import Submissions.UpperLeanIsa.FourAdmissible
 import Submissions.UpperLeanIsa.FourMachine
 
-/-! The 1125-cycle leanISA submission: nine groups bind four dependency tops each
+/-! The 1124-cycle leanISA submission: nine groups bind four dependency tops each
 through their final chain hashes, one hash finishes the root, and a landing checksum
-forces 86 chain steps. Fourteen constants serve the frames, costs and domain words.
+forces 86 chain steps. Thirteen constants and the validated length serve the frames; binding costs are offset by one.
 The certificate includes the exact rarest-cut signing bound and strong unforgeability. -/
 
 namespace OptimalOTS.Challenge.UpperLeanIsa
@@ -17,8 +17,8 @@ noncomputable def submission : LeanIsa.Submission := HLFour.fusionMachine
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1125` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1125 where
+`1124` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1124 where
   admissible := FourFusion.concrete_admissible
   secure := FourFusion.concrete_secure
   valid := HLFour.fusion_valid

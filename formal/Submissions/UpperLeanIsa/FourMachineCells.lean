@@ -46,8 +46,9 @@ theorem hc_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 21) : hcell T bits y0 A RA (cC
         show c ≠ 1 by omega, show c ≠ 2 by omega, show c ≠ 3 by omega, show c ≠ 4 by omega]
       rw [hc]; unfold hcell; hsimp; congr 1; omega
 
-theorem hc_frame {r : ℕ} (hr : r < 14) : hcell T bits y0 A RA (fCell r) = frameV r := by
-  rw [fCell, frameV_eq_cV]; exact hc_c T bits y0 A RA (by omega) (by omega)
+theorem hc_frame {r : ℕ} (hr : r < 14) (hn : r ≠ 1) : hcell T bits y0 A RA (fCell r) = frameV r := by
+  rw [fCell, if_neg hn, frameV_eq_cV hn]
+  exact hc_c T bits y0 A RA (by split_ifs <;> omega) (by split_ifs <;> omega)
 
 theorem hc_idx : hcell T bits y0 A RA idxCell = loC y0 := by unfold hcell idxCell; hsimp
 theorem hc_idx1 : hcell T bits y0 A RA (idxCell + 1) = hiC y0 := by unfold hcell idxCell; hsimp

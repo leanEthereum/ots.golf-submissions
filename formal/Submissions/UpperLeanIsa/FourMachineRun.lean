@@ -81,8 +81,13 @@ def PrePinned (v : ℕ → E) : Prop := ∀ c, 1 ≤ c → c ≤ 4 → v (cCell 
 
 theorem prepinned_of_pinned {v : ℕ → E} (h : Pinned v) : PrePinned v := by
   intro c hc hc4
-  have hf := h.2 (c - 1) (by omega)
-  simpa only [fCell, frameV_eq_cV, Nat.sub_add_cancel hc] using hf
+  by_cases hc1 : c = 1
+  · subst c
+    have hf := h.2 0 (by decide)
+    change v (cCell 1) = frameV 0 at hf
+    exact hf.trans (frameV_eq_cV (by decide : (0 : ℕ) ≠ 1))
+  · have hf := h.2 c (by omega)
+    simpa only [fCell, if_neg hc1, frameV_eq_cV hc1, if_neg (show c ≠ 0 by omega)] using hf
 
 theorem lengthDomain_exact {v : ℕ → E} (h : v lenCell = natV 5504) : LengthDomain v := by
   refine ⟨5504, by omega, h, ?_⟩
@@ -325,7 +330,7 @@ theorem exec_dispatch {k : ℕ} (hk : k < 14) (hpin : Pinned (Lx L)) :
   simp only [LeanerVM.Semantics.execute,
     read_one h16 hκ L (show oneCell < 2 ^ 16 by unfold oneCell; omega),
     read_one h16 hκ L (show hCell k < 2 ^ 16 by unfold hCell; omega),
-    read_one h16 hκ L (show fCell k < 2 ^ 16 by unfold fCell cCell; split_ifs <;> omega),
+    read_one h16 hκ L (show fCell k < 2 ^ 16 by unfold fCell cCell lenCell; split_ifs <;> omega),
     Option.bind_eq_bind, Option.bind_some, hpin.1, hpin.2 k hk]
   by_cases hH : IsInK (Lx L (hCell k))
   · have hin : IsInK oneV ∧ IsInK (Lx L (hCell k)) ∧ IsInK (frameV k) :=

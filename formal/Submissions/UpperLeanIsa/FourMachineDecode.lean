@@ -154,10 +154,11 @@ theorem body_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13)
     split_ifs at h <;> simp at h <;> (try rcases h with rfl | rfl) <;>
       simp only [CInstr.Bounded, accCell, tCell, copy, oneCell, idxCell] <;> (try split_ifs) <;> omega
   · subst h
-    have := band_lt_17 hu hv
-    rw [← hT.cost_eq u hu v hv] at this
-    simp only [prodOp, CInstr.Bounded, gpCell, cCell]
-    split_ifs <;> omega
+    have hc := LengthFrame.cost_shift_le hT hu hv
+    change gpCell u < 2 ^ 16 ∧ cCell (chargedCost T u v) < 2 ^ 16 ∧ gpCell (u + 1) < 2 ^ 16
+    exact ⟨by unfold gpCell; omega,
+      (show ∀ c ≤ 13, cCell c < 2 ^ 16 by decide) _ hc,
+      by unfold gpCell; omega⟩
   · obtain ⟨i, hi, hx⟩ := mem_segs.mp h
     have hk := chainOf_lt u hu i hi
     have hd := hT.coord_lt u hu v (lt_of_lt_of_le hv (VF_le u hu)) i hi

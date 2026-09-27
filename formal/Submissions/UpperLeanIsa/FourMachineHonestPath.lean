@@ -5,7 +5,7 @@ import Submissions.UpperLeanIsa.FourMachineHonestChain
 
 Every op of every block on the honest path holds on the loaded honest image (`honest_blk`), so
 the relations along the path of `hxs T I` hold (`honest_path`), and the machine completes in
-`213` instructions at cost `1005` (`honest_run`).
+`212` instructions at cost `1004` (`honest_run`).
 -/
 
 set_option maxRecDepth 4000
@@ -41,7 +41,7 @@ theorem honest_free : ∀ y ∈ fbody (XF P T f pk m bits 0), y.Rel f (hv P T f 
   have hd0 : hd T (y0F P f pk m bits) 0 = XF P T f pk m bits 0 := by
     rw [hd_XF]; unfold dg; rw [if_pos rfl]
   have hseed : (CInstr.setc (gpCell 0)
-      (ofK (LeanIsaFieldRescale.initialProduct 86 (XF P T f pk m bits 0)))).Rel f
+      (ofK (LeanIsaFieldRescale.initialProduct 77 (XF P T f pk m bits 0)))).Rel f
         (hv P T f pk m bits) := by
     show hv P T f pk m bits (gpCell 0) = _
     rw [honest_gp (by omega)]
@@ -114,9 +114,9 @@ include hT hC hacc in
 theorem honest_prod {u : ℕ} (hu : u < 13) :
     (prodOp T u (XF P T f pk m bits (u + 1))).Rel f (hv P T f pk m bits) := by
   show hv P T f pk m bits (gpCell (u + 1)) = hv P T f pk m bits (gpCell u) *
-    hv P T f pk m bits (cCell (cost T u (XF P T f pk m bits (u + 1))))
+    hv P T f pk m bits (cCell (chargedCost T u (XF P T f pk m bits (u + 1))))
   rw [honest_gp (by omega), honest_gp (by omega),
-    hv_cc (by have := cost_le hT hu (XF_lt_W hC hacc hu); omega), cV]
+    hv_cc (c := chargedCost T u (XF P T f pk m bits (u + 1))) (by have := LengthFrame.cost_shift_le hT hu (XF_lt_W hC hacc hu); exact le_trans this (by decide)), cV]
   unfold gpV
   rw [← ofK_mul, Finset.sum_range_succ]
   change ofK (_ * LeanIsaFieldRescale.costFactor (_ + _)) =
@@ -269,21 +269,21 @@ include hT hC hlen hacc hroot in
 honest image. -/
 theorem honest_path : PathFacts T (oracleRel f) (hv P T f pk m bits) (XF P T f pk m bits) :=
   ⟨honest_pro hC hlen hacc, fun r hr => honest_dispatch hC hacc hr, honest_blk hT hC hlen hacc hroot,
-    by show IsInK (hv P T f pk m bits (gpCell 13)); rw [honest_gp13 hC hacc]; exact isInK_ofK _,
-    honest_gp13 hC hacc⟩
+    by show IsInK (hv P T f pk m bits (gpCell 13)); rw [honest_gp13 hT hC hacc]; exact isInK_ofK _,
+    honest_gp13 hT hC hacc⟩
 
 include hT hC hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`213` instructions. -/
+`212` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 213
-          Regs.initial) = pure (some 1005) := by
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 212
+          Regs.initial) = pure (some 1004) := by
   obtain ⟨n, c, hw⟩ := walk_mk hT (hxs_valid T _ (hlive hC hacc)) (honest_path hT hC hlen hacc hroot)
     (fun r hr => by rw [hv_h1 (frU_lt _ hr), XFr_frU hr])
   have hpin : Pinned (hv P T f pk m bits) := by
     refine ⟨hv_one, fun r hr => ?_⟩
-    exact hv_frame hr
+    exact hv_frame hlen hr
   obtain ⟨hV, hP, hL, hn, hc⟩ := walk_full hT hw
   have hs := layer_of_facts hT hV hP hL
   have := sim_of_walk hT (le_refl 16) (by decide) f hpin hw

@@ -1,6 +1,7 @@
 import Submissions.UpperLeanIsa.ConstraintMath
 import Submissions.UpperLeanIsa.FieldRescale
 import Submissions.UpperLeanIsa.FourConcrete
+import Submissions.UpperLeanIsa.LengthGate128
 
 /-! Layout of the fixed-tag fused machine. All live field bands begin at raw field zero;
 the excluded zero-cost binding tuples have no holes or aliases. The 27-slot prologue is
@@ -391,8 +392,11 @@ def cV (c : ℕ) : E := ofK (gpow (1152921504606846976 * c))
 /-- Upper bound on the fourteen frame exponents. -/
 def eLen : ℕ := 17293822569102704640
 
-/-- Frame f is cost factor C_(f+1). -/
-def frameExp (f : ℕ) : ℕ := (f + 1) * 1152921504606846976
+/-- Fourteen frames reuse C1..C13 and the validated length word. -/
+def frameExp (f : ℕ) : ℕ :=
+  if f = 0 then 1152921504606846976
+  else if f = 1 then 1434881718044321323
+  else f * 1152921504606846976
 
 /-- The frame pointer of frame `f`. -/
 def frame (f : ℕ) : K := gpow (frameExp f)
@@ -408,18 +412,24 @@ theorem cV_zero : cV 0 = oneV := by unfold cV oneV; rw [Nat.mul_zero, gpow_zero'
 theorem cV_sixteen : cV 16 = gV := by
   exact congrArg ofK LeanIsaFieldRescale.factor_sixteen
 
-theorem frameV_eq_cV (f : ℕ) : frameV f = cV (f + 1) := by
+theorem frameV_eq_cV {f : ℕ} (hf : f ≠ 1) :
+    frameV f = cV (if f = 0 then 1 else f) := by
   unfold frameV frame frameExp cV
-  rw [Nat.mul_comm]
+  split_ifs <;> first | (exfalso; omega) | (congr 2 <;> omega)
+
+theorem frameV_one : frameV 1 = OptimalOTS.HLG3.natV 5504 := by
+  change ofK (gpow 1434881718044321323) = ofK (BitVec.ofNat 64 5504)
+  rw [OptimalOTS.HLG3.LengthGate.log5504]
+  rfl
 
 /-- Frame exponents are far apart and far from `0` modulo the order of `g`. -/
 theorem frameExp_bounds {f : ℕ} (hf : f < 14) :
     2 ^ 33 ≤ frameExp f ∧ frameExp f ≤ eLen := by
-  unfold frameExp eLen; omega
+  exact (show ∀ f < 14, 2 ^ 33 ≤ frameExp f ∧ frameExp f ≤ eLen by decide) f hf
 
 theorem frameExp_sep {f j : ℕ} (hf : f < 14) (hj : j < 14) (h : j < f) :
     frameExp j + 2 ^ 33 ≤ frameExp f := by
-  unfold frameExp; omega
+  exact (show ∀ f < 14, ∀ j < 14, j < f → frameExp j + 2 ^ 33 ≤ frameExp f by decide) f hf j hj h
 
 /-! ## The table and scheme interfaces -/
 

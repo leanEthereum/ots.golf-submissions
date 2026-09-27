@@ -3,7 +3,7 @@ import Submissions.UpperLeanIsa.FourMachineRun
 /-!
 # Forced paths and the landing exit
 
-Every completing walk follows the 18 straight prologue instructions, the free dispatch,
+Every completing walk follows the 17 straight prologue instructions, the free dispatch,
 then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `j`. The block relations give
 GP_u = initialProduct(86,s) * C_(sum of preceding group costs), so the exit target is
 GP_13 = g ^ seedExp t with t = s + Σ costs. The exit table (`seed_table`, a hash-free identity)
@@ -106,11 +106,11 @@ theorem cinstrAt_proList (T : Tab) {t : ℕ} (ht : t < proList.length) :
   unfold prologue
   rw [if_pos (by rw [proList_length] at ht; exact ht), List.getD_eq_getElem _ _ ht]
 
-theorem cinstrAt_18 (T : Tab) : cinstrAt T 18 = .dispatch 0 := by
+theorem cinstrAt_17 (T : Tab) : cinstrAt T 17 = .dispatch 0 := by
   rw [cinstrAt_pro T (by omega)]; unfold prologue; rw [if_neg (by omega), if_pos rfl]
 
 /-- The existing cost constants are checked before the full-nonce length gate. -/
-theorem cinstrAt_setup (T : Tab) {s : ℕ} (hs : s < 14) :
+theorem cinstrAt_setup (T : Tab) {s : ℕ} (hs : s < 13) :
     cinstrAt T s = .setc (cCell (s + 1)) (cV (s + 1)) := by
   rw [cinstrAt_pro T (by omega)]
   unfold prologue proList
@@ -118,16 +118,17 @@ theorem cinstrAt_setup (T : Tab) {s : ℕ} (hs : s < 14) :
 
 theorem pro_mem_init : CInstr.init ∈ proList := by unfold proList; simp
 theorem pro_mem_g : CInstr.setc gCell gV ∈ proList := by unfold proList; simp
-theorem pro_mem_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 14) :
+theorem pro_mem_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 13) :
     CInstr.setc (cCell c) (cV c) ∈ proList := by
   unfold proList
   simp only [List.mem_append, List.mem_map, List.mem_range]
   left
   exact ⟨c - 1, by omega, by rw [Nat.sub_add_cancel h1]⟩
 
-theorem pro_mem_frame {f : ℕ} (hf : f < 14) : CInstr.setc (fCell f) (frameV f) ∈ proList := by
-  rw [fCell, frameV_eq_cV]
-  exact pro_mem_c (by omega) (by omega)
+theorem pro_mem_frame {f : ℕ} (hf : f < 14) (hn : f ≠ 1) :
+    CInstr.setc (fCell f) (frameV f) ∈ proList := by
+  rw [fCell, if_neg hn, frameV_eq_cV hn]
+  exact pro_mem_c (by split_ifs <;> omega) (by split_ifs <;> omega)
 
 theorem pro_mem_idx : CInstr.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell ∈ proList := by
   unfold proList; simp
@@ -193,7 +194,7 @@ structure PathFacts (T : Tab) (B : BlakeRel) (v : ℕ → E) (xs : ℕ → ℕ) 
 
 /-- The dispatch slot of unit `f` on the path of `xs` (for `f = 14`, the exit). -/
 def ctlSlot (T : Tab) (xs : ℕ → ℕ) (f : ℕ) : ℕ :=
-  if f = 0 then 18 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
+  if f = 0 then 17 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
     (bodyF T (frU (xs 0) (f - 1)) (xs (f - 1))).length
 
 theorem ctlSlot_succ (T : Tab) (xs : ℕ → ℕ) (f : ℕ) :
@@ -205,7 +206,7 @@ theorem cinstrAt_ctlSlot (hT : T.Hyp) {xs : ℕ → ℕ} {f : ℕ} (hf : f ≤ 1
     cinstrAt T (ctlSlot T xs f) = ctlF' (xs 0) f ∧ ctlSlot T xs f < sentinel := by
   rcases Nat.eq_zero_or_pos f with rfl | hf0
   · refine ⟨?_, by unfold ctlSlot sentinel; simp⟩
-    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_18 T
+    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_17 T
   · obtain ⟨j, rfl⟩ : ∃ j, f = j + 1 := ⟨f - 1, by omega⟩
     rw [ctlSlot_succ]
     have hx : xs j < Wf (frU (xs 0) j) := by rw [Wf_frU _ (by omega)]; exact hV j (by omega)
@@ -280,11 +281,11 @@ end Units
 
 /-- Steps of the whole path. -/
 def totalSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  19 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
+  18 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
 
 /-- Cycles of the whole path. -/
 def totalCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  28 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
+  27 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
 
 /-! ### The landing product -/
 
@@ -293,7 +294,7 @@ theorem prodOp_mem (T : Tab) (s : ℕ) {u : ℕ} (hu : u < 13) (x : ℕ) :
   rw [bodyF_frU_succ T s hu]; unfold body; simp
 
 theorem cCell_val {B : BlakeRel} {v : ℕ → E} (hpro : ∀ y ∈ proList, y.RelB B v) {c : ℕ}
-    (hc : c ≤ 14) : v (cCell c) = cV c := by
+    (hc : c ≤ 13) : v (cCell c) = cV c := by
   rcases Nat.eq_zero_or_pos c with rfl | h0
   · rw [cV_zero]; exact (hpro _ pro_mem_init).1
   · by_cases h16 : c = 16
@@ -307,15 +308,15 @@ theorem cost_le (hT : T.Hyp) {u x : ℕ} (hu : u < 13) (hx : x < VF u) : cost T 
 theorem prod_eq {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
     (hpro : ∀ y ∈ proList, y.RelB B v)
     (hblk : ∀ f < 14, ∀ y ∈ bodyF T (frU (xs 0) f) (xs f), y.RelB B v) : ∀ u ≤ 13,
-      v (gpCell u) = ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0) *
-        LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, cost T w (xs (w + 1)))) := by
+      v (gpCell u) = ofK (LeanIsaFieldRescale.initialProduct 77 (xs 0) *
+        LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, chargedCost T w (xs (w + 1)))) := by
   intro u
   induction u with
   | zero =>
     intro _
-    have hseed : CInstr.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0))) ∈
+    have hseed : CInstr.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 77 (xs 0))) ∈
         bodyF T (frU (xs 0) 0) (xs 0) := by rw [bodyF_frU_zero]; unfold fbody; simp
-    have h : v (gpCell 0) = ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0)) :=
+    have h : v (gpCell 0) = ofK (LeanIsaFieldRescale.initialProduct 77 (xs 0)) :=
       hblk 0 (by omega) _ hseed
     rw [Finset.sum_range_zero]
     change v (gpCell 0) = ofK (_ * gpow 0)
@@ -326,11 +327,28 @@ theorem prod_eq {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (
     have hx : xs (u + 1) < VF u := by have := hV (u + 1) (by omega); rwa [Wf_succ (by omega)] at this
     have hrel := CInstr.relNH_of_relB
       (hblk (u + 1) (by omega) _ (prodOp_mem T (xs 0) (by omega) (xs (u + 1))))
-    have hrel' : v (gpCell (u + 1)) = v (gpCell u) * v (cCell (cost T u (xs (u + 1)))) := hrel
-    rw [hrel', ih (by omega), cCell_val hpro (cost_le hT (by omega) hx), cV, ← ofK_mul,
+    have hrel' : v (gpCell (u + 1)) = v (gpCell u) * v (cCell (chargedCost T u (xs (u + 1)))) := hrel
+    rw [hrel', ih (by omega), cCell_val (c := chargedCost T u (xs (u + 1))) hpro (LengthFrame.cost_shift_le hT (by omega) hx), cV, ← ofK_mul,
       Finset.sum_range_succ]
     change ofK ((_ * LeanIsaFieldRescale.costFactor _) * LeanIsaFieldRescale.costFactor _) = _
     rw [mul_assoc, LeanIsaFieldRescale.factor_add]
+
+/-- The shifted group costs restore the nine guaranteed hashes at the final gate. -/
+theorem charged_sum (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) :
+    (∑ w ∈ Finset.range 13, chargedCost T w (xs (w + 1))) + 9 =
+      ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) := by
+  apply LengthFrame.shifted_sum
+  intro u hu
+  have hx := hV (u + 1) (by omega)
+  rw [Wf_succ hu] at hx
+  exact LengthFrame.cost_lower hT hu hx
+
+theorem prod_eq_full {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
+    (hpro : ∀ y ∈ proList, y.RelB B v)
+    (hblk : ∀ f < 14, ∀ y ∈ bodyF T (frU (xs 0) f) (xs f), y.RelB B v) :
+    v (gpCell 13) = ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0) *
+      LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range 13, cost T w (xs (w + 1)))) := by
+  rw [prod_eq hT hV hpro hblk 13 le_rfl, LengthFrame.shifted_product, charged_sum hT hV]
 
 /-- The exponent of the landing product for the total `t`: `sentinel + Q (t − 86)` modulo the
 order of `g`. -/
@@ -447,7 +465,7 @@ theorem walk_full (hT : T.Hyp) {n c : ℕ} (h : Walk T B v n 0 c) :
     rw [hci]; unfold ctlF'; rw [if_neg (by omega)]
   obtain ⟨-, hRx, n2, c2, rfl, rfl, hw2⟩ := hw1.inv (by omega)
   have hV : Valid xs := fun f hf => (hall f hf).1
-  have hgp := prod_eq hT hV hRp (fun f hf => (hall f hf).2.2.2) 13 le_rfl
+  have hgp := prod_eq_full hT hV hRp (fun f hf => (hall f hf).2.2.2)
   set t := xs 0 + ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) with htdef
   have hbound : ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) ≤ ∑ _w ∈ Finset.range 13, 14 :=
     Finset.sum_le_sum fun w hw => by
@@ -571,13 +589,13 @@ theorem rel_prefix (Sm : Sem) (B : BlakeRel) (lim : ℕ)
 theorem prepinned_of_sem (Sm : Sem) (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow 0, 1⟩)) :
     PrePinned (Lx L) := by
-  have hp := rel_prefix Sm trueRel 14 (fun s hs pc x _ hx => by
+  have hp := rel_prefix Sm trueRel 13 (fun s hs pc x _ hx => by
     rw [cinstrAt_setup T hs, exec_setc h16 hκ L pc (by
       simp only [CInstr.Bounded, cCell]; split_ifs <;> omega), Sm.pure_iff] at hx
     rw [cinstrAt_setup T hs]
     split_ifs at hx with hr
     · exact Or.inr ⟨hx, hr⟩
-    · exact Or.inl hx) 14 0 n c (by omega)
+    · exact Or.inl hx) 13 0 n c (by omega)
     (fun i hi => by rw [Nat.zero_add, cinstrAt_setup T hi]; rfl)
     (by unfold sentinel; omega) h
   intro k hk hk4
@@ -592,7 +610,7 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
         x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelB B (Lx L)))
     {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow 0, 1⟩)) :
     Pinned (Lx L) := by
-  have hp := rel_prefix Sm B 18 (fun s _ => hst s) 18 0 n c (by omega)
+  have hp := rel_prefix Sm B 17 (fun s _ => hst s) 17 0 n c (by omega)
     (fun i hi => by
       rw [cinstrAt_proList T (by rw [proList_length]; exact hi)]
       exact proList_straight _ (List.getElem_mem _))
@@ -603,7 +621,11 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
     have := hp i (by rw [proList_length] at hi; exact hi)
     rwa [cinstrAt_proList T hi] at this
   refine ⟨(hall _ pro_mem_init).1, fun f hf => ?_⟩
-  exact hall _ (pro_mem_frame hf)
+  by_cases hn : f = 1
+  · subst f
+    rw [fCell, if_pos rfl, frameV_one]
+    exact (hall _ pro_mem_init).2
+  · exact hall _ (pro_mem_frame hf hn)
 
 end Prefix
 

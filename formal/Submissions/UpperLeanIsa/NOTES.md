@@ -1,6 +1,6 @@
-# 1125-cycle four-child leanISA construction
+# 1124-cycle four-child leanISA construction
 
-The complete certificate in `Solution.lean` targets 1125 cycles. This research branch
+The complete certificate in `Solution.lean` targets 1124 cycles. This research branch
 continues toward a fully certified result at most 1110; it has not reached that goal.
 
 ## Construction
@@ -20,20 +20,27 @@ C1 through C13, ordinary and index metadata remain C0 and C16, and root metadata
 The single root binds tops 3,4,5,6,8,9. The graph is acyclic and its root plus nine binding
 packets cover all 42 tops. The codec rejects each all-zero binding tuple.
 
-The fourteen frame/cost constants C1 through C14 are pinned before the full-nonce length
-gate. C1,C2,C3,C4 occupy cells 105,106,47,107 to reject its otherwise possible long-length
-aliases. The remaining aliases lie in loader-padded cells. ONE and g remain adjacent at
-48 and 49. The four-child CV pairs and root CV pair have disjoint physical answer pairs;
-ten chains take the high half of their final hash so the selected tops are adjacent.
+Thirteen constants C1 through C13 are pinned before the full-nonce length gate.
+C1,C2,C3,C4 occupy cells 105,106,47,107 to reject its otherwise possible long-length
+aliases. The remaining aliases lie in loader-padded cells. After the gate establishes
+length 5504, that loaded word supplies frame 1; frame 0 uses C1 and frames 2–13 use
+C2–C13. Their field exponents remain separated by more than 2^33. This removes the C14
+initializer. Each of the nine positive binding-group costs contributes `cost - 1` to
+the product; the free block targets 77 instead of 86. The exact sum identity restores
+all nine hashes at the exit, so the hash count and signature scheme are unchanged.
+
+ONE and g remain adjacent at 48 and 49. The four-child CV pairs and root CV pair have
+disjoint physical answer pairs; ten chains take the high half of their final hash so
+the selected tops are adjacent.
 
 Group 5 supplies the four root message words directly from the signature for zero digits;
 all other groups materialize their tops. The group ordinary-instruction allowances are
 `[7,8,8,8,8,6,9,8,8,8,8,8,8]`, totaling 102. Including the free block and prologue/exit gives
-125 ordinary cycles. There are 86 chain hashes, one index hash and one root hash:
+124 ordinary cycles. There are 86 chain hashes, one index hash and one root hash:
 
-`125 + 88 * 10 + 120 = 1125`.
+`124 + 88 * 10 + 120 = 1124`.
 
-Every completing execution has 213 instructions. The bytecode has 2^18 slots, the group
+Every completing execution has 212 instructions. The bytecode has 2^18 slots, the group
 prefix ends at slot 243173, and the free blocks start at 255615. Memory has 2^16 cells,
 so the seeded-row total is 327680, strictly below 2^20. The public execution witnesses
 cannot reduce the cycle bound: `FourMachineCycles` quantifies over all admitted memory
@@ -44,15 +51,19 @@ at most 176 charged compressions in the abstract oracle model.
 
 ## Validation
 
-The complete four-child scheme and all machine clauses compile with the pinned Lean
-version. The initial axiom audit of scheme security, admissibility and table counts
-reports only `propext`, `Classical.choice`, and `Quot.sound`. The complete certificate's
-exact statement/primitive comparison, axiom audit and fresh unchanged Lean kernel replay
-all passed. The full export is 256,735,416 bytes and contains 55,390 declarations.
-Kernel replay took 398.423 seconds; the complete export checks took 440.173 seconds
-and peaked at 4,221,604,864 bytes of sampled PSS.
-The official Linux sandbox cannot run here because Landlock is unavailable. Standalone
-local checks do not constitute a hosted verdict. No 1125 submission has been pushed.
+The complete 1124-cycle solution built with the pinned Lean version (8919 jobs). Its
+256,820,865-byte export contains 55,400 declarations and passed exact statement/primitive
+comparison, the axiom audit, and a fresh unchanged Lean kernel replay. Replay took
+319.726 seconds; all local export checks took 360.680 seconds, with sampled peak PSS of
+5,204,140,032 bytes. Only propext, Classical.choice and Quot.sound were used.
+The official Linux sandbox cannot run here because Landlock is unavailable;
+standalone local checks do not constitute a hosted verdict. No 1124 submission has been pushed.
+
+The preceding 1125-cycle checkpoint fb0489b passed exact statement/primitive comparison,
+axiom audit and a fresh unchanged Lean kernel replay. Its 256,735,416-byte export contained
+55,390 declarations. Kernel replay took 398.423 seconds; all export checks took 440.173 seconds
+with 4,221,604,864 bytes of sampled peak PSS. It used only propext, Classical.choice and Quot.sound.
+That complete checkpoint is retained in Git.
 
 The preceding full nonce128 certificate at commit 191ba69 proved 1138 cycles. Its exact
 export comparison, axiom audit and fresh kernel replay passed in 355.328 seconds, with
@@ -121,3 +132,5 @@ budget for all extra field constants. The suggested 1010 figure is not a proved 
 
 - The full-nonce revision and the four-child single-root construction, exact codec/tier
   proofs, address layout, security proof and 1125-cycle machine certificate were prepared with Codex.
+- The validated-length frame and shifted checksum, reducing the machine to 1124 cycles,
+  were prepared with Codex.

@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.FourMachineFaithful
 import Submissions.UpperLeanIsa.FourMachineTable
 
-/-! The concrete 1125-cycle machine and its machine certificate clauses. -/
+/-! The concrete 1124-cycle machine and its machine certificate clauses. -/
 namespace OptimalOTS.HLFour
 open OptimalOTS.LeanIsaBaseline.Layer
 noncomputable section
@@ -13,7 +13,7 @@ theorem fusion_faithful : fusionMachine.Faithful := faithful fusionTab_hyp fusio
 
 theorem fusion_sound : fusionMachine.Sound := machine_sound fusionTab_hyp fusion_compat
 
-theorem fusion_cycles : fusionMachine.CyclesAtMost 1125 := machine_cycles fusionTab_hyp
+theorem fusion_cycles : fusionMachine.CyclesAtMost 1124 := machine_cycles fusionTab_hyp
 
 theorem fusion_valid : LeanIsa.BytecodeValid fusionMachine.program := machine_valid
 

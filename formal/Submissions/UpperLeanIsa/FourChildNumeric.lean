@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.TierNumeric
 
-/-! Exact numerical schedule for the proposed four-child tables.
-This is not a scheme or machine certificate; the codec counts still need a Lean proof. -/
+/-! Exact numerical schedule for the four-child tables. FourChildTier links these counts
+to FourChildCodec; FourSecurity and FourMachine use the resulting certificate. -/
 
 set_option linter.constructorNameAsVariable false
 

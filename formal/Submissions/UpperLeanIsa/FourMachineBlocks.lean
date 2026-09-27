@@ -168,7 +168,7 @@ theorem fbody_len (s : ℕ) : (fbody s).length = 3+s := by
 theorem fbody_lcost (s : ℕ) : lcost (fbody s) = 3+10*s := by
   unfold fbody
   rw [lcost_append,lcost_append,chainOps_lcost]
-  have h1 : lcost [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 86 s))] = 1 := rfl
+  have h1 : lcost [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 77 s))] = 1 := rfl
   have h2 : lcost [copy (if s = 0 then wCell 0 else tfCell) tfCell,.mul (hCell 1) gCell (h1Cell 1)] = 2 := rfl
   rw [h1,h2]
   omega
@@ -250,9 +250,9 @@ theorem body_lcost {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (
   omega
 
 
-theorem proList_length : proList.length = 18 := by unfold proList; rfl
+theorem proList_length : proList.length = 17 := by unfold proList; rfl
 
-theorem proList_lcost : lcost proList = 27 := by unfold proList lcost; rfl
+theorem proList_lcost : lcost proList = 26 := by unfold proList lcost; rfl
 
 theorem cinstrAt_sentinel (T : Tab) : cinstrAt T sentinel = .pad := by
   unfold cinstrAt
@@ -281,7 +281,7 @@ theorem sum_control_steps : (∑ u ∈ Finset.range 13, (ctlF (u+1)).steps) = 25
 theorem canonical_cost (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
     (hx : ∀ u < 13, xs (u+1) < VF u)
     (hlayer : xs 0 + ∑ u ∈ Finset.range 13, cost T u (xs (u+1)) = 86) :
-    canonicalCost T xs + 120 = 1125 := by
+    canonicalCost T xs + 120 = 1124 := by
   have hb : ∀ u ∈ Finset.range 13, lcost (body T u (xs (u+1)) false) =
       gcu u - 2 + 10 * cost T u (xs (u+1)) + 10 * hm u := by
     intro u hu
@@ -297,7 +297,7 @@ theorem canonical_cost (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
 theorem canonical_steps (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
     (hx : ∀ u < 13, xs (u+1) < VF u)
     (hlayer : xs 0 + ∑ u ∈ Finset.range 13, cost T u (xs (u+1)) = 86) :
-    canonicalSteps T xs = 213 := by
+    canonicalSteps T xs = 212 := by
   have hb : ∀ u ∈ Finset.range 13, (body T u (xs (u+1)) false).length =
       gcu u - 2 + cost T u (xs (u+1)) + hm u :=
     fun u hu => body_len hT (Finset.mem_range.mp hu) (hx u (Finset.mem_range.mp hu))

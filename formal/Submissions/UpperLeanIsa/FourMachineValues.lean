@@ -136,7 +136,7 @@ include hP in
 theorem v_g : v gCell = gV := hP.pro _ pro_mem_g
 
 include hP in
-theorem v_c {c : ℕ} (hc : c ≤ 14) : v (cCell c) = cV c := cCell_val hP.pro hc
+theorem v_c {c : ℕ} (hc : c ≤ 13) : v (cCell c) = cV c := cCell_val hP.pro hc
 
 include hP in
 theorem cb_cv (hC : Compat P T) : cellBits (v (oneCell+1)) ++ cellBits (v oneCell) = P.codec.cv := by
@@ -154,7 +154,7 @@ theorem fusedMd_cell (hC : Compat P T) (k : Fin 42) (_hk : binds k.val) :
     cellBits (v (fusedMdCell k.val)) = P.fusedMd k := by
   rw [hC.fusedMd]
   have hsmall : ∀ k : Fin 42,
-      fusedMdCell k.val = cCell (FourFusion.mdIndex k).val ∧ (FourFusion.mdIndex k).val ≤ 14 := by decide
+      fusedMdCell k.val = cCell (FourFusion.mdIndex k).val ∧ (FourFusion.mdIndex k).val ≤ 13 := by decide
   obtain ⟨he,hi⟩ := hsmall k
   rw [he,v_c hP hi,factor_bits _ (by omega)]
 
@@ -163,7 +163,7 @@ theorem fusedTag_cell (hC : Compat P T) (k : Fin 42) :
     cellBits (v (fusedTagCell k.val)) = P.fusedTag k := by
   rw [hC.fusedTag]
   have hsmall : ∀ k : Fin 42,
-      fusedTagCell k.val = cCell (FourFusion.tagIndex k).val ∧ (FourFusion.tagIndex k).val ≤ 14 := by decide
+      fusedTagCell k.val = cCell (FourFusion.tagIndex k).val ∧ (FourFusion.tagIndex k).val ≤ 13 := by decide
   obtain ⟨he,hi⟩ := hsmall k
   rw [he,v_c hP hi,factor_bits _ (by omega)]
 
@@ -192,10 +192,10 @@ theorem chainOp_plain_query (hP : PathFacts T (oracleRel f) v xs) (hC : Compat P
       P.codec.chainInput ⟨k, hk⟩ (LEN k - 1 - d + t) (cellBits x) := by
   have hj : LEN k - 1 - d + t + 1 < LEN k := by omega
   obtain ⟨h0, h1, h2⟩ := hC.tag ⟨k, hk⟩ _ hj
-  have hp : tpos k d t / 81 ≤ 14 := by
+  have hp : tpos k d t / 81 ≤ 13 := by
     have := OFFT_bound k hk; unfold tpos; omega
   rw [blake2sQuery_eq, v_c hP (c := tpos k d t % 9) (by omega),
-    v_c hP (c := tpos k d t / 9 % 9) (by omega), v_c hP (by omega : tpos k d t / 81 ≤ 14), cb_cv hP hC, v_one hP]
+    v_c hP (c := tpos k d t / 9 % 9) (by omega), v_c hP (by omega : tpos k d t / 81 ≤ 13), cb_cv hP hC, v_one hP]
   unfold Params.chainInput
   rw [h0, h1, h2, hC.chainMd]
   rfl
