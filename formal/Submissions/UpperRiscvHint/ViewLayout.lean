@@ -1,11 +1,11 @@
 import Submissions.UpperRiscvHint.MixedLayout
 
 /-! The in-place view. Bits `[0,128)` hold the nonce and the root region follows. Region bits
-`[0,192)` hold the free chain's value and region byte 24 the free count `v`. Up to region bit 5568
-the region is a run of 448-bit cells: cell `i` holds cap `i`'s 192-bit value at bit 0 (`i ≥ 1`)
-and normal chain `13 + i`'s 144-bit value at bit 256 (`i < 12`). After it, normal chain `25 + t`
-has its value at region bit `5632 + 192 t`. The honest view is 7248 bits and is zero outside the
-nonce, the values and `v`.
+`[0,144)` hold normal chain 32's value, region bits `[192,384)` the free chain's value and region
+byte 48 the free count `v`. From region bit 192 to 5760 the region is a run of 448-bit cells:
+cell `i` holds cap `i`'s 192-bit value at bit 0 (`i ≥ 1`) and normal chain `13 + i`'s 144-bit
+value at bit 256 (`i < 12`). After it, normal chain `25 + t` has its value at region bit
+`5824 + 192 t`. The honest view is 7248 bits and is zero outside the nonce, the values and `v`.
 
 `viewNonce` and `viewPayload` read a view, with zero padding, as the nonce and the chain values in
 graph order, which is the signature's order. `honestView σ c` places a 5504-bit signature with
@@ -78,18 +78,20 @@ theorem ofBits_viewNonce (view : List Bool) :
 /-! ## The honest view -/
 
 /-- The first view bit of the free count `v`. -/
-def freeBit : ℕ := 320
+def freeBit : ℕ := 512
 
 /-- The signature bit placed at view bit `b`; 5504, past every signature, marks padding. -/
 def sigIndex (b : ℕ) : ℕ :=
   if b < 128 then b
-  else if b - 128 < 5568 then
-    if (b - 128) % 448 < 192 then 128 + 192 * ((b - 128) / 448) + (b - 128) % 448
-    else if 256 ≤ (b - 128) % 448 ∧ (b - 128) % 448 < 400 ∧ (b - 128) / 448 < 12 then
-      2624 + 144 * ((b - 128) / 448) + ((b - 128) % 448 - 256)
+  else if b < 272 then 5360 + (b - 128)
+  else if b < 320 then 5504
+  else if b - 320 < 5568 then
+    if (b - 320) % 448 < 192 then 128 + 192 * ((b - 320) / 448) + (b - 320) % 448
+    else if 256 ≤ (b - 320) % 448 ∧ (b - 320) % 448 < 400 ∧ (b - 320) / 448 < 12 then
+      2624 + 144 * ((b - 320) / 448) + ((b - 320) % 448 - 256)
     else 5504
-  else if 5632 ≤ b - 128 ∧ (b - 5760) % 192 < 144 ∧ (b - 5760) / 192 < 8 then
-    4352 + 144 * ((b - 5760) / 192) + (b - 5760) % 192
+  else if 5632 ≤ b - 320 ∧ (b - 5952) % 192 < 144 ∧ (b - 5952) / 192 < 7 then
+    4352 + 144 * ((b - 5952) / 192) + (b - 5952) % 192
   else 5504
 
 /-- The in-place view of a signature with free count `c`: its nonce, every chain value in its
@@ -98,9 +100,6 @@ def honestView (σ : List Bool) (c : ℕ) : List Bool :=
   List.ofFn fun b : Fin honestViewBits =>
     if freeBit ≤ b.val ∧ b.val < freeBit + 8 then (4 * c).testBit (b.val - freeBit)
     else σ.getD (sigIndex b) false
-
-theorem honestView_length (σ : List Bool) (c : ℕ) : (honestView σ c).length = honestViewBits :=
-  List.length_ofFn
 
 theorem honestView_getD {σ : List Bool} {c b : ℕ} (hb : b < honestViewBits)
     (hv : ¬ (freeBit ≤ b ∧ b < freeBit + 8)) :
@@ -131,8 +130,8 @@ theorem viewIndex_free (p : ℕ) (hp : p < 5376) :
   split_ifs <;> omega
 
 theorem sigIndex_viewIndex (p : ℕ) (hp : p < 5376) : sigIndex (viewIndex p) = 128 + p := by
-  unfold viewIndex sigIndex wireOffset wireByte
-  split_ifs <;> omega
+  unfold viewIndex wireOffset wireByte
+  split_ifs <;> (unfold sigIndex; split_ifs <;> omega)
 
 /-- The honest view reads back as the signature's payload, in the same order. -/
 theorem viewPayload_honestView {σ : List Bool} (c : ℕ) (h : σ.length = 5504) :

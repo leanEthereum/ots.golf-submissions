@@ -1,5 +1,105 @@
-import Submissions.UpperRiscvHint.MixedPrepare
-import Submissions.UpperRiscvHint.MixedCost
+import Submissions.UpperRiscvHint.MixedChainStart
+import Submissions.UpperRiscvHint.MixedChainFrame
+import Submissions.UpperRiscvHint.MixedCode
+
+namespace OptimalOTS.RiscvMixedProgram
+open OptimalOTS.Dag
+open RiscvZkvm.Rv64 Forest Forest.Name OracleComp
+open Riscv2Program
+
+/-- The pointer move from chain `2q + 1` to chain `k = 2q + 2` preserves every value and slice. -/
+theorem move_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+    (q : Fin 16) (k : Chain) (hk : k.val = 2*q.val+2)
+    (s : MachineState) (x : graph.Assignment) (tail : Code)
+    (ctx : Ctx s index wire pk) (input : s.getReg .x10 = W (prevInput k))
+    (out : s.getReg .x12 = W (outAddr (2*q.val+1)))
+    (len : s.getReg .x11 = W (chainBits k)) (payload : PayloadFrom s wire k)
+    (done : Completed s (tops x) k)
+    (located : Riscv.CodeAt s s.pc (enter k (prevInput k) ++ tail))
+    (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : 2 ≤ fuel)
+    (continuation : ∀ u, HashInv index wire pk u x k (work k) →
+      MemBits u (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k))) →
+      Riscv.CodeAt u u.pc tail → Riscv.Refines (fuel-2) u Q c) :
+    Riscv.Refines fuel s Q (2+c) := by
+  have E := enter_effect s k input
+  have ready := enter_ready s k (prevInput k)
+  let u := (enter k (prevInput k)).foldl execInstrBr s
+  have prev : prevInput k = work (2*q.val+1) := by
+    unfold prevInput; rw [if_neg (by omega)]; congr 1; omega
+  have uctx : Ctx u index wire pk :=
+    ctx.enter q (input.trans (by rw [prev])) out (E.input.trans (by rw [hk]))
+      (E.out.trans (by rw [hk])) E.regs E.mem E.code
+  have urange : 32 ≤ work k ∧ work k+24 ≤ 0x78000000 := by
+    have h := wireOffset_contained k
+    unfold honestViewBits at h
+    rw [work_eq_view]; omega
+  have inv : HashInv index wire pk u x k (work k) := by
+    refine ⟨uctx, E.input, urange, ?_, E.out, ?_, ?_⟩
+    · rw [E.regs .x11 (by decide) (by decide)]; exact len
+    · intro j hj; exact memBits_of_mem_eq E.mem (payload j (by omega))
+    · intro j hj; exact memBits_of_mem_eq E.mem (done j hj)
+  have held := memBits_of_mem_eq E.mem (payload k le_rfl)
+  have loc : Riscv.CodeAt u u.pc tail := by
+    rw [E.pc]
+    exact located.append_right.code_eq E.code
+  rw [show fuel = (enter k (prevInput k)).length+(fuel-2) by change fuel=2+(fuel-2); omega]
+  exact Riscv.Refines.linear _ located.append_left ready (continuation u inv held loc)
+
+end OptimalOTS.RiscvMixedProgram
+
+namespace OptimalOTS.RiscvMixedProgram
+open OptimalOTS.Dag
+open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
+open Riscv2Program
+
+set_option allowUnsafeReducibility true
+attribute [local reducible] Forest.graph
+attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
+
+/-- The hashes of chain `k`: its digit for the free chain and a cap, its digit plus one for a
+normal chain. -/
+def remaining (index : RawIdx) (k : Chain) : ℕ := 32-firstAt index k
+
+theorem steps_eq_digit (index : RawIdx) (k : Chain) :
+    remaining index k = chainDigit index.val k + 1 - if k.val < 13 then 1 else 0 := by
+  have h := chainDigit_lt_32 index.val k
+  unfold remaining firstAt firstEval
+  rw [fixedPositions_val]
+  split_ifs <;> omega
+
+theorem lead_pair (q : ℕ) (j : ℕ) (hj : j < 2) :
+    (if 2*q+1+j < 13 then 1 else 0) = lead q := by
+  unfold lead; split_ifs <;> omega
+
+theorem fineDigit_lt (index : RawIdx) (q : ℕ) (hq : q < 16) :
+    digit index.val (2*q) < 2^fineWidth q := by
+  have h := digit_lt index.val (2*q)
+  have he : wid (2*q) = fineWidth q := by
+    simp [wid, fineWidth, show 2*q < 32 by omega]
+  rw [he] at h; exact h
+
+theorem coarseDigit_lt_copies (index : RawIdx) (q : ℕ) (hq : q < 16) :
+    coarseDigit index q < copies q := by
+  have h := digit_lt index.val (2*q+1)
+  have he : 2^wid (2*q+1) = copies q := by
+    simp [wid, copies, show 2*q+1 < 32 by omega]
+  rw [he] at h; exact h
+
+/-- The packed subtraction selects the coarse copy and the fine table entry, one row later for a
+cap pair. -/
+theorem pair_landing (index : RawIdx) (q : ℕ) (hq : q < 16) :
+    landing0 q+4*lead q-dispatch index q = copyStart q (coarseDigit index q) +
+      4*(2^fineWidth q-1-digit index.val (2*q)+lead q) := by
+  have hc := coarseDigit_lt_copies index q hq
+  have hf := fineDigit_lt index q hq
+  have e : copyStart q 0 = copyStart q (coarseDigit index q)+1024*coarseDigit index q := by
+    unfold copyStart
+    omega
+  unfold landing0 dispatch
+  rw [e]
+  omega
+
+end OptimalOTS.RiscvMixedProgram
 
 namespace OptimalOTS.RiscvMixedProgram
 open OptimalOTS.Dag
@@ -53,9 +153,11 @@ theorem hidden_refines (k : Chain) (hidden : 32 ≤ firstAt index k)
       apply (memBits_cast _ _ _ _).mpr
       rw [ofBits_take]
       have hw : graph.len (top k).fin = chainBits k := by rw [graph_len_fin]; exact hb
-      have e : work k = outAddr k := by rw [work_eq' k]; simp [truncOff, cap]
+      have h32 : k.val ≠ 32 := by omega
+      have e : work k = topAddr k := by
+        rw [work_eq' k]; simp [truncOff, topAddr, topOff, cap, h32]
       have key : ∀ n, n = chainBits k →
-          MemBits s (W (outAddr k)) (ofBits n ((viewPayload wire).drop (cursor k))) := by
+          MemBits s (W (topAddr k)) (ofBits n ((viewPayload wire).drop (cursor k))) := by
         intro n hn
         subst hn
         rw [viewPayload_read wire k, ← e]

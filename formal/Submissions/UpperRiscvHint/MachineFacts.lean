@@ -1,7 +1,69 @@
 import Submissions.UpperRiscvHint.Refines
-import Submissions.UpperRiscvHint.CopyProof
-import Submissions.UpperRiscvHint.HashOutput
+import Submissions.UpperRiscvHint.AssemblyMacros
+import Submissions.UpperRiscvHint.LoaderProof
 import Submissions.UpperRiscvHint.Lanes
+
+/-! Exact output words and memory frames for the machine's hash call. -/
+
+namespace OptimalOTS.Riscv2Program
+
+open OptimalOTS.Dag
+
+
+open RiscvZkvm.Rv64
+
+/-- A bounded sequence of word stores leaves each stored word at its own address. -/
+theorem getMem_writeWords_index (s : MachineState) (base : Word) (words : List Word)
+    (bounded : 8 * words.length < 2 ^ 64) (j : ℕ) (hj : j < words.length) :
+    (s.writeWords base words).getMem (base + BitVec.ofNat 64 (8 * j)) = words[j] := by
+  induction words generalizing s base j with
+  | nil => simp at hj
+  | cons w ws ih =>
+    have shift (k : ℕ) : (base + 8) + BitVec.ofNat 64 (8 * k) =
+        base + BitVec.ofNat 64 (8 * (k + 1)) := by
+      rw [Nat.mul_add, Nat.mul_one, BitVec.ofNat_add, BitVec.add_assoc]
+      congr 1
+      exact BitVec.add_comm _ _
+    cases j with
+    | zero =>
+      simp only [Nat.mul_zero, List.getElem_cons_zero]
+      rw [show base + 0#64 = base from BitVec.add_zero _]
+      rw [MachineState.writeWords_cons, getMem_writeWords_of_disjoint]
+      · exact MachineState.getMem_setMem_eq
+      · intro k hk
+        rw [shift k]
+        have h := add_offset_ne base (by norm_num : 0 < 2 ^ 64)
+          (by simp only [List.length_cons] at bounded; omega : 8 * (k + 1) < 2 ^ 64)
+          (by omega : 0 ≠ 8 * (k + 1))
+        simpa using h
+    | succ j =>
+      rw [MachineState.writeWords_cons, ← shift j]
+      exact ih _ _ (by simp only [List.length_cons] at bounded; omega) j (by simpa using hj)
+
+/-- HASH writes all four 64-bit slices of its answer in little-endian order. -/
+theorem writeHash_word (s : MachineState) (answer : BitVec hashBits) (j : ℕ) (hj : j < 4) :
+    (Riscv.writeHash s answer).getMem (s.getReg .x12 + BitVec.ofNat 64 (8 * j)) =
+      answer.extractLsb' (64 * j) 64 := by
+  unfold Riscv.writeHash
+  rw [MachineState.getMem_setPC, getMem_writeWords_index _ _ _ (by norm_num) j (by simpa using hj)]
+  interval_cases j <;> rfl
+
+/-- The output buffer represents the complete hash answer. -/
+theorem writeHash_memBits (s : MachineState) (answer : BitVec hashBits)
+    (aligned : alignToDword (s.getReg .x12) = s.getReg .x12) :
+    MemBits (Riscv.writeHash s answer) (s.getReg .x12) answer := by
+  apply memBits_of_words _ _ _ aligned
+  exact writeHash_word s answer
+
+/-- HASH preserves each memory word outside its four-word output buffer. -/
+theorem writeHash_frame (s : MachineState) (answer : BitVec hashBits) (addr : Word)
+    (disjoint : ∀ j, j < 4 → addr ≠ s.getReg .x12 + BitVec.ofNat 64 (8 * j)) :
+    (Riscv.writeHash s answer).getMem addr = s.getMem addr := by
+  unfold Riscv.writeHash
+  rw [MachineState.getMem_setPC]
+  exact getMem_writeWords_of_disjoint _ _ _ _ disjoint
+
+end OptimalOTS.Riscv2Program
 
 /-!
 # Addresses and accesses of the machine image
@@ -12,7 +74,21 @@ halfword loads.
 
 namespace OptimalOTS.Riscv2Program
 
+open OptimalOTS.Dag
+
 open RiscvZkvm.Rv64
+
+@[simp] theorem getReg_store (s : MachineState) (base value : Word) (r : Reg) :
+    (s.setMem base value).getReg r = s.getReg r := by cases r <;> rfl
+
+/-- The first aligned memory word can be recovered from a represented vector. -/
+theorem getMem_of_memBits {n : ℕ} {s : MachineState} {base : Word} {v : BitVec n}
+    (hn : 64 ≤ n) (ha : alignToDword base = base) (hm : MemBits s base v) :
+    s.getMem base = v.extractLsb' 0 64 := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  have h := (memBits_word s base ha i hi).symm.trans (hm i (by omega))
+  simpa only [BitVec.getLsbD_extractLsb', hi, decide_true, Bool.true_and, Nat.zero_add] using h
 
 /-- A 64-bit literal. -/
 abbrev W (n : ℕ) : Word := BitVec.ofNat 64 n
@@ -41,13 +117,6 @@ theorem W_ne {a b : ℕ} (ha : a < 2 ^ 64) (hb : b < 2 ^ 64) (h : a ≠ b) : W a
 theorem dword_ok (a : ℕ) (h1 : 32 ≤ a) (h2 : a ≤ 0x78000000) (h3 : a % 8 = 0) :
     isValidDwordAccess (W a) = true := by
   simp only [isValidDwordAccess, isAligned8, isValidMemAddr, MEM_START, MEM_END,
-    INPUT_MEM_START, INPUT_MEM_END, RAM_MEM_START, RAM_MEM_END, BitVec.toNat_ofNat,
-    Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq]
-  omega
-
-theorem half_ok (a : ℕ) (h1 : 32 ≤ a) (h2 : a ≤ 0x78000000) (h3 : a % 2 = 0) :
-    isValidHalfwordAccess (W a) = true := by
-  simp only [isValidHalfwordAccess, isAligned2, isValidMemAddr, MEM_START, MEM_END,
     INPUT_MEM_START, INPUT_MEM_END, RAM_MEM_START, RAM_MEM_END, BitVec.toNat_ofNat,
     Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq]
   omega
@@ -110,11 +179,6 @@ theorem getReg_setReg_ite (s : MachineState) (r r' : Reg) (v : Word) :
     · subst h
       simp [h0, MachineState.getReg_setReg_eq h0]
     · simp [h, MachineState.getReg_setReg_ne _ _ _ _ (Ne.symm h)]
-
-theorem getHalfword_congr {s t : MachineState} {a : Word}
-    (h : t.getMem (alignToDword a) = s.getMem (alignToDword a)) :
-    t.getHalfword a = s.getHalfword a := by
-  simp only [MachineState.getHalfword, h]
 
 theorem getMem_setMem_ite (s : MachineState) (a a' v : Word) :
     (s.setMem a v).getMem a' = if a' = a then v else s.getMem a' := by

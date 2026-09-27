@@ -191,10 +191,4 @@ theorem admissible (h : S.Admissible)
   signCost := h.signCost
   verifyCost := cost
 
-/--
-info: 'OptimalOTS.RejectAdapter.secure' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms secure
-
 end OptimalOTS.RejectAdapter

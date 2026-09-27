@@ -2,9 +2,9 @@ import Submissions.UpperRiscvHint.MixedVerifier
 import Submissions.UpperRiscvHint.HintTrap
 
 /-! In-place views of the free-chain scheme's signatures. A view whose free count (bits `2 … 7` of
-view byte 40) is below 16 holds the nonce and every chain value at fixed positions, and `compress`
+view byte 64) is below 16 holds the nonce and every chain value at fixed positions, and `compress`
 extracts them in signature order. A view with a larger count carries a raw signature after view
-byte 40; the image rejects it at the free dispatch, before its first possible trap. The honest
+byte 64; the image rejects it at the free dispatch, before its first possible trap. The honest
 prover lays out accepted signatures with the free count of their index, and hands every other
 signature over in the raw form (`HintTrap`). -/
 
@@ -21,8 +21,8 @@ open OptimalOTS.RiscvHint RiscvZkvm.Rv64
 set_option allowUnsafeReducibility true in
 attribute [local irreducible] stagedBlocks stagedRun freeBlocks freeRun instDecidablePredNatStagedRank
 
-/-- A raw view carries its signature after these bits: view byte 40 is the free count. -/
-def rawFlagBits : ℕ := 328
+/-- A raw view carries its signature after these bits: view byte 64 is the free count. -/
+def rawFlagBits : ℕ := 520
 
 def viewCompress (view : List Bool) : List Bool :=
   if 16 ≤ viewDigit view then view.drop rawFlagBits
@@ -30,7 +30,7 @@ def viewCompress (view : List Bool) : List Bool :=
 
 /-- The raw form: free count 63, then the signature. -/
 def rawView (σ : List Bool) : List Bool :=
-  List.replicate 320 false ++ List.replicate 8 true ++ σ
+  List.replicate 512 false ++ List.replicate 8 true ++ σ
 
 /-- The index query of a signature. -/
 def indexQuery (pk : PublicKey) (m : Message) (σ : List Bool) :=
@@ -105,30 +105,30 @@ theorem honestView_free (σ : List Bool) (c b : ℕ) (hb : freeBit ≤ b ∧ b <
 
 theorem viewDigit_honestView (σ : List Bool) (c : ℕ) (hc : c < 64) :
     viewDigit (honestView σ c) = c := by
-  have e : ofBits 8 ((honestView σ c).drop 320) = BitVec.ofNat 8 (4 * c) := by
+  have e : ofBits 8 ((honestView σ c).drop 512) = BitVec.ofNat 8 (4 * c) := by
     apply BitVec.eq_of_getLsbD_eq
     intro i hi
     simp only [ofBits, BitVec.getLsbD_ofNat, hi, decide_true, Bool.true_and,
       testBit_foldr_bits, List.getD_eq_getElem?_getD, List.getElem?_drop]
-    rw [← List.getD_eq_getElem?_getD, honestView_free σ c (320 + i) (by unfold freeBit; omega)]
+    rw [← List.getD_eq_getElem?_getD, honestView_free σ c (512 + i) (by unfold freeBit; omega)]
     unfold freeBit
-    rw [show 320 + i - 320 = i by omega]
+    rw [show 512 + i - 512 = i by omega]
   unfold viewDigit
   rw [e, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   omega
 
 theorem viewDigit_rawView (σ : List Bool) : viewDigit (rawView σ) = 63 := by
-  have e : ofBits 8 ((rawView σ).drop 320) = BitVec.ofNat 8 255 := by
+  have e : ofBits 8 ((rawView σ).drop 512) = BitVec.ofNat 8 255 := by
     apply BitVec.eq_of_getLsbD_eq
     intro i hi
     simp only [ofBits, BitVec.getLsbD_ofNat, hi, decide_true, Bool.true_and,
       testBit_foldr_bits, List.getD_eq_getElem?_getD, List.getElem?_drop]
-    have hbit : (rawView σ)[320 + i]? = some true := by
+    have hbit : (rawView σ)[512 + i]? = some true := by
       unfold rawView
       rw [List.getElem?_append_left (by simp only [List.length_append, List.length_replicate]; omega),
         List.getElem?_append_right (by simp only [List.length_replicate]; omega),
         List.getElem?_replicate]
-      simp only [List.length_replicate, show 320 + i - 320 < 8 by omega, if_true]
+      simp only [List.length_replicate, show 512 + i - 512 < 8 by omega, if_true]
     rw [hbit, Option.getD_some]
     interval_cases i <;> decide
   unfold viewDigit

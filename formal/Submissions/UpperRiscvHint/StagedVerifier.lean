@@ -94,25 +94,6 @@ theorem freeBlocks_eq_freeRun (index : RawIdx) (payload : List Bool) (pk : Publi
 attribute [local irreducible] stagedBlocks
 attribute [local irreducible] stagedRun
 
-/-- Machine-facing expansion: `some` changes the output interface, never the query trace. -/
-theorem stagedBlocks_some_succ (index : RawIdx) (payload : List Bool) (pk : PublicKey)
-    (n q : ℕ) (hq : q < 16) (x : graph.Assignment) (cursor : ℕ) :
-    some <$> stagedBlocks index payload pk (n+1) q x cursor =
-      if PairAllowed index.val q then (do
-        let r ← runNodes' index payload
-          (chainNodes ⟨2*q+1, by omega⟩ ++ chainNodes ⟨2*q+2, by omega⟩) x cursor
-        some <$> stagedBlocks index payload pk n (q+1) r.1 r.2)
-      else pure (some false) := by
-  rw [stagedBlocks, dif_pos hq]
-  split_ifs <;> simp only [map_bind, map_pure]
-
-theorem stagedBlocks_some_zero (index : RawIdx) (payload : List Bool) (pk : PublicKey)
-    (q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
-    some <$> stagedBlocks index payload pk 0 q x cursor = (do
-      let r ← runNodes' index payload [rc, rh] x cursor
-      return some (decide (flipHi ((r.1 rh.fin).setWidth 128) = pk))) := by
-  simp only [stagedBlocks, map_bind, map_pure]
-
 theorem stagedBlocks_eq_of_allowed (index : RawIdx) (payload : List Bool) (pk : PublicKey)
     (n q : ℕ) (hq : q+n ≤ 16)
     (caps : ∀ j, q ≤ j → j < q+n → PairAllowed index.val j)
@@ -449,17 +430,5 @@ theorem stagedScheme_admissible : stagedScheme.Admissible := by
   · exact stagedVerify_deterministic
   · intro pk m bits
     exact (stagedVerify_cost pk m bits).mono (by decide)
-
-/--
-info: 'OptimalOTS.RiscvMixedProgram.stagedScheme_secure' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms stagedScheme_secure
-
-/--
-info: 'OptimalOTS.RiscvMixedProgram.stagedScheme_admissible' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms stagedScheme_admissible
 
 end OptimalOTS.RiscvMixedProgram

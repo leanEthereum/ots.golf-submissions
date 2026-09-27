@@ -30,7 +30,6 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 namespace Dag.Graph
 
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
@@ -49,20 +48,6 @@ def keygenCache (ξ : G.Rec) : Cache :=
     (fun c v => match G.point (G.evalRec ξ) v with
       | some q => c.cacheQuery q (ξ.2 v)
       | none => c) ∅
-
-theorem point_eq_some_iff (x : G.Assignment) (v : Fin G.size) (q : Query) :
-    G.point x v = some q ↔
-      ∃ p hp hl, G.kind v = .hash p hp hl ∧ q = ⟨G.len p, x p⟩ := by
-  unfold point
-  rcases hk : G.kind v with _ | ⟨ps, hps, f, hf⟩ | ⟨p, hp, hl⟩
-  · simp
-  · simp
-  · simp only [Option.some.injEq, NodeKind.hash.injEq]
-    constructor
-    · rintro rfl
-      exact ⟨p, hp, hl, rfl, rfl⟩
-    · rintro ⟨p', hp', hl', rfl, rfl⟩
-      rfl
 
 /-- The keygen points of the assignment `x` are pairwise distinct. -/
 def Distinct (x : G.Assignment) : Prop :=

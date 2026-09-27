@@ -27,7 +27,6 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 namespace Forest
 
 open Name
@@ -42,8 +41,6 @@ theorem sigma_cast {a b : ℕ} (h : a = b) (x : BitVec a) :
 
 theorem trunc_cast_eq (k : Chain) {a b : ℕ} (h : a = b) (x : BitVec a) : trunc k (x.cast h) = trunc k x := by
   subst h; rfl
-
-theorem trunc_state (k : Chain) (x : BitVec (chainBits k)) : trunc k x = x := trunc_eq_self k x
 
 theorem trunc_src (k : Chain) (x : BitVec (src k).len) : trunc k x = x := trunc_eq_self k x
 
@@ -81,8 +78,8 @@ theorem slotCat_inj {a b : (k : Chain) → BitVec (topBits k)} :
 
 /-- The root slot of chain `k`. -/
 def slotOf (k : Chain) : ℕ :=
-  if 13 ≤ k.val ∧ k.val < 25 then 2 * (k.val - 13) + 1 else if k.val < 13 then 2 * k.val
-  else k.val
+  if k.val = 32 then 0 else if 13 ≤ k.val ∧ k.val < 25 then 2 * (k.val - 13) + 2
+  else if k.val < 13 then 2 * k.val + 1 else k.val + 1
 
 theorem slotChain_slotOf (k : Chain) : slotChain (slotOf k) = k := by
   have := k.isLt
@@ -101,19 +98,8 @@ theorem rootCat_inj {a b : (k : Chain) → BitVec (topBits k)} (h : rootCat a = 
 
 /-! ## Names -/
 
-theorem cost_eq_zero_of_len {n : Name} (h : n.len = 192) : n.cost = 0 := by
-  cases n <;> first | rfl | (simp [Name.len] at h)
-
 theorem len_eq_of_hashParent {h p : Name} (hp : hashParent h = some p) : h.len = 256 := by
   cases h <;> simp only [hashParent, reduceCtorEq] at hp <;> rfl
-
-/-- The input of a hash node is a deterministic node. -/
-theorem cost_hashParent {h p : Name} (hp : hashParent h = some p) : p.cost = 0 := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;> rfl
-
-theorem hashParent_ne_src {h p : Name} (hp : hashParent h = some p) (k : Chain) : p ≠ src k := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp <;>
-    exact fun e => nomatch e
 
 theorem prev_zero (k : Chain) : prev k 0 = src k := by
   simp [prev]
@@ -132,10 +118,6 @@ theorem hashOf_of_ne_zero (k : Chain) (t : Fin 32) (ht : ¬ t.val = 0) :
 
 theorem child_cv_of_ne (k : Chain) (t : Fin 32) (ht : ¬ t.val = 31) :
     child (cv k t) = some (ci k ⟨t.val + 1, by omega⟩) := by
-  simp [Name.child, ht]
-
-theorem child_cv_top (k : Chain) (t : Fin 32) (ht : t.val = 31) :
-    child (cv k t) = some (top k) := by
   simp [Name.child, ht]
 
 theorem val_top' (ξ : Rec) (k : Chain) : val ξ (top k) = topOf k (val ξ (cv k 31)) := by
@@ -251,9 +233,6 @@ def Dif (ξ : Rec) : (v : Name) → BitVec v.len → Prop
   | cv k t, x => if t.val = 31 then topOf k x ≠ topOf k (val ξ (cv k t)) else
       trunc k x ≠ trunc k (val ξ (cv k t))
   | v, x => x ≠ val ξ v
-
-theorem dif_src {ξ : Rec} {k : Chain} {x : BitVec (src k).len} (h : x ≠ val ξ (src k)) :
-    Dif ξ (src k) x := h
 
 theorem dif_ci {ξ : Rec} {k : Chain} {t : Fin 32} {x : BitVec (ci k t).len}
     (h : x ≠ val ξ (ci k t)) : Dif ξ (ci k t) x := h

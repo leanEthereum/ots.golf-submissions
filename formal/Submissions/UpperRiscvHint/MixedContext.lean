@@ -6,26 +6,14 @@ open RiscvZkvm.Rv64
 open Riscv2Program (W Code laneBase hashBase)
 open OptimalOTS.Dag
 
-abbrev target : ℕ := OptimalOTS.target
 /-- The free dispatch, after the index phase. -/
 def freeStart : ℕ := 4096 + 4*34
-/-- Pair 0's prologue, after the free row. -/
-def blockZero : ℕ := 4096 + 4*101
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q
-def firstChain (q : ℕ) : ℕ := 2*q
 def coarseDigit (index : RawIdx) (q : ℕ) : ℕ := digit index.val (2*q+1)
 def dispatch (index : RawIdx) (q : ℕ) : ℕ :=
   4*digit index.val (2*q) + 1024*coarseDigit index q
-
-theorem firstChain_lt (q : ℕ) (hq : q < 16) : firstChain q < 32 := by
-  unfold firstChain; omega
-
-theorem digit_lt_32' (i k : ℕ) : digit i k < 32 := by
-  have h := digit_lt i k
-  have : 2 ^ wid k ≤ 32 := by unfold wid; split_ifs <;> norm_num
-  omega
 
 theorem coarseDigit_lt (index : RawIdx) (q : ℕ) : coarseDigit index q < 16 := by
   have h := digit_lt index.val (2*q+1)

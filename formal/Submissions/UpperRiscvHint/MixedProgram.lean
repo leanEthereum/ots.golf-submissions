@@ -1,17 +1,19 @@
 import Submissions.UpperRiscvHint.Program
 
-/-! The 321-cycle free-chain image. This module proves image validity; the execution and
+/-! The 320-cycle free-chain image. This module proves image validity; the execution and
 refinement certificate is a separate obligation.
 
 The view holds the nonce and then the 888-byte root region from 0x400040. Chain 0 is the free
 chain and chains 1 to 12 are the index caps: a cap takes answer bytes `[0,24)` as its 192-bit
-state and hashes in place, so its top is its value when its count is 0. The free chain is at region
-byte 0 and cap `k` at `56 k`. Chains 13 to 32 are normal chains: normal `13 + j` has its 32-byte
-answer buffer at region byte `56 j + 24` below cap `j + 1` for `j < 12`, and at `696 + 24 (j - 12)`
-after, with its 144-bit value eight bytes into the buffer. The free chain runs first, then the caps,
+state and hashes in place, so its top is its value when its count is 0. Chains 13 to 32 are normal
+chains with their 144-bit value eight bytes into a 32-byte answer buffer. Chain 32, which hashes
+last, has its value at region byte 0 and its buffer eight bytes lower, in the nonce's high word:
+after its last hash `x10` already points at the root input. The free chain is at region byte 24
+and cap `k` at `24 + 56 k`; normal `13 + j` has its buffer at region byte `48 + 56 j` below cap
+`j + 1` for `j < 12`, and at `720 + 24 (j - 12)` after. The free chain runs first, then the caps,
 then the normals.
 
-The free chain's count `c` is the view byte `v` at 0x400058, a dead byte of normal 13's buffer:
+The free chain's count `c` is the view byte `v` at 0x400070, a dead byte of normal 13's buffer:
 `v & 0xFC = 4 c`. The checksum subtracts `4 c` from the address sum, so its residue is the HASH call
 number exactly when the digit sum plus `c` is 145 modulo 255. The free dispatch lands `c` cells
 before pair 0's prologue; cells for `c ≥ 16` jump to a rejection stub. -/
@@ -25,17 +27,19 @@ open Riscv2Program (Code imm12 reject indexPrefix wordReg
   laneWordAddr hashBase laneBase wordBytes broadcast nop decision)
 
 /-- The answer buffer of chain `k`, and for a cap also its value and state. -/
-def outAddr (k : ℕ) : ℕ := 0x400040 +
-  if k ≤ 12 then 56 * k else if k < 25 then 56 * (k - 13) + 24 else 696 + 24 * (k - 25)
+def outAddr (k : ℕ) : ℕ :=
+  if k = 32 then 0x400038 else 0x400058 +
+    if k ≤ 12 then 56 * k else if k < 25 then 56 * (k - 13) + 24 else 696 + 24 * (k - 25)
 /-- View byte offset of chain `k`'s value, after the 16-byte nonce. -/
 def wireByte (k : ℕ) : ℕ :=
-  if k ≤ 12 then 56 * k else if k < 25 then 56 * (k - 13) + 32 else 704 + 24 * (k - 25)
+  if k = 32 then 0 else 24 +
+    if k ≤ 12 then 56 * k else if k < 25 then 56 * (k - 13) + 32 else 704 + 24 * (k - 25)
 /-- The input address while chain `k` hashes: its value in the view, then its state. -/
 def work (k : ℕ) : ℕ := 0x400040 + wireByte k
 /-- The length of the honest view. -/
 def honestViewBits : ℕ := 7248
 /-- The view byte that carries the free chain's count. -/
-def freeByte : ℕ := 0x400058
+def freeByte : ℕ := 0x400070
 /-- The constant in `x1`: the free dispatch base and, less 960, the root length. -/
 def freeBase : ℕ := 6144
 def fineWidth (_q : ℕ) : ℕ := 4
@@ -105,10 +109,9 @@ def prologue (q : ℕ) : Code :=
      .LHU .x28 .x12 (imm12 ((laneBase + 2*q : ℤ) - outAddr (2*q+1))),
      .ADDI .x10 .x12 (imm12 ((work (2*q+1) : ℤ) - outAddr (2*q+1))),
      .JALR .x0 .x28 (imm12 (jumpImm q))]
-/-- The root length is the free base less 960. -/
-def root : Code :=
-  [.ADDI .x10 .x10 (imm12 ((outAddr 0 : ℤ) - work 32)),
-   .ADDI .x11 .x1 (imm12 (7104 - (freeBase : ℤ))), .ECALL]
+/-- The last chain's state is the root input's first slot, so `x10` needs no move. The root length
+is the free base less 960. -/
+def root : Code := [.ADDI .x11 .x1 (imm12 (7104 - (freeBase : ℤ))), .ECALL]
 def pairCap (_q : ℕ) : ℕ := 24
 /-- Rejection fragments occupy previously unreachable padding, in discovery order. -/
 def rejectStubs : List ℕ := [655,4518,8382,12247,716,4581,8447,12310]
@@ -161,7 +164,7 @@ def dataImage : List (BitVec 8) :=
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
 theorem index_length : indexPhase.length = 34 := by decide +kernel
-theorem code_length : verifier.length = 15752 := by decide +kernel
+theorem code_length : verifier.length = 15751 := by decide +kernel
 theorem data_length : dataImage.length = 64 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel
 theorem image_valid : image.Valid := by

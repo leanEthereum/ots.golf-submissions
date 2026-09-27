@@ -32,11 +32,6 @@ theorem setsName_injective : Function.Injective setsName := fixedCut_injective
 def forestScheme : GScheme where
   graph := graph
   sets := fun i => fins (setsName i)
-  root_not_mem := by
-    intro i
-    show rh.fin ∉ fins (setsName i)
-    rw [mem_fins]
-    exact (fixedCut_isCut i).rh_not_mem
   no_hidden_source := by
     intro i
     exact (no_hidden_source_iff (setsName i)).mpr (fixedCut_isCut i).covers

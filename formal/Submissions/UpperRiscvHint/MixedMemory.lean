@@ -11,21 +11,17 @@ def PayloadFrom (s : MachineState) (view : List Bool) (k : ℕ) : Prop :=
   ∀ j : Chain, k ≤ j.val →
     MemBits s (W (work j)) (ofBits (chainBits j) (view.drop (wireOffset j)))
 
-/-- Every chain below `k` has its committed top at its answer buffer. -/
+/-- Every chain below `k` has its committed top at its top address. -/
 def Completed (s : MachineState) (tops : (k : Chain) → BitVec (topBits k)) (k : ℕ) : Prop :=
-  ∀ j : Chain, j.val < k → MemBits s (W (outAddr j)) (tops j)
+  ∀ j : Chain, j.val < k → MemBits s (W (topAddr j)) (tops j)
 
-/-- The low bits of a represented vector are represented at the same address. -/
-theorem memBits_setWidth {n w : ℕ} {s : MachineState} {base : Word} {v : BitVec n}
-    (hm : MemBits s base v) (hw : w ≤ n) : MemBits s base (v.setWidth w) := by
-  intro i hi
-  rw [BitVec.getLsbD_setWidth, hm i (by omega)]
-  simp [hi]
-
-/-- A hash writes the chain's top as the low bits of its answer buffer. -/
+/-- A hash writes the chain's top into its answer buffer. -/
 theorem top_of_answer {s : MachineState} (k : Chain) {y : BitVec 256}
-    (answer : MemBits s (W (outAddr k)) y) : MemBits s (W (outAddr k)) (topOf k y) :=
-  memBits_setWidth answer (topBits_le k)
+    (answer : MemBits s (W (outAddr k)) y) : MemBits s (W (topAddr k)) (topOf k y) := by
+  have h := memBits_extract answer (start := topOff k) (len := topBits k)
+    (by unfold topOff; split_ifs <;> rfl) (topOff_add_le k)
+  rw [W_add] at h
+  exact h
 
 /-- Byte intervals disjoint from the aligned 32-byte hash output retain their bits. -/
 theorem writeHash_preserves (s : MachineState) (y : BitVec 256) (base out n : ℕ)
@@ -69,8 +65,9 @@ theorem Completed.writeHash {s : MachineState} {tops : (k : Chain) → BitVec (t
   have bj := output_bounds j
   have hn : topBits j % 8 = 0 := by unfold topBits; split_ifs <;> decide
   have hl := topBits_le j
-  apply writeHash_preserves s y (outAddr j) (outAddr k) (topBits j) _ (hp j hj)
-    ho bo.2.2 hn (by omega) (by omega)
+  have ht : topOff j ≤ 64 := by unfold topOff; split_ifs <;> decide
+  apply writeHash_preserves s y (topAddr j) (outAddr k) (topBits j) _ (hp j hj)
+    ho bo.2.2 hn (by unfold topAddr; omega) (by omega)
   exact completed_disjoint j k hj
 
 end OptimalOTS.RiscvMixedProgram

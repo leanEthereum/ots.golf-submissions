@@ -1,6 +1,41 @@
 import Submissions.UpperRiscvHint.Master
 import Submissions.UpperRiscvHint.GScheme
-import Submissions.UpperRiscvHint.PackCount
+import Submissions.UpperRiscvHint.PackFiber
+
+/-! # The fiber count of `pack` -/
+
+namespace OptimalOTS
+
+attribute [local irreducible] hashBits
+
+/-- Every set of packed indices below `2 ^ 128` is hit by exactly `2 ^ 128` answers each. -/
+theorem card_pack_mem (A : Finset ℕ) (hA : ∀ n ∈ A, n < 2 ^ 128) :
+    (Finset.univ.filter fun y : BitVec hashBits => pack y ∈ A).card = A.card * 2 ^ 128 := by
+  have hj : ∀ y, junk y < 2 ^ 128 := junk_lt
+  have hpu : ∀ i j, i < 2 ^ 128 → j < 2 ^ 128 → pack (unpack i j) = i :=
+    fun i j hi _ => pack_unpack j hi
+  have hju : ∀ i j, i < 2 ^ 128 → j < 2 ^ 128 → junk (unpack i j) = j :=
+    fun i j _ hj => junk_unpack i hj
+  generalize hM : (2 : ℕ) ^ 128 = M at hA hj hpu hju ⊢
+  rw [← Finset.card_range M, ← Finset.card_product]
+  refine Finset.card_nbij' (fun y => (pack y, junk y)) (fun x => unpack x.1 x.2) ?_ ?_ ?_ ?_
+  · intro y hy
+    rw [Finset.mem_coe, Finset.mem_filter] at hy
+    rw [Finset.mem_coe, Finset.mem_product]
+    exact ⟨hy.2, Finset.mem_range.mpr (hj y)⟩
+  · intro x hx
+    rw [Finset.mem_coe, Finset.mem_product, Finset.mem_range] at hx
+    rw [Finset.mem_coe, Finset.mem_filter]
+    refine ⟨Finset.mem_univ _, ?_⟩
+    rw [hpu _ _ (hA _ hx.1) hx.2]
+    exact hx.1
+  · intro y _
+    exact unpack_pack_junk y
+  · intro x hx
+    rw [Finset.mem_coe, Finset.mem_product, Finset.mem_range] at hx
+    exact Prod.ext (hpu _ _ (hA _ hx.1) hx.2) (hju _ _ (hA _ hx.1) hx.2)
+
+end OptimalOTS
 
 /-!
 # The signing loop
@@ -28,7 +63,6 @@ open scoped Classical
 namespace OptimalOTS
 
 open OptimalOTS.Dag
-
 
 /-! ## Lemmas shared with the lower-bound proof (copied: submissions may not import each other) -/
 
@@ -61,54 +95,9 @@ theorem card_idxOfOut_mem (_hidx : idxBits ≤ hashBits) (A : Finset ℕ)
   rw [two_pow_hashBits_sub]
   exact card_pack_mem A fun n hn => by rw [← two_pow_idxBits]; exact hA n hn
 
-/-- The old, direct proof for the truncated index, kept for reference. -/
-theorem card_setWidth_mem (hidx : idxBits ≤ hashBits) (A : Finset ℕ)
-    (hA : ∀ n ∈ A, n < 2 ^ idxBits) :
-    (Finset.univ.filter fun y : BitVec hashBits => (y.setWidth idxBits).toNat ∈ A).card =
-      A.card * 2 ^ (hashBits - idxBits) := by
-  have hH : 2 ^ hashBits = 2 ^ idxBits * 2 ^ (hashBits - idxBits) := by
-    rw [← pow_add, Nat.add_sub_cancel' hidx]
-  have hNpos : 0 < 2 ^ idxBits := by positivity
-  rw [← Finset.card_range (2 ^ (hashBits - idxBits)), ← Finset.card_product]
-  refine Finset.card_nbij' (fun y => (y.toNat % 2 ^ idxBits, y.toNat / 2 ^ idxBits))
-    (fun x => BitVec.ofNat hashBits (x.1 + 2 ^ idxBits * x.2)) ?_ ?_ ?_ ?_
-  · intro y hy
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq] at hy
-    simp only [Finset.coe_product, Set.mem_prod, Finset.mem_coe, Finset.mem_range]
-    refine ⟨?_, ?_⟩
-    · simpa [BitVec.toNat_setWidth] using hy
-    · rw [Nat.div_lt_iff_lt_mul hNpos]
-      have := y.isLt
-      rw [hH] at this
-      linarith
-  · intro x hx
-    simp only [Finset.coe_product, Set.mem_prod, Finset.mem_coe, Finset.mem_range] at hx
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq]
-    have h1 : x.1 + 2 ^ idxBits * x.2 < 2 ^ hashBits := by
-      rw [hH]
-      have := hA _ hx.1
-      nlinarith
-    simp only [BitVec.toNat_setWidth, BitVec.toNat_ofNat, Nat.mod_eq_of_lt h1,
-      Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt (hA _ hx.1)]
-    exact hx.1
-  · intro y _
-    apply BitVec.eq_of_toNat_eq
-    simp only [BitVec.toNat_ofNat]
-    rw [Nat.mod_add_div, Nat.mod_eq_of_lt y.isLt]
-  · intro x hx
-    simp only [Finset.coe_product, Set.mem_prod, Finset.mem_coe, Finset.mem_range] at hx
-    have hx1 := hA _ hx.1
-    have h1 : x.1 + 2 ^ idxBits * x.2 < 2 ^ hashBits := by
-      rw [hH]
-      nlinarith
-    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h1, Nat.add_mul_mod_self_left,
-      Nat.mod_eq_of_lt hx1, Nat.add_mul_div_left _ _ hNpos, Nat.div_eq_of_lt hx1, zero_add]
-
 end Analysis
 
-
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
-
 
 /-- An encoding input. -/
 abbrev EncInput := BitVec (emsgBits + nonceBits)

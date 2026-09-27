@@ -12,7 +12,6 @@ namespace OptimalOTS.Riscv2Program
 
 open OptimalOTS.Dag
 
-
 open RiscvZkvm.Rv64
 
 /-- The next `n` memory bits represent `v`, least significant bit first. -/
@@ -147,34 +146,6 @@ theorem memBits_word (s : MachineState) (base : Word)
   simp only [hm, decide_true, Bool.true_and]
   congr 1
   omega
-
-/-- Aligned adjacent doublewords reconstruct one 128-bit value. -/
-theorem memBits_twoWords (s : MachineState) (base : Word)
-    (hbase : alignToDword base = base) :
-    MemBits s base (s.getMem (base + 8) ++ s.getMem base) := by
-  apply memBits_append (by decide) (memBits_word s base hbase)
-  apply memBits_word
-  apply (aligned_iff _).mpr
-  have hb := (aligned_iff base).mp hbase
-  simp only [BitVec.toNat_add, BitVec.toNat_ofNat]
-  omega
-
-/-- A 128-bit value is determined by its two little-endian doublewords. -/
-theorem memBits_of_twoWords {s : MachineState} {base : Word} {v : BitVec 128}
-    (hbase : alignToDword base = base)
-    (hlo : s.getMem base = v.extractLsb' 0 64)
-    (hhi : s.getMem (base + 8) = v.extractLsb' 64 64) : MemBits s base v := by
-  have h := memBits_twoWords s base hbase
-  rw [hlo, hhi] at h
-  have heq : v.extractLsb' 64 64 ++ v.extractLsb' 0 64 = v := by
-    apply BitVec.eq_of_getLsbD_eq
-    intro i hi
-    rw [BitVec.getLsbD_append]
-    by_cases hlow : i < 64
-    · simp [hlow]
-    · have hsub : i - 64 < 64 := by omega
-      simp [hlow, hsub, show 64 + (i - 64) = i by omega]
-  simpa only [heq] using h
 
 /-- Reading one packed byte is the corresponding list lookup, with zero padding. -/
 theorem bytesToWordLE_getLsbD (bs : List (BitVec 8)) {i : ℕ} (hi : i < 64) :

@@ -47,9 +47,6 @@ theorem addCycles_accept_bound (computation : OracleComp Spec Outcome) (a b : �
     have hb := bound cycles' hr
     omega
 
-theorem Refines.congr {fuel : ℕ} {s : MachineState} {q q' : OracleComp Spec (Option Bool)}
-    {c : ℕ} (h : Refines fuel s q c) (hq : q = q') : Refines fuel s q' c := hq ▸ h
-
 theorem addCycles_zero (x : Outcome) : addCycles 0 x = x := by
   cases x with
   | none => rfl

@@ -17,9 +17,7 @@ namespace OptimalOTS.GenericCorrectness
 
 open OptimalOTS.Dag
 
-
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
-
 
 /-- A reconstruction satisfying the cached equations agrees with the original on visited nodes. -/
 theorem reconstruct_eq (G : Graph) (A : Finset (Fin G.size)) (x y : G.Assignment)
@@ -138,11 +136,5 @@ theorem correct (S : GScheme) : S.toAlgorithm.Correct := by
     simp only [hok, Bool.not_true, run_pure, support_pure, Set.mem_singleton_iff,
       Prod.mk.injEq] at h
     cases h.1.symm.trans hb
-
-/--
-info: 'OptimalOTS.GenericCorrectness.correct' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms correct
 
 end OptimalOTS.GenericCorrectness

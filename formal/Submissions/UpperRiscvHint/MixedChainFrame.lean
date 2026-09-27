@@ -1,5 +1,45 @@
 import Submissions.UpperRiscvHint.MixedChainSteps
-import Submissions.UpperRiscvHint.MixedRootMemory
+import Submissions.UpperRiscvHint.MixedRoot
+
+namespace OptimalOTS.RiscvMixedProgram
+open OptimalOTS.Dag
+open RiscvZkvm.Rv64
+open Riscv2Program
+open Forest
+
+theorem slotWidth_aligned : ∀ s : Fin 33, slotWidth s % 8 = 0 := by decide
+
+/-- Root slot `s + 1` starts where slots `0 … s` end. -/
+theorem slot_address : ∀ s : Fin 32, topAddr (slotChain (s.val + 1)) = regionAddr + slotWidth s / 8 := by
+  decide
+
+theorem completed_slotCat (s : MachineState) (c : (k : Chain) → BitVec (topBits k))
+    (done : Completed s c 33) : ∀ n, n < 33 → MemBits s (W regionAddr) (slotCat c n) := by
+  intro n
+  induction n with
+  | zero =>
+    intro _
+    have h := done (slotChain 0) (by decide)
+    have e : topAddr (slotChain 0) = regionAddr := by decide
+    rw [e] at h
+    exact h
+  | succ n ih =>
+    intro hn
+    rw [slotCat]
+    apply memBits_append (slotWidth_aligned ⟨n, by omega⟩) (ih (by omega))
+    have h := done (slotChain (n+1)) (Fin.isLt _)
+    have e := slot_address ⟨n, by omega⟩
+    dsimp only at e
+    rw [e, ← W_add] at h
+    exact h
+
+/-- The completed tops form exactly the graph's 7104-bit root input. -/
+theorem completed_root (s : MachineState) (c : (k : Chain) → BitVec (topBits k))
+    (done : Completed s c 33) : MemBits s (W regionAddr) (rootCat c) := by
+  unfold rootCat
+  exact (memBits_cast _ _ _ _).mpr (completed_slotCat s c done 32 (by decide))
+
+end OptimalOTS.RiscvMixedProgram
 
 namespace OptimalOTS.RiscvMixedProgram
 open OptimalOTS.Dag
@@ -84,11 +124,6 @@ theorem Ctx.prologue {s t : MachineState} {index : RawIdx} {view : List Bool} {p
 
 variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
-theorem holdsAt_frame {s t : MachineState} {x : graph.Assignment} {k : Chain} {level : ℕ}
-    (mem : t.mem = s.mem) (held : HoldsAt s x k level) : HoldsAt t x k level := by
-  unfold HoldsAt at *
-  split_ifs at * <;> exact memBits_of_mem_eq mem held
-
 /-- Hash-input width in `x11` at the boundary before chain `k`: the previous chain's width. -/
 def prevBits (k : ℕ) : ℕ := if k ≤ 13 then 192 else 144
 
@@ -103,7 +138,7 @@ structure ChainsInv (s : MachineState) (x : graph.Assignment) (k : ℕ) : Prop w
 
 theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Chain}
     (inv : HashInv index wire pk s x k (work k))
-    (answer : MemBits s (W (outAddr k)) (tops x k)) :
+    (answer : MemBits s (W (topAddr k)) (tops x k)) :
     ChainsInv index wire pk s x (k.val+1) := by
   refine ⟨inv.ctx, ?_, ?_, ?_, inv.payload, ?_⟩
   · rw [inv.input]

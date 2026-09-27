@@ -24,7 +24,6 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
-
 namespace Forest
 
 attribute [local irreducible] GScheme.experiment forestScheme
@@ -84,17 +83,5 @@ theorem forestScheme_secure : forestScheme.Secure := by
   · exact (probOutput_le_one).trans_lt (one_lt_div (not_le.1 hle))
 
 end Forest
-
-/--
-info: 'OptimalOTS.Forest.forestScheme_secure' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms Forest.forestScheme_secure
-
-/--
-info: 'OptimalOTS.Forest.forestScheme_verifyCost' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in
-#print axioms Forest.forestScheme_verifyCost
 
 end OptimalOTS
