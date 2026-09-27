@@ -5,13 +5,14 @@ import Submissions.UpperRiscv.EncCharges
 import Submissions.UpperRiscv.RowPotential
 import Submissions.UpperRiscv.Keygen
 import Submissions.UpperRiscv.Reconstruct
+import Submissions.UpperRiscv.Adapter
 
 /-!
 # The experiment in stages, and the potentials
 
-The experiment of `forestScheme` against an adversary `A` is `keygen >>= rest A`, where `rest`
-runs the attacker's first stage, signing (`sign_eq`: the signing loop `signIdx` followed by
-encoding), the attacker's second stage and verification (`stB`).
+The experiment of the bit-string scheme built on `forestScheme` against an attacker `A` is
+`keygen >>= rest A`, where `rest` runs the attacker's first stage, signing (`sign_eq`: the signing
+loop `signIdx` followed by encoding), the attacker's second stage and verification (`stB`).
 
 The potentials of the security proof (see `DESIGN.md`): `ΦA` for the first stage (hidden keygen
 points, `Spr`, and the encoding counts of the signing analysis), `ΦB` for the second stage; each
@@ -40,16 +41,62 @@ open Name
 attribute [local irreducible] validSet numValid
 
 
-variable (A : Adversary)
+/-- The signature bits read as a nonce and a payload in graph order. -/
+def decodeSignature (bits : List Bool) : Signature :=
+  (ofBits 128 (bits.take 128), Payload.permute (bits.drop 128))
+
+theorem decode_encode (σ : Signature) :
+    decodeSignature (AlgorithmAdapter.encodeSignature σ) = σ := by
+  rcases σ with ⟨nonce, payload⟩
+  simp only [decodeSignature, AlgorithmAdapter.encodeSignature]
+  have hn : (toBits nonce).length = 128 := length_toBits nonce
+  simp [← hn]
+  exact Prod.ext (ofBits_toBits nonce) rfl
+
+theorem encode_decode (bits : List Bool) (hlen : 128 ≤ bits.length) :
+    AlgorithmAdapter.encodeSignature (decodeSignature bits) = bits := by
+  change toBits (ofBits 128 (bits.take 128)) ++ Payload.unpermute (Payload.permute (bits.drop 128)) = bits
+  rw [Payload.unpermute_permute, toBits_ofBits _ (by simp [hlen]), List.take_append_drop]
+
+/-- The scheme on signature bits: the forest's keys and signer, and the verifier `V`. -/
+def wireScheme (V : PublicKey → Message → List Bool → OracleComp Spec Bool) :
+    OracleAlgorithm.Scheme where
+  SecretKey := graph.Assignment
+  keygen := forestScheme.keygen
+  sign := fun sk m => Option.map AlgorithmAdapter.encodeSignature <$> forestScheme.sign sk m
+  verify := V
+
+/-- A bit-string verifier covered by the security proof: on full-length signatures it is the
+forest verifier, and it accepts any other signature only after a query of a short root length
+whose answer begins with the public key. -/
+structure WireVerifier (V : PublicKey → Message → List Bool → OracleComp Spec Bool) : Prop where
+  full : ∀ pk m bits, bits.length = 5504 → V pk m bits = forestScheme.verify pk m (decodeSignature bits)
+  short : ∀ pk m bits (c : Cache) (p : Bool × Cache), bits.length ≠ 5504 →
+    p ∈ support (run (V pk m bits) c) → p.1 = true →
+    ∃ n, ShortLen n ∧ ∃ u : BitVec n, ∃ w, p.2 ⟨n, u⟩ = some w ∧ trunc128 w = pk
+
+/-- An attacker on signature bits, with the verifier that judges its forgery. -/
+structure WireGame where
+  State : Type
+  choose : PublicKey → OracleComp Spec (Message × State)
+  forge : State → Option (List Bool) → OracleComp Spec (Message × List Bool)
+  verify : PublicKey → Message → List Bool → OracleComp Spec Bool
+  verify_spec : WireVerifier verify
+
+/-- The attacker of a game. -/
+def WireGame.adversary (A : WireGame) : OracleAlgorithm.Adversary := ⟨A.State, A.choose, A.forge⟩
+
+variable (A : WireGame)
 
 /-! ## The experiment in stages -/
 
 /-- The second stage of the attacker, followed by verification and the final check. -/
 def stB (pk : PublicKey) (m₁ : Message) (st : A.State) (σ : Option Signature) :
     OracleComp Spec Bool := do
-  let (m₂, σ₂) ← A.forge st σ
-  let ok ← forestScheme.verify pk m₂ σ₂
-  return ok && decide (σ.map (fun s => (m₁, s)) ≠ some (m₂, σ₂))
+  let (m₂, σ₂) ← A.forge st (σ.map AlgorithmAdapter.encodeSignature)
+  let ok ← A.verify pk m₂ σ₂
+  return ok && decide ((σ.map AlgorithmAdapter.encodeSignature).map (fun s => (m₁, s)) ≠
+    some (m₂, σ₂))
 
 /-- Signing and the second stage. -/
 def rest₂ (pk : PublicKey) (sk : graph.Assignment) (y : Message × A.State) :
@@ -60,9 +107,11 @@ def rest₂ (pk : PublicKey) (sk : graph.Assignment) (y : Message × A.State) :
 def rest (x : PublicKey × graph.Assignment) : OracleComp Spec Bool :=
   A.choose x.1 >>= rest₂ A x.1 x.2
 
-theorem experiment_eq : GScheme.experiment forestScheme A = forestScheme.keygen >>= rest A := by
-  unfold GScheme.experiment rest rest₂ stB
-  congr 1
+theorem experiment_eq :
+    OracleAlgorithm.experiment (wireScheme A.verify) A.adversary = forestScheme.keygen >>= rest A := by
+  unfold OracleAlgorithm.experiment rest rest₂ stB wireScheme WireGame.adversary
+  simp only [bind_map_left]
+  rfl
 
 /-- The indicator of success. -/
 def g (p : Bool × Cache) : ℝ≥0∞ := if p.1 = true then 1 else 0
@@ -83,8 +132,9 @@ theorem probTrue_eq_E_run (oa : OracleComp Spec Bool) :
 
 attribute [local semireducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget nonceBits idxBits numCuts trials
 
-theorem probTrue_eq : probTrue (GScheme.experiment forestScheme A) = E (run (GScheme.experiment forestScheme A) ∅) g := by
-  generalize GScheme.experiment forestScheme A = oa
+theorem probTrue_eq : probTrue (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) =
+    E (run (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) ∅) g := by
+  generalize OracleAlgorithm.experiment (wireScheme A.verify) A.adversary = oa
   rw [probTrue_eq_E_run]
   rfl
 

@@ -8,11 +8,11 @@ open Riscv2Program
 open Forest Forest.Name OracleComp
 
 /-- A chain hash preserves the dispatch table and all fixed registers. -/
-theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {pk : PublicKey}
-    (ctx : Ctx s index pk) (k : Fin 32) (y : BitVec hashBits)
-    (ho : s.getReg .x12 = W (outAddr k)) : Ctx (Riscv.writeHash s y) index pk := by
+theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {pk : PublicKey} {a : ℕ}
+    (ctx : Ctx s index pk a) (k : Fin 32) (y : BitVec hashBits)
+    (ho : s.getReg .x12 = W (outAddr k)) : Ctx (Riscv.writeHash s y) index pk a := by
   have b := output_bounds k
-  refine ⟨?_, ?_, ?_, ?_, ?_, ctx.code.code_eq (writeHash_code s y)⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ctx.short, ?_, ctx.code.code_eq (writeHash_code s y)⟩
   · rw [writeHash_regs]; exact ctx.pk0
   · rw [writeHash_regs]; exact ctx.pk1
   · rw [writeHash_regs]; exact ctx.call
@@ -29,6 +29,7 @@ theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {pk : PublicKey}
       omega
     rw [he]; exact ctx.lanes q
   · rw [writeHash_regs]; exact ctx.sigLen
+  · rw [writeHash_regs]; exact ctx.bound
 
 /-- Each admitted chain input costs one oracle compression, at either state width. -/
 theorem chain_blockCost (k : Fin 32) : blockCost (chainBits k) = 1 := by

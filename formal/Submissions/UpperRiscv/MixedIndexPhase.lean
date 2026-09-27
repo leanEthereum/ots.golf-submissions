@@ -6,7 +6,7 @@ import Submissions.UpperRiscv.IndexDispatchFields
 /-!
 # The index phase
 
-The machine saves the public key, hashes `pk ‖ message ‖ nonce`, rejects wrong lengths, builds
+The machine saves the public key, hashes `pk ‖ message ‖ nonce`, loads the length bound, builds
 the four dispatch words, and rejects unless the fields sum to 158 or 413. It then sets the
 chain input length. The state `afterIndex` satisfies a raw-index chain invariant; the pair
 restrictions remain to be checked by the dispatch tables.
@@ -30,7 +30,7 @@ theorem dataImage_length : dataImage.length = 88 := by decide
 
 /-- The seven constant words of the data image, after the 32-byte answer buffer. -/
 def dataWord (j : ℕ) : ℕ :=
-  [firstMask, broadcast 0x3c3c, broadcast 0x1fc, 255, 0, 5504,
+  [firstMask, broadcast 0x3c3c, broadcast 0x1fc, 255, 0, 5505,
     baseWord 0].getD j 0
 
 theorem dataImage_word (j : ℕ) (hj : j < 7) :
@@ -58,9 +58,9 @@ theorem initial_data_word (pk : PublicKey) (m : Message) (bits : List Bool) (j :
     norm_num [Riscv.bytesOfVector, Riscv.bytesOfBits, pkBits, msgBits, maxSignatureBits, dataAddr]
     try omega
 
-/-- The signature length, the tenth word of the data image. -/
+/-- The length bound, the tenth word of the data image. -/
 theorem initial_data_len (pk : PublicKey) (m : Message) (bits : List Bool) :
-    (Riscv.initialState image pk m bits).getMem (W (dataAddr + 72)) = W 5504 := by
+    (Riscv.initialState image pk m bits).getMem (W (dataAddr + 72)) = W 5505 := by
   have h := initial_data_word pk m bits 5 (by norm_num)
   rw [show dataAddr + 32 + 8 * 5 = dataAddr + 72 by norm_num] at h
   exact h
@@ -208,13 +208,9 @@ variable (pk : PublicKey) (m : Message) (bits : List Bool) (answer : BitVec hash
 
 abbrev S2 : MachineState := Riscv.writeHash (afterPrefix pk m bits) answer
 
-def lenBlock : Code := [.LD .x6 .x12 (BitVec.ofNat 12 72)]
-
-theorem lengthCheck_parts : lengthCheck = lenBlock ++ ([.BEQ .x13 .x6 16] ++ reject) := rfl
-
 def S3 : MachineState := lenBlock.foldl execInstrBr (S2 pk m bits answer)
 
-def S4 : MachineState := (S3 pk m bits answer).setPC ((S3 pk m bits answer).pc + 16)
+def S4 : MachineState := S3 pk m bits answer
 
 def sumOps : Code :=
   [.REMU .x27 .x27 .x2]
@@ -253,8 +249,8 @@ theorem S2_const (j : ℕ) (hj : j < 7) :
   rw [S2_frame _ _ _ _ _ (Or.inr (by rw [W_toNat _ (by unfold dataAddr; omega)]; omega)),
     (prefix_effect pk m bits).frame, initial_data_word pk m bits j hj]
 
-/-- The signature-length word survives the index hash and the prefix. -/
-theorem S2_len : (S2 pk m bits answer).getMem (W (dataAddr + 72)) = W 5504 := by
+/-- The length-bound word survives the index hash and the prefix. -/
+theorem S2_len : (S2 pk m bits answer).getMem (W (dataAddr + 72)) = W 5505 := by
   have h := S2_const pk m bits answer 5 (by norm_num)
   rw [show dataAddr + 32 + 8 * 5 = dataAddr + 72 by norm_num] at h
   exact h
@@ -264,7 +260,7 @@ theorem S3_regs (r : Reg) (hr : r ≠ .x6) :
   unfold S3
   simp [lenBlock, execInstrBr, getReg_setReg_ite, hr, S2_regs]
 
-theorem S3_x6 : (S3 pk m bits answer).getReg .x6 = W 5504 := by
+theorem S3_x6 : (S3 pk m bits answer).getReg .x6 = W 5505 := by
   unfold S3
   simp only [lenBlock, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
     getReg_setReg_ite]
@@ -278,18 +274,6 @@ theorem S3_mem (addr : Word) : (S3 pk m bits answer).getMem addr = (S2 pk m bits
 theorem S3_code : (S3 pk m bits answer).code = (S0 pk m bits).code := by
   unfold S3
   simp [lenBlock, execInstrBr, Riscv.writeHash, (prefix_effect pk m bits).code]
-
-theorem length_iff : (S3 pk m bits answer).getReg .x13 = (S3 pk m bits answer).getReg .x6 ↔
-    bits.length = 5504 := by
-  rw [S3_x6, S3_regs pk m bits answer .x13 (by decide), (prefix_effect pk m bits).x13]
-  constructor
-  · intro h
-    have hn := congrArg BitVec.toNat h
-    rw [BitVec.toNat_ofNat, W_toNat _ (by norm_num), Nat.mod_eq_of_lt (by omega)] at hn
-    omega
-  · intro h
-    rw [h]
-    rfl
 
 theorem S4_regs (r : Reg) : (S4 pk m bits answer).getReg r = (S3 pk m bits answer).getReg r := by
   simp [S4]
@@ -501,8 +485,7 @@ theorem afterIndex_prefixReg (r : Reg) (h11 : r ≠ .x11) (h6 : r ≠ .x6) (hl :
 
 theorem afterIndex_code : (afterIndex pk m bits answer).code = (S0 pk m bits).code := by
   unfold afterIndex S6 S5 S4
-  rw [Riscv.fold_code, MachineState.code_setPC, Riscv.fold_code, MachineState.code_setPC,
-    S3_code]
+  rw [Riscv.fold_code, MachineState.code_setPC, Riscv.fold_code, S3_code]
 
 /-- Memory outside the index answer and the lane words is the loader's. -/
 theorem afterIndex_frame (addr : Word)
@@ -528,11 +511,15 @@ def rawIdx : RawIdx := ⟨pack answer, pack_lt answer⟩
 def acceptedIdx (hi : Accepted (pack answer)) : Idx :=
   ⟨pack answer, mem_validSet.mpr ⟨pack_lt answer, hi⟩⟩
 
-theorem afterIndex_x13 (hlen : bits.length = 5504) :
-    (afterIndex pk m bits answer).getReg .x13 = W 5504 := by
+theorem afterIndex_x13 :
+    (afterIndex pk m bits answer).getReg .x13 = W (min bits.length 5505) := by
   rw [afterIndex_prefixReg _ _ _ _ .x13 (by decide) (by decide) (by decide) (by decide)
-    (by decide), (prefix_effect pk m bits).x13, hlen]
-  rfl
+    (by decide), (prefix_effect pk m bits).x13]
+
+theorem afterIndex_x6 : (afterIndex pk m bits answer).getReg .x6 = W 5505 := by
+  rw [afterIndex_regs _ _ _ _ .x6 (by decide), S6_regs, S5_regs _ _ _ _ .x6 (by decide) (by decide),
+    S45, LoadEffect.regs' answer (loadWords_effect pk m bits answer) .x6 (by decide), S4_regs,
+    S3_x6]
 
 theorem laneGroup_lt (q : ℕ) (hq : q < 16) : laneGroup q < 4 := by
   unfold laneGroup; omega
@@ -582,9 +569,8 @@ theorem afterIndex_lanes (q : Fin 16) :
       baseLane q - dispatch (rawIdx answer) q :=
   stored_lanes answer (afterIndex pk m bits answer) (afterIndex_stored pk m bits answer) q
 
-theorem afterIndex_ctx (hlen : bits.length = 5504)
-    (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier) :
-    Ctx (afterIndex pk m bits answer) (rawIdx answer) pk := by
+theorem afterIndex_ctx (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier) :
+    Ctx (afterIndex pk m bits answer) (rawIdx answer) pk (min bits.length 5505) := by
   have P := prefix_effect pk m bits
   obtain ⟨r11, r10⟩ := afterIndex_setupRegs pk m bits answer
   have pre : ∀ r : Reg, r = .x30 ∨ r = .x31 ∨ r = .x5 →
@@ -593,8 +579,9 @@ theorem afterIndex_ctx (hlen : bits.length = 5504)
     rcases hr with rfl | rfl | rfl <;>
       exact afterIndex_prefixReg _ _ _ _ _ (by decide) (by decide) (by decide) (by decide)
         (by decide)
-  refine ⟨?_, ?_, ?_, afterIndex_lanes pk m bits answer,
-    afterIndex_x13 pk m bits answer hlen, located.code_eq (afterIndex_code pk m bits answer)⟩
+  refine ⟨?_, ?_, ?_, afterIndex_lanes pk m bits answer, afterIndex_x13 pk m bits answer,
+    Nat.min_le_right _ _, afterIndex_x6 pk m bits answer,
+    located.code_eq (afterIndex_code pk m bits answer)⟩
   · rw [pre .x30 (Or.inl rfl), P.x30]
   · rw [pre .x31 (Or.inr (Or.inl rfl)), P.x31]
   · rw [pre .x5 (Or.inr (Or.inr rfl)), P.x5]; rfl
@@ -644,11 +631,10 @@ theorem beq_refines (s : MachineState) (r r' : Reg) (fuel : ℕ) (tail : Code)
     exact (Riscv.Refines.branch fetch rfl (fun h => nomatch h) transition rej).mono (by omega)
 
 theorem indexPhase_parts : indexPhase = indexPrefix ++ ([.ECALL] ++ (lenBlock ++
-    ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++ ([.BEQ .x27 .x0 16] ++ reject ++
-      setup))))) := by
-  simp only [indexPhase, lengthCheck_parts, sumCheck_parts, mainBlock, lanes, lanesUpTo, setup, List.append_assoc]
+    (mainBlock ++ ([.BEQ .x27 .x0 16] ++ reject ++ setup)))) := by
+  simp only [indexPhase, sumCheck_parts, mainBlock, lanes, lanesUpTo, setup, List.append_assoc]
 
-theorem indexPhase_length : indexPhase.length = 39 := by decide
+theorem indexPhase_length : indexPhase.length = 35 := by decide
 
 theorem mainBlock_length : mainBlock.length = 23 := by decide
 
@@ -659,18 +645,18 @@ variable (pk : PublicKey) (m : Message) (bits : List Bool)
 theorem pc_add (p : Word) (a b : ℕ) : p + W a + W b = p + W (a + b) := by
   rw [BitVec.add_assoc, W_add]
 
-/-- The index phase: the specified first query, the length and sum rejections, and otherwise the
-continuation from `afterIndex`, at 33 cycles plus the continuation. -/
+/-- The index phase: the specified first query, the sum rejection, and otherwise the
+continuation from `afterIndex`, at 32 cycles plus the continuation. -/
 theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (q : BitVec hashBits → OracleComp Spec (Option Bool)) (c : ℕ) (hc : 3 ≤ c)
     (located : Riscv.CodeAt (S0 pk m bits) (S0 pk m bits).pc (indexPhase ++ tail))
     (bound : indexPhase.length + rest ≤ fuel)
-    (continuation : ∀ answer, IndexRank (pack answer) → bits.length = 5504 →
+    (continuation : ∀ answer, IndexRank (pack answer) →
       ∀ left, rest ≤ left → Riscv.Refines left (afterIndex pk m bits answer) (q answer) c) :
     Riscv.Refines fuel (S0 pk m bits) (do
       let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits bits))
-      if IndexRank (pack answer) ∧ bits.length = 5504 then q answer
-      else pure (some false)) (c + 33) := by
+      if IndexRank (pack answer) then q answer
+      else pure (some false)) (c + 32) := by
   rw [indexPhase_length] at bound
   rw [indexPhase_parts] at located
   simp only [List.append_assoc] at located
@@ -678,29 +664,29 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
   -- the prefix
   have ready := indexPrefix_ready pk m bits
   rw [show fuel = indexPrefix.length + ((fuel - 6) + 1) by rw [indexPrefix_length]; omega,
-    show c + 33 = indexPrefix.length + (1 + (c + 27)) by rw [indexPrefix_length]; omega]
+    show c + 32 = indexPrefix.length + (1 + (c + 26)) by rw [indexPrefix_length]; omega]
   apply Riscv.Refines.linear _ located.append_left ready
   have callLocated : Riscv.CodeAt (afterPrefix pk m bits) (afterPrefix pk m bits).pc
-      ([.ECALL] ++ (lenBlock ++ ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
-        ([.BEQ .x27 .x0 16] ++ reject ++ (setup ++ tail)))))) := by
+      ([.ECALL] ++ (lenBlock ++ (mainBlock ++
+        ([.BEQ .x27 .x0 16] ++ reject ++ (setup ++ tail))))) := by
     have h := located.append_right
     have e : (afterPrefix pk m bits).pc = (S0 pk m bits).pc +
         BitVec.ofNat 64 (4 * indexPrefix.length) := Riscv.linear_fold_pc _ _ ready
     rw [e]
     simpa only [List.append_assoc] using h.code_eq P.code
   have hashed := Riscv.Refines.hash (fuel := fuel - 6) callLocated.head P.x5
-    (prefix_hashValid pk m bits) (c := c + 27)
-    (k := fun answer => if IndexRank (pack answer) ∧ bits.length = 5504 then q answer
+    (prefix_hashValid pk m bits) (c := c + 26)
+    (k := fun answer => if IndexRank (pack answer) then q answer
       else pure (some false)) ?_
   · rw [prefix_hashInput pk m bits] at hashed
     dsimp only at hashed
     rw [show blockCost 512 = 1 by decide] at hashed
     exact hashed
   intro answer
-  -- the length check
+  -- the length bound
   have S2code : Riscv.CodeAt (S2 pk m bits answer) (S2 pk m bits answer).pc
-      (lenBlock ++ ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
-        ([.BEQ .x27 .x0 16] ++ reject ++ (setup ++ tail))))) :=
+      (lenBlock ++ (mainBlock ++
+        ([.BEQ .x27 .x0 16] ++ reject ++ (setup ++ tail)))) :=
     callLocated.tail.code_eq (by simp [Riscv.writeHash])
   have lenReady : Riscv.LinearReady (S2 pk m bits answer) lenBlock := by
     simp only [lenBlock, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady, true_and,
@@ -709,38 +695,17 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     exact dword_ok _ (by unfold dataAddr; omega) (by unfold dataAddr; omega)
       (by unfold dataAddr; omega)
   rw [show fuel - 6 = lenBlock.length + (fuel - 7) by simp [lenBlock]; omega,
-    show c + 27 = lenBlock.length + (c + 26) by simp [lenBlock]; omega]
+    show c + 26 = lenBlock.length + (c + 25) by simp [lenBlock]; omega]
   apply Riscv.Refines.linear _ S2code.append_left lenReady
-  have S3code : Riscv.CodeAt (S3 pk m bits answer) (S3 pk m bits answer).pc
-      ([.BEQ .x13 .x6 16] ++ reject ++ (mainBlock ++
-        ([.BEQ .x27 .x0 16] ++ reject ++ (setup ++ tail)))) := by
-    have h := S2code.append_right
-    rw [show (S3 pk m bits answer).pc = (S2 pk m bits answer).pc + BitVec.ofNat 64 (4 * lenBlock.length)
-      from Riscv.linear_fold_pc _ _ lenReady]
-    exact h.code_eq (Riscv.fold_code _ _)
-  have reorder : (if IndexRank (pack answer) ∧ bits.length = 5504 then q answer
-      else pure (some false)) =
-      if (S3 pk m bits answer).getReg .x13 = (S3 pk m bits answer).getReg .x6 then
-        (if (S5 pk m bits answer).getReg .x27 = (S5 pk m bits answer).getReg .x0 then q answer
-          else pure (some false)) else pure (some false) := by
-    by_cases hl : bits.length = 5504
-    · rw [if_pos ((length_iff pk m bits answer).mpr hl)]
-      by_cases ha : IndexRank (pack answer)
-      · rw [if_pos ⟨ha, hl⟩, if_pos ((sum_iff pk m bits answer).mpr ha)]
-      · rw [if_neg (fun h => ha h.1), if_neg (fun h => ha ((sum_iff pk m bits answer).mp h))]
-    · rw [if_neg (fun h => hl h.2), if_neg (fun h => hl ((length_iff pk m bits answer).mp h))]
-  rw [reorder, show c + 26 = (c + 25) + 1 by omega]
-  apply beq_refines _ _ _ _ _ S3code (by omega) (by omega)
-  intro hlenEq
-  have hl := (length_iff pk m bits answer).mp hlenEq
   -- the loads, the lanes and the sum
   have S4code : Riscv.CodeAt (S4 pk m bits answer) (S4 pk m bits answer).pc
       (mainBlock ++ ([.BEQ .x27 .x0 16] ++ reject ++ (setup ++ tail))) := by
-    have h := S3code.append_right (first := [.BEQ .x13 .x6 16] ++ reject)
-    rw [show (4 * ([Instr.BEQ .x13 .x6 16] ++ reject).length) = 16 from rfl] at h
-    exact h.code_eq (by simp [S4])
+    have h := S2code.append_right
+    rw [show (S4 pk m bits answer).pc = (S2 pk m bits answer).pc + BitVec.ofNat 64 (4 * lenBlock.length)
+      from Riscv.linear_fold_pc _ _ lenReady]
+    exact h.code_eq (Riscv.fold_code _ _)
   have mReady := mainBlock_ready pk m bits answer
-  rw [show fuel - 7 - 1 = mainBlock.length + (fuel - 31) by rw [mainBlock_length]; omega,
+  rw [show fuel - 7 = mainBlock.length + (fuel - 30) by rw [mainBlock_length]; omega,
     show c + 25 = mainBlock.length + (c + 2) by rw [mainBlock_length]; omega]
   apply Riscv.Refines.linear _ (S4code.append_left) mReady
   have S5code : Riscv.CodeAt (S5 pk m bits answer) (S5 pk m bits answer).pc
@@ -749,7 +714,13 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [show (S5 pk m bits answer).pc = (S4 pk m bits answer).pc +
       BitVec.ofNat 64 (4 * mainBlock.length) from Riscv.linear_fold_pc _ _ mReady]
     exact h.code_eq (Riscv.fold_code _ _)
-  rw [show c + 2 = (c + 1) + 1 by omega]
+  have reorder : (if IndexRank (pack answer) then q answer else pure (some false)) =
+      if (S5 pk m bits answer).getReg .x27 = (S5 pk m bits answer).getReg .x0 then q answer
+        else pure (some false) := by
+    by_cases ha : IndexRank (pack answer)
+    · rw [if_pos ha, if_pos ((sum_iff pk m bits answer).mpr ha)]
+    · rw [if_neg ha, if_neg (fun h => ha ((sum_iff pk m bits answer).mp h))]
+  rw [reorder, show c + 2 = (c + 1) + 1 by omega]
   apply beq_refines _ _ _ _ _ S5code (by omega) (by omega)
   intro hsumEq
   have ha := (sum_iff pk m bits answer).mp hsumEq
@@ -758,10 +729,10 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     have h := S5code.append_right (first := [.BEQ .x27 .x0 16] ++ reject)
     rw [show (4 * ([Instr.BEQ .x27 .x0 16] ++ reject).length) = 16 from rfl] at h
     exact h.code_eq (by simp [S6])
-  rw [show fuel - 31 - 1 = setup.length + (fuel - 33) by simp [setup]; omega,
+  rw [show fuel - 30 - 1 = setup.length + (fuel - 32) by simp [setup]; omega,
     show c + 1 = setup.length + c by simp only [setup, List.length_cons, List.length_nil]; omega]
   apply Riscv.Refines.linear _ S6code.append_left (setup_ready _)
-  exact continuation answer ha hl _ (by omega)
+  exact continuation answer ha _ (by omega)
 
 /-- Where the index phase ends. -/
 theorem afterIndex_pc (answer : BitVec hashBits) :
@@ -778,7 +749,7 @@ theorem afterIndex_pc (answer : BitVec hashBits) :
   have e3 : (S5 pk m bits answer).pc = (S4 pk m bits answer).pc +
       BitVec.ofNat 64 (4 * mainBlock.length) :=
     Riscv.linear_fold_pc _ _ (mainBlock_ready pk m bits answer)
-  have e4 : (S4 pk m bits answer).pc = (S3 pk m bits answer).pc + 16 := rfl
+  have e4 : (S4 pk m bits answer).pc = (S3 pk m bits answer).pc := rfl
   have e5 : (S3 pk m bits answer).pc = (S2 pk m bits answer).pc +
       BitVec.ofNat 64 (4 * lenBlock.length) := Riscv.linear_fold_pc _ _ lenReady
   have e6 : (S2 pk m bits answer).pc = (afterPrefix pk m bits).pc + 4 := rfl

@@ -3,9 +3,10 @@ import Submissions.UpperRiscv.Assembly
 /-!
 # Security of the concrete scheme
 
-`forestScheme_secure`: the bare-chain forest satisfies `GScheme.Secure`, the
-127-bit strong unforgeability requirement of `OptimalOTS.Dag`, and every signature verifies
-in `203` compressions (`forestScheme_verifyCost`).
+`wireScheme_secure`: the scheme on signature bits built on the bare-chain forest satisfies
+`OracleAlgorithm.Scheme.Secure`, the 127-bit strong unforgeability requirement, for every
+verifier covered by `WireVerifier`; every forest signature verifies in `203` compressions
+(`forestScheme_verifyCost`).
 
 For a budget `B ≤ 2 ^ 127` the bound `probTrue ≤ 2 ε (B - 1036) + 2 δ` of `Forest.main_bound`
 applies, and `2 δ = 4 · 1025² · 2⁻¹⁴⁴ < 1036 · 2⁻¹²⁷` makes it smaller than `B / 2 ^ 127`; for larger
@@ -27,7 +28,7 @@ open OptimalOTS.Dag
 
 namespace Forest
 
-attribute [local irreducible] GScheme.experiment forestScheme
+attribute [local irreducible] OracleAlgorithm.experiment forestScheme
 
 theorem kappa_eq : κ = ((2 : ℝ≥0∞) ^ 127)⁻¹ := by
   unfold κ ε
@@ -75,21 +76,25 @@ theorem one_lt_div {B : ℕ} (h : 2 ^ 127 < B) : (1 : ℝ≥0∞) < (B : ℝ≥0
   exact_mod_cast h
 
 /-- **Security of the concrete scheme.** -/
-theorem forestScheme_secure : forestScheme.Secure := by
-  intro A B hB
+theorem wireScheme_secure (V : PublicKey → Message → List Bool → OracleComp Spec Bool)
+    (hV : WireVerifier V) : (wireScheme V).Secure := by
+  intro A₀ B hB
+  let A : WireGame := ⟨A₀.State, A₀.choose, A₀.forge, V, hV⟩
+  change CostAtMost (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) B at hB
+  change probTrue (OracleAlgorithm.experiment (wireScheme A.verify) A.adversary) < _
   by_cases hle : B ≤ 2 ^ 127
-  · have h1 := @main_bound A B hB hle
-    have h2 := @keygen_le A B hB
+  · have h1 := main_bound A hB hle
+    have h2 := keygen_le A hB
     exact h1.trans_lt (kappa_mul_lt h2)
   · exact (probOutput_le_one).trans_lt (one_lt_div (not_le.1 hle))
 
 end Forest
 
 /--
-info: 'OptimalOTS.Forest.forestScheme_secure' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'OptimalOTS.Forest.wireScheme_secure' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in
-#print axioms Forest.forestScheme_secure
+#print axioms Forest.wireScheme_secure
 
 /--
 info: 'OptimalOTS.Forest.forestScheme_verifyCost' depends on axioms: [propext, Classical.choice, Quot.sound]

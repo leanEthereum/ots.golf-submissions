@@ -7,8 +7,9 @@ import Submissions.UpperRiscv.Deterministic
 /-!
 # The verified forest under the generic algorithm interface
 
-The forest satisfies the generic challenge: perfect correctness, signing failure at most
-`2⁻¹²⁸`, 127-bit strong security, and verification within 203 compressions on every path.
+The forest satisfies the generic admission requirements: perfect correctness, signing failure at
+most `2⁻¹²⁸`, and verification within 203 compressions on every path. Security is proved for the
+scheme on signature bits (`Forest.wireScheme_secure`).
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -22,14 +23,11 @@ open OptimalOTS.Dag
 
 attribute [local irreducible] Forest.forestScheme
 attribute [local irreducible] GScheme.sign GScheme.signLoop
-attribute [local irreducible] TypedScheme.Secure TypedScheme.VerifyCostAtMost
+attribute [local irreducible] TypedScheme.VerifyCostAtMost
   TypedScheme.KeygenCostAtMost TypedScheme.SignCostAtMost
   TypedScheme.SignatureSizeAtMost TypedScheme.RejectsOversized
 
 def scheme : TypedScheme := Forest.forestScheme.toAlgorithm
-
-theorem secure : scheme.Secure :=
-  (AlgorithmAdapter.secure_iff Forest.forestScheme).2 Forest.forestScheme_secure
 
 /-- This bound covers all public keys, messages and signatures, including rejecting inputs. -/
 theorem cost : scheme.VerifyCostAtMost 203 := by
@@ -69,11 +67,10 @@ theorem admissible : scheme.Admissible (1 / 2 ^ 128) where
   keygenCost := keygen_cost
   signCost := sign_cost
 
-/-- A complete admissible, strongly secure, 203-compression construction. -/
+/-- A complete admissible, 203-compression construction. -/
 theorem certificate :
-    scheme.Admissible (1 / 2 ^ 128) ∧
-    scheme.Secure ∧ scheme.VerifyCostAtMost 203 :=
-  ⟨admissible, secure, cost⟩
+    scheme.Admissible (1 / 2 ^ 128) ∧ scheme.VerifyCostAtMost 203 :=
+  ⟨admissible, cost⟩
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.certificate' depends on axioms: [propext, Classical.choice, Quot.sound]

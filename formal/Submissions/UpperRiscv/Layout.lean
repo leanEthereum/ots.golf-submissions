@@ -25,10 +25,10 @@ open OptimalOTS.Dag
 
 /-- The machine's fixed-length check is exactly the specification's payload-length check. -/
 theorem payload_length_iff (bits : List Bool) (i : Idx) :
-    (decode bits).2.length = Forest.forestScheme.graph.revealBits (Forest.forestScheme.sets i) ↔
+    (Forest.decodeSignature bits).2.length = Forest.forestScheme.graph.revealBits (Forest.forestScheme.sets i) ↔
       bits.length = 5504 := by
   rw [Forest.fixed_revealBits]
-  simp only [decode, Payload.length_permute, List.length_drop]
+  simp only [Forest.decodeSignature, Payload.length_permute, List.length_drop]
   omega
 
 end OptimalOTS.RiscvUpperForest.Wire

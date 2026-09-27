@@ -1,3 +1,22 @@
+# RISC-V upper bound: 348 cycles with the length test folded into the decision
+
+This extends the 349-cycle capped-rank record (PR #40). The index phase no
+longer rejects wrong lengths. The data word that held 5504 now holds 5505, and
+the accepting `ADDI x10, x0, 1` becomes `SLTU x10, x13, x6`: the machine
+accepts only if the root matches the public key and the loader's length
+register `a3 = min(|σ|, 5505)` is below 5505. The root query reads the first
+`a3 + 639` bits of the committed region (6143 for a full signature, at most
+twelve blocks). Four NOPs after the first prologue keep every table address.
+
+Proved accounting: **348 = 32 index + 295 chains + 21 root/decision** cycles on
+an accepting run, and at most 348 on every run. The image stays **62,892
+bytes**, and the full signature stays **5504 bits**. Every signature length now
+runs the whole verifier. A signature shorter than 5504 bits is accepted
+exactly when its shorter root query hits the public key, and the scheme's
+verifier and security proof include that case. See `NOTES.md`.
+
+---
+
 # RISC-V upper bound: 349-cycle capped-rank candidate
 
 This extends Nicolas Consigny's officially verified 353-cycle record in PR #34

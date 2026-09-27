@@ -1,3 +1,74 @@
+# Length test folded into the decision: 348-cycle candidate
+
+This extends the 349-cycle capped-rank record (PR #40). Earlier notes below
+are historical snapshots.
+
+## Machine change
+
+- `lenBlock` is `LD x6, 72(x12)`, and the data word at offset 72 is 5505. The
+  length `BEQ` and its three-instruction rejection are gone, so the index phase
+  is 35 instructions and 32 cycles. Nine NOPs (not five) follow prologue 0, so
+  `copiesStart`, every landing, the dispatch bases, the jump immediates and the
+  rejection stubs are unchanged.
+- `root` is `ADDI x11, x13, 639`: the root query reads the first `a3 + 639` bits
+  of the 768-byte region, with `a3 = min(|σ|, 5505)`. That is 6143 bits for a
+  full signature and never more than 6144, so at most twelve blocks.
+- `decision` accepts with `SLTU x10, x13, x6` instead of `ADDI x10, x0, 1`. Both
+  root words must match the public key, and then the verdict is `a3 < 5505`.
+  An oversized signature (`a3 = 5505`) is rejected on every oracle path, and
+  `x10` is 0 or 1 at every HALT.
+
+Accounting: **32 + 295 + 21 = 348** on an accepting run. Every run is bounded
+by 348: the index phase is 32 cycles, the chain phase is bounded by
+`CappedCost.bound` (316 including the root and the decision), and the root
+costs `blockCost (a3 + 639) ≤ 12`.
+
+## Proof change
+
+- `Ctx` carries the length `a` (`x13 = a`, `a ≤ 5505`, `x6 = 5505`); `x6` is a
+  frame register of every chain step. `indexPhase_refines` has no length
+  branch. `rootDecision_refines` hashes `(rootRegion tops).setWidth (a + 639)`
+  and proves the `SLTU` verdict (`sltu_bound`).
+- `image_refines` refines `stagedVerify`, which runs the chains on
+  `padded σ` (the first 5504 bits, zero-extended) with `a = min |σ| 5505`.
+  `padded_slice` shows that the chain values in memory are the same slices.
+
+## Security of short signatures
+
+Signatures shorter than 5504 bits now run the whole verifier. Such a signature
+is accepted only if the root query of length `ℓ + 639 ∈ [639, 6142]`
+(`Values.ShortLen`) returns an answer whose low 128 bits are the public key.
+The simulation event `Spr` gains this case (`Values.SprShort`,
+`Spr = SprHash ∨ SprShort`). No hash node and no index query has a short
+length (graph inputs are 144, 192 and 6143 bits, the index query 512), so a
+fresh query creates `Spr` with probability at most `ε = 2^-128` either way
+(`Values.spr_charge`, `card_simSet_le`). The per-compression charge `κ = 2ε`
+is unchanged, and the bound stays `κ(B − 1036) + 2δ`. The security theorem is
+stated on signature bits for every verifier that satisfies
+`Forest.WireVerifier` (the forest verifier at 5504 bits, a short-root-query
+witness otherwise): `Main.wireScheme_secure`. `StageB.stB_support` and
+`events_stB` turn a short acceptance into `SprShort`. The submitted verifier
+`stagedVerify` prunes to `strictVerify` (`StagedVerifier.strict_prunes_staged`,
+`strictVerify_wire`). The graph root input is 6143 bits
+(`Names.rootCat = (rootRegion c).setWidth 6143`); chain 31 commits 191 bits
+(`Values.rootSlice`).
+
+## Validation
+
+An independent generator reproduces the Lean-exported 349 image and the new
+image instruction for instruction (15,701 instructions and 88 data bytes,
+62,892 bytes). The 348 transcript test runs 15,770 executions against a staged
+reference with the same oracle: every 4,096 pair/digit landing, first
+forbidden pairs at the high checksum alias 413, digit sums 0, 157, 159,
+412–414 and 480, all 5,504 bit flips of one honest signature, every length from
+0 to 5505, lengths 5506, 5512, 6000, 6143, 6144, 65,536 and 2^20, oversized
+tails, and short signatures whose programmed root answer is the public key
+(accepted; rejected at length 5505). No run traps. Every run makes the same
+oracle queries as the reference and returns the same verdict. The maximum is
+348 cycles, for accepting runs at 5504 bits and for the programmed 5505-bit run.
+
+---
+
 # Restricted antichain and address checksum: 349-cycle candidate
 
 This extends Nicolas Consigny's officially verified 353-cycle record in PR #34,

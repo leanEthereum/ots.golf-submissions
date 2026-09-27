@@ -10,7 +10,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+variable (index : RawIdx) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
 def chainsFrom (k : ℕ) : List Name :=
   if h : k < 32 then chainNodes ⟨k,h⟩ ++ chainsFrom (k+1) else []
@@ -76,11 +76,11 @@ theorem blocks_refines
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
     (hlen : wire.length = 5376)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      ChainsInv index wire pk u z 32 → Riscv.CodeAt u u.pc (root ++ decision) →
+      ChainsInv index wire pk a u z 32 → Riscv.CodeAt u u.pc (root ++ decision) →
       ∀ left, rest ≤ left → Riscv.Refines left u (K (z,5376)) c) :
     ∀ (n q : ℕ), 16-q=n → q ≤ 16 →
     ∀ (s : MachineState) (x : graph.Assignment) (fuel : ℕ),
-      ChainsInv index wire pk s x (2*q) →
+      ChainsInv index wire pk a s x (2*q) →
       (∃ junk, Riscv.CodeAt s s.pc (blockCodeAt q ++ junk)) →
       blocksCost index q+rest ≤ fuel →
       Riscv.Refines fuel s
@@ -120,11 +120,11 @@ theorem blocks_refines
 theorem stagedBlocks_refines (hlen : wire.length = 5376) :
     ∀ (n q : ℕ), 16-q=n → q ≤ 16 →
     ∀ (s : MachineState) (x : graph.Assignment) (fuel : ℕ),
-      ChainsInv index wire pk s x (2*q) →
+      ChainsInv index wire pk a s x (2*q) →
       (∃ junk, Riscv.CodeAt s s.pc (blockCodeAt q ++ junk)) →
       stagedCost index n q ≤ fuel →
       Riscv.Refines fuel s
-        (some <$> stagedBlocks index (Payload.permute wire) pk n q x (cursor (2*q)))
+        (some <$> stagedBlocks index (Payload.permute wire) pk a n q x (cursor (2*q)))
         (stagedCost index n q) := by
   intro n
   induction n with
@@ -135,20 +135,22 @@ theorem stagedBlocks_refines (hlen : wire.length = 5376) :
     obtain ⟨junk, located⟩ := located
     unfold blockCodeAt at located
     rw [if_neg (by omega)] at located
-    simp only [stagedCost, stagedBlocks, map_bind, map_pure] at bound ⊢
-    have h := rootDecision_refines index (Payload.permute wire) pk s x fuel
-      (final_root index wire pk inv) located.append_left (by omega)
+    simp only [stagedCost] at bound ⊢
+    rw [stagedBlocks_some_zero]
+    have h := rootDecision_refines index pk s x fuel (final_root index wire pk inv)
+      located.append_left (by omega)
     convert h using 1
     apply bind_congr
-    intro r
+    intro y
     apply congrArg pure
     apply congrArg some
+    congr 1
     exact decide_eq_decide.mpr Iff.rfl
   | succ n ih =>
     intro q hq hq' s x fuel inv located bound
     have hq16 : q < 16 := by omega
     let Q : Fin 16 := ⟨q,hq16⟩
-    rw [stagedBlocks_some_succ _ _ _ _ _ hq16]
+    rw [stagedBlocks_some_succ _ _ _ _ _ _ hq16]
     rw [stagedCost, dif_pos hq16] at bound ⊢
     unfold blockCodeAt at located
     rw [if_pos hq16] at located
@@ -156,16 +158,16 @@ theorem stagedBlocks_refines (hlen : wire.length = 5376) :
     · simp only [if_pos good] at bound ⊢
       have spec : (runNodes' index (Payload.permute wire)
           (chainNodes (leftChain Q) ++ chainNodes (rightChain Q)) x (cursor (2*q)) >>= fun r =>
-            some <$> stagedBlocks index (Payload.permute wire) pk n (q+1) r.1 r.2) =
+            some <$> stagedBlocks index (Payload.permute wire) pk a n (q+1) r.1 r.2) =
           (runNodes' index (Payload.permute wire) (entryNodes index (leftChain Q)) x (cursor (2*q)) >>= fun r =>
             runNodes' index (Payload.permute wire)
               (tableNodes index (leftChain Q) ++ chainNodes (rightChain Q)) r.1 r.2 >>= fun r' =>
-                some <$> stagedBlocks index (Payload.permute wire) pk n (q+1) r'.1 r'.2) := by
+                some <$> stagedBlocks index (Payload.permute wire) pk a n (q+1) r'.1 r'.2) := by
         rw [chain_entry_split index (leftChain Q), List.append_assoc, runNodes'_append, bind_assoc]
       dsimp only [Q, leftChain, rightChain] at spec
       rw [← spec]
       apply pair_refines index wire pk Q good
-        (fun r => some <$> stagedBlocks index (Payload.permute wire) pk n (q+1) r.1 r.2)
+        (fun r => some <$> stagedBlocks index (Payload.permute wire) pk a n (q+1) r.1 r.2)
         (stagedCost index n (q+1)) (stagedCost index n (q+1)) hlen ?_
         s x fuel inv located bound
       intro u z invU locU left hleft

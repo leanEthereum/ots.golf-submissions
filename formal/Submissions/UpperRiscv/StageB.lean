@@ -28,7 +28,7 @@ namespace Forest
 open Name
 
 
-variable (A : Adversary)
+variable (A : WireGame)
 
 /-! ## Auxiliary facts -/
 
@@ -111,14 +111,21 @@ theorem spr_signExt_iff {m₁ : EMessage} {d d' : Cache}
     {r : Option (Nonce × Idx)} (hd' : SignExt m₁ d r d')
     (ξ : Rec) : Spr d' ξ ↔ Spr d ξ := by
   constructor
-  · rintro ⟨h, p, hp, u, hu, w, hw, htr⟩
-    refine ⟨h, p, hp, u, hu, w, ?_, htr⟩
-    rcases hdq : d ⟨p.len, u⟩ with _ | v
-    · exfalso
-      obtain ⟨η, hqe, -⟩ := hd'.2.1 _ w hdq hw
-      exact mk_ne_encQuery hp u _ hqe
-    · rw [hd'.1 _ _ hdq] at hw
-      exact hw
+  · rintro (⟨h, p, hp, u, hu, w, hw, htr⟩ | ⟨n, hn, u, w, hw, htr⟩)
+    · refine Or.inl ⟨h, p, hp, u, hu, w, ?_, htr⟩
+      rcases hdq : d ⟨p.len, u⟩ with _ | v
+      · exfalso
+        obtain ⟨η, hqe, -⟩ := hd'.2.1 _ w hdq hw
+        exact mk_ne_encQuery hp u _ hqe
+      · rw [hd'.1 _ _ hdq] at hw
+        exact hw
+    · refine Or.inr ⟨n, hn, u, w, ?_, htr⟩
+      rcases hdq : d ⟨n, u⟩ with _ | v
+      · exfalso
+        obtain ⟨η, hqe, -⟩ := hd'.2.1 _ w hdq hw
+        exact ne_encQuery_of_length_ne (shortLen_ne_enc hn) _ hqe
+      · rw [hd'.1 _ _ hdq] at hw
+        exact hw
   · exact Spr.mono hd'.1
 
 theorem spr_extend_fExp_iff {m₁ : EMessage} {d d' : Cache}
@@ -151,35 +158,51 @@ theorem Inv_extend_fExp (d' : Cache) (ξ : Rec) (A? : Option (Finset Name)) (b :
 
 /-! ## Stage B -/
 
+/-- An accepted forgery either passes the forest verifier on a full-length signature, as a fresh
+typed signature, or leaves a short root query whose answer begins with the public key. -/
 theorem stB_support (pk : PublicKey) (m₁ : Message) (st : A.State) (σ : Option Signature)
     (c : Cache) : ∀ p ∈ support (run (stB A pk m₁ st σ) c), Cache.Sub c p.2 ∧
-      (p.1 = true → ∃ m₂ σ₂, σ.map (fun s => (m₁, s)) ≠ some (m₂, σ₂) ∧
+      (p.1 = true → (∃ m₂ σ₂, σ.map (fun s => (m₁, s)) ≠ some (m₂, σ₂) ∧
         ∃ w, p.2 (encQuery (emsg m₂ pk ++ σ₂.1)) = some w ∧
           ∃ hi : pack w ∈ validSet,
             σ₂.2.length = graph.revealBits (fins (setsName ⟨_, hi⟩)) ∧
             ∃ y : graph.Assignment,
               graph.ReconEqs p.2 (fins (setsName ⟨_, hi⟩))
-                (graph.decode (fins (setsName ⟨_, hi⟩)) σ₂.2) y ∧ trunc128 (yv y rh) = pk) := by
+                (graph.decode (fins (setsName ⟨_, hi⟩)) σ₂.2) y ∧ trunc128 (yv y rh) = pk) ∨
+        ∃ n, ShortLen n ∧ ∃ u : BitVec n, ∃ w, p.2 ⟨n, u⟩ = some w ∧ trunc128 w = pk) := by
   intro p hp
   unfold stB at hp
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
-  obtain ⟨⟨⟨m₂, σ₂⟩, c₁⟩, h₁, hp⟩ := hp
+  obtain ⟨⟨⟨m₂, bits⟩, c₁⟩, h₁, hp⟩ := hp
   have hsub₁ := sub_of_mem_support_run _ c _ h₁
   dsimp only at hp hsub₁
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
   obtain ⟨⟨ok, c₂⟩, h₂, hp⟩ := hp
-  obtain ⟨hsub₂, hver⟩ := verify_support forestScheme pk m₂ σ₂ c₁ ⟨ok, c₂⟩ h₂
-  dsimp only at hp hsub₂ hver
+  have hsub₂ := sub_of_mem_support_run _ c₁ _ h₂
+  dsimp only at hp hsub₂
   rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
   subst hp
   refine ⟨hsub₁.trans hsub₂, fun hok => ?_⟩
   simp only [Bool.and_eq_true, decide_eq_true_iff] at hok
   obtain ⟨hok, hne⟩ := hok
-  obtain ⟨w, hw, hi, hlen, y, hy, hpk⟩ := hver hok
-  refine ⟨m₂, σ₂, hne, w, hw, hi, hlen, y, hy, ?_⟩
-  exact (trunc128_cast_pot (graph_len_fin rh) (y rh.fin)).trans hpk
+  by_cases hlen : bits.length = 5504
+  · left
+    rw [A.verify_spec.full pk m₂ bits hlen] at h₂
+    obtain ⟨-, hver⟩ := verify_support forestScheme pk m₂ (decodeSignature bits) c₁ ⟨ok, c₂⟩ h₂
+    obtain ⟨w, hw, hi, hlen', y, hy, hpk⟩ := hver hok
+    refine ⟨m₂, decodeSignature bits, ?_, w, hw, hi, hlen', y, hy, ?_⟩
+    · intro heq
+      apply hne
+      rcases σ with _ | s
+      · cases heq
+      · simp only [Option.map_some, Option.some.injEq, Prod.mk.injEq] at heq ⊢
+        refine ⟨heq.1, ?_⟩
+        rw [heq.2, encode_decode bits (by omega)]
+    · exact (trunc128_cast_pot (graph_len_fin rh) (y rh.fin)).trans hpk
+  · right
+    exact A.verify_spec.short pk m₂ bits c₁ ⟨ok, c₂⟩ hlen h₂ hok
 
 /-- An accepted forgery is one of the charged events. -/
 theorem events_stB (ξ : Rec) (pk : PublicKey) (hpk : pkOf ξ = pk) (r : Option (Nonce × Idx))
@@ -191,7 +214,9 @@ theorem events_stB (ξ : Rec) (pk : PublicKey) (hpk : pkOf ξ = pk) (r : Option 
       ∃ η i, r = some (η, i) ∧ (IdxPost d' p.2 i.val ∨ IdxPre d (emsg m₁ pk ++ η) i.val) := by
   subst hpk
   obtain ⟨hcp, h⟩ := stB_support A (pkOf ξ) m₁ st (sigOf ξ r) c p hp
-  obtain ⟨m₂, σ₂, hne, w, hw, hi, hlen, y, hy, hacc⟩ := h hok
+  rcases h hok with ⟨m₂, σ₂, hne, w, hw, hi, hlen, y, hy, hacc⟩ | ⟨n, hn, u, w, hw, hacc⟩
+  swap
+  · exact Or.inr (Or.inl (Or.inr ⟨n, hn, u, w, hw, hacc⟩))
   rcases r with _ | ⟨η, i⟩
   · -- signing failed: everything is hidden
     rcases events_none (isCut_setsName ⟨_, hi⟩) hy hacc with hs | hh

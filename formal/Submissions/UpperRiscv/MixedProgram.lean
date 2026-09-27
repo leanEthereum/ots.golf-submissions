@@ -1,6 +1,6 @@
 import Submissions.UpperRiscv.Program
 
-/-! The 349-cycle mixed-width candidate image. This module proves image validity;
+/-! The 348-cycle mixed-width candidate image. This module proves image validity;
 the complete execution/refinement certificate is a separate obligation.
 
 Chains 6, 9, 12 and 15 are hashed in place: each wire value starts six bytes into its own cell,
@@ -12,8 +12,8 @@ set_option maxRecDepth 100000
 namespace OptimalOTS.RiscvMixedProgram
 
 open RiscvZkvm.Rv64
-open Riscv2Program (Code imm12 reject indexPrefix lengthCheck wordReg
-  laneWordAddr hashBase laneBase wordBytes broadcast nop decision)
+open Riscv2Program (Code imm12 reject indexPrefix wordReg
+  laneWordAddr hashBase laneBase wordBytes broadcast nop)
 
 /-- Working cell of chain `k`: 24-byte cells from 0x3FFFE0, in execution order. -/
 def slot (k : ℕ) : ℕ := 0x3FFFE0 + 24 * k
@@ -70,8 +70,10 @@ def laneWord (g : ℕ) : Code :=
 def fold : Code :=
   [.SRLI .x26 .x27 8, .ADD .x27 .x27 .x26, .AND .x27 .x27 .x1]
 def sumCheck : Code := [.REMU .x27 .x27 .x2, .BEQ .x27 .x0 16] ++ reject
+/-- The length bound `5505`, kept in `x6` for the decision. -/
+def lenBlock : Code := [.LD .x6 .x12 (BitVec.ofNat 12 72)]
 def indexPhase : Code :=
-  indexPrefix ++ [.ECALL] ++ lengthCheck ++ loadWords ++
+  indexPrefix ++ [.ECALL] ++ lenBlock ++ loadWords ++
     (List.range 4).flatMap laneWord ++ sumCheck ++ [.ADDI .x11 .x0 144]
 
 def enter (k previous : ℕ) : Code :=
@@ -83,8 +85,13 @@ def prologue (q : ℕ) : Code :=
     enter (2*q) (if q = 0 then hashBase else work (2*q-1)) ++
     [.LHU .x28 .x12 (imm12 ((laneBase + 2*q : ℤ) - outAddr (2*q))),
      .JALR .x0 .x28 (imm12 (jumpImm q))]
+/-- The root reads the first `a3 + 639` bits of the region: 6143 bits for a full signature. -/
 def root : Code :=
-  [.ADDI .x10 .x10 (imm12 ((0x3FFFD8 : ℤ) - slot 31)), .ADDI .x11 .x13 640, .ECALL]
+  [.ADDI .x10 .x10 (imm12 ((0x3FFFD8 : ℤ) - slot 31)), .ADDI .x11 .x13 639, .ECALL]
+/-- Accept exactly when both root words match the public key and `a3 < 5505`. -/
+def decision : Code :=
+  [.LD .x26 .x12 0, .BNE .x26 .x30 24, .LD .x28 .x12 8, .BNE .x28 .x31 16,
+   .SLTU .x10 .x13 .x6, .ADDI .x5 .x0 0, .ECALL] ++ reject
 def pairCap (q : ℕ) : ℕ := if q < 8 then 23 else if q < 10 then 24 else 30
 /-- Rejection fragments occupy previously unreachable padding, in discovery order. -/
 def rejectStubs : List ℕ := [600,4463,8327,12192,660,4526,8392,12255]
@@ -126,16 +133,16 @@ def assemble (cursor : ℕ) : List (ℕ × Code) → Code
   | (off, body) :: rest =>
     List.replicate (off-cursor) nop ++ body ++ assemble (off+body.length) rest
 def tables : Code := assemble 0 fragments
-def verifier : Code := indexPhase ++ prologue 0 ++ List.replicate 5 nop ++ tables
+def verifier : Code := indexPhase ++ prologue 0 ++ List.replicate 9 nop ++ tables
 
 def firstMask : ℕ := broadcast 0x3c3c
 def dataImage : List (BitVec 8) :=
   List.replicate 32 0 ++ wordBytes firstMask ++ wordBytes (broadcast 0x3c3c) ++
-    wordBytes (broadcast 0x1fc) ++ wordBytes 255 ++ wordBytes 0 ++ wordBytes 5504 ++
+    wordBytes (broadcast 0x1fc) ++ wordBytes 255 ++ wordBytes 0 ++ wordBytes 5505 ++
     wordBytes (baseWord 0)
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
-theorem index_length : indexPhase.length = 39 := by decide +kernel
+theorem index_length : indexPhase.length = 35 := by decide +kernel
 theorem code_length : verifier.length = 15701 := by decide +kernel
 theorem data_length : dataImage.length = 88 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel
