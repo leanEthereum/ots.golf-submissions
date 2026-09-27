@@ -3,10 +3,11 @@ import Submissions.UpperLeanIsa.FusionMachineRun
 /-!
 # Forced paths and the landing exit
 
-Every completing walk follows the 24 straight prologue instructions, the free dispatch,
+Every completing walk follows the 19 straight prologue instructions, the free dispatch,
 then fourteen frame-isolated blocks and the exit. Unit `j` runs in frame `j`. The block relations give
-GP_u = initialProduct(86,s) * C_(sum of preceding group costs), so the exit target is
-GP_13 = g ^ seedExp t with t = s + Σ costs. The exit table (`seed_table`, a hash-free identity)
+GP_u = initialProduct(82,s) * C_(sum of preceding product exponents). The four `shifted` units
+have positive cost and multiply by C_(cost − 1), so the exit target is GP_13 = g ^ seedExp t with
+t = s + Σ costs. The exit table (`seed_table`, a hash-free identity)
 shows that only t = 86 lands on the sentinel; every other total lands on a pad or past the
 bytecode (`exit_forced`).
 
@@ -106,7 +107,7 @@ theorem cinstrAt_proList (T : Tab) {t : ℕ} (ht : t < proList.length) :
   unfold prologue
   rw [if_pos (by rw [proList_length] at ht; exact ht), List.getD_eq_getElem _ _ ht]
 
-theorem cinstrAt_24 (T : Tab) : cinstrAt T 24 = .dispatch 0 := by
+theorem cinstrAt_19 (T : Tab) : cinstrAt T 19 = .dispatch 0 := by
   rw [cinstrAt_pro T (by omega)]; unfold prologue; rw [if_neg (by omega), if_pos rfl]
 
 theorem pro_mem_init : CInstr.init ∈ proList := by unfold proList; simp
@@ -115,7 +116,7 @@ theorem pro_mem_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 16) (h16 : c ≠ 16) :
     CInstr.setc (cCell c) (cV c) ∈ proList := by
   unfold proList
   simp only [List.mem_append, List.mem_map, List.mem_range]
-  left; left; right
+  left; right
   exact ⟨c - 1, by omega, by rw [Nat.sub_add_cancel h1]⟩
 
 theorem pro_mem_frame {f : ℕ} (hf : f < 15) : CInstr.setc (fCell f) (frameV f) ∈ proList := by
@@ -186,7 +187,7 @@ structure PathFacts (T : Tab) (B : BlakeRel) (v : ℕ → E) (xs : ℕ → ℕ) 
 
 /-- The dispatch slot of unit `f` on the path of `xs` (for `f = 14`, the exit). -/
 def ctlSlot (T : Tab) (xs : ℕ → ℕ) (f : ℕ) : ℕ :=
-  if f = 0 then 24 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
+  if f = 0 then 19 else ent (frU (xs 0) (f - 1)) (xs (f - 1)) + 1 +
     (bodyF T (frU (xs 0) (f - 1)) (xs (f - 1))).length
 
 theorem ctlSlot_succ (T : Tab) (xs : ℕ → ℕ) (f : ℕ) :
@@ -198,7 +199,7 @@ theorem cinstrAt_ctlSlot (hT : T.Hyp) {xs : ℕ → ℕ} {f : ℕ} (hf : f ≤ 1
     cinstrAt T (ctlSlot T xs f) = ctlF' (xs 0) f ∧ ctlSlot T xs f < sentinel := by
   rcases Nat.eq_zero_or_pos f with rfl | hf0
   · refine ⟨?_, by unfold ctlSlot sentinel; simp⟩
-    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_24 T
+    unfold ctlSlot ctlF'; rw [if_pos rfl, if_pos (by omega), frU_zero]; exact cinstrAt_19 T
   · obtain ⟨j, rfl⟩ : ∃ j, f = j + 1 := ⟨f - 1, by omega⟩
     rw [ctlSlot_succ]
     have hx : xs j < Wf (frU (xs 0) j) := by rw [Wf_frU _ (by omega)]; exact hV j (by omega)
@@ -273,11 +274,11 @@ end Units
 
 /-- Steps of the whole path. -/
 def totalSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  25 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
+  20 + ∑ f ∈ Finset.range 14, (2 + (bodyF T (frU (xs 0) f) (xs f)).length)
 
 /-- Cycles of the whole path. -/
 def totalCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  34 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
+  29 + ∑ f ∈ Finset.range 14, (2 + lcost (bodyF T (frU (xs 0) f) (xs f)))
 
 /-! ### The landing product -/
 
@@ -293,22 +294,51 @@ theorem cCell_val {B : BlakeRel} {v : ℕ → E} (hpro : ∀ y ∈ proList, y.Re
     · subst c; rw [cV_sixteen]; exact hpro _ pro_mem_g
     · exact hpro _ (pro_mem_c h0 hc h16)
 
-theorem cost_le (hT : T.Hyp) {u x : ℕ} (hu : u < 13) (hx : x < VF u) : cost T u x ≤ 16 := by
-  rw [hT.cost_eq u hu x hx]; have := band_lt_17 hu hx; omega
+theorem cost_le (hT : T.Hyp) {u x : ℕ} (hu : u < 13) (hx : x < VF u) : cost T u x ≤ 17 := by
+  rw [hT.cost_eq u hu x hx]; have := band_lt_18 hu hx; omega
+
+/-- Only the `shifted` units reach cost 17. -/
+theorem nb_shift : ∀ u < 13, nb u ≤ 17 + (if shifted u then 1 else 0) := by decide
+
+/-- A shifted unit has positive cost, and every product exponent is at most 16. -/
+theorem pcost_spec (hT : T.Hyp) {u x : ℕ} (hu : u < 13) (hx : x < VF u) :
+    pcost T u x + (if shifted u then 1 else 0) = cost T u x ∧ pcost T u x ≤ 16 := by
+  have hb := (band_spec hu hx).1
+  have hn := nb_shift u hu
+  have hc := hT.cost_eq u hu x hx
+  unfold pcost
+  by_cases hs : shifted u
+  · have hp := bind_cost_pos hT hu (by unfold shifted at hs; omega) hx
+    rw [if_pos hs, if_pos hs] at *
+    omega
+  · rw [if_neg hs, if_neg hs] at *
+    omega
+
+theorem sum_shift : ∑ u ∈ Finset.range 13, (if shifted u then 1 else 0) = 4 := by decide
+
+/-- The product exponents sum to the group costs less the shift. -/
+theorem pcost_sum (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) :
+    ∑ w ∈ Finset.range 13, pcost T w (xs (w + 1)) + 4 =
+      ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) := by
+  rw [← sum_shift, ← Finset.sum_add_distrib]
+  refine Finset.sum_congr rfl fun w hw => ?_
+  have hw' := Finset.mem_range.mp hw
+  have := hV (w + 1) (by omega); rw [Wf_succ hw'] at this
+  exact (pcost_spec hT hw' this).1
 
 /-- The landing product before group `u`: the free landing times the cost constants. -/
 theorem prod_eq {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
     (hpro : ∀ y ∈ proList, y.RelB B v)
     (hblk : ∀ f < 14, ∀ y ∈ bodyF T (frU (xs 0) f) (xs f), y.RelB B v) : ∀ u ≤ 13,
-      v (gpCell u) = ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0) *
-        LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, cost T w (xs (w + 1)))) := by
+      v (gpCell u) = ofK (LeanIsaFieldRescale.initialProduct 82 (xs 0) *
+        LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, pcost T w (xs (w + 1)))) := by
   intro u
   induction u with
   | zero =>
     intro _
-    have hseed : CInstr.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0))) ∈
+    have hseed : CInstr.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 82 (xs 0))) ∈
         bodyF T (frU (xs 0) 0) (xs 0) := by rw [bodyF_frU_zero]; unfold fbody; simp
-    have h : v (gpCell 0) = ofK (LeanIsaFieldRescale.initialProduct 86 (xs 0)) :=
+    have h : v (gpCell 0) = ofK (LeanIsaFieldRescale.initialProduct 82 (xs 0)) :=
       hblk 0 (by omega) _ hseed
     rw [Finset.sum_range_zero]
     change v (gpCell 0) = ofK (_ * gpow 0)
@@ -319,8 +349,8 @@ theorem prod_eq {B : BlakeRel} {v : ℕ → E} (hT : T.Hyp) {xs : ℕ → ℕ} (
     have hx : xs (u + 1) < VF u := by have := hV (u + 1) (by omega); rwa [Wf_succ (by omega)] at this
     have hrel := CInstr.relNH_of_relB
       (hblk (u + 1) (by omega) _ (prodOp_mem T (xs 0) (by omega) (xs (u + 1))))
-    have hrel' : v (gpCell (u + 1)) = v (gpCell u) * v (cCell (cost T u (xs (u + 1)))) := hrel
-    rw [hrel', ih (by omega), cCell_val hpro (cost_le hT (by omega) hx), cV, ← ofK_mul,
+    have hrel' : v (gpCell (u + 1)) = v (gpCell u) * v (cCell (pcost T u (xs (u + 1)))) := hrel
+    rw [hrel', ih (by omega), cCell_val hpro (pcost_spec hT (by omega) hx).2, cV, ← ofK_mul,
       Finset.sum_range_succ]
     change ofK ((_ * LeanIsaFieldRescale.costFactor _) * LeanIsaFieldRescale.costFactor _) = _
     rw [mul_assoc, LeanIsaFieldRescale.factor_add]
@@ -348,6 +378,27 @@ theorem initialProduct_mul (s c : ℕ) :
         LeanIsaFieldRescale.stride * 86) % ordG := by
     unfold LeanIsaFieldRescale.stride ordG LeanIsaFieldRescale.sentinel; omega
   rw [he]
+
+/-- The shifted seed: `initialProduct(82, s) · C_p = initialProduct(86, s) · C_(p + 4)`. -/
+theorem initialProduct_shift (s p : ℕ) :
+    LeanIsaFieldRescale.initialProduct 82 s * LeanIsaFieldRescale.costFactor p =
+      LeanIsaFieldRescale.initialProduct 86 s * LeanIsaFieldRescale.costFactor (p + 4) := by
+  have h86 : LeanIsaFieldRescale.costFactor 86 =
+      LeanIsaFieldRescale.costFactor 82 * LeanIsaFieldRescale.costFactor 4 :=
+    (LeanIsaFieldRescale.factor_add 82 4).symm
+  have h4 : LeanIsaFieldRescale.costFactor 4 ≠ 0 := pow_ne_zero _ g_ne_zero
+  have h82 : LeanIsaFieldRescale.costFactor 82 ≠ 0 := pow_ne_zero _ g_ne_zero
+  rw [LeanIsaFieldRescale.initialProduct, LeanIsaFieldRescale.initialProduct, h86,
+    ← LeanIsaFieldRescale.factor_add p 4]
+  field_simp
+
+/-- **The landing total.** On a valid path, the last landing product is `g ^ seedExp` of the
+chain-step total `s + Σ costs`. -/
+theorem landing_total (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs) :
+    LeanIsaFieldRescale.initialProduct 82 (xs 0) *
+        LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range 13, pcost T w (xs (w + 1))) =
+      gpow (seedExp (xs 0 + ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)))) := by
+  rw [initialProduct_shift, pcost_sum hT hV, initialProduct_mul]
 
 /-- **The exit table.** For every reachable total `t ≤ 284`, the exit target `g ^ seedExp t` is
 the sentinel only at the layer `t = 86`; otherwise it is past the bytecode or one of the pads
@@ -442,14 +493,14 @@ theorem walk_full (hT : T.Hyp) {n c : ℕ} (h : Walk T B v n 0 c) :
   have hV : Valid xs := fun f hf => (hall f hf).1
   have hgp := prod_eq hT hV hRp (fun f hf => (hall f hf).2.2.2) 13 le_rfl
   set t := xs 0 + ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) with htdef
-  have hbound : ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) ≤ ∑ _w ∈ Finset.range 13, 16 :=
+  have hbound : ∑ w ∈ Finset.range 13, cost T w (xs (w + 1)) ≤ ∑ _w ∈ Finset.range 13, 17 :=
     Finset.sum_le_sum fun w hw => by
       have hw' := Finset.mem_range.mp hw
       have := hV (w + 1) (by omega); rw [Wf_succ hw'] at this
       exact cost_le hT hw' this
   rw [Finset.sum_const, Finset.card_range, smul_eq_mul] at hbound
   have hx0 : xs 0 < 64 := by have := hV 0 (by omega); rwa [Wf_zero] at this
-  have hgp' : v (gpCell 13) = ofK (gpow (seedExp t)) := by rw [hgp, initialProduct_mul]
+  have hgp' : v (gpCell 13) = ofK (gpow (seedExp t)) := by rw [hgp, landing_total hT hV]
   have hnext0 : nextSlot T v (ctlSlot T xs 14) = slotOf (gpow (seedExp t)) := by
     unfold nextSlot; rw [hci']
     show slotOf _ = _
@@ -566,7 +617,7 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
         x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelB B (Lx L)))
     {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow 0, 1⟩)) :
     Pinned (Lx L) := by
-  have hp := rel_prefix Sm B hst 24 0 n c
+  have hp := rel_prefix Sm B hst 19 0 n c
     (fun i hi => by
       rw [cinstrAt_proList T (by rw [proList_length]; exact hi)]
       exact proList_straight _ (List.getElem_mem _))

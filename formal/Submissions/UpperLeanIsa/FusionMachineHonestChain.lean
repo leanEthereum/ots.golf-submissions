@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.FusionMachineHonest
 
-/-! Honest chain assertions, including the fused dependency packet at each binding endpoint
-and the light packet at each final step of chains 39, 40, 41. -/
+/-! Honest chain assertions, including the fused dependency packet at each five-dep endpoint
+and the three-dep packet at each three-dep endpoint. -/
 set_option maxRecDepth 4000
 set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
@@ -25,12 +25,12 @@ theorem honest_topBits {k : ℕ} (hk : k<42) :
 
 attribute [local irreducible] Fusion.tagWord LeanIsaFieldRescale.costFactor
 
-include hC hlen hacc in
+include hT hC hlen hacc in
 theorem honest_fusedMd (k : Fin 42) (hk : binds k.val) :
     cellBits (hv P T f pk m bits (fusedMdCell k.val)) = P.fusedMd k := by
   rw [hC.fusedMd]
   have hsmall : ∀ k : Fin 42, binds k.val → k.val≠5 → k.val≠6 →
-      fusedMdCell k.val = cCell (Fusion.tagIndex k).val ∧ (Fusion.tagIndex k).val≤21 := by decide
+      fusedMdCell k.val = cCell (Fusion.tagIndex k).val ∧ (Fusion.tagIndex k).val≤16 := by decide
   by_cases h5 : k.val=5
   · have he : k=5 := Fin.ext h5
     subst k
@@ -40,12 +40,12 @@ theorem honest_fusedMd (k : Fin 42) (hk : binds k.val) :
     · have he : k=6 := Fin.ext h6
       subst k
       change cellBits (hv P T f pk m bits (gpCell 13)) = Fusion.tagWord 46
-      rw [honest_gp13 hC hacc,sentinel_bits]
+      rw [honest_gp13 hT hC hacc,sentinel_bits]
     · obtain ⟨he,hi⟩ := hsmall k hk h5 h6
       rw [he,hv_cc hi,factor_bits _ (by omega)]
 
 include hT hC hlen hacc in
-theorem honest_fusion_query (k : Fin 42) (hk : binds k.val) (u : Fin 7)
+theorem honest_fusion_query (k : Fin 42) (hk : binds k.val) (u : Fin 9)
     (hu : Fusion.owner k = some u) (x : E) :
     blake2sQuery ![x,hv P T f pk m bits (topCell (depTop k.val 2)),
       hv P T f pk m bits (topCell (depTop k.val 3)),hv P T f pk m bits (topCell (depTop k.val 4))]
@@ -53,7 +53,7 @@ theorem honest_fusion_query (k : Fin 42) (hk : binds k.val) (u : Fin 7)
       (hv P T f pk m bits (fusedMdCell k.val)) =
       Fusion.packet (Fusion.fusionWords (ctxF P f pk m bits) u (cellBits x) (P.fusedMd k)) := by
   obtain ⟨hc0,hc1,hd⟩ := fusion_cells k hk u hu
-  rw [blake2sQuery_eq,hc1,hc0,honest_fusedMd hC hlen hacc k hk]
+  rw [blake2sQuery_eq,hc1,hc0,honest_fusedMd hT hC hlen hacc k hk]
   unfold Fusion.packet Fusion.fusionWords
   simp only [Matrix.cons_val,Fin.isValue]
   rw [(hd 2 (by omega)).1,(hd 3 (by omega)).1,(hd 4 (by omega)).1]
@@ -64,23 +64,21 @@ theorem honest_fusion_query (k : Fin 42) (hk : binds k.val) (u : Fin 7)
     honest_topBits hT hC hacc (hd 4 (by omega)).2.2]
 
 include hT hC hacc in
-theorem honest_light_query {k : ℕ} (hk : k < 42) {d t : ℕ} (hd : d < LEN k) (ht : t < d) (x : E) :
-    blake2sQuery ![x, hv P T f pk m bits (topCell 7), hv P T f pk m bits (cCell (tpos k d t / 9 % 9)),
-        hv P T f pk m bits (cCell (tpos k d t / 81))]
-        (hv P T f pk m bits (cCell 1)) (hv P T f pk m bits (cCell 1 + 1)) (hv P T f pk m bits oneCell) =
-      Fusion.lightPacket P.lightCv (P.codec.tag ⟨k, hk⟩ (LEN k - 1 - d + t) 1)
-        (P.codec.tag ⟨k, hk⟩ (LEN k - 1 - d + t) 2) (ctxF P f pk m bits) (cellBits x)
-        P.codec.chainMd := by
-  have hj : LEN k - 1 - d + t + 1 < LEN k := by omega
-  obtain ⟨-, h1, h2⟩ := hC.tag ⟨k, hk⟩ _ hj
-  have hp : tpos k d t / 81 ≤ 16 := by
-    have := OFFT_bound k hk; unfold tpos; omega
-  rw [blake2sQuery_eq, show cCell 1 + 1 = cCell 2 from rfl, hv_cc (c := 1) (by omega),
-    hv_cc (c := 2) (by omega), hv_cc (c := tpos k d t / 9 % 9) (by omega),
-    hv_cc (c := tpos k d t / 81) (by omega), hv_one, h1, h2, hC.lightCv, hC.chainMd]
-  unfold Fusion.lightPacket
-  rw [honest_topBits hT hC hacc (k := 7) (by decide)]
-  rfl
+theorem honest_triple_query (k : Fin 42) (hk : tri k.val) (u : Fin 9)
+    (hu : Fusion.owner k = some u) (x : E) :
+    blake2sQuery ![x, hv P T f pk m bits (topCell (depTop k.val 0)),
+        hv P T f pk m bits (topCell (depTop k.val 1)), hv P T f pk m bits (topCell (depTop k.val 2))]
+        (hv P T f pk m bits (cCell (triA k.val))) (hv P T f pk m bits (cCell (triA k.val) + 1))
+        (hv P T f pk m bits oneCell) =
+      Fusion.triplePacket (P.tripleCv k) (ctxF P f pk m bits) u (cellBits x) P.codec.chainMd := by
+  obtain ⟨ha1, ha2, hd⟩ := triple_cells k hk u hu
+  rw [blake2sQuery_eq, cCell_succ ha1 (by omega), hv_cc (c := triA k.val) (by omega),
+    hv_cc (c := triA k.val + 1) (by omega), hv_one, hC.tripleCv k hk, hC.chainMd]
+  unfold Fusion.triplePacket
+  rw [(hd 0 (by omega)).1, (hd 1 (by omega)).1, (hd 2 (by omega)).1,
+    honest_topBits hT hC hacc (hd 0 (by omega)).2.2,
+    honest_topBits hT hC hacc (hd 1 (by omega)).2.2,
+    honest_topBits hT hC hacc (hd 2 (by omega)).2.2]
 
 include hT hC hlen hacc in
 /-- The honest chain step `t` of chain `k` (the last writes `dst`). -/
@@ -125,7 +123,7 @@ theorem honest_chainOp {k : ℕ} (hk : k < 42) {t dst : ℕ}
         simpa [junkCell, ho, loC, hiC, he]
           using And.intro hjunk hsel
     · rw [if_neg hl]; exact hv_xc hk (by omega)
-  have hp : tpos k d t / 81 ≤ 21 := by
+  have hp : tpos k d t / 81 ≤ 16 := by
     have := OFFT_bound k hk; unfold tpos; omega
   have hq : blake2sQuery ![hv P T f pk m bits (if t = 0 then wCell k else xcCell k (t - 1)),
       hv P T f pk m bits (cCell (tpos k d t % 9)), hv P T f pk m bits (cCell (tpos k d t / 9 % 9)),
@@ -143,39 +141,34 @@ theorem honest_chainOp {k : ℕ} (hk : k < 42) {t dst : ℕ}
     rfl
   unfold chainOp
   dsimp only
+  have hact : ∀ u, Fusion.owner ⟨k,hk⟩ = some u → t+1=d →
+      P.active ⟨k,hk⟩ (LEN k-1-d+t) = some u := by
+    intro u hu hl
+    unfold Fusion.Params.active
+    rw [hC.len]
+    change (if LEN k-1-d+t+2=LEN k then Fusion.owner ⟨k,hk⟩ else none) = some u
+    rw [if_pos (by omega),hu]
   by_cases hb : t+1=d ∧ binds k
   · rw [if_pos hb]
-    obtain ⟨u,hu⟩ : ∃ u, Fusion.owner ⟨k,hk⟩ = some u :=
-      Option.ne_none_iff_exists'.mp ((binds_owner ⟨k,hk⟩).mp hb.2).1
-    have hu6 : u.val ≠ 6 := fun h6 =>
-      ((binds_owner ⟨k,hk⟩).mp hb.2).2 (by rw [hu, show u = 6 from Fin.ext h6])
-    have ha : P.active ⟨k,hk⟩ (LEN k-1-d+t) = some u := by
-      unfold Fusion.Params.active
-      rw [hC.len]
-      change (if LEN k-1-d+t+2=LEN k then Fusion.owner ⟨k,hk⟩ else none) = some u
-      rw [if_pos (by omega),hu]
+    obtain ⟨u,hu,hu5⟩ := binds_owner ⟨k,hk⟩ hb.2
     refine blake_rel (a:=AF P T f pk m bits k t)
       (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)
       (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)
       (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)
       (hv_canonical P T f pk m bits _) ?_ hout.1 hout.2
     rw [honest_fusion_query hT hC hlen hacc ⟨k,hk⟩ hb.2 u hu,hsrc.2,
-      AF_spec P T f pk m bits hk ht,chainInput_fused ha hu6]
+      AF_spec P T f pk m bits hk ht,chainInput_fused (hact u hu hb.1) hu5]
   · rw [if_neg hb]
-    by_cases hl : t+1=d ∧ light k
+    by_cases hl : t+1=d ∧ tri k
     · rw [if_pos hl]
-      have ha : P.active ⟨k,hk⟩ (LEN k-1-d+t) = some 6 := by
-        unfold Fusion.Params.active
-        rw [hC.len]
-        change (if LEN k-1-d+t+2=LEN k then Fusion.owner ⟨k,hk⟩ else none) = some 6
-        rw [if_pos (by omega),(light_owner ⟨k,hk⟩).mp hl.2]
+      obtain ⟨u,hu,hu5⟩ := tri_owner ⟨k,hk⟩ hl.2
       refine blake_rel (a:=AF P T f pk m bits k t)
         (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)
         (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)
         (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)
         (hv_canonical P T f pk m bits _) ?_ hout.1 hout.2
-      rw [honest_light_query hT hC hacc hk hdl (by omega),hsrc.2,
-        AF_spec P T f pk m bits hk ht,chainInput_light ha]
+      rw [honest_triple_query hT hC hacc ⟨k,hk⟩ hl.2 u hu,hsrc.2,
+        AF_spec P T f pk m bits hk ht,chainInput_triple (hact u hu hl.1) hu5]
     · rw [if_neg hl]
       have ha : P.active ⟨k,hk⟩ (LEN k-1-d+t) = none := by
         unfold Fusion.Params.active
@@ -187,9 +180,9 @@ theorem honest_chainOp {k : ℕ} (hk : k < 42) {t dst : ℕ}
           | none => rfl
           | some u =>
             exfalso
-            by_cases h6 : u = 6
-            · subst h6; exact hl ⟨hl', (light_owner ⟨k,hk⟩).mpr ho⟩
-            · exact hb ⟨hl', (binds_owner ⟨k,hk⟩).mpr ⟨by simp [ho], by simp [ho, h6]⟩⟩
+            rcases owner_kind ⟨k,hk⟩ u ho with h5 | h5
+            · exact hb ⟨hl', h5⟩
+            · exact hl ⟨hl', h5⟩
         · rfl
       refine blake_rel (a:=AF P T f pk m bits k t)
         (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)

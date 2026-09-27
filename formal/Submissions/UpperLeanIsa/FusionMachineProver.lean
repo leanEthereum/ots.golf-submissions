@@ -4,8 +4,8 @@ import Submissions.UpperLeanIsa.FusionMachineSound
 # The honest fused prover
 
 The prover computes the index and reconstructs chain tops in dependency order. It then queries
-the chain steps again with that final context to collect both output halves, followed by two
-root calls. Repeated queries share answers in the cached oracle. The resulting committed image
+the chain steps again with that final context to collect both output halves, followed by the
+root call. Repeated queries share answers in the cached oracle. The resulting committed image
 contains constants, index words, tie patterns, accumulators, landing hints and products, chain
 pairs, and root states. Under a fixed table the prover is `imageF` (`fixed_prover`).
 -/
@@ -74,24 +74,24 @@ theorem chainAnsF_spec (f : HashTable) (ctx : Fusion.Tops) (k : Fin numChains) :
       rw [ih (j + 1) _ u (by omega), show j + 1 + u = j + (u + 1) by omega]
       rfl
 
-/-- The two root states, extended periodically only to make the recursion total. -/
+/-- The root states, extended periodically only to make the recursion total. -/
 def rootState (f : HashTable) (P : Fusion.Params) (tp : Fusion.Tops) : ℕ → ℕ → BitVec 256 → BitVec 256
   | _,0,st => st
-  | r,n+1,st => rootState f P tp (r+1) n (f ⟨896,P.rootInput tp ⟨r%2,Nat.mod_lt _ (by decide)⟩ st⟩)
+  | r,n+1,st => rootState f P tp (r+1) n (f ⟨896,P.rootInput tp ⟨r%1,Nat.mod_lt _ (by decide)⟩ st⟩)
 
 /-- The answers of `n` root calls from call `r` and state `st`, in order. -/
 def rootAnsQ (tp : Fusion.Tops) : ℕ → ℕ → BitVec 256 → OracleComp Spec (ℕ → BitVec 256)
   | _, 0, _ => pure (fun _ => 0)
   | r, n + 1, st => do
-    let a ← hash896 (P.rootInput tp ⟨r%2,Nat.mod_lt _ (by decide)⟩ st)
+    let a ← hash896 (P.rootInput tp ⟨r%1,Nat.mod_lt _ (by decide)⟩ st)
     let A ← rootAnsQ tp (r + 1) n a
     pure (fun i => if i = 0 then a else A (i - 1))
 
 /-- `rootAnsQ` under a fixed table. -/
 def rootAnsF (f : HashTable) (tp : Fusion.Tops) : ℕ → ℕ → BitVec 256 → ℕ → BitVec 256
   | _, 0, _ => fun _ => 0
-  | r, n + 1, st => fun i => if i = 0 then ans f (P.rootInput tp ⟨r%2,Nat.mod_lt _ (by decide)⟩ st) else
-      rootAnsF f tp (r + 1) n (ans f (P.rootInput tp ⟨r%2,Nat.mod_lt _ (by decide)⟩ st)) (i - 1)
+  | r, n + 1, st => fun i => if i = 0 then ans f (P.rootInput tp ⟨r%1,Nat.mod_lt _ (by decide)⟩ st) else
+      rootAnsF f tp (r + 1) n (ans f (P.rootInput tp ⟨r%1,Nat.mod_lt _ (by decide)⟩ st)) (i - 1)
 
 theorem fixed_rootAns (f : HashTable) (tp : Fusion.Tops) (r n : ℕ) (st : BitVec 256) :
     simulateQ (unifFwdAnswerImpl f) (rootAnsQ P tp r n st) = pure (rootAnsF P f tp r n st) := by
@@ -150,10 +150,10 @@ def hiC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 128 128)
 
 /-- The honest landing product before group `u`. -/
 def gpV (I : Word) (u : ℕ) : E :=
-  ofK (LeanIsaFieldRescale.initialProduct 86 (hxs T I 0) *
-    LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, cost T w (hxs T I (w + 1))))
+  ofK (LeanIsaFieldRescale.initialProduct 82 (hxs T I 0) *
+    LeanIsaFieldRescale.costFactor (∑ w ∈ Finset.range u, pcost T w (hxs T I (w + 1))))
 
-def pairK (i : ℕ) : ℕ := [12, 13, 22, 23, 33, 37, 14, 15, 21, 24, 35, 36, 1, 2, 26, 0, 7, 0, 0, 3, 4, 5, 6, 8, 9, 10, 11, 16, 17, 18, 19, 20, 25, 27, 28, 29, 30, 31, 32, 34, 38, 39, 40, 41].getD i 0
+def pairK (i : ℕ) : ℕ := [12, 13, 22, 23, 33, 37, 14, 15, 21, 24, 35, 36, 1, 2, 26, 29, 7, 8, 0, 3, 4, 5, 6, 0, 9, 10, 11, 16, 17, 18, 19, 20, 25, 27, 28, 0, 30, 31, 32, 34, 38, 39, 40, 41].getD i 0
 
 /-- The physical answer pair, placing the top at offset topOff k and the unused half beside it. -/
 def topPair (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (k b : ℕ) : E :=
@@ -166,7 +166,7 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   if c < 48 then 0
   else if c=48 then oneV
   else if c=49 then gV
-  else if 51 ≤ c ∧ c < 72 then cV (c-50)
+  else if 51 ≤ c ∧ c < 66 then cV (c-50)
   else if c=80 then loC y0
   else if c=81 then hiC y0
   else if 100 ≤ c ∧ c < 113 then fpat (c-100) (hxs T (idxOf y0) (c-100+1))
@@ -175,10 +175,8 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if 180 ≤ c ∧ c < 194 then ofK (gpow (ent (c-180) (hxs T (idxOf y0) (c-180))+1))
   else if 200 ≤ c ∧ c < 214 then gpV T (idxOf y0) (c-200)
   else if c < 256 then 0
-  else if c=286 then loC (RA 0)
-  else if c=287 then hiC (RA 0)
-  else if c=290 then loC (RA 1)
-  else if c=291 then hiC (RA 1)
+  else if c=302 then loC (RA 0)
+  else if c=303 then hiC (RA 0)
   else if c < 344 then topPair T bits y0 A (pairK ((c-256)/2)) ((c-256)%2)
   else if c < 4096 then 0
   else if c < 5430 then
@@ -201,7 +199,7 @@ def prover (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp Spec (
   let ctx ← P.reconFrom (effective (idxOf y0)) bits Fusion.chainOrder (fun _ => 0)
   let CA ← tabulate (fun k : Fin numChains =>
     chainAnsQ P ctx k (LEN k.val - 1 - hd T y0 k.val) (hd T y0 k.val) (sigW bits k.val))
-  let RA ← rootAnsQ P (topsOfV T bits y0 (chainTab CA)) 0 2 0
+  let RA ← rootAnsQ P (topsOfV T bits y0 (chainTab CA)) 0 1 0
   pure (imageOf T bits y0 (chainTab CA) RA)
 
 /-! ## The prover under a fixed table -/
@@ -223,7 +221,7 @@ def AF : ℕ → ℕ → BitVec 256 :=
 
 /-- The root answers. -/
 def RAF : ℕ → BitVec 256 :=
-  rootAnsF P f (topsOfV T bits (y0F P f pk m bits) (AF P T f pk m bits)) 0 2 0
+  rootAnsF P f (topsOfV T bits (y0F P f pk m bits) (AF P T f pk m bits)) 0 1 0
 
 /-- The honest image under the table. -/
 def imageF : MemImage 16 :=

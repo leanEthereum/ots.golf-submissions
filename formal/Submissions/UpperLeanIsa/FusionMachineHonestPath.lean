@@ -5,7 +5,7 @@ import Submissions.UpperLeanIsa.FusionMachineHonestChain
 
 Every op of every block on the honest path holds on the loaded honest image (`honest_blk`), so
 the relations along the path of `hxs T I` hold (`honest_path`), and the machine completes in
-`217` instructions at cost `1018` (`honest_run`).
+`214` instructions at cost `1006` (`honest_run`).
 -/
 
 set_option maxRecDepth 4000
@@ -41,7 +41,7 @@ theorem honest_free : ∀ y ∈ fbody (XF P T f pk m bits 0), y.Rel f (hv P T f 
   have hd0 : hd T (y0F P f pk m bits) 0 = XF P T f pk m bits 0 := by
     rw [hd_XF]; unfold dg; rw [if_pos rfl]
   have hseed : (CInstr.setc (gpCell 0)
-      (ofK (LeanIsaFieldRescale.initialProduct 86 (XF P T f pk m bits 0)))).Rel f
+      (ofK (LeanIsaFieldRescale.initialProduct 82 (XF P T f pk m bits 0)))).Rel f
         (hv P T f pk m bits) := by
     show hv P T f pk m bits (gpCell 0) = _
     rw [honest_gp (by omega)]
@@ -114,9 +114,9 @@ include hT hC hacc in
 theorem honest_prod {u : ℕ} (hu : u < 13) :
     (prodOp T u (XF P T f pk m bits (u + 1))).Rel f (hv P T f pk m bits) := by
   show hv P T f pk m bits (gpCell (u + 1)) = hv P T f pk m bits (gpCell u) *
-    hv P T f pk m bits (cCell (cost T u (XF P T f pk m bits (u + 1))))
+    hv P T f pk m bits (cCell (pcost T u (XF P T f pk m bits (u + 1))))
   rw [honest_gp (by omega), honest_gp (by omega),
-    hv_cc (by have := cost_le hT hu (XF_lt_W hC hacc hu); omega), cV]
+    hv_cc (pcost_spec hT hu (XF_lt_W hC hacc hu)).2, cV]
   unfold gpV
   rw [← ofK_mul, Finset.sum_range_succ]
   change ofK (_ * LeanIsaFieldRescale.costFactor (_ + _)) =
@@ -156,7 +156,7 @@ abbrev tpsF (P : Fusion.Params) (T : Tab) (f : HashTable) (pk : PublicKey) (m : 
 
 theorem rootState_last (f : HashTable) (P : Fusion.Params) (tp : Fusion.Tops) :
     ∀ n r st, rootState f P tp r (n+1) st =
-      ans f (P.rootInput tp ⟨(r+n)%2,Nat.mod_lt _ (by decide)⟩ (rootState f P tp r n st)) := by
+      ans f (P.rootInput tp ⟨(r+n)%1,Nat.mod_lt _ (by decide)⟩ (rootState f P tp r n st)) := by
   intro n
   induction n with
   | zero => intro r st; rfl
@@ -166,9 +166,9 @@ theorem rootState_last (f : HashTable) (P : Fusion.Params) (tp : Fusion.Tops) :
     rw [ih,show r+1+n=r+(n+1) by ring]
     rfl
 
-theorem RAF_eq {i : ℕ} (hi : i<2) :
+theorem RAF_eq {i : ℕ} (hi : i<1) :
     RAF P T f pk m bits i = rootState f P (tpsF P T f pk m bits) 0 (i+1) 0 := by
-  unfold RAF; exact rootAnsF_spec P f _ 2 0 _ i hi
+  unfold RAF; exact rootAnsF_spec P f _ 1 0 _ i hi
 
 include hlen in
 theorem topsV_honest : topsV T (hv P T f pk m bits) (XF P T f pk m bits) = tpsF P T f pk m bits := by
@@ -179,7 +179,7 @@ theorem topsV_honest : topsV T (hv P T f pk m bits) (XF P T f pk m bits) = tpsF 
   · simp only [topsV,tpsF,topsOfV,if_neg hk]
 
 include hlen in
-theorem rootSeq_honest {i : ℕ} (hi : i≤2) :
+theorem rootSeq_honest {i : ℕ} (hi : i≤1) :
     rootSeq (hv P T f pk m bits) i = rootState f P (tpsF P T f pk m bits) 0 i 0 := by
   unfold rootSeq
   by_cases h0 : i=0
@@ -190,25 +190,25 @@ theorem rootSeq_honest {i : ℕ} (hi : i≤2) :
       RAF_eq (by omega),Nat.sub_add_cancel (by omega)]
 
 include hC hlen in
-theorem honest_rootCall {r : ℕ} (hr : r<2) :
+theorem honest_rootCall {r : ℕ} (hr : r<1) :
     (CInstr.blake (rootMsg T (XF P T f pk m bits) r 0) (rootMsg T (XF P T f pk m bits) r 1)
       (rootMsg T (XF P T f pk m bits) r 2) (rootMsg T (XF P T f pk m bits) r 3)
       (rootCv r) (stCell r) (rootMdCell r)).Rel f (hv P T f pk m bits) := by
-  have hmd : ∀ r : Fin 2, cellBits (hv P T f pk m bits (rootMdCell r.val)) = P.rootMd r := by
+  have hmd : ∀ r : Fin 1, cellBits (hv P T f pk m bits (rootMdCell r.val)) = P.rootMd r := by
     intro r
-    have he : rootMdCell r.val = cCell (Fusion.rootIndex r).val := by fin_cases r <;> rfl
-    have hi : (Fusion.rootIndex r).val≤21 := by fin_cases r <;> decide
+    have he : rootMdCell r.val = cCell (Fusion.rootIndex r).val := by fin_cases r; rfl
+    have hi : (Fusion.rootIndex r).val≤16 := by fin_cases r; decide
     rw [he,hv_cc hi,hC.rootMd]
   refine blake_rel (a:=RAF P T f pk m bits r)
     (hv_canonical ..) (hv_canonical ..) (hv_canonical ..) (hv_canonical ..)
     (hv_canonical ..) (hv_canonical ..) (hv_canonical ..) ?_ (hv_st hr).1 (hv_st hr).2
-  rw [root_query_of hv_one hmd ⟨r,hr⟩,topsV_honest hlen,rootSeq_honest hlen (by omega),
+  rw [root_query_of hmd ⟨r,hr⟩,topsV_honest hlen,rootSeq_honest hlen (by omega),
     RAF_eq hr,rootState_last,Nat.zero_add]
   simp only [Nat.mod_eq_of_lt hr]
 
 include hC hlen in
-/-- Every root instruction in a home block is one of the two root calls. -/
-theorem honest_rootIns {u : ℕ} (hu : u < 13) :
+/-- The root instruction of the home block is the root call. -/
+theorem honest_rootIns {u : ℕ} (_hu : u < 13) :
     ∀ y ∈ rootIns T u (XF P T f pk m bits (u + 1)) (zU (XF P T f pk m bits 0) u),
       y.Rel f (hv P T f pk m bits) := by
   intro y hy
@@ -216,9 +216,8 @@ theorem honest_rootIns {u : ℕ} (hu : u < 13) :
   split_ifs at hy with h5
   · simp only [List.mem_singleton] at hy
     subst y
-    have hr : hcall u < 2 := by unfold hcall; split_ifs <;> omega
-    have hU : homeU (hcall u) = u := by
-      interval_cases u <;> first | rfl | (exfalso; omega)
+    have hr : hcall u < 1 := by unfold hcall; omega
+    have hU : homeU (hcall u) = u := by unfold homeU; omega
     have h := honest_rootCall (f := f) (pk := pk) (m := m) hC hlen hr
     simpa only [rootMsg, hU, zU] using h
   · simp at hy
@@ -230,10 +229,10 @@ theorem honest_next {u : ℕ} (hu : u < 13) : (nextOp u).Rel f (hv P T f pk m bi
   by_cases h12 : u < 12
   · rw [if_pos h12]; exact honest_hmul (by omega)
   · rw [if_neg h12]
-    show hv P T f pk m bits pkCell = hv P T f pk m bits (stCell 1) * hv P T f pk m bits oneCell
+    show hv P T f pk m bits pkCell = hv P T f pk m bits (stCell 0) * hv P T f pk m bits oneCell
     rw [hv_one, mul_oneV, (hv_st (by omega)).1, show pkCell = 0 from rfl,
       hv_lt P T f pk m bits (by omega), inputWord_pk]
-    have hlo : (RAF P T f pk m bits 1).extractLsb' 0 128 = pk := by
+    have hlo : (RAF P T f pk m bits 0).extractLsb' 0 128 = pk := by
       rw [RAF_eq (by omega)]
       show rootValue f P (topsOfV T bits (y0F P f pk m bits) (AF P T f pk m bits)) = pk
       rw [topsOfV_eq hacc hT hC]
@@ -269,16 +268,16 @@ include hT hC hlen hacc hroot in
 honest image. -/
 theorem honest_path : PathFacts T (oracleRel f) (hv P T f pk m bits) (XF P T f pk m bits) :=
   ⟨honest_pro hC hlen hacc, fun r hr => honest_dispatch hC hacc hr, honest_blk hT hC hlen hacc hroot,
-    by show IsInK (hv P T f pk m bits (gpCell 13)); rw [honest_gp13 hC hacc]; exact isInK_ofK _,
-    honest_gp13 hC hacc⟩
+    by show IsInK (hv P T f pk m bits (gpCell 13)); rw [honest_gp13 hT hC hacc]; exact isInK_ofK _,
+    honest_gp13 hT hC hacc⟩
 
 include hT hC hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`217` instructions. -/
+`214` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 217
-          Regs.initial) = pure (some 1018) := by
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 214
+          Regs.initial) = pure (some 1006) := by
   obtain ⟨n, c, hw⟩ := walk_mk hT (hxs_valid T _ (hlive hC hacc)) (honest_path hT hC hlen hacc hroot)
     (fun r hr => by rw [hv_h1 (frU_lt _ hr), XFr_frU hr])
   have hpin : Pinned (hv P T f pk m bits) := by

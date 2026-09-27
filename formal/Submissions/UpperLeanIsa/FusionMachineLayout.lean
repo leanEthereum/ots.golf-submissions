@@ -99,20 +99,19 @@ def gb (u : ℕ) : ℕ := [10, 9, 9, 9, 9, 11, 11, 10, 10, 10, 10, 10, 10].getD 
 def POS (u : ℕ) : ℕ := posW gb u
 
 /-- Groups that materialize each top, including zero-digit disclosures. -/
-def isExp (u : ℕ) : Prop := u ≠ 5 ∧ u ≠ 6
+def isExp (u : ℕ) : Prop := u ≠ 5
 
 instance (u : ℕ) : Decidable (isExp u) := by unfold isExp; infer_instance
 
 /-- The uniform non-hash instruction count of a block of group `u` (entry and exit included). -/
-def gcu (u : ℕ) : ℕ := if u = 0 then 7 else if isExp u then 8 else 6
+def gcu (u : ℕ) : ℕ := if u = 0 then 7 else if u = 6 then 9 else if isExp u then 8 else 6
 
-/-- Root calls in a block: one for each home of a root call (groups `5, 6` run calls `0, 1`),
-none elsewhere. -/
-def hm (u : ℕ) : ℕ := if u = 5 ∨ u = 6 then 1 else 0
+/-- Root calls in a block: the single root call runs in group `5`. -/
+def hm (u : ℕ) : ℕ := if u = 5 then 1 else 0
 
 /-- Raw field-value counts in each live cost band. -/
 def prof (u : ℕ) : List ℕ :=
-  ([[0, 6, 24, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 102], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 6, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 54], [1, 3, 6, 20, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229], [0, 3, 96, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 118], [0, 12, 24, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153], [0, 3, 12, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153], [1, 384, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 83], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153]]).getD u []
+  ([[0, 6, 24, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 104], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 20, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 3, 96, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 119], [0, 12, 24, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153, 29], [0, 6, 12, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153, 47], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153, 56], [0, 384, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 84], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153, 56]]).getD u []
 
 /-- Number of cost bands of group `u` (maximal cost plus one). -/
 def nb (u : ℕ) : ℕ := (prof u).length
@@ -136,10 +135,10 @@ def RS (u : ℕ) : ℕ := OFF u (nb u)
 def BASE (u : ℕ) : ℕ := 27 + psum RS u
 
 /-- End of the group regions. -/
-def gEnd : ℕ := 234289
+def gEnd : ℕ := 243258
 
 /-- The number of blocks (live field values) of group `u`: the live values are a contiguous prefix. -/
-def VF (u : ℕ) : ℕ := ([1022, 512, 512, 512, 512, 2047, 2047, 1023, 995, 974, 969, 1024, 968]).getD u 0
+def VF (u : ℕ) : ℕ := ([1024, 512, 512, 512, 512, 2048, 2048, 1024, 1024, 1024, 1024, 1024, 1024]).getD u 0
 
 /-- The cost band of field value `v` of group `u`. -/
 def band (u v : ℕ) : ℕ := bandIdx (A u) (nb u) v
@@ -170,13 +169,13 @@ theorem BASE_succ (u : ℕ) : BASE (u + 1) = BASE u + RS u := by
 
 theorem BASE_13 : BASE 13 = gEnd := by decide
 
-theorem BASE_one : BASE 1 = 16721 := by decide
+theorem BASE_one : BASE 1 = 16761 := by decide
 
 theorem A_full : ∀ u < 13, A u (nb u) = VF u := by decide
 
 theorem VF_le : ∀ u < 13, VF u ≤ 2 ^ gb u := by decide
 
-theorem nb_le : ∀ u < 13, nb u ≤ 17 := by decide
+theorem nb_le : ∀ u < 13, nb u ≤ 18 := by decide
 
 theorem nb_pos : ∀ u < 13, 1 ≤ nb u := by decide
 
@@ -206,7 +205,7 @@ theorem band_spec {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
     (by rw [A_full u hu]; exact hv)
   exact h
 
-theorem band_lt_17 {u v : ℕ} (hu : u < 13) (hv : v < VF u) : band u v < 17 := by
+theorem band_lt_18 {u v : ℕ} (hu : u < 13) (hv : v < VF u) : band u v < 18 := by
   have := (band_spec hu hv).1; have := nb_le u hu; omega
 
 /-- The block of field value `v` lies inside group `u`'s region. -/
@@ -352,8 +351,8 @@ theorem xcBase_42 : xcBase 42 = 5430 := by decide
 
 theorem xcBase_zero : xcBase 0 = 4096 := rfl
 
-/-- The explicit chain assignment: group 0, four exporter groups, the homes of root calls 0
-and 1, and six further groups; group 12 holds the light parents of top 7. -/
+/-- The explicit chain assignment: group 0, four exporter groups, the root home (group 5), and
+seven further groups. Groups 6, 10, 11 and 12 hold the three-dep chains. -/
 def chainOf (u i : ℕ) : ℕ := ([[1, 2, 7], [12, 13, 17], [18, 22, 23], [27, 28, 32], [33, 37, 38], [3, 4, 5, 6], [8, 9, 10, 11], [14, 15, 16], [19, 20, 21], [24, 25, 26], [29, 30, 31], [34, 35, 36], [39, 40, 41]].getD u []).getD i 0
 
 def unitOf (k : ℕ) : ℕ := [0, 0, 0, 5, 5, 5, 5, 0, 6, 6, 6, 6, 1, 1, 7, 7, 7, 1, 2, 8, 8, 8, 2, 2, 9, 9, 9, 3, 3, 10, 10, 10, 3, 4, 11, 11, 11, 4, 4, 12, 12, 12].getD k 0
@@ -362,7 +361,14 @@ def coordOf (k : ℕ) : ℕ := [0, 0, 1, 0, 1, 2, 3, 2, 0, 1, 2, 3, 0, 1, 0, 1, 
 
 /-- Tops always materialized at `topCell`. The others are root-call messages, which read the
 revealed word when their digit is zero. -/
-def exported (k : ℕ) : Prop := k ∉ [3,4,5,6,8,9,10,11]
+def exported (k : ℕ) : Prop := k ∉ [3,4,5,6]
+
+/-- Chains whose final step carries three dependency tops in its message. -/
+def tri (k : ℕ) : Prop := k ∈ [8, 9, 10, 11, 29, 30, 31, 34, 35, 36, 39, 40, 41]
+instance (k : ℕ) : Decidable (tri k) := by unfold tri; infer_instance
+
+/-- The index `a` of a three-dep step's cv pair `(C_a, C_(a+1))`. -/
+def triA (k : ℕ) : ℕ := ([0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 6, 7, 0, 0, 8, 9, 10, 0, 0, 11, 12, 13]).getD k 0
 
 instance (k : ℕ) : Decidable (exported k) := by unfold exported; infer_instance
 
@@ -465,7 +471,8 @@ structure Compat (P : Fusion.Params) (T : Tab) : Prop where
   chainMd : P.codec.chainMd = cellBits oneV
   idxMd : P.codec.idxMd = cellBits gV
   fusedMd : ∀ k : Fin 42, P.fusedMd k = Fusion.tagWord (Fusion.tagIndex k)
-  rootMd : ∀ r : Fin 2, P.rootMd r = cellBits (cV (Fusion.rootIndex r).val)
-  lightCv : P.lightCv = cellBits (cV 2) ++ cellBits (cV 1)
+  rootMd : ∀ r : Fin 1, P.rootMd r = cellBits (cV (Fusion.rootIndex r).val)
+  tripleCv : ∀ k : Fin 42, tri k.val →
+    P.tripleCv k = cellBits (cV (triA k.val + 1)) ++ cellBits (cV (triA k.val))
 
 end OptimalOTS.HLFusion

@@ -6,14 +6,14 @@ namespace OptimalOTS.LeanIsaBaseline.Layer.Fusion
 open scoped Classical
 noncomputable section
 
-def bindingUnit (u : Fin 7) : ℕ := ![0,5,6,7,8,9,12] u
+def bindingUnit (u : Fin 9) : ℕ := ![5,0,7,8,9,6,10,11,12] u
 
-theorem bindingUnit_lt (u : Fin 7) : bindingUnit u < 13 := by fin_cases u <;> decide
+theorem bindingUnit_lt (u : Fin 9) : bindingUnit u < 13 := by fin_cases u <;> decide
 
-theorem bindingUnit_zero_empty : ∀ u : Fin 7,
+theorem bindingUnit_zero_empty : ∀ u : Fin 9,
     FusionCodec.AS (FusionCodec.ushape (bindingUnit u)) 1 = 0 := by decide +kernel
 
-theorem binding_cost_positive (I : Index) (hI : params.codec.Accepted I) (u : Fin 7) :
+theorem binding_cost_positive (I : Index) (hI : params.codec.Accepted I) (u : Fin 9) :
     0 < FusionCodec.cost (bindingUnit u) (FusionCodec.field (bindingUnit u) I) := by
   have hl := (FusionCodec.not_dummy_iff I).mp ((FusionCodec.accepted_iff I).mp hI).1
     (bindingUnit u) (bindingUnit_lt u)
@@ -23,7 +23,7 @@ theorem binding_cost_positive (I : Index) (hI : params.codec.Accepted I) (u : Fi
   rw [hz, show 0+1=1 from rfl, bindingUnit_zero_empty u] at hb
   omega
 
-theorem parents_sum (I : Index) (u : Fin 7) :
+theorem parents_sum (I : Index) (u : Fin 9) :
     ∑ k ∈ parents u, FusionCodec.digitN I k =
       FusionCodec.cost (bindingUnit u) (FusionCodec.field (bindingUnit u) I) := by
   have hh : ∀ v < 13,
@@ -38,13 +38,13 @@ theorem parents_sum (I : Index) (u : Fin 7) :
     simpa [parents, bindingUnit, FusionCodec.digitN, FusionCodec.unitOf, FusionCodec.coordOf,
       FusionCodec.shK, FusionCodec.ushape, Finset.sum_range_succ, add_assoc] using h
 
-/-- Every accepted signature executes a final binding step in each of the seven groups. -/
-theorem accepted_active (I : Index) (hI : params.codec.Accepted I) (u : Fin 7) :
+/-- Every accepted signature executes a final binding step in each of the nine groups. -/
+theorem accepted_active (I : Index) (hI : params.codec.Accepted I) (u : Fin 9) :
     0 < ∑ k ∈ parents u, FusionCodec.digitN I k := by
   rw [parents_sum]
   exact binding_cost_positive I hI u
 
-theorem accepted_parent (I : Index) (hI : params.codec.Accepted I) (u : Fin 7) :
+theorem accepted_parent (I : Index) (hI : params.codec.Accepted I) (u : Fin 9) :
     ∃ k : Fin 42, k.val ∈ parents u ∧ 0 < params.codec.digit I k := by
   have hpos := accepted_active I hI u
   by_contra hn
@@ -60,7 +60,7 @@ theorem accepted_parent (I : Index) (hI : params.codec.Accepted I) (u : Fin 7) :
 /-- Structural hypotheses required by the fused reconstruction security proof. -/
 structure Params.SecurityHyp (P : Params) extends P.Hyp where
   ordered : P.locationOrder.Pairwise Earlier
-  binding : ∀ I, P.codec.Accepted I → ∀ u : Fin 7,
+  binding : ∀ I, P.codec.Accepted I → ∀ u : Fin 9,
     ∃ k : Fin 42, k.val ∈ parents u ∧ 0 < P.codec.digit I k
 
 instance {P : Params} : Coe P.SecurityHyp P.Hyp := ⟨fun h => h.toHyp⟩

@@ -36,7 +36,7 @@ theorem final_query_binding (d : Cut) (hd : ValidCut P d) (ζ : Record P) (c : C
 /-- An executed final binding hash binds all children of its group. -/
 theorem final_binds_dependencies (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
     (ζ : Record P) (c : Cache) (k : Fin 42) (hlen : 2 ≤ P.codec.len k)
-    (u : Fin 7) (hu : owner k = some u) (t : Tops) (x : Word) (v : BitVec hashBits)
+    (u : Fin 9) (hu : owner k = some u) (t : Tops) (x : Word) (v : BitVec hashBits)
     (hv : c ⟨896,P.chainInput t k (P.codec.len k - 2) x⟩ = some v)
     (hout : P.codec.slice k (P.codec.len k - 2) v = ζ.top k)
     (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ a ∈ children u, t a = ζ.tops a := by
@@ -50,7 +50,7 @@ theorem final_binds_dependencies (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
   exact Params.groupInput_binds t ζ.tops x (ζ.word k (P.codec.len k - 2)) hq
 
 /-- Matching a root answer without a target hit forces its input to be honest. -/
-theorem root_query_binding (d : Cut) (ζ : Record P) (c : Cache) (r : Fin 2)
+theorem root_query_binding (d : Cut) (ζ : Record P) (c : Cache) (r : Fin 1)
     (q : Query) (v : BitVec hashBits) (hq : queryLocation P q = some (.inr r))
     (hv : c q = some v) (hout : v.extractLsb' 0 128 = (ζ.2 (.inr r)).extractLsb' 0 128)
     (hno : ¬ TargetHit (cutTargets P d ζ) c) : q = ζ.query (.inr r) := by
@@ -60,62 +60,41 @@ theorem root_query_binding (d : Cut) (ζ : Record P) (c : Cache) (r : Fin 2)
   rw [matchingAnswers_inr,mem_lowAnswers]
   exact hout
 
-theorem Params.rootInput_state_low (P : Params) (t t' : Tops) (st st' : BitVec 256)
-    (h : P.rootInput t 1 st = P.rootInput t' 1 st') :
-    st.extractLsb' 0 128 = st'.extractLsb' 0 128 := by
-  unfold Params.rootInput at h
-  rw [if_neg (by decide),if_neg (by decide)] at h
-  exact (append_inj ((hashInput_eq_iff _ _ _ _ _ _).mp h).1).1
-
-/-- The two-call root is bound backwards from the public key, the low half of call 1. -/
+/-- The one-call root is bound from the public key, the low half of its output. -/
 theorem root_path_inputs (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
     (t : Tops) (S : ℕ → BitVec 256)
-    (hc : ∀ r : Fin 2, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
-    (hpk : (S 2).extractLsb' 0 128 = ζ.pk)
+    (hc : ∀ r : Fin 1, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
+    (hpk : (S 1).extractLsb' 0 128 = ζ.pk)
     (hno : ¬ TargetHit (cutTargets P d ζ) c) :
-    ∀ r : Fin 2, P.rootInput t r (S r.val) = P.rootInput ζ.tops r (ζ.rootState r.val) := by
-  have h1 := root_query_binding d ζ c 1 _ _ (queryLocation_rootInput hP t 1 (S 1)) (hc 1) hpk hno
-  rw [Record.query_inr] at h1
-  have e1 := query_inj h1
-  have hs1 := P.rootInput_state_low t ζ.tops (S 1) (ζ.rootState 1) e1
-  rw [show ζ.rootState 1 = ζ.2 (.inr 0) from Record.rootState_succ ζ 0] at hs1
-  have h0 := root_query_binding d ζ c 0 _ _ (queryLocation_rootInput hP t 0 (S 0)) (hc 0) hs1 hno
+    ∀ r : Fin 1, P.rootInput t r (S r.val) = P.rootInput ζ.tops r (ζ.rootState r.val) := by
+  have h0 := root_query_binding d ζ c 0 _ _ (queryLocation_rootInput hP t 0 (S 0)) (hc 0) hpk hno
   rw [Record.query_inr] at h0
-  have e0 := query_inj h0
   intro r
   fin_cases r
-  · exact e0
-  · exact e1
+  exact query_inj h0
 
-/-- Eleven root anchors are equal whenever the public key matches without a target hit. -/
+/-- The six root anchors are equal whenever the public key matches without a target hit. -/
 theorem root_path_anchors (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
     (t : Tops) (S : ℕ → BitVec 256)
-    (hc : ∀ r : Fin 2, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
-    (hpk : (S 2).extractLsb' 0 128 = ζ.pk)
-    (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ k ∈ rootSet, t k = ζ.tops k := by
-  have he := root_path_inputs hP d ζ c t S hc hpk hno
-  let tags : ℕ → Word := fun n => if n = 0 then P.rootMd 0 else P.rootMd 1
-  apply root_binds t ζ.tops (fun n => (S (n+1)).extractLsb' 0 128)
-    (fun n => (ζ.rootState (n+1)).extractLsb' 0 128) tags tags
-  intro r hr
-  interval_cases r
-  · simpa [packet,rootWords,Params.rootInput,tags] using he 0
-  · simpa [packet,rootWords,Params.rootInput,tags] using he 1
+    (hc : ∀ r : Fin 1, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
+    (hpk : (S 1).extractLsb' 0 128 = ζ.pk)
+    (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ k ∈ rootSet, t k = ζ.tops k :=
+  root_binds t ζ.tops _ _ (root_path_inputs hP d ζ c t S hc hpk hno 0)
 
-theorem parents_bounded : ∀ u : Fin 7, ∀ k ∈ parents u, k < 42 := by decide
+theorem parents_bounded : ∀ u : Fin 9, ∀ k ∈ parents u, k < 42 := by decide
 
 /-- Actual cached final queries propagate the root binding through both dependency levels. -/
 theorem all_tops_bound (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
     (ζ : Record P) (c : Cache) (I : Index) (t : Tops) (S : ℕ → BitVec 256)
-    (hc : ∀ r : Fin 2, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
-    (hpk : (S 2).extractLsb' 0 128 = ζ.pk)
-    (hactive : ∀ u : Fin 7, ∃ k : Fin 42, k.val ∈ parents u ∧ 0 < P.codec.digit I k)
+    (hc : ∀ r : Fin 1, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
+    (hpk : (S 1).extractLsb' 0 128 = ζ.pk)
+    (hactive : ∀ u : Fin 9, ∃ k : Fin 42, k.val ∈ parents u ∧ 0 < P.codec.digit I k)
     (hfinal : ∀ k : Fin 42, 0 < P.codec.digit I k → ∃ x v,
       c ⟨896,P.chainInput t k (P.codec.len k - 2) x⟩ = some v ∧
         P.codec.slice k (P.codec.len k - 2) v = t k.val)
     (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ k < 42, t k = ζ.tops k := by
   have hroot := root_path_anchors hP d ζ c t S hc hpk hno
-  have hclosed : ∀ n ≤ 7, ∀ k ∈ closure n, t k = ζ.tops k := by
+  have hclosed : ∀ n ≤ 9, ∀ k ∈ closure n, t k = ζ.tops k := by
     intro n
     induction n with
     | zero => intro _; exact hroot
@@ -135,7 +114,7 @@ theorem all_tops_bound (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
           ((owner_mem b ⟨_,hg⟩).mpr hb) t x v hv (hout.trans (hbnd.trans hbtop)) hno
         exact he k (List.mem_toFinset.mp hnew)
   intro k hk
-  exact hclosed 7 le_rfl k (full_coverage (Finset.mem_range.mpr hk))
+  exact hclosed 9 le_rfl k (full_coverage (Finset.mem_range.mpr hk))
 
 end
 end OptimalOTS.LeanIsaBaseline.Layer.Fusion

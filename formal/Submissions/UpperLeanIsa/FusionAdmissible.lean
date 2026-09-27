@@ -36,7 +36,7 @@ theorem chainOrder_sum (I : Index) :
   change (List.ofFn (P.codec.digit I)).sum = _
   exact List.sum_ofFn
 
-theorem cost_rootFrom (t : Tops) (l : List (Fin 2)) (st : BitVec 256) :
+theorem cost_rootFrom (t : Tops) (l : List (Fin 1)) (st : BitVec 256) :
     CostAtMost (P.rootFrom t l st) (2*l.length) := by
   induction l generalizing st with
   | nil => exact cost_pure _ _
@@ -44,8 +44,8 @@ theorem cost_rootFrom (t : Tops) (l : List (Fin 2)) (st : BitVec 256) :
     have h := cost_bind (cost_hash (P.rootInput t r st)) (fun v => ih v)
     simpa only [rootFrom,List.length_cons,Nat.mul_add,Nat.mul_one,Nat.add_comm] using h
 
-theorem cost_root (t : Tops) : CostAtMost (P.root t) 4 :=
-  cost_map (P.cost_rootFrom t [0,1] 0) _
+theorem cost_root (t : Tops) : CostAtMost (P.root t) 2 :=
+  cost_map (P.cost_rootFrom t [0] 0) _
 
 theorem cost_evalLocations (seeds : Fin 42 → Word) (l : List (Loc P)) (y : Tbl P) :
     CostAtMost (P.evalLocations seeds l y) (2*l.length) := by
@@ -64,11 +64,11 @@ theorem cost_keygen : CostAtMost P.keygen (2 * P.locationOrder.length) := by
   simpa only [Finset.sum_const_zero,Nat.zero_add,Nat.add_zero] using h
 
 theorem cost_verify (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (P.verify pk m bits) (6 + 2 * P.codec.layer) := by
+    CostAtMost (P.verify pk m bits) (4 + 2 * P.codec.layer) := by
   unfold verify
   split
   · exact cost_pure _ _
-  · refine CostAtMost.mono (b := 2 + (2 * P.codec.layer + 4)) ?_ (by omega)
+  · refine CostAtMost.mono (b := 2 + (2 * P.codec.layer + 2)) ?_ (by omega)
     refine cost_bind (P.codec.cost_index m (decodeNonce bits) pk) (fun I => ?_)
     refine cost_ite _ (fun _ => cost_pure _ _) (fun hI' => ?_)
     have hI : P.codec.Accepted I := not_not.mp hI'
@@ -93,7 +93,7 @@ theorem deterministic_reconFrom (I : Index) (bits : List Bool) (l : List (Fin 42
     exact deterministic_bind (P.deterministic_chain t k _ _ _) (fun x => ih (Function.update t k.val x))
 
 open Layer.Params in
-theorem deterministic_rootFrom (t : Tops) (l : List (Fin 2)) (st : BitVec 256) :
+theorem deterministic_rootFrom (t : Tops) (l : List (Fin 1)) (st : BitVec 256) :
     Deterministic (P.rootFrom t l st) := by
   induction l generalizing st with
   | nil => exact deterministic_pure _
@@ -125,7 +125,7 @@ set_option maxHeartbeats 800000 in
 theorem admissible (hP : P.Hyp) (hl : P.locationOrder.Pairwise Earlier)
     {S : Tier.Sched} (hS : S.Valid) (hT : P.codec.TierHyp S)
     (hk : 2 * P.locationOrder.length ≤ keygenBudget)
-    (hv : 6 + 2 * P.codec.layer ≤ verifyBudget) : P.scheme.Admissible where
+    (hv : 4 + 2 * P.codec.layer ≤ verifyBudget) : P.scheme.Admissible where
   correct := P.correct hP.codec hl
   verifyDeterministic := P.verifyDeterministic
   signingFailure := P.signingFailure hP hl hS hT
@@ -139,12 +139,12 @@ theorem admissible (hP : P.Hyp) (hl : P.locationOrder.Pairwise Earlier)
 
 end Params
 
-theorem concrete_keygenCost : CostAtMost params.keygen 1254 := by
+theorem concrete_keygenCost : CostAtMost params.keygen 1252 := by
   have h := params.cost_keygen
   rwa [concrete_location_count] at h
 
 theorem concrete_verifyCost (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (params.verify pk m bits) 178 := params.cost_verify pk m bits
+    CostAtMost (params.verify pk m bits) 176 := params.cost_verify pk m bits
 
 theorem concrete_admissible : params.scheme.Admissible :=
   params.admissible params_hyp concrete_ordered FusionNumeric.schedule_valid FusionCodec.tierHyp
