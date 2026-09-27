@@ -42,8 +42,6 @@ structure TierHyp (S : Tier.Sched) : Prop where
 def cweight (v : Cls) : ℕ :=
   (Finset.univ.filter fun I : Index => P.Accepted I ∧ P.digit I = v).card
 
-theorem weight_eq (I : Index) : P.weight I = P.cweight (P.digit I) := rfl
-
 /-- The classes: digit vectors of accepted indices. -/
 def classes : Finset Cls := (Finset.univ.filter P.Accepted).image P.digit
 
@@ -248,11 +246,6 @@ variable (P S) in
 def tierB : Option (Nonce × Index) → ℕ
   | none => S.T
   | some b => P.tierI S b.2
-
-theorem tierB_le (β : Option (Nonce × Index)) : P.tierB S β ≤ S.T := by
-  cases β with
-  | none => exact le_rfl
-  | some b => exact tierI_le _
 
 /-- The signer's rule in tiers. -/
 theorem better_iff (hS : S.Valid) (hT : P.TierHyp S) (I : Index) {β : Option (Nonce × Index)}

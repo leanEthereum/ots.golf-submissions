@@ -148,7 +148,6 @@ section Path
 variable {f : HashTable} {v : ℕ → E} {xs : ℕ → ℕ}
   (hV : Valid xs) (hP : PathFacts T (oracleRel f) v xs)
 
-
 include hP in
 theorem v_one : v oneCell = oneV := (hP.pro _ pro_mem_init).1
 include hP in
@@ -157,7 +156,7 @@ include hP in
 theorem v_g : v gCell = gV := hP.pro _ pro_mem_g
 
 include hP in
-theorem v_c {c : ℕ} (hc : c ≤ 16) : v (cCell c) = cV c := cCell_val hP.pro hc
+theorem v_c {c : ℕ} (hc : c ≤ 16) (h15 : c ≠ 15) : v (cCell c) = cV c := cCell_val hP.pro hc h15
 
 include hP in
 theorem cb_cv (hC : Compat P T) : cellBits (v (oneCell+1)) ++ cellBits (v oneCell) = P.codec.cv := by
@@ -187,7 +186,8 @@ theorem fusedMd_cell (hC : Compat P T) (k : Fin 42) (hk : binds k.val) :
     cellBits (v (fusedMdCell k.val)) = P.fusedMd k := by
   rw [hC.fusedMd]
   have hsmall : ∀ k : Fin 42, binds k.val → k.val ≠ 5 → k.val ≠ 6 →
-      fusedMdCell k.val = cCell (Fusion.tagIndex k).val ∧ (Fusion.tagIndex k).val ≤ 16 := by decide
+      fusedMdCell k.val = cCell (Fusion.tagIndex k).val ∧ (Fusion.tagIndex k).val ≤ 16 ∧
+        (Fusion.tagIndex k).val ≠ 15 := by decide
   by_cases h5 : k.val = 5
   · have he : k = 5 := Fin.ext h5
     subst k
@@ -198,8 +198,8 @@ theorem fusedMd_cell (hC : Compat P T) (k : Fin 42) (hk : binds k.val) :
       subst k
       change cellBits (v (gpCell 13)) = Fusion.tagWord 46
       rw [hP.gp13,sentinel_bits]
-    · obtain ⟨he,hi⟩ := hsmall k hk h5 h6
-      rw [he,v_c hP hi,factor_bits _ (by omega)]
+    · obtain ⟨he,hi,hi'⟩ := hsmall k hk h5 h6
+      rw [he,v_c hP hi hi',factor_bits _ (by omega)]
 
 include hP in
 theorem fusion_query (hC : Compat P T) (k : Fin 42) (hk : binds k.val) (u : Fin 9)
@@ -235,8 +235,8 @@ theorem triple_query (hC : Compat P T) (k : Fin 42) (hk : tri k.val) (u : Fin 9)
         (v oneCell) =
       Fusion.triplePacket (P.tripleCv k) (topsV T v xs) u (cellBits x) P.codec.chainMd := by
   obtain ⟨ha1, ha2, hd⟩ := triple_cells k hk u hu
-  rw [blake2sQuery_eq, cCell_succ ha1 (by omega), v_c hP (c := triA k.val) (by omega),
-    v_c hP (c := triA k.val + 1) (by omega), v_one hP, hC.tripleCv k hk, hC.chainMd]
+  rw [blake2sQuery_eq, cCell_succ ha1 (by omega), v_c hP (c := triA k.val) (by omega) (by omega),
+    v_c hP (c := triA k.val + 1) (by omega) (by omega), v_one hP, hC.tripleCv k hk, hC.chainMd]
   unfold Fusion.triplePacket
   rw [(hd 0 (by omega)).1, (hd 1 (by omega)).1, (hd 2 (by omega)).1,
     topsV_top T v xs (hd 0 (by omega)).2.2 (hd 0 (by omega)).2.1,
@@ -250,10 +250,11 @@ theorem chainOp_plain_query (hP : PathFacts T (oracleRel f) v xs) (hC : Compat P
       P.codec.chainInput ⟨k, hk⟩ (LEN k - 1 - d + t) (cellBits x) := by
   have hj : LEN k - 1 - d + t + 1 < LEN k := by omega
   obtain ⟨h0, h1, h2⟩ := hC.tag ⟨k, hk⟩ _ hj
-  have hp : tpos k d t / 81 ≤ 16 := by
+  have hp : tpos k d t / 81 ≤ 8 := by
     have := OFFT_bound k hk; unfold tpos; omega
-  rw [blake2sQuery_eq, v_c hP (c := tpos k d t % 9) (by omega),
-    v_c hP (c := tpos k d t / 9 % 9) (by omega), v_c hP (by omega : tpos k d t / 81 ≤ 16), cb_cv hP hC, v_one hP]
+  rw [blake2sQuery_eq, v_c hP (c := tpos k d t % 9) (by omega) (by omega),
+    v_c hP (c := tpos k d t / 9 % 9) (by omega) (by omega),
+    v_c hP (c := tpos k d t / 81) (by omega) (by omega), cb_cv hP hC, v_one hP]
   unfold Params.chainInput
   rw [h0, h1, h2, hC.chainMd]
   rfl

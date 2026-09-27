@@ -2,7 +2,7 @@ import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.FusionMachineLayout
 import Submissions.UpperLeanIsa.LengthGate
 
-/-! The 1126-cycle bytecode and its local instruction algebra. The complete machine
+/-! The 1125-cycle bytecode and its local instruction algebra. The complete machine
 certificate is assembled in `FusionMachine.lean`. -/
 
 namespace OptimalOTS.HLFusion
@@ -76,11 +76,12 @@ def hCell (f : ℕ) : ℕ := 160 + f
 /-- `H'_f = H_f · g`, the return address of the entry. -/
 def h1Cell (f : ℕ) : ℕ := 180 + f
 
-/-- The running landing product before group `u` (`GP_0` is seeded in the free block); `GP_13` is the exit target. -/
-def gpCell (u : ℕ) : ℕ := 200 + u
+/-- The running landing product before group `u` (`GP_0` is seeded in the free block); `GP_13` is
+the exit target. It sits next to `C_14`, so `(C_14, GP_13)` is the constant cv pair of the index. -/
+def gpCell (u : ℕ) : ℕ := if u = 13 then 65 else 200 + u
 
-/-- The first cv word of the root call (the top of chain 1). -/
-def cvCell : ℕ := 281
+/-- The landing product after the first factor `C_14` of a product exponent `15`. -/
+def tpCell (u : ℕ) : ℕ := 220 + u
 
 /-- The free chain's last output pair. -/
 def tfCell : ℕ := 292
@@ -181,7 +182,7 @@ def Bounded : CInstr → Prop
   | .blake m0 m1 m2 m3 cv out md =>
       m0 < 2 ^ 16 ∧ m1 < 2 ^ 16 ∧ m2 < 2 ^ 16 ∧ m3 < 2 ^ 16 ∧ cv + 1 < 2 ^ 16 ∧
         out + 1 < 2 ^ 16 ∧ md < 2 ^ 16
-  | .dispatch f => f < 15
+  | .dispatch f => f < 14
   | .exit => True
   | .entry f => f < 15
   | .pad => True
@@ -198,9 +199,6 @@ theorem cell0_lt {ci : CInstr} (hb : ci.Bounded) (hpad : ci ≠ .pad) (hent : �
   | exit => show 48 < 2 ^ 16; norm_num
   | entry k => exact absurd rfl (hent k)
   | pad => exact absurd rfl hpad
-
-theorem opcode_blake {m0 m1 m2 m3 cv out md : ℕ} :
-    (CInstr.blake m0 m1 m2 m3 cv out md).toInstr.opcode = .blake2s := rfl
 
 theorem ne_entry_of_straight {ci : CInstr} (h : ci.straight = true) (f : ℕ) : ci ≠ .entry f := by
   rintro rfl; simp [straight] at h
@@ -312,7 +310,7 @@ def depTop (k i : ℕ) : ℕ :=
 
 def depCv (k : ℕ) : ℕ := ([269, 0, 0, 0, 0, 289, 0, 285, 277, 257, 0, 0, 0]).getD (unitOf k) 0
 
-def fusedMdCell (k : ℕ) : ℕ := ([0, 61, 62, 64, 65, 3, 213, 63, 0, 0, 0, 0, 0, 0, 52, 53, 54, 0, 0, 55, 56, 57, 0, 0, 58, 59, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).getD k 0
+def fusedMdCell (k : ℕ) : ℕ := ([0, 61, 62, 64, 49, 3, 65, 63, 0, 0, 0, 0, 0, 0, 52, 53, 54, 0, 0, 55, 56, 57, 0, 0, 58, 59, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).getD k 0
 
 def rootMdCell (r : ℕ) : ℕ := [51].getD r 0
 
@@ -335,16 +333,16 @@ def chainOp (k d t dst : ℕ) : CInstr :=
 /-- The `d` steps of chain `k`. -/
 def chainOps (k d dst : ℕ) : List CInstr := (List.range d).map (fun t => chainOp k d t dst)
 
-/-- The straight part of the prologue (slots `0 … 18`). -/
+/-- The straight part of the prologue (slots `0 … 17`). -/
 def proList : List CInstr :=
   [.init,.setc gCell gV] ++
-    ((List.range 15).map (fun c => .setc (cCell (c+1)) (cV (c+1)))) ++
-    [.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell,.mul (hCell 0) gCell (h1Cell 0)]
+    ((List.range 14).map (fun c => .setc (cCell (c+1)) (cV (c+1)))) ++
+    [.blake msgLo msgHi nonceCell pkCell (cCell 14) idxCell oneCell,.mul (hCell 0) gCell (h1Cell 0)]
 
-/-- Slots `0 … 26`: the straight prologue, the free dispatch at 19, and seven pads that are
+/-- Slots `0 … 26`: the straight prologue, the free dispatch at 18, and eight pads that are
 never executed. -/
 def prologue (s : ℕ) : CInstr :=
-  if s < 19 then proList.getD s .pad else if s = 19 then .dispatch 0 else .pad
+  if s < 18 then proList.getD s .pad else if s = 18 then .dispatch 0 else .pad
 
 /-- The control op after the block of group `f - 1`: the next dispatch, or the exit. -/
 def ctlF (f : ℕ) : CInstr := if f < 13 then .dispatch (f + 1) else .exit
@@ -353,9 +351,9 @@ def ctlF (f : ℕ) : CInstr := if f < 13 then .dispatch (f + 1) else .exit
 def frG0 (_s : ℕ) : ℕ := 1
 
 /-- The free block: seed, `s` chain steps, top materialization, and the next hint product. The
-seed targets layer `86 − 4` because the four units of `shifted` multiply by `C_(cost − 1)`. -/
+seed targets layer `86 − 5` because the five units of `shifted` multiply by `C_(cost − 1)`. -/
 def fbody (s : ℕ) : List CInstr :=
-  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 82 s))] ++
+  [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 81 s))] ++
   chainOps 0 s tfCell ++ [copy (if s = 0 then wCell 0 else tfCell) tfCell,
     .mul (hCell 1) gCell (h1Cell 1)]
 
@@ -392,28 +390,41 @@ def rootIns (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=
       (rootCv (hcall u)) (stCell (hcall u)) (rootMdCell (hcall u))]
   else []
 
-/-- Padding to the unit's constant non-hash count. -/
-def npad (T : Tab) (u v : ℕ) : ℕ := gcu u - 4 - (tie u v).length - zexp T u v
 
 /-- The last straight op: the next group's `MUL(H, g, H')`, or the public-key copy. -/
 def nextOp (u : ℕ) : CInstr :=
   if u < 12 then .mul (hCell (u+2)) gCell (h1Cell (u+2)) else copy (stCell 0) pkCell
 
-/-- Units whose tables reach cost 17. They never have cost 0, so their product factor is
+/-- Units whose tables reach cost 16. They never have cost 0, so their product factor is
 `C_(cost − 1)` and the free seed absorbs the shift. -/
-def shifted (u : ℕ) : Prop := u = 8 ∨ u = 9 ∨ u = 10 ∨ u = 12
+def shifted (u : ℕ) : Prop := u = 7 ∨ u = 8 ∨ u = 9 ∨ u = 10 ∨ u = 12
 instance (u : ℕ) : Decidable (shifted u) := by unfold shifted; infer_instance
 
 /-- The product exponent of the block of `v` in group `u`. -/
 def pcost (T : Tab) (u v : ℕ) : ℕ := if shifted u then cost T u v - 1 else cost T u v
 
+/-- Whether the product exponent is `15`: the prologue sets no `C_15`, so the block multiplies by
+`C_14` and then by `C_1`. -/
+def split15 (T : Tab) (u v : ℕ) : ℕ := if pcost T u v = 15 then 1 else 0
+
 /-- The product op of the block of `v` in group `u`. -/
-def prodOp (T : Tab) (u v : ℕ) : CInstr := .mul (gpCell u) (cCell (pcost T u v)) (gpCell (u + 1))
+def prodOp (T : Tab) (u v : ℕ) : CInstr :=
+  if pcost T u v = 15 then .mul (gpCell u) (cCell 14) (tpCell u)
+  else .mul (gpCell u) (cCell (pcost T u v)) (gpCell (u + 1))
+
+/-- The second factor `C_1` of a product exponent `15`. -/
+def fixOp (u : ℕ) : CInstr := .mul (tpCell u) (cCell 1) (gpCell (u + 1))
+
+/-- Padding to the unit's constant non-hash count. -/
+def npad (T : Tab) (u v : ℕ) : ℕ := gcu u - 4 - (tie u v).length - zexp T u v - split15 T u v
+
+/-- The second product factor when needed, then the padding. -/
+def padOps (T : Tab) (u v : ℕ) : List CInstr :=
+  List.replicate (split15 T u v) (fixOp u) ++ List.replicate (npad T u v) NOP
 
 /-- The straight part of the block of `v` in group `u`, variant `z`. -/
 def body (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=
-  tie u v ++ [prodOp T u v] ++ segs T u v ++ rootIns T u v z ++ List.replicate (npad T u v) NOP ++
-    [nextOp u]
+  tie u v ++ [prodOp T u v] ++ segs T u v ++ rootIns T u v z ++ padOps T u v ++ [nextOp u]
 
 /-- Op `i` of the block of `v` in group `u`, entered in frame `u+1`. -/
 def blockInstr (T : Tab) (u v : ℕ) (z : Bool) (i : ℕ) : CInstr :=
@@ -449,6 +460,5 @@ theorem program_logSize (T : Tab) : (program T).logSize = 18 := rfl
 /- The builders are irreducible: elaboration never unfolds a block or a slot decode. -/
 attribute [irreducible] proList prologue fbody body blockInstr
   fblockInstr cinstrAt
-
 
 end OptimalOTS.HLFusion

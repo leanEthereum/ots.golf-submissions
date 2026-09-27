@@ -99,27 +99,6 @@ theorem encQuery_inj {u u' : EncInput} (h : P.encQuery u = P.encQuery u') : u = 
   obtain ⟨hm, hη, hpk⟩ := P.idxInput_inj (query_inj h)
   rw [hm, hη, hpk]
 
-theorem idx_eq_encQuery (m : Message) (η : Nonce) (pk : PublicKey) :
-    (⟨896, P.idxInput m η pk⟩ : Query) = P.encQuery (emsg m pk ++ η) :=
-  (P.encQuery_emsg m pk η).symm
-
-theorem chainInput_ne_encQuery (hP : P.Hyp) (k : Fin numChains) (j : ℕ) (x : Word)
-    (u : EncInput) : (⟨896, P.chainInput k j x⟩ : Query) ≠ P.encQuery u := by
-  intro h
-  exact P.chainInput_ne_idxInput hP k j x _ _ _ (query_inj h)
-
-theorem rootInput_ne_encQuery (hP : P.Hyp) {r : ℕ} (hr : r < 9) (t : Fin numChains → Word)
-    (st : BitVec 256) (u : EncInput) : (⟨896, P.rootInput t r st⟩ : Query) ≠ P.encQuery u := by
-  intro h
-  exact P.rootInput_ne_idxInput hP hr t st _ _ _ (query_inj h)
-
-theorem record_query_ne_encQuery (hP : P.Hyp) (ξ : Record P) (a : Loc P) (u : EncInput) :
-    ξ.query a ≠ P.encQuery u := by
-  obtain ⟨M, η, rfl⟩ := exists_append u
-  obtain ⟨m, pk, rfl⟩ := exists_emsg M
-  rw [encQuery_emsg]
-  exact ξ.query_ne_idx hP a m η pk
-
 end Params
 
 theorem sum_fin_equivFin {α : Type*} {s : Finset α} {n : ℕ} (h : n = s.card) (G : α → ℝ≥0∞) :

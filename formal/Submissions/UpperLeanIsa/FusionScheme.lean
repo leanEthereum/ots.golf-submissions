@@ -13,8 +13,6 @@ abbrev Tbl (P : Params) := Loc P → BitVec hashBits
 def chainOrder : List (Fin 42) :=
   [0,12,13,17,18,22,23,27,28,32,33,37,38,24,25,26,29,30,31,34,35,36,39,40,41,14,15,16,19,20,21,1,2,7,8,9,10,11,3,4,5,6]
 
-theorem chainOrder_values : chainOrder.map Fin.val = evaluationOrder := rfl
-
 theorem chainOrder_permutation : chainOrder.Perm (List.finRange 42) := by decide
 
 namespace Params

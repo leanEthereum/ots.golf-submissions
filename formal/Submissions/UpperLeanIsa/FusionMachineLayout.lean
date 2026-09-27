@@ -43,8 +43,6 @@ theorem gpow_inj {a b : ℕ} (ha : a < 2 ^ 64 - 1) (hb : b < 2 ^ 64 - 1) (h : gp
 /-- `F 0 + ⋯ + F (c - 1)`. -/
 def psum (F : ℕ → ℕ) (c : ℕ) : ℕ := ∑ i ∈ Finset.range c, F i
 
-theorem psum_zero (F : ℕ → ℕ) : psum F 0 = 0 := rfl
-
 theorem psum_succ (F : ℕ → ℕ) (c : ℕ) : psum F (c + 1) = psum F c + F c :=
   Finset.sum_range_succ F c
 
@@ -111,7 +109,7 @@ def hm (u : ℕ) : ℕ := if u = 5 then 1 else 0
 
 /-- Raw field-value counts in each live cost band. -/
 def prof (u : ℕ) : List ℕ :=
-  ([[0, 6, 24, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 104], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 20, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 3, 96, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 119], [0, 12, 24, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153, 29], [0, 6, 12, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153, 47], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153, 56], [0, 384, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 84], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153, 56]]).getD u []
+  ([[0, 6, 24, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 104], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [1, 3, 6, 20, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230], [0, 3, 96, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 119], [0, 12, 24, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 32], [0, 6, 12, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 50], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 59], [0, 384, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 84], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 59]]).getD u []
 
 /-- Number of cost bands of group `u` (maximal cost plus one). -/
 def nb (u : ℕ) : ℕ := (prof u).length
@@ -135,7 +133,7 @@ def RS (u : ℕ) : ℕ := OFF u (nb u)
 def BASE (u : ℕ) : ℕ := 27 + psum RS u
 
 /-- End of the group regions. -/
-def gEnd : ℕ := 243258
+def gEnd : ℕ := 243270
 
 /-- The number of blocks (live field values) of group `u`: the live values are a contiguous prefix. -/
 def VF (u : ℕ) : ℕ := ([1024, 512, 512, 512, 512, 2048, 2048, 1024, 1024, 1024, 1024, 1024, 1024]).getD u 0
@@ -156,8 +154,6 @@ def sentinel : ℕ := 262143
 /-- The free-chain entry of digit `s` (block length `s + 5 ≤ 68`). -/
 def entF (s : ℕ) : ℕ := baseF + 68 * s
 
-theorem baseF_add : baseF + 68 * 96 = sentinel := rfl
-
 theorem A_mono (u : ℕ) : Monotone (A u) := psum_mono _
 theorem OFF_mono (u : ℕ) : Monotone (OFF u) := psum_mono _
 theorem BASE_mono : Monotone BASE := fun _ _ h => Nat.add_le_add_left (psum_mono RS h) 27
@@ -169,15 +165,11 @@ theorem BASE_succ (u : ℕ) : BASE (u + 1) = BASE u + RS u := by
 
 theorem BASE_13 : BASE 13 = gEnd := by decide
 
-theorem BASE_one : BASE 1 = 16761 := by decide
-
 theorem A_full : ∀ u < 13, A u (nb u) = VF u := by decide
 
 theorem VF_le : ∀ u < 13, VF u ≤ 2 ^ gb u := by decide
 
 theorem nb_le : ∀ u < 13, nb u ≤ 18 := by decide
-
-theorem nb_pos : ∀ u < 13, 1 ≤ nb u := by decide
 
 theorem L_pos (u c : ℕ) : 6 ≤ L u c := by
   have hg : 6 ≤ gcu u := by unfold gcu; split_ifs <;> omega
@@ -188,13 +180,7 @@ theorem OFF_succ (u c : ℕ) : OFF u (c + 1) = OFF u c + pn u c * L u c := psum_
 
 theorem A_succ (u c : ℕ) : A u (c + 1) = A u c + pn u c := psum_succ _ c
 
-theorem gb_le : ∀ u < 13, gb u ≤ 11 := by decide
-
 theorem POS_13 : POS 13 = 128 := by decide
-
-theorem gk_le (u : ℕ) : gk u ≤ 4 := by unfold gk; split_ifs <;> omega
-
-theorem gk_ge (u : ℕ) : 3 ≤ gk u := by unfold gk; split_ifs <;> omega
 
 /-! ### Bands of field values -/
 
@@ -300,16 +286,6 @@ theorem dec_spec {s : ℕ} (h1 : 27 ≤ s) (h2 : s < gEnd) :
     rw [mul_comm] at this
     omega
 
-/-- Distinct field values have distinct entries. -/
-theorem entryOf_inj {u v v' : ℕ} (hu : u < 13) (hv : v < VF u) (hv' : v' < VF u)
-    (h : entryOf u v = entryOf u v') : v = v' := by
-  have h1 := dec_entry hu hv (i := 0) (by have := L_pos u (band u v); omega)
-  have h2 := dec_entry hu hv' (i := 0) (by have := L_pos u (band u v'); omega)
-  rw [Nat.add_zero] at h1 h2
-  rw [h] at h1
-  rw [h1] at h2
-  exact (Prod.mk.inj (Prod.mk.inj h2).2).1
-
 theorem entryOf_ge {u v : ℕ} (hu : u < 13) (hv : v < VF u) : 27 ≤ entryOf u v := by
   have := (entry_region hu hv (i := 0) (by have := L_pos u (band u v); omega)).1
   have := BASE_mono (Nat.zero_le u); rw [BASE_zero] at this; omega
@@ -334,8 +310,6 @@ def OFFT (k : ℕ) : ℕ := psum (fun j => LEN j - 1) k
 def xcBase (k : ℕ) : ℕ := 4096 + 2 * psum LEN k
 
 theorem LEN_le : ∀ k < 42, LEN k ≤ 64 := by decide
-
-theorem LEN_pos : ∀ k < 42, 2 ≤ LEN k := by decide
 
 theorem OFFT_bound : ∀ k < 42, OFFT k + LEN k ≤ 656 := by decide
 
@@ -413,6 +387,9 @@ def fpat (u v : ℕ) : E := natV (v * 2 ^ POS u)
 
 theorem cV_zero : cV 0 = oneV := by unfold cV oneV; rw [Nat.mul_zero, gpow_zero']
 
+theorem cV_mul (a b : ℕ) : cV a * cV b = cV (a + b) := by
+  unfold cV; rw [← ofK_mul, gpow_mul_gpow, Nat.mul_add]
+
 theorem cV_sixteen : cV 16 = gV := by
   exact congrArg ofK LeanIsaFieldRescale.factor_sixteen
 
@@ -438,10 +415,12 @@ abbrev Tab := ℕ → ℕ → ℕ → ℕ
 def cost (T : Tab) (u v : ℕ) : ℕ := ((List.range (gk u)).map (T u v)).sum
 
 /-- What the machine needs of the tables: the cost of a live tuple is its cost band, and every
-coordinate is below its chain's length. -/
+coordinate is below its chain's length (and below `16` from group `7` on). -/
 structure Tab.Hyp (T : Tab) : Prop where
   cost_eq : ∀ u < 13, ∀ v < VF u, cost T u v = band u v
   coord_lt : ∀ u < 13, ∀ v < 2 ^ gb u, ∀ i < gk u, T u v i < LEN (chainOf u i)
+  /-- The groups from `7` on have digits at most `15`. -/
+  coord_lt16 : ∀ u < 13, 7 ≤ u → ∀ v < 2 ^ gb u, ∀ i < gk u, T u v i < 16
 
 /-- The free chain's digit: `86 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
 def freeDigit (c : ℕ) : ℕ := if c ≤ 86 ∧ 86 - c ≤ 63 then 86 - c else 0
@@ -469,7 +448,8 @@ structure Compat (P : Fusion.Params) (T : Tab) : Prop where
   hiTop : ∀ k : Fin numChains, P.codec.hiTop k = decide (k.val ∈ [1,7,12,14,21,22,26,33,35])
   cv : P.codec.cv = cellBits gV ++ cellBits oneV
   chainMd : P.codec.chainMd = cellBits oneV
-  idxMd : P.codec.idxMd = cellBits gV
+  idxCv : P.codec.idxCv = cellBits (ofK (gpow 262143)) ++ cellBits (cV 14)
+  idxMd : P.codec.idxMd = cellBits oneV
   fusedMd : ∀ k : Fin 42, P.fusedMd k = Fusion.tagWord (Fusion.tagIndex k)
   rootMd : ∀ r : Fin 1, P.rootMd r = cellBits (cV (Fusion.rootIndex r).val)
   tripleCv : ∀ k : Fin 42, tri k.val →

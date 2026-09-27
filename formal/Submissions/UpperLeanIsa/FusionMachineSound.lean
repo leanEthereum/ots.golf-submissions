@@ -30,9 +30,6 @@ def stVal (v : ℕ → E) (r : ℕ) : BitVec 256 := cellBits (v (stCell r + 1)) 
 theorem stVal_lo (v : ℕ → E) (r : ℕ) : (stVal v r).extractLsb' 0 128 = cellBits (v (stCell r)) :=
   BitVec.extractLsb'_append_eq_right
 
-theorem cellBits_oneV : cellBits oneV = (1 : Word) := by
-  simp [oneV, ofK_eq_ofLimbs, cellBits]
-
 def rootSeq (v : ℕ → E) (i : ℕ) : BitVec 256 := if i=0 then 0 else stVal v (i-1)
 def homeU (_r : ℕ) : ℕ := 5
 
@@ -49,7 +46,7 @@ include hP in
 theorem rootMd_cell (hC : Compat P T) (r : Fin 1) : cellBits (v (rootMdCell r.val)) = P.rootMd r := by
   have he : rootMdCell r.val = cCell (Fusion.rootIndex r).val := by fin_cases r; rfl
   have hi : (Fusion.rootIndex r).val ≤ 16 := by fin_cases r; decide
-  rw [he,v_c hP hi,hC.rootMd]
+  rw [he,v_c hP hi (by fin_cases r; decide),hC.rootMd]
 
 theorem root_query_of
     (hmd : ∀ r : Fin 1, cellBits (v (rootMdCell r.val)) = P.rootMd r) (r : Fin 1) :
@@ -146,15 +143,16 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
     length_of_inputWord_len pk m bits ((hpin 3 (by omega)).symm.trans (v_len hP))
   -- the index
   have hidx : (ans f (P.codec.idxInput m (decodeNonce bits) pk)).extractLsb' 0 128 = cellBits (v idxCell) := by
-    have h : (CInstr.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell).Rel f v :=
+    have h : (CInstr.blake msgLo msgHi nonceCell pkCell (cCell 14) idxCell oneCell).Rel f v :=
       hP.pro _ pro_mem_idx
     have hlo := oracle_lo h
     have hpk : cellBits (v pkCell) = pk := by
       rw [show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
       exact cellBits_cellOfBits pk
-    have hq : blake2sQuery ![v msgLo, v msgHi, v nonceCell, v pkCell] (v oneCell)
-        (v (oneCell + 1)) (v gCell) = P.codec.idxInput m (decodeNonce bits) pk := by
-      rw [blake2sQuery_eq, cb_cv hP hC, v_g hP,
+    have hq : blake2sQuery ![v msgLo, v msgHi, v nonceCell, v pkCell] (v (cCell 14))
+        (v (cCell 14 + 1)) (v oneCell) = P.codec.idxInput m (decodeNonce bits) pk := by
+      rw [blake2sQuery_eq, show cCell 14 + 1 = gpCell 13 from rfl, v_c hP (c := 14) (by omega)
+        (by omega), hP.gp13, v_one hP,
         show nonceCell = 46 from rfl, show msgHi = 2 from rfl,
         show msgLo = 1 from rfl, hpin 46 (by omega), hpin 2 (by omega),
         hpin 1 (by omega), inputWord_nonce pk m bits hlen, inputWord_two,
@@ -162,7 +160,8 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
         cellBits_cellOfBits (m.extractLsb' 128 128), cellBits_cellOfBits (m.extractLsb' 0 128),
         msg_split, hpk]
       unfold Params.idxInput
-      rw [hC.idxMd]
+      rw [hC.idxCv, hC.idxMd]
+      rfl
     rw [hq] at hlo
     exact hlo.symm
   set I := (ans f (P.codec.idxInput m (decodeNonce bits) pk)).extractLsb' 0 128 with hIdef

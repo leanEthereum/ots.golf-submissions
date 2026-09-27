@@ -157,8 +157,6 @@ theorem mass_mono {s t : ℕ} (h : s ≤ t) : S.mass s ≤ S.mass t := by
     (Finset.sum_le_sum_of_subset_of_nonneg (Finset.range_mono h) fun _ _ _ => by positivity)
     (by positivity)
 
-theorem mass_nonneg (t : ℕ) : 0 ≤ S.mass t := by unfold mass; positivity
-
 theorem mass_lt_one (hS : S.Valid) {t : ℕ} (ht : t ≤ S.T) : S.mass t < 1 := by
   refine (S.mass_mono ht).trans_lt ?_
   unfold mass
@@ -399,10 +397,6 @@ theorem kpost_le (hS : S.Valid) : (2 ^ 128 : ℝ≥0∞)⁻¹ + ENNReal.ofReal S
 
 theorem rate_le_k1 (hS : S.Valid) : (2 ^ 128 : ℝ≥0∞)⁻¹ ≤ S.k1E :=
   le_self_add.trans (S.kpost_le hS)
-
-theorem k1E_ne_top : S.k1E ≠ ⊤ := ENNReal.ofReal_ne_top
-
-theorem hpE_ne_top : S.hpE ≠ ⊤ := ENNReal.ofReal_ne_top
 
 theorem Kb_mono {b b' : ℕ} (h : b ≤ b') : S.Kb b ≤ S.Kb b' := by
   unfold Kb

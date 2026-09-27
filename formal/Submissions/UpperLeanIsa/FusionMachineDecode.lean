@@ -85,7 +85,6 @@ theorem bodyF_lcost {T : Tab} (hT : T.Hyp) {f x : ℕ} (hf : f < 14) (hx : x < W
     rw [bodyF_pos T hf0, body_lcost hT (gOf_lt hf0 hf) hx]
     unfold gcuF cF hmF; rw [if_neg hf0, if_neg hf0, if_neg hf0]
 
-
 theorem topCell_lt {k : ℕ} (hk : k < 42) : topCell k + 1 < 346 := by
   have hh : ∀ k < 42, topCell k + 1 < 346 := by decide
   exact hh k hk
@@ -139,16 +138,16 @@ theorem rootIns_bounded (T : Tab) {u v : ℕ} {z : Bool} (hu : u < 13) :
 theorem body_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (hv : v < VF u) :
     ∀ x ∈ body T u v z, x.Bounded := by
   intro x hx
-  unfold body at hx
+  unfold body padOps at hx
   simp only [List.mem_append, List.mem_singleton, List.mem_replicate] at hx
-  rcases hx with ((((h | h) | h) | h) | h) | h
+  rcases hx with ((((h | h) | h) | h) | h | h) | h
   · unfold tie at h
     split_ifs at h <;> simp at h <;> (try rcases h with rfl | rfl) <;>
       simp only [CInstr.Bounded, accCell, tCell, copy, oneCell, idxCell] <;> (try split_ifs) <;> omega
   · subst h
     have := band_lt_18 hu hv
     rw [← hT.cost_eq u hu v hv] at this
-    simp only [prodOp, pcost, CInstr.Bounded, gpCell, cCell]
+    simp only [prodOp, pcost, CInstr.Bounded, gpCell, tpCell, cCell]
     split_ifs <;> omega
   · obtain ⟨i, hi, hx⟩ := mem_segs.mp h
     have hk := chainOf_lt u hu i hi
@@ -164,6 +163,7 @@ theorem body_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13)
     · obtain ⟨t, ht, rfl⟩ := mem_chainOps.mp hx
       exact chainOp_bounded hk ht (by omega) (by have := xhCell_lt hk; omega)
   · exact rootIns_bounded T hu x h
+  · rw [h.2]; simp only [fixOp, CInstr.Bounded, gpCell, tpCell, cCell]; split_ifs <;> omega
   · rw [h.2]; simp only [NOP, CInstr.Bounded, oneCell]; omega
   · subst h; unfold nextOp; split_ifs <;> simp only [CInstr.Bounded, copy, hCell, gCell, h1Cell,
       show stCell 0 = 302 from rfl, oneCell, pkCell] <;> (try split_ifs) <;> omega
@@ -206,12 +206,12 @@ theorem prologue_bounded (s : ℕ) : (prologue s).Bounded := by
   · rcases getD_mem_or (l := proList) (i := s) with h | h
     · exact proList_bounded _ h
     · rw [h]; trivial
-  · show 0 < 15; omega
+  · show 0 < 14; omega
   · trivial
 
 theorem ctlF_bounded {f : ℕ} (hf : f < 14) : (ctlF f).Bounded := by
   unfold ctlF; split_ifs
-  · show f + 1 < 15; omega
+  · show f + 1 < 14; omega
   · trivial
 
 theorem blockInstr_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} {i : ℕ} (hu : u < 13)
@@ -234,7 +234,7 @@ theorem fblockInstr_bounded {s i : ℕ} (hs : s < 64) : (fblockInstr s i).Bounde
   · rcases getD_mem_or (l := fbody s) (i := i - 1) with h | h
     · exact fbody_bounded s hs _ h
     · rw [h]; trivial
-  · show frG0 s < 15; unfold frG0; omega
+  · show frG0 s < 14; unfold frG0; omega
   · trivial
 
 theorem cinstrAt_cases (T : Tab) (s : ℕ) :

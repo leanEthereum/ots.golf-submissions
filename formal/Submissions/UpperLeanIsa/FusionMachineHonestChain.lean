@@ -30,7 +30,8 @@ theorem honest_fusedMd (k : Fin 42) (hk : binds k.val) :
     cellBits (hv P T f pk m bits (fusedMdCell k.val)) = P.fusedMd k := by
   rw [hC.fusedMd]
   have hsmall : ∀ k : Fin 42, binds k.val → k.val≠5 → k.val≠6 →
-      fusedMdCell k.val = cCell (Fusion.tagIndex k).val ∧ (Fusion.tagIndex k).val≤16 := by decide
+      fusedMdCell k.val = cCell (Fusion.tagIndex k).val ∧ (Fusion.tagIndex k).val≤16 ∧
+        (Fusion.tagIndex k).val ≠ 15 := by decide
   by_cases h5 : k.val=5
   · have he : k=5 := Fin.ext h5
     subst k
@@ -41,8 +42,8 @@ theorem honest_fusedMd (k : Fin 42) (hk : binds k.val) :
       subst k
       change cellBits (hv P T f pk m bits (gpCell 13)) = Fusion.tagWord 46
       rw [honest_gp13 hT hC hacc,sentinel_bits]
-    · obtain ⟨he,hi⟩ := hsmall k hk h5 h6
-      rw [he,hv_cc hi,factor_bits _ (by omega)]
+    · obtain ⟨he,hi,hi'⟩ := hsmall k hk h5 h6
+      rw [he,hv_cc hi hi',factor_bits _ (by omega)]
 
 include hT hC hlen hacc in
 theorem honest_fusion_query (k : Fin 42) (hk : binds k.val) (u : Fin 9)
@@ -72,8 +73,8 @@ theorem honest_triple_query (k : Fin 42) (hk : tri k.val) (u : Fin 9)
         (hv P T f pk m bits oneCell) =
       Fusion.triplePacket (P.tripleCv k) (ctxF P f pk m bits) u (cellBits x) P.codec.chainMd := by
   obtain ⟨ha1, ha2, hd⟩ := triple_cells k hk u hu
-  rw [blake2sQuery_eq, cCell_succ ha1 (by omega), hv_cc (c := triA k.val) (by omega),
-    hv_cc (c := triA k.val + 1) (by omega), hv_one, hC.tripleCv k hk, hC.chainMd]
+  rw [blake2sQuery_eq, cCell_succ ha1 (by omega), hv_cc (c := triA k.val) (by omega) (by omega),
+    hv_cc (c := triA k.val + 1) (by omega) (by omega), hv_one, hC.tripleCv k hk, hC.chainMd]
   unfold Fusion.triplePacket
   rw [(hd 0 (by omega)).1, (hd 1 (by omega)).1, (hd 2 (by omega)).1,
     honest_topBits hT hC hacc (hd 0 (by omega)).2.2,
@@ -123,7 +124,7 @@ theorem honest_chainOp {k : ℕ} (hk : k < 42) {t dst : ℕ}
         simpa [junkCell, ho, loC, hiC, he]
           using And.intro hjunk hsel
     · rw [if_neg hl]; exact hv_xc hk (by omega)
-  have hp : tpos k d t / 81 ≤ 16 := by
+  have hp : tpos k d t / 81 ≤ 8 := by
     have := OFFT_bound k hk; unfold tpos; omega
   have hq : blake2sQuery ![hv P T f pk m bits (if t = 0 then wCell k else xcCell k (t - 1)),
       hv P T f pk m bits (cCell (tpos k d t % 9)), hv P T f pk m bits (cCell (tpos k d t / 9 % 9)),
@@ -133,8 +134,9 @@ theorem honest_chainOp {k : ℕ} (hk : k < 42) {t dst : ℕ}
         (P.chainValue f (ctxF P f pk m bits) ⟨k, hk⟩ (LEN k - 1 - d) t (sigW bits k)) := by
     have hj : LEN k - 1 - d + t + 1 < LEN k := by omega
     obtain ⟨h0, h1, h2⟩ := hC.tag ⟨k, hk⟩ _ hj
-    rw [blake2sQuery_eq, hv_cc (c := tpos k d t % 9) (by omega),
-      hv_cc (c := tpos k d t / 9 % 9) (by omega), hv_cc hp, show oneCell + 1 = gCell from rfl,
+    rw [blake2sQuery_eq, hv_cc (c := tpos k d t % 9) (by omega) (by omega),
+      hv_cc (c := tpos k d t / 9 % 9) (by omega) (by omega),
+      hv_cc (c := tpos k d t / 81) (by omega) (by omega), show oneCell + 1 = gCell from rfl,
       hv_g, hv_one, hsrc.2]
     unfold Params.chainInput
     rw [h0, h1, h2, hC.chainMd, hC.cv]

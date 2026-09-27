@@ -96,8 +96,6 @@ def Record.word (ξ : Record P) (k : Fin 42) : ℕ → Word
   | 0 => ξ.1 k
   | j + 1 => if h : j < P.codec.len k - 1 then P.codec.slice k j (ξ.2 (.inl ⟨k,⟨j,h⟩⟩)) else 0
 
-theorem Record.word_zero (ξ : Record P) (k : Fin 42) : ξ.word k 0 = ξ.1 k := rfl
-
 theorem Record.word_succ (ξ : Record P) (k : Fin 42) (j : ℕ) (h : j < P.codec.len k - 1) :
     ξ.word k (j+1) = P.codec.slice k j (ξ.2 (.inl ⟨k,⟨j,h⟩⟩)) := dif_pos h
 
@@ -107,8 +105,6 @@ def Record.tops (ξ : Record P) : Tops := Layer.Params.topAt ξ.top
 def Record.rootState (ξ : Record P) : ℕ → BitVec 256
   | 0 => 0
   | r+1 => if h : r < 1 then ξ.2 (.inr ⟨r,h⟩) else 0
-
-theorem Record.rootState_zero (ξ : Record P) : ξ.rootState 0 = 0 := rfl
 
 theorem Record.rootState_succ (ξ : Record P) (r : Fin 1) : ξ.rootState (r.val+1) = ξ.2 (.inr r) :=
   dif_pos r.isLt
@@ -177,16 +173,6 @@ theorem Record.cache_some_iff (hP : P.Hyp) (ξ : Record P) (q : Query) (u : BitV
       · simp only [Record.cache, hl, if_neg ha, reduceCtorEq] at h
   · rintro ⟨a, rfl, rfl⟩
     exact ξ.cache_query hP a
-
-theorem Record.cache_isSome_iff (hP : P.Hyp) (ξ : Record P) (q : Query) :
-    (ξ.cache q).isSome ↔ ∃ a, ξ.query a = q := by
-  rw [Option.isSome_iff_exists]
-  constructor
-  · rintro ⟨u, hu⟩
-    obtain ⟨a, ha, -⟩ := (ξ.cache_some_iff hP q u).mp hu
-    exact ⟨a, ha⟩
-  · rintro ⟨a, ha⟩
-    exact ⟨ξ.2 a, (ξ.cache_some_iff hP q _).mpr ⟨a, ha, rfl⟩⟩
 
 /-- All programmed points are separated from every signing-index query. -/
 theorem Record.query_ne_idx (hP : P.Hyp) (ξ : Record P) (a : Loc P) (m : Message) (η : Nonce)

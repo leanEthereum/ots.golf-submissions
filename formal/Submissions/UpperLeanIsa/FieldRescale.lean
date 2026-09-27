@@ -12,11 +12,6 @@ def stride : ℕ := 1152921504606846976
 def sentinel : ℕ := 262143
 
 def costFactor (c : ℕ) : K := gpow (stride * c)
-def landingFrame (u : ℕ) : K := gpow ((u + 1) * stride)
-
-theorem frame_is_cost_factor (u : ℕ) :
-    landingFrame u = costFactor (u + 1) := by
-  simp [landingFrame, costFactor, Nat.mul_comm]
 
 theorem factor_add (a b : ℕ) :
     costFactor a * costFactor b = costFactor (a + b) := by
@@ -60,49 +55,5 @@ theorem checksum_exact {layer s c : ℕ} (hLayer : layer ≤ 300) (hSum : s + c 
   · intro h
     rw [h]
     exact div_mul_cancel₀ _ hl
-
-/-- Ordinary operands cannot be read in any of the fourteen landing frames,
-even at the largest prover-selected memory size (2^32 cells). -/
-theorem ordinary_operand_outside {u c : ℕ} (hu : u < 14) (hc : c < 65536) :
-    4294967296 ≤ ((u + 1) * stride + c) % 18446744073709551615 := by
-  have hlt : (u + 1) * stride + c < 18446744073709551615 := by
-    unfold stride
-    omega
-  rw [Nat.mod_eq_of_lt hlt]
-  unfold stride
-  omega
-
-/-- Entry operands are also inaccessible before a dispatch changes the frame. -/
-theorem inactive_entry_outside {v c : ℕ} (hv : v < 14) (hc : c < 65536) :
-    4294967296 ≤ (c + 18446744073709551615 - (v + 1) * stride) %
-      18446744073709551615 := by
-  have hlt : c + 18446744073709551615 - (v + 1) * stride <
-      18446744073709551615 := by unfold stride; omega
-  rw [Nat.mod_eq_of_lt hlt]
-  unfold stride
-  omega
-
-/-- An entry operand for frame v is out of range in every different frame u. -/
-theorem wrong_entry_outside {u v c : ℕ} (hu : u < 14) (hv : v < 14)
-    (hne : u ≠ v) (hc : c < 65536) :
-    4294967296 ≤ (c + 18446744073709551615 + (u + 1) * stride -
-        (v + 1) * stride) % 18446744073709551615 := by
-  by_cases huv : u < v
-  · have hlt : c + 18446744073709551615 + (u + 1) * stride -
-        (v + 1) * stride < 18446744073709551615 := by unfold stride; omega
-    rw [Nat.mod_eq_of_lt hlt]
-    unfold stride
-    omega
-  · have hge : 18446744073709551615 ≤ c + 18446744073709551615 +
-        (u + 1) * stride - (v + 1) * stride := by unfold stride; omega
-    rw [Nat.mod_eq_sub_mod hge]
-    have hlt : c + 18446744073709551615 + (u + 1) * stride -
-        (v + 1) * stride - 18446744073709551615 < 18446744073709551615 := by
-      unfold stride
-      omega
-    rw [Nat.mod_eq_of_lt hlt]
-    unfold stride
-    omega
-
 
 end LeanIsaFieldRescale

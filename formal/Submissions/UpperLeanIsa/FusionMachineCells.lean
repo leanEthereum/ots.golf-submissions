@@ -16,7 +16,6 @@ macro "hsimp" : tactic => `(tactic| simp (disch := omega) only [if_pos,if_neg,�
 def junkCell (k dst : ℕ) : ℕ := if topOff k=0 then dst+1 else dst-1
 
 def cvTop (_k : ℕ) : Prop := True
-instance (k : ℕ) : Decidable (cvTop k) := by unfold cvTop; infer_instance
 
 theorem cvTop_of_exported {k : ℕ} (_he : exported k) : cvTop k := trivial
 
@@ -37,14 +36,15 @@ variable (T : Tab) (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → Bit
 theorem hc_one : hcell T bits y0 A RA oneCell = oneV := by unfold hcell oneCell; hsimp
 theorem hc_g : hcell T bits y0 A RA gCell = gV := by unfold hcell gCell; hsimp
 
-theorem hc_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 16) : hcell T bits y0 A RA (cCell c) = cV c := by
+theorem hc_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 16) (h15 : c ≠ 15) :
+    hcell T bits y0 A RA (cCell c) = cV c := by
   by_cases h16 : c = 16
   · subst c; rw [cV_sixteen]; exact hc_g ..
   · have hc : cCell c = 50 + c := by unfold cCell; rw [if_neg (by omega), if_neg h16]
     rw [hc]; unfold hcell; hsimp; congr 1; omega
 
-theorem hc_frame {r : ℕ} (hr : r < 15) : hcell T bits y0 A RA (fCell r) = frameV r := by
-  rw [fCell, frameV_eq_cV]; exact hc_c T bits y0 A RA (by omega) (by omega)
+theorem hc_frame {r : ℕ} (hr : r < 14) : hcell T bits y0 A RA (fCell r) = frameV r := by
+  rw [fCell, frameV_eq_cV]; exact hc_c T bits y0 A RA (by omega) (by omega) (by omega)
 
 theorem hc_idx : hcell T bits y0 A RA idxCell = loC y0 := by unfold hcell idxCell; hsimp
 theorem hc_idx1 : hcell T bits y0 A RA (idxCell + 1) = hiC y0 := by unfold hcell idxCell; hsimp
@@ -68,7 +68,14 @@ theorem hc_h1 {r : ℕ} (hr : r < 14) :
 
 theorem hc_gp {u : ℕ} (hu : u ≤ 13) :
     hcell T bits y0 A RA (gpCell u) = gpV T (idxOf y0) u := by
-  unfold gpCell hcell; hsimp; congr 1; omega
+  unfold gpCell hcell
+  by_cases h13 : u = 13
+  · subst u; hsimp
+  · hsimp; congr 1; omega
+
+theorem hc_tp {u : ℕ} (hu : u < 13) :
+    hcell T bits y0 A RA (tpCell u) = tpV T (idxOf y0) u := by
+  unfold tpCell hcell; hsimp; congr 1; omega
 
 theorem hc_tf : hcell T bits y0 A RA tfCell = cellOfBits (topOf T bits y0 A 0) := by
   simp [hcell,tfCell,pairK,topPair,topOff]
@@ -80,10 +87,6 @@ theorem hc_top {k : ℕ} (hk : k<42) (_he : cvTop k) :
     hcell T bits y0 A RA (topCell k) = cellOfBits (topOf T bits y0 A k) ∧
       hcell T bits y0 A RA (junkCell k (topCell k)) = hiOf T y0 A k := by
   interval_cases k <;> simp [topCell,junkCell,topOff,hcell,topPair,pairK]
-
-theorem hc_xh {k : ℕ} (hk : k<42) (_hk0 : k≠0) (_he : ¬ exported k) :
-    hcell T bits y0 A RA (xhCell k) = cellOfBits (topOf T bits y0 A k) ∧
-      hcell T bits y0 A RA (junkCell k (xhCell k)) = hiOf T y0 A k := hc_top T bits y0 A RA hk trivial
 
 theorem hc_st {r : ℕ} (hr : r<1) :
     hcell T bits y0 A RA (stCell r) = loC (RA r) ∧
@@ -137,6 +140,7 @@ theorem canon_topPair (T : Tab) (bits : List Bool) (y0 : BitVec 256)
   · exact canon_hiOf _ _ _ _
 
 theorem canon_gpV (T : Tab) (I : Word) (u : ℕ) : IsCanonical128 (gpV T I u) := canon_ofK _
+theorem canon_tpV (T : Tab) (I : Word) (u : ℕ) : IsCanonical128 (tpV T I u) := canon_ofK _
 theorem canon_cV (c : ℕ) : IsCanonical128 (cV c) := canon_ofK _
 theorem canon_fpat (u v : ℕ) : IsCanonical128 (fpat u v) := canon_natV _
 theorem canon_oneV : IsCanonical128 oneV := canon_ofK _
@@ -147,7 +151,7 @@ theorem canon_hcell (T : Tab) (bits : List Bool) (y0 : BitVec 256)
     (A : ℕ → ℕ → BitVec 256) (RA : ℕ → BitVec 256) (c : ℕ) :
     IsCanonical128 (hcell T bits y0 A RA c) := by
   simp only [hcell, apply_ite IsCanonical128, canon_zero, canon_cellOfBits, canon_ofK, canon_natV,
-    canon_loC, canon_hiC, canon_hiOf, canon_topPair, canon_gpV, canon_cV, canon_fpat,
+    canon_loC, canon_hiC, canon_hiOf, canon_topPair, canon_gpV, canon_tpV, canon_cV, canon_fpat,
     canon_oneV, canon_gV, ite_self]
 
 theorem blake_rel {f : HashTable} {v : ℕ → E} {m0 m1 m2 m3 cv out md : ℕ} {a : BitVec 256}

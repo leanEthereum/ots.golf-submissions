@@ -64,6 +64,7 @@ structure Hyp : Prop where
   root_chain : ∀ r, P.rootMd r ≠ P.codec.chainMd
   root_idx : ∀ r, P.rootMd r ≠ P.codec.idxMd
   triple_cv : ∀ k, P.tripleCv k ≠ P.codec.cv
+  triple_idx : ∀ k, P.tripleCv k ≠ P.codec.idxCv
   /-- The cv words separate the three-dep parents. -/
   triple_inj : ∀ k k' : Fin 42, tripleOwned k → tripleOwned k' → P.tripleCv k = P.tripleCv k' →
     k = k'
@@ -169,7 +170,7 @@ theorem chainInput_ne_idxInput (hP : P.Hyp) (t : Tops) (k : Fin 42) (j : ℕ)
     simp only [ha, groupInput] at h
     split_ifs at h
     · exact (hP.fused_idx k) ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.2
-    · exact hP.codec.chain_idx ((hashInput_eq_iff _ _ _ _ _ _).mp h).2.2
+    · exact (hP.triple_idx k) ((hashInput_eq_iff _ _ _ _ _ _).mp h).1
 
 theorem rootInput_ne_idxInput (hP : P.Hyp) (t : Tops) (r : Fin 1) (st : BitVec 256)
     (m : Message) (η : Nonce) (pk : PublicKey) : P.rootInput t r st ≠ P.codec.idxInput m η pk := by

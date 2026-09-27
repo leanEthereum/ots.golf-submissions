@@ -39,10 +39,6 @@ theorem progUpd_apply (ξ : Record P) (S : Loc P → Prop) (c : Cache) (q : Quer
     progUpd ξ S c q = if ∃ a, S a ∧ ξ.query a = q then ξ.cache q else c q :=
   rfl
 
-theorem progUpd_apply_neg {ξ : Record P} {S : Loc P → Prop} {c : Cache}
-    {q : Query} (h : ¬ ∃ a, S a ∧ ξ.query a = q) : progUpd ξ S c q = c q := by
-  rw [progUpd_apply, if_neg h]
-
 theorem progUpd_of_false (ξ : Record P) (S : Loc P → Prop) (c : Cache)
     (h : ∀ b, ¬ S b) : progUpd ξ S c = c := by
   funext q
@@ -78,26 +74,6 @@ theorem progUpd_cacheQuery (hP : P.Hyp) (ξ : Record P) (S : Loc P → Prop) (c 
         · exact hq hbq
       rw [if_neg h, if_neg h1, QueryCache.cacheQuery_of_ne _ _ (Ne.symm hq)]
 
-theorem progUpd_progUpd (ξ : Record P) (S T : Loc P → Prop) (c : Cache) :
-    progUpd ξ S (progUpd ξ T c) = progUpd ξ (fun b => S b ∨ T b) c := by
-  funext q
-  rw [progUpd_apply, progUpd_apply, progUpd_apply]
-  by_cases hS : ∃ b, S b ∧ ξ.query b = q
-  · have h1 : ∃ b, (S b ∨ T b) ∧ ξ.query b = q := by
-      obtain ⟨b, hb, hbq⟩ := hS
-      exact ⟨b, Or.inl hb, hbq⟩
-    rw [if_pos hS, if_pos h1]
-  · by_cases hT : ∃ b, T b ∧ ξ.query b = q
-    · have h1 : ∃ b, (S b ∨ T b) ∧ ξ.query b = q := by
-        obtain ⟨b, hb, hbq⟩ := hT
-        exact ⟨b, Or.inr hb, hbq⟩
-      rw [if_neg hS, if_pos hT, if_pos h1]
-    · have h1 : ¬ ∃ b, (S b ∨ T b) ∧ ξ.query b = q := by
-        rintro ⟨b, hb | hb, hbq⟩
-        · exact hS ⟨b, hb, hbq⟩
-        · exact hT ⟨b, hb, hbq⟩
-      rw [if_neg hS, if_neg hT, if_neg h1]
-
 theorem progUpd_true_empty (hP : P.Hyp) (ξ : Record P) :
     progUpd ξ (fun _ => True) ∅ = ξ.cache := by
   funext q
@@ -110,30 +86,6 @@ theorem progUpd_true_empty (hP : P.Hyp) (ξ : Record P) :
     | some v =>
       obtain ⟨a, ha, -⟩ := (ξ.cache_some_iff hP q v).1 hc
       exact (h ⟨a, trivial, ha⟩).elim
-
-theorem progUpd_update (hP : P.Hyp) (sk : Fin numChains → Word) (y : Tbl P) (b : Loc P)
-    (u : BitVec hashBits) (S : Loc P → Prop) (c : Cache)
-    (hS : ∀ b', S b' → b' ≠ b ∧
-      Record.query (sk, Function.update y b u) b' = Record.query (sk, y) b') :
-    progUpd (sk, Function.update y b u) S c = progUpd (sk, y) S c := by
-  funext q
-  rw [progUpd_apply, progUpd_apply]
-  have hiff : (∃ b', S b' ∧ Record.query (sk, Function.update y b u) b' = q) ↔
-      (∃ b', S b' ∧ Record.query (sk, y) b' = q) :=
-    ⟨fun ⟨b', hb', hq⟩ => ⟨b', hb', (hS b' hb').2.symm.trans hq⟩,
-      fun ⟨b', hb', hq⟩ => ⟨b', hb', (hS b' hb').2.trans hq⟩⟩
-  by_cases h : ∃ b', S b' ∧ Record.query (sk, y) b' = q
-  · rw [if_pos (hiff.2 h), if_pos h]
-    obtain ⟨b', hb', rfl⟩ := h
-    have h1 : Record.cache (sk, Function.update y b u) (Record.query (sk, y) b') =
-        some (y b') := by
-      rw [← (hS b' hb').2, Record.cache_query hP]
-      exact congrArg some (Function.update_of_ne (hS b' hb').1 u y)
-    have h2 : Record.cache (sk, y) (Record.query (sk, y) b') = some (y b') :=
-      Record.cache_query hP (sk, y) b'
-    rw [h1, h2]
-  · rw [if_neg (fun h' => h (hiff.1 h')), if_neg h]
-
 
 /-- Future answers are erased before running a suffix of the DAG. -/
 def erase (y : Tbl P) (l : List (Loc P)) : Tbl P := fun a => if a ∈ l then 0 else y a
