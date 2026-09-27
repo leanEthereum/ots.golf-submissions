@@ -31,7 +31,7 @@ abbrev emsgBits : ℕ := msgBits + pkBits
 abbrev EMessage := BitVec emsgBits
 
 /-- An encoding input: an extended message above a nonce. -/
-abbrev EncInput := BitVec (emsgBits + 127)
+abbrev EncInput := BitVec (emsgBits + 128)
 
 /-- The extended message of `m` under the public key `pk`. -/
 def emsg (m : Message) (pk : PublicKey) : EMessage := m ++ pk
@@ -43,15 +43,15 @@ theorem append_nonce_inj (m : EMessage) {η η' : Nonce} (h : m ++ η = m ++ η'
   (append_inj h).2
 
 theorem exists_append (u : EncInput) : ∃ (m : EMessage) (η : Nonce), u = m ++ η := by
-  refine ⟨u.extractLsb' 127 emsgBits, u.extractLsb' 0 127, ?_⟩
+  refine ⟨u.extractLsb' 128 emsgBits, u.extractLsb' 0 128, ?_⟩
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
   rw [BitVec.getLsbD_append]
   split_ifs with h
   · simp [BitVec.getLsbD_extractLsb', h]
   · rw [BitVec.getLsbD_extractLsb']
-    have : i - 127 < emsgBits := by omega
-    simp [this, show 127 + (i - 127) = i by omega]
+    have : i - 128 < emsgBits := by omega
+    simp [this, show 128 + (i - 128) = i by omega]
 
 theorem emsg_inj {m m' : Message} {pk pk' : PublicKey} (h : emsg m pk = emsg m' pk') :
     m = m' ∧ pk = pk' := append_inj h
@@ -74,8 +74,8 @@ variable (P : Params)
 
 /-- The index query of an encoding input `emsg m pk ++ η`. -/
 def encQuery (u : EncInput) : Query :=
-  ⟨896, P.idxInput ((u.extractLsb' 127 emsgBits).extractLsb' pkBits msgBits)
-    (u.extractLsb' 0 127) ((u.extractLsb' 127 emsgBits).extractLsb' 0 pkBits)⟩
+  ⟨896, P.idxInput ((u.extractLsb' 128 emsgBits).extractLsb' pkBits msgBits)
+    (u.extractLsb' 0 128) ((u.extractLsb' 128 emsgBits).extractLsb' 0 pkBits)⟩
 
 theorem encQuery_emsg (m : Message) (pk : PublicKey) (η : Nonce) :
     P.encQuery (emsg m pk ++ η) = ⟨896, P.idxInput m η pk⟩ := by

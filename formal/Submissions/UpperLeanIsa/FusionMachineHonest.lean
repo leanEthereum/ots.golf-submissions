@@ -168,7 +168,7 @@ theorem hv_idx1 : hv P T f pk m bits (idxCell + 1) = hiC (y0F P f pk m bits) :=
   hv_c (by decide) (by decide) (hc_idx1 ..)
 theorem hv_t {u : ℕ} (hu : u < 13) :
     hv P T f pk m bits (tCell u) = fpat u (XF P T f pk m bits (u + 1)) :=
-  hv_c (by unfold tCell; omega) (by unfold tCell; omega) (hc_t _ _ _ _ _ hu)
+  hv_c (by unfold tCell; split_ifs <;> omega) (by unfold tCell; split_ifs <;> omega) (hc_t _ _ _ _ _ hu)
 theorem hv_accl {u : ℕ} (hu : u < 12) :
     hv P T f pk m bits (accCell u) =
       natV (ofDigitsW gb (fun w => XF P T f pk m bits (w + 1)) (u + 1)) :=
@@ -228,13 +228,13 @@ theorem hv_xc {k t : ℕ} (hk : k < 42) (ht : t < LEN k) :
     hv_c (by unfold xcCell; omega) (by unfold xcCell; omega) e2⟩
 
 /-- The revealed words (for an admitted length). -/
-theorem hv_w (hlen : bits.length = 5503) {k : ℕ} (hk : k < 42) :
+theorem hv_w (hlen : bits.length = 5504) {k : ℕ} (hk : k < 42) :
     hv P T f pk m bits (wCell k) = cellOfBits (sigW bits k) := by
   rw [hv_lt P T f pk m bits (by unfold wCell; omega), show wCell k = 4 + k from rfl,
     inputWord_sig pk m bits hlen k]
   rfl
 
-theorem hv_rtop (hlen : bits.length=5503) {k : ℕ} (hk : k<42) :
+theorem hv_rtop (hlen : bits.length=5504) {k : ℕ} (hk : k<42) :
     hv P T f pk m bits (rtopCell k (hd T (y0F P f pk m bits) k)) =
       cellOfBits (topOf T bits (y0F P f pk m bits) (AF P T f pk m bits) k) := by
   unfold rtopCell
@@ -248,7 +248,7 @@ end Values
 section Accepted
 
 variable {P T f pk m bits}
-variable (hT : T.Hyp) (hC : Compat P T) (hlen : bits.length = 5503)
+variable (hT : T.Hyp) (hC : Compat P T) (hlen : bits.length = 5504)
   (hacc : P.codec.Accepted (effective (IF P f pk m bits)))
   (hroot : rootValue f P (topsOf f P (effective (IF P f pk m bits)) bits) = pk)
 
@@ -348,12 +348,12 @@ theorem honest_pro : ∀ y ∈ proList, y.Rel f (hv P T f pk m bits) := by
   unfold proList at hy
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hy
-  rcases hy with (((h | h) | ⟨c,hc,rfl⟩) | ⟨c,hc,rfl⟩) | h | h
+  rcases hy with ((⟨c,hc,rfl⟩ | (h | h)) | ⟨c,hc,rfl⟩) | h | h
+  · exact hv_cc (by omega)
   · subst h; refine ⟨hv_one, ?_⟩
-    show hv P T f pk m bits 3 = natV 5503
+    show hv P T f pk m bits 3 = natV 5504
     rw [hv_lt P T f pk m bits (by omega)]; exact inputWord_len_of pk m bits hlen
   · subst h; exact hv_g
-  · exact hv_cc (by omega)
   · apply hv_cc
     omega
   · subst h

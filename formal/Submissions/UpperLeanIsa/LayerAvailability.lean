@@ -374,7 +374,7 @@ theorem E_afterHash_none (sk : SecretKey) (m : Message) (k : ℕ) (tried : Finse
 /-- Failure probability while enough untried nonces remain and their queries are fresh. -/
 theorem loop_failure (sk : SecretKey) (m : Message) :
     ∀ (k : ℕ) (tried : Finset Nonce) (c : Cache),
-      tried.card + k ≤ 2 ^ 127 →
+      tried.card + k ≤ 2 ^ 128 →
       (∀ η ∉ tried, c ⟨896, P.idxInput m η sk.pk⟩ = none) →
       E (run (P.signLoop sk m k tried none) c)
         (fun p => if p.1.isNone then 1 else 0) ≤ P.miss ^ k := by
@@ -429,7 +429,7 @@ theorem miss_le_one : P.miss ≤ 1 := by
 fresh: at most `miss ^ (k - 1)`. -/
 theorem loop_failure_one (sk : SecretKey) (m : Message) (η₀ : Nonce) :
     ∀ (k : ℕ) (tried : Finset Nonce) (c : Cache),
-      tried.card + k ≤ 2 ^ 127 →
+      tried.card + k ≤ 2 ^ 128 →
       (∀ η ∉ tried, η ≠ η₀ → c ⟨896, P.idxInput m η sk.pk⟩ = none) →
       E (run (P.signLoop sk m k tried none) c)
         (fun p => if p.1.isNone then 1 else 0) ≤ P.miss ^ (k - 1) := by
@@ -451,7 +451,7 @@ theorem loop_failure_one (sk : SecretKey) (m : Message) (η₀ : Nonce) :
       intro j
       set η := nonceOf tried hc j with hηdef
       have hη : η ∉ tried := (Finset.mem_sdiff.mp (nonceOf_mem tried hc j)).2
-      have hbud' : (insert η tried).card + k ≤ 2 ^ 127 := by
+      have hbud' : (insert η tried).card + k ≤ 2 ^ 128 := by
         rw [Finset.card_insert_of_notMem hη]
         omega
       have hfresh' : ∀ w : BitVec hashBits, ∀ η' ∉ insert η tried, η' ≠ η₀ →

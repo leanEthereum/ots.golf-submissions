@@ -2,9 +2,35 @@
 
 ## Local research toward 1110 (2026-09-27)
 
-`Solution.lean` and `claim.txt` still describe the upstream 1138-cycle construction.
-There is no 1110-cycle certificate in this checkout. Two independent research helpers
-have been compiled with the pinned Lean toolchain:
+The current local candidate uses a full 128-bit nonce at the same **1138 cycles**.
+The complete security, admissibility and machine certificate builds with pinned Lean.
+There is no 1110-cycle certificate in this checkout, and this nonce revision has not
+been submitted to the hosted verifier.
+
+Standalone exact export comparison and axiom auditing passed, followed by a fresh Lean
+kernel replay (315 seconds; 355 seconds including parsing and comparison). These are
+local checks of the proof, not a hosted verifier verdict. Source policy passes with
+86 files and about 2.8 MB after removing 22 unused legacy modules from this root.
+
+The signature now uses exactly 5504 bits. The nonce-row factors use 2^128; effective
+index width, attack ceiling and security target remain 127 bits. With the same tables,
+the normalized final security slope is at most 0.804851, previously about 0.96582.
+
+Length 5504 cannot use the old length gate's out-of-range argument. Its ten exceptional
+addresses are checked exhaustively in `LengthBounds128` and `LengthLogs128`:
+
+- Lengths 43, 86, 172, 344, 688 and 1376 address cells 41 through 46, respectively.
+  The loader pins those cells to zero because the signatures are too short to reach them.
+- Lengths 2752, 917, 1834 and 3668 address cells 47, 105, 106 and 107. These now hold
+  C_3, C_1, C_2 and C_4. The first fifteen prologue instructions check C_1 through C_15,
+  before the indirect length check. Each exceptional constant differs from ONE.
+
+The three displaced tie-pattern cells move to 140 through 142. The C_1/C_2 pair remains
+adjacent. This preserves every instruction count, the table layout, and the seeded-row
+bound. `LengthGate128` and the prefix extraction in `FusionMachinePath` justify the
+guard for every completing execution at all admitted memory sizes.
+
+The remaining research helpers are:
 
 - `LightRootShape.lean` proves packet-location separation, three-child packet binding,
   acyclic evaluation, and conditional coverage of all 42 chains from one six-word root.
@@ -13,10 +39,8 @@ have been compiled with the pinned Lean toolchain:
   C_16 are needed. Availability, security, and a concrete machine remain to be proved.
 - `Nonce128Budget.lean` proves the budget charging and bounding algebra with a 2^128
   nonce row. At attack budgets at most 2^127, setting the linear slope to hp/2 gives
-  an upper slope of 5*hp/8, compared with 3*hp/4 in the current numeric schedule.
-  This is not a security theorem. The current nonce is still 127 bits; the proposed
-  128-bit nonce fits exactly in the 5504-bit signature limit, but needs a new encoding,
-  length gate, signing-row analysis, numeric certificate, and machine proof.
+  an upper slope of 5*hp/8, compared with 3*hp/4 for a 127-bit nonce. The algebra is
+  now also implemented in the complete signing-row analysis and machine proof.
 
 Numerical searches tried 128-bit effective indices, varied field widths, and mixed alias
 multiplicities within a cost band. None produced a candidate meeting every security,
@@ -24,7 +48,7 @@ availability, and code-size condition. Search scores are floating-point diagnost
 A weighted acceptance condition accounting for zero-digit copies also needs an efficient
 machine checksum: its extra cost-factor initialization cannot be omitted from a cycle claim.
 
-The following notes describe the unchanged certified 1138 construction.
+The remaining notes describe the binding construction and its earlier validation history.
 
 Claim **1138 cycles**: **128 ordinary instructions + 89 BLAKE2S × 10 + 120 boundary cycles**.
 Every completing path executes 217 instructions. The 89 hashes are 86 chain steps, one index,
@@ -36,8 +60,8 @@ The reference is the verified submission by lucemans at
 https://ots.golf/submissions/ae54a7a1c4f0d7c6f00e42030c96e468.
 The local 1198 continuation is preserved separately. This construction retains its rarest-cut
 signer and much of the machine framework, and proves a new fused dependency DAG and security
-reduction. `Fusion*.lean` contains the active construction. Older modules provide shared lemmas
-and preserve the earlier proof development.
+reduction. `Fusion*.lean` contains the active construction. Shared modules provide the
+general lemmas; unused legacy proof branches remain available in Git history.
 
 ## Fusing chain and root work
 
@@ -58,7 +82,7 @@ dependency tops. Six groups work this way:
 
 The light group 6 binds top 7, which the 1149 root hashed in a third root call. The final
 step of each chain 39, 40, 41 keeps its ordinary shape except for two words. Message word 1
-carries top 7 in place of the low tag digit, and the cv pair is `(C_1, C_2)` (cells 51, 52)
+carries top 7 in place of the low tag digit, and the cv pair is `(C_1, C_2)` (cells 105, 106)
 in place of `(ONE, g)`. The message is `[x, t7, B, C]` with the metadata `ONE`. The cv word
 `C_1 ≠ ONE` separates these steps from ordinary chain steps. The tag digits `(B, C)` at the
 final positions 592, 608, 624 are `(2,7)`, `(4,7)` and `(6,7)`, which separates the three
@@ -79,7 +103,7 @@ Its low half is the public key. Binding propagates through the DAG to all 42 top
 
 ## Tables, signing, and exact probability bounds
 
-The signature is 42 complete 128-bit words and a 127-bit nonce, totaling 5503 bits. The signer
+The signature is 42 complete 128-bit words and a 128-bit nonce, totaling 5504 bits. The signer
 tries `2^19` nonces and keeps the accepted class of least weight, breaking ties by earliest
 trial. A class's weight counts its effective 127-bit indices. Thirteen group tables encode
 41 chain digits; the free chain digit completes the total to **86**. The group cost lies in
@@ -108,7 +132,7 @@ signing.
 
 The memory layout places selected high and low hash halves in adjacent cv cells. Ordinary
 position tags use the existing cost constants. Fused endpoint tags additionally reuse the
-checked signature-length cell (5503) and the forced terminal landing product. Their exact
+checked signature-length cell (5504) and the forced terminal landing product. Their exact
 bits are proved distinct and are matched to the abstract scheme's metadata.
 
 The prologue has 24 straight instructions and dispatches at slot 24; slots 25 and 26 are

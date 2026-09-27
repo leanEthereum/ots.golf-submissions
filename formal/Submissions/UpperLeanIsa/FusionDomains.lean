@@ -1,4 +1,4 @@
-import Submissions.UpperLeanIsa.LengthGate
+import Submissions.UpperLeanIsa.LengthLogValues
 
 namespace OptimalOTS.LeanIsaBaseline.Layer.Fusion
 set_option maxRecDepth 100000
@@ -6,14 +6,14 @@ set_option maxHeartbeats 0
 open LeanerVM.Parameters
 
 theorem length_ne_factor {c : ℕ} (hc : c < 45) :
-    LeanIsaFieldRescale.costFactor c ≠ (5503 : K) := by
+    LeanIsaFieldRescale.costFactor c ≠ (5504 : K) := by
   intro h
   unfold LeanIsaFieldRescale.costFactor at h
-  rw [← HLG3.gpow_mod, ← HLG3.LengthGate.log5503] at h
+  rw [← HLG3.gpow_mod, ← HLG3.LengthGate.log5504] at h
   have he := HLG3.gpow_inj
     (show (LeanIsaFieldRescale.stride*c) % HLG3.ordG < 2^64-1 from
       Nat.mod_lt _ (by norm_num [HLG3.ordG]))
-    (show 4674821839435376859 < 2^64-1 by norm_num) h
+    (show 1434881718044321323 < 2^64-1 by norm_num) h
   interval_cases c <;> norm_num [LeanIsaFieldRescale.stride, HLG3.ordG] at he
 
 theorem sentinel_ne_factor {c : ℕ} (hc : c < 45) :
@@ -28,15 +28,15 @@ theorem sentinel_ne_factor {c : ℕ} (hc : c < 45) :
     (show 262143 < 2^64-1 by norm_num) h'
   interval_cases c <;> norm_num [LeanIsaFieldRescale.stride, HLG3.ordG] at he
 
-theorem sentinel_ne_length : gpow 262143 ≠ (5503 : K) := by
+theorem sentinel_ne_length : gpow 262143 ≠ (5504 : K) := by
   intro h
-  rw [← HLG3.LengthGate.log5503] at h
+  rw [← HLG3.LengthGate.log5504] at h
   have he := HLG3.gpow_inj (by norm_num) (by norm_num) h
   norm_num at he
 
 def domainTag (i : Fin 47) : K :=
   if i.val < 45 then LeanIsaFieldRescale.costFactor i.val
-  else if i.val = 45 then 5503 else gpow 262143
+  else if i.val = 45 then 5504 else gpow 262143
 
 theorem domainTag_injective : Function.Injective domainTag := by
   intro i j h

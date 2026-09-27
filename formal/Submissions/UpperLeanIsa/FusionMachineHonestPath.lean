@@ -24,7 +24,7 @@ noncomputable section
 section Honest
 
 variable {P : Fusion.Params} {T : Tab} {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool}
-variable (hT : T.Hyp) (hC : Compat P T) (hlen : bits.length = 5503)
+variable (hT : T.Hyp) (hC : Compat P T) (hlen : bits.length = 5504)
   (hacc : P.codec.Accepted (effective (IF P f pk m bits)))
   (hroot : rootValue f P (topsOf f P (effective (IF P f pk m bits)) bits) = pk)
 

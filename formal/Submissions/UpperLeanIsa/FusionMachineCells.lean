@@ -40,8 +40,11 @@ theorem hc_g : hcell T bits y0 A RA gCell = gV := by unfold hcell gCell; hsimp
 theorem hc_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 21) : hcell T bits y0 A RA (cCell c) = cV c := by
   by_cases h16 : c = 16
   · subst c; rw [cV_sixteen]; exact hc_g ..
-  · have hc : cCell c = 50 + c := by unfold cCell; rw [if_neg (by omega), if_neg h16]
-    rw [hc]; unfold hcell; hsimp; congr 1; omega
+  · by_cases h4 : c ≤ 4
+    · interval_cases c <;> simp [cCell, hcell]
+    · have hc : cCell c = 50 + c := by simp [cCell, h16, show c ≠ 0 by omega,
+        show c ≠ 1 by omega, show c ≠ 2 by omega, show c ≠ 3 by omega, show c ≠ 4 by omega]
+      rw [hc]; unfold hcell; hsimp; congr 1; omega
 
 theorem hc_frame {r : ℕ} (hr : r < 15) : hcell T bits y0 A RA (fCell r) = frameV r := by
   rw [fCell, frameV_eq_cV]; exact hc_c T bits y0 A RA (by omega) (by omega)
@@ -51,7 +54,7 @@ theorem hc_idx1 : hcell T bits y0 A RA (idxCell + 1) = hiC y0 := by unfold hcell
 
 theorem hc_t {u : ℕ} (hu : u < 13) :
     hcell T bits y0 A RA (tCell u) = fpat u (hxs T (idxOf y0) (u + 1)) := by
-  unfold hcell tCell; hsimp; congr 2 <;> omega
+  interval_cases u <;> simp [hcell, tCell]
 
 theorem hc_acc {u : ℕ} (hu : u < 12) :
     hcell T bits y0 A RA (accCell u) =

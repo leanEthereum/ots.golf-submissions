@@ -84,8 +84,8 @@ theorem iterDn_le_pow {x : ℚ} {m : ℕ} (hx : (m : ℚ) / prec ≤ x) :
 /-! ## The schedule -/
 
 /-- `⌈prec · η₀⌉` and `⌊prec · η₀⌋`. -/
-def etaUp : ℕ := (prec * (2 ^ 66 + 2 ^ 19) + (2 ^ 127 - 2 ^ 19) - 1) / (2 ^ 127 - 2 ^ 19)
-def etaDn : ℕ := prec * (2 ^ 66 + 2 ^ 19) / (2 ^ 127 - 2 ^ 19)
+def etaUp : ℕ := (prec * (2 ^ 66 + 2 ^ 19) + (2 ^ 128 - 2 ^ 19) - 1) / (2 ^ 128 - 2 ^ 19)
+def etaDn : ℕ := prec * (2 ^ 66 + 2 ^ 19) / (2 ^ 128 - 2 ^ 19)
 
 /-- `prec · (1 - P_{<t})`, exact. -/
 def rest (t : ℕ) : ℕ := prec - cum t * 2 ^ 129

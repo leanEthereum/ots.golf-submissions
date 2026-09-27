@@ -1,6 +1,6 @@
 import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.FusionMachineLayout
-import Submissions.UpperLeanIsa.LengthGate
+import Submissions.UpperLeanIsa.LengthGate128
 
 /-! The 1138-cycle bytecode and its local instruction algebra. The complete machine
 certificate is assembled in `FusionMachine.lean`. -/
@@ -56,7 +56,10 @@ def nonceCell : ℕ := 46
 def oneCell : ℕ := 48
 def gCell : ℕ := 49
 /-- The cost constant / tag symbol `C_c` (`C_0 = ONE`). -/
-def cCell (c : ℕ) : ℕ := if c = 0 then 48 else if c = 16 then 49 else 50 + c
+def cCell (c : ℕ) : ℕ :=
+  if c = 0 then 48 else if c = 16 then 49
+  else if c = 1 then 105 else if c = 2 then 106 else if c = 3 then 47
+  else if c = 4 then 107 else 50 + c
 
 /-- The frame constant of frame `f`: frame f reuses cost factor C_(f+1). -/
 def fCell (f : ℕ) : ℕ := cCell (f + 1)
@@ -65,7 +68,7 @@ def fCell (f : ℕ) : ℕ := cCell (f + 1)
 def idxCell : ℕ := 80
 
 /-- The tie pattern of group `u`. -/
-def tCell (u : ℕ) : ℕ := 100 + u
+def tCell (u : ℕ) : ℕ := if 5 ≤ u ∧ u ≤ 7 then 135 + u else 100 + u
 
 /-- The tie accumulator after group `u`; the last one is the index cell. -/
 def accCell (u : ℕ) : ℕ := if u = 12 then idxCell else 120 + u
@@ -129,7 +132,7 @@ namespace CInstr
 
 /-- The ISA instruction; all but `entry` address frame-1 cells `gpow c`. -/
 def toInstr : CInstr → Instr
-  | .init => .deref (gpow lenCell) OptimalOTS.HLG3.LengthGate.scale (gpow lenCell) .fp
+  | .init => .deref (gpow lenCell) OptimalOTS.HLG3.LengthGate128.scale (gpow lenCell) .fp
   | .xor a b c => .xor (gpow a) (gpow b) (gpow c)
   | .mul a b c => .mulNative (gpow a) (gpow b) (gpow c)
   | .setc a v => .setConstant (gpow a) v
@@ -314,9 +317,9 @@ def depTop (k i : ℕ) : ℕ :=
 
 def depCv (k : ℕ) : ℕ := ([269, 0, 0, 0, 0, 273, 277, 257, 261, 265, 0, 0, 0]).getD (unitOf k) 0
 
-def fusedMdCell (k : ℕ) : ℕ := ([0, 61, 62, 64, 65, 3, 213, 63, 67, 68, 69, 70, 0, 0, 52, 53, 54, 0, 0, 55, 56, 57, 0, 0, 58, 59, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).getD k 0
+def fusedMdCell (k : ℕ) : ℕ := ([0, 61, 62, 64, 65, 3, 213, 63, 67, 68, 69, 70, 0, 0, 106, 47, 107, 0, 0, 55, 56, 57, 0, 0, 58, 59, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).getD k 0
 
-def rootMdCell (r : ℕ) : ℕ := [51,71].getD r 0
+def rootMdCell (r : ℕ) : ℕ := [105,71].getD r 0
 
 /-- Step `t` of the `d` steps of chain `k` (the last writes `dst`): position `LEN k − 1 − d + t`,
 tag cells `C` of the base-9 digits of its tag position, cv pair `(ONE, g)`, metadata `ONE`.
@@ -337,8 +340,8 @@ def chainOps (k d dst : ℕ) : List CInstr := (List.range d).map (fun t => chain
 
 /-- The straight part of the prologue (slots `0 … 23`). -/
 def proList : List CInstr :=
-  [.init,.setc gCell gV] ++
-    ((List.range 15).map (fun c => .setc (cCell (c+1)) (cV (c+1)))) ++
+  ((List.range 15).map (fun c => .setc (cCell (c+1)) (cV (c+1)))) ++
+    [.init,.setc gCell gV] ++
     ([17,18,19,20,21].map (fun c => .setc (cCell c) (cV c))) ++
     [.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell,.mul (hCell 0) gCell (h1Cell 0)]
 

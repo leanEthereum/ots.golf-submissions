@@ -86,7 +86,7 @@ theorem master_budget_family {α β J : Type} [Nonempty J] (Φ : Cache → ℕ �
 namespace Params
 
 /-- `1 / (I - L)`. -/
-def ILinv : ℝ≥0∞ := ((2 ^ 127 - 2 ^ 19 : ℕ) : ℝ≥0∞)⁻¹
+def ILinv : ℝ≥0∞ := ((2 ^ 128 - 2 ^ 19 : ℕ) : ℝ≥0∞)⁻¹
 
 variable (P : Params) (S : Tier.Sched)
 
@@ -130,7 +130,7 @@ def Yp (c : Cache) : ℝ≥0∞ := ∑ u ∈ P.accc c, P.atCls (P.sC S) c u
 
 /-- `Pre(c, b) = (1 + b / I) G + Z + Y`. -/
 def Pre (c : Cache) (b : ℕ) : ℝ≥0∞ :=
-  (1 + (b : ℝ≥0∞) / 2 ^ 127) * P.Gp S c + P.Zp S c + P.Yp S c
+  (1 + (b : ℝ≥0∞) / 2 ^ 128) * P.Gp S c + P.Zp S c + P.Yp S c
 
 variable {P S}
 
@@ -387,11 +387,11 @@ theorem pC_eq (hT : P.TierHyp S) {v : Cls} (hv : v ∈ P.classes) :
     P.pC v = S.pE (P.ctier S v) := by
   rw [pC, Tier.Sched.pE, ← cweight_of_mem hT hv, hT.K_eq]
 
-theorem ILinv_cast : ((2 ^ 127 - 2 ^ 19 : ℕ) : ℝ≥0∞) = 2 ^ 127 - 2 ^ 19 := by
+theorem ILinv_cast : ((2 ^ 128 - 2 ^ 19 : ℕ) : ℝ≥0∞) = 2 ^ 128 - 2 ^ 19 := by
   rw [ENNReal.natCast_sub]
   norm_num
 
-theorem cIE_eq_mul : Tier.cIE = 2 ^ 127 * ILinv := by
+theorem cIE_eq_mul : Tier.cIE = 2 ^ 128 * ILinv := by
   rw [Tier.cIE, ILinv, ILinv_cast, div_eq_mul_inv]
 
 theorem one_le_cIE : 1 ≤ Tier.cIE := by
@@ -437,25 +437,25 @@ theorem avg_Yp (hS : S.Valid) (hT : P.TierHyp S) :
 theorem avg_Zp (c : Cache) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         (P.cls w).elim 0 (fun v => if v ∈ P.Vc c then 2 * zT S (P.ctier S v) else 0) =
-      2 / 2 ^ 127 * P.Gp S c := by
+      2 / 2 ^ 128 * P.Gp S c := by
   rw [avg_cls, Gp, Finset.mul_sum]
   simp only [mul_ite, mul_zero]
   have hsub : P.Vc c ⊆ P.classes := Finset.filter_subset _ _
   rw [Finset.sum_ite_mem, Finset.inter_eq_right.2 hsub]
   refine Finset.sum_congr rfl fun v _ => ?_
   rw [zT, gbar, cIE_eq_mul,
-    show (2 : ℝ≥0∞) / 2 ^ 127 * (2 ^ 127 * ILinv * P.pC v * S.wbar (P.ctier S v)) =
-      (2 / 2 ^ 127 * 2 ^ 127) * (ILinv * P.pC v * S.wbar (P.ctier S v)) by ring,
+    show (2 : ℝ≥0∞) / 2 ^ 128 * (2 ^ 128 * ILinv * P.pC v * S.wbar (P.ctier S v)) =
+      (2 / 2 ^ 128 * 2 ^ 128) * (ILinv * P.pC v * S.wbar (P.ctier S v)) by ring,
     ENNReal.div_mul_cancel (pow_ne_zero _ two_ne_zero) (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)]
   ring
 
-theorem ILinv_mul_le (x : ℝ≥0∞) : ILinv * x ≤ Tier.cIE ^ 2 * x / 2 ^ 127 := by
-  have h2 : Tier.cIE * ILinv * 2 ^ 127 = Tier.cIE ^ 2 := by rw [cIE_eq_mul]; ring
+theorem ILinv_mul_le (x : ℝ≥0∞) : ILinv * x ≤ Tier.cIE ^ 2 * x / 2 ^ 128 := by
+  have h2 : Tier.cIE * ILinv * 2 ^ 128 = Tier.cIE ^ 2 := by rw [cIE_eq_mul]; ring
   rw [ENNReal.le_div_iff_mul_le (Or.inl (pow_ne_zero _ two_ne_zero))
     (Or.inl (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)), ← h2]
-  calc ILinv * x * 2 ^ 127 = 1 * (ILinv * 2 ^ 127 * x) := by ring
-    _ ≤ Tier.cIE * (ILinv * 2 ^ 127 * x) := by gcongr; exact one_le_cIE
-    _ = Tier.cIE * ILinv * 2 ^ 127 * x := by ring
+  calc ILinv * x * 2 ^ 128 = 1 * (ILinv * 2 ^ 128 * x) := by ring
+    _ ≤ Tier.cIE * (ILinv * 2 ^ 128 * x) := by gcongr; exact one_le_cIE
+    _ = Tier.cIE * ILinv * 2 ^ 128 * x := by ring
 
 /-! ## The charge of the pre-sign potential (P2, P3) -/
 
@@ -467,9 +467,9 @@ theorem pre_charge_enc (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {u₀ : Enc
     (hq : c (P.encQuery u₀) = none) {b : ℕ} (hb : 2 ≤ b) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
       P.Pre S (c.cacheQuery (P.encQuery u₀) w) (b - 2) ≤
-      P.Pre S c b + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE := by
+      P.Pre S c b + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128) * S.hpE := by
   set K := (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹
-  set β := 1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127
+  set β := 1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128
   set A := β * P.Gp S c + P.Zp S c + P.Yp S c
   set g1 := fun w : BitVec hashBits => (P.cls w).elim 0 (P.gbar S)
   set z1 := fun w : BitVec hashBits =>
@@ -487,17 +487,17 @@ theorem pre_charge_enc (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {u₀ : Enc
     rw [Finset.mul_sum]
     exact Finset.sum_congr rfl fun _ _ => mul_left_comm _ _ _
   have hβ : 1 ≤ β := le_self_add
-  have hα : β * P.Gp S c + 2 / 2 ^ 127 * P.Gp S c = (1 + (b : ℝ≥0∞) / 2 ^ 127) * P.Gp S c := by
+  have hα : β * P.Gp S c + 2 / 2 ^ 128 * P.Gp S c = (1 + (b : ℝ≥0∞) / 2 ^ 128) * P.Gp S c := by
     rw [← add_mul, add_assoc, ENNReal.div_add_div_same]
     congr 3
     exact_mod_cast Nat.sub_add_cancel hb
   have hY : ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t ≤
-      β * (Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127) :=
+      β * (Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 128) :=
     calc _ ≤ ILinv * ((2 ^ 19 - 1) * ENNReal.ofReal S.SCsum) := by
           gcongr
           exact S.sum_sck_le hS
-      _ ≤ Tier.cIE ^ 2 * ((2 ^ 19 - 1) * ENNReal.ofReal S.SCsum) / 2 ^ 127 := ILinv_mul_le _
-      _ = Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127 := by rw [mul_assoc]
+      _ ≤ Tier.cIE ^ 2 * ((2 ^ 19 - 1) * ENNReal.ofReal S.SCsum) / 2 ^ 128 := ILinv_mul_le _
+      _ = Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 128 := by rw [mul_assoc]
       _ ≤ _ := le_mul_of_one_le_left zero_le hβ
   calc ∑ w, K * P.Pre S (c.cacheQuery (P.encQuery u₀) w) (b - 2)
       ≤ ∑ w, K * (A + (β * g1 w + z1 w + y1 w)) :=
@@ -506,10 +506,10 @@ theorem pre_charge_enc (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {u₀ : Enc
         have hK : ∀ a, ∑ _w : BitVec hashBits, K * a = a := fun a => sum_inv_card_mul a
         simp only [mul_add, Finset.sum_add_distrib, hK]
     _ = A + (β * (Tier.cIE * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t) +
-          2 / 2 ^ 127 * P.Gp S c +
+          2 / 2 ^ 128 * P.Gp S c +
           ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t) := by
         rw [eβ, avg_Gp hS hT, avg_Zp, avg_Yp hS hT]
-    _ = (β * P.Gp S c + 2 / 2 ^ 127 * P.Gp S c) + P.Zp S c + P.Yp S c +
+    _ = (β * P.Gp S c + 2 / 2 ^ 128 * P.Gp S c) + P.Zp S c + P.Yp S c +
           (β * (Tier.cIE * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t) +
             ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t) := by
         ring
@@ -517,10 +517,10 @@ theorem pre_charge_enc (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {u₀ : Enc
         rw [hα]
         refine add_le_add le_rfl ?_
         calc _ ≤ β * (Tier.cIE * ENNReal.ofReal S.Hsum) +
-              β * (Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127) :=
+              β * (Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 128) :=
               add_le_add (by gcongr; exact S.sum_wbar_le hS) hY
           _ = β * (Tier.cIE * ENNReal.ofReal S.Hsum +
-              Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127) := (mul_add _ _ _).symm
+              Tier.cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 128) := (mul_add _ _ _).symm
           _ ≤ β * S.hpE := by gcongr; exact S.Hprime_le hS
 
 /-- **P3.** A query at no index point leaves `Pre` unchanged. -/

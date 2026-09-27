@@ -163,14 +163,19 @@ def topPair (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256
 root answers `RA`. -/
 def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (RA : ℕ → BitVec 256)
     (c : ℕ) : E :=
-  if c < 48 then 0
+  if c = 47 then cV 3
+  else if c < 48 then 0
   else if c=48 then oneV
   else if c=49 then gV
   else if 51 ≤ c ∧ c < 72 then cV (c-50)
   else if c=80 then loC y0
   else if c=81 then hiC y0
+  else if c = 105 then cV 1
+  else if c = 106 then cV 2
+  else if c = 107 then cV 4
   else if 100 ≤ c ∧ c < 113 then fpat (c-100) (hxs T (idxOf y0) (c-100+1))
   else if 120 ≤ c ∧ c < 132 then natV (ofDigitsW gb (fun w => hxs T (idxOf y0) (w+1)) (c-120+1))
+  else if 140 ≤ c ∧ c < 143 then fpat (c-135) (hxs T (idxOf y0) (c-135+1))
   else if 160 ≤ c ∧ c < 174 then ofK (gpow (ent (c-160) (hxs T (idxOf y0) (c-160))))
   else if 180 ≤ c ∧ c < 194 then ofK (gpow (ent (c-180) (hxs T (idxOf y0) (c-180))+1))
   else if 200 ≤ c ∧ c < 214 then gpV T (idxOf y0) (c-200)

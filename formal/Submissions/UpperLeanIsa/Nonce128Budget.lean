@@ -1,8 +1,8 @@
 import Submissions.UpperLeanIsa.TierKernel
 
-/-! Algebra for a proposed 128-bit signing nonce. This proves only the budget
-inequalities. The current scheme still uses a 127-bit nonce; applying these
-lemmas requires updating its encoding, signing-row analysis, and machine proof. -/
+/-! Standalone algebra for the 128-bit signing nonce. The same inequalities are
+implemented for general schedules in TierKernel; LayerScheme and the fused
+machine now use the full nonce and the 5504-bit wire format. -/
 
 namespace OptimalOTS.LeanIsaBaseline.Layer.Tier.Nonce128
 

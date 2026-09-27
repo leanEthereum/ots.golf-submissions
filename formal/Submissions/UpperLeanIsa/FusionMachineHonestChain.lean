@@ -12,7 +12,7 @@ open OptimalOTS.HLG3 (natV ans inputWord_len_of)
 open OptimalOTS.LeanIsa (cellBits cellOfBits cellBits_cellOfBits blake2sQuery hashInput inputWord OracleCompressCells)
 noncomputable section
 variable {P : Fusion.Params} {T : Tab} {f : HashTable} {pk : PublicKey} {m : Message} {bits : List Bool}
-variable (hT : T.Hyp) (hC : Compat P T) (hlen : bits.length=5503)
+variable (hT : T.Hyp) (hC : Compat P T) (hlen : bits.length=5504)
   (hacc : P.codec.Accepted (effective (IF P f pk m bits)))
 
 include hT hC hacc in

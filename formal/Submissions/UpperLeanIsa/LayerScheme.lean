@@ -7,8 +7,8 @@ import VCVio.OracleComp.Constructions.SampleableType
 # Layer schemes with a 127-bit effective index
 
 The 42 chains hold 128-bit words. Accepted remaining-step digits sum to a fixed layer,
-forming an antichain. Index queries use the zero-padded 127-bit nonce; answer bits 1..127
-select the effective index. The signature has 42 words plus the nonce, totaling 5503 bits.
+forming an antichain. Index queries use the 128-bit nonce; answer bits 1..127
+select the effective index. The signature has 42 words plus the nonce, totaling 5504 bits.
 Signing makes 2^19 trials at fresh untried nonces and keeps the accepted trial of least weight
 (the number of accepted indices with its digits), the earliest among equals.
 
@@ -31,20 +31,19 @@ namespace OptimalOTS.LeanIsaBaseline.Layer
 
 /-- A 128-bit chain word (one canonical cell). -/
 abbrev Word := BitVec 128
-/-- The signing nonce: 127 bits, zero-padded in its machine cell. -/
-abbrev Nonce := BitVec 127
+/-- The signing nonce: one full 128-bit machine cell. -/
+abbrev Nonce := BitVec 128
 
 /-- Canonical nonce word consumed by the fixed-width hash input. -/
-def nonceWord (η : Nonce) : Word := (0 : BitVec 1) ++ η
+def nonceWord (η : Nonce) : Word := η
 
 theorem nonceWord_injective : Function.Injective nonceWord := by
   intro a b h
-  have hh := congrArg (fun w : Word => w.extractLsb' 0 127) h
-  simpa only [nonceWord, BitVec.extractLsb'_append_eq_right] using hh
+  exact h
 /-- Number of chains. -/
 abbrev numChains : ℕ := 42
 /-- Signature length in bits: 42 words and the nonce. -/
-def sigBits : ℕ := 5503
+def sigBits : ℕ := 5504
 /-- Maximal number of signing trials: `signBudget / blockCost 896`. -/
 def trials : ℕ := 2 ^ 19
 
@@ -199,7 +198,7 @@ def decodeWord (bits : List Bool) (k : Fin numChains) : Word :=
   ofBits 128 ((bits.drop (128 * k.val)).take 128)
 
 /-- The nonce: signature cell 42 (machine cell 46). -/
-def decodeNonce (bits : List Bool) : Nonce := ofBits 127 ((bits.drop 5376).take 127)
+def decodeNonce (bits : List Bool) : Nonce := ofBits 128 ((bits.drop 5376).take 128)
 
 namespace Params
 

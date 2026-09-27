@@ -1,6 +1,6 @@
-import Submissions.UpperLeanIsa.LengthBounds
+import Submissions.UpperLeanIsa.LengthBounds128
 
-namespace OptimalOTS.HLG3.LengthGate
+namespace OptimalOTS.HLG3.LengthGate128
 open LeanerVM.Parameters LeanerVM.Semantics
 set_option maxHeartbeats 2000000
 
@@ -19,7 +19,8 @@ attribute [local irreducible] block1 block129 block257 block385 block513 block64
 
 theorem bounded_log {n : Nat} (h0 : 0 < n) (hn : n ≤ 5505) :
     ∃ e, gpow e = (BitVec.ofNat 64 n : K) ∧ e < ordG ∧
-      (n = 5503 ∨ 2^32 ≤ (e + ordG - 4674821839435376859 + 48) % ordG) := by
+      (n = 5504 ∨ 2^32 ≤ (e + ordG - 1434881718044321323 + 48) % ordG ∨
+        (n, (e + ordG - 1434881718044321323 + 48) % ordG) ∈ aliases) := by
   change ∃ e, Good (n,e)
   by_cases h1 : n < 129
   · exact from_block block1 block1_good block1_cover (by omega) h1
@@ -109,4 +110,4 @@ theorem bounded_log {n : Nat} (h0 : 0 < n) (hn : n ≤ 5505) :
   · exact from_block block5377 block5377_good block5377_cover (by omega) h5377
   exact from_block block5505 block5505_good block5505_cover (by omega) (by omega)
 
-end OptimalOTS.HLG3.LengthGate
+end OptimalOTS.HLG3.LengthGate128

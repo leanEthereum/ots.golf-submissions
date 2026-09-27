@@ -15,5 +15,8 @@ lake build Submissions.UpperLeanIsa.Solution
 ```
 
 `Solution.lean` is the competition entry point and `claim.txt` contains the score.
-The root keeps the 1149 revision's consolidated length certificates and adjacent ordering
-checks. Clean-build timing and a hosted run for 1138 remain to be measured.
+This local revision expands the nonce to 128 bits and relocates the length gate's alias
+cells without adding cycles. Its complete certificate passes local compilation, exact
+export comparison, axiom auditing and fresh kernel replay;
+the hosted 1138 record used the preceding 127-bit nonce revision. See the notes for
+the proof changes and research still needed for 1110.

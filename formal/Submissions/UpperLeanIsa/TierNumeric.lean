@@ -8,7 +8,7 @@ A tier schedule `S` lists, for the tiers `t < S.T` in ascending order of weight,
 `S.N t` of classes of the tier, together with outward-rounded rational bounds on the powers
 `ybar t ^ 2 ^ 19` and the literals `hp` (the collision slope `H'`), `k1` (the linear slope `κ₁`)
 and `b0` (the knee of the quadratic budget term). `Sched.Valid` is the list of exact conditions
-used by the security proof: the row has `2 ^ 127` nonces, signing makes `2 ^ 19` trials, the
+used by the security proof: the row has `2 ^ 128` nonces, signing makes `2 ^ 19` trials, the
 non-index charge is `2 ^ -128` per compression, and the final slope is at most `2 ^ -127`.
 -/
 
@@ -38,11 +38,11 @@ structure Sched where
   b0 : ℕ
 
 /-- The RowGood deviation shift `η₀ = (δ + L) / (I - L)` with `δ = 2 ^ 66`, `L = 2 ^ 19`,
-`I = 2 ^ 127`. -/
-def eta0 : ℚ := (2 ^ 66 + 2 ^ 19) / (2 ^ 127 - 2 ^ 19)
+`I = 2 ^ 128`. -/
+def eta0 : ℚ := (2 ^ 66 + 2 ^ 19) / (2 ^ 128 - 2 ^ 19)
 
 /-- The row factor `I / (I - L)`. -/
-def cI : ℚ := 2 ^ 127 / (2 ^ 127 - 2 ^ 19)
+def cI : ℚ := 2 ^ 128 / (2 ^ 128 - 2 ^ 19)
 
 namespace Sched
 
@@ -70,7 +70,7 @@ def Hbar : ℚ := cI * S.Hsum
 def SCf : ℚ := cI ^ 2 * (2 ^ 19 - 1) * S.SCsum
 
 /-- `H' = H̄ + SC_f / I`. -/
-def Hprime : ℚ := S.Hbar + S.SCf / 2 ^ 127
+def Hprime : ℚ := S.Hbar + S.SCf / 2 ^ 128
 
 /-- `f_t = (p_t - 2 ρ_N)⁺` with `ρ_N = 2 ^ -128`. -/
 def f (t : ℕ) : ℚ := max 0 (S.p t - 1 / 2 ^ 127)
@@ -82,7 +82,7 @@ def Pos : ℚ :=
 /-- The post-sign rate `κ_post = ρ_N + Pos / 2`. -/
 def kpost : ℚ := 1 / 2 ^ 128 + S.Pos / 2
 
-/-- The exact conditions (tier-proof.md §10 with `I = 2 ^ 127`, `CR = 1/2`). -/
+/-- The exact conditions (tier-proof.md §10 with `I = 2 ^ 128`, `CR = 1/2`). -/
 structure Valid : Prop where
   K_le : S.K ≤ 256
   T_le : S.T ≤ 2 ^ 64
@@ -97,8 +97,8 @@ structure Valid : Prop where
   k1_post : S.kpost ≤ S.k1
   k1_sc : S.SCf ≤ 2 * 2 ^ 19 * S.k1
   b0_pos : 1 ≤ S.b0
-  b0_le : S.hp * ((S.b0 : ℚ) - 1) ≤ 2 ^ 127 * (2 * S.k1 - S.hp)
-  kmax_le : S.k1 + S.hp / (4 * 2 ^ 127) * ((2 ^ 127 - S.b0 : ℕ) : ℚ) ^ 2 / 2 ^ 127 ≤
+  b0_le : S.hp * ((S.b0 : ℚ) - 1) ≤ 2 ^ 128 * (2 * S.k1 - S.hp)
+  kmax_le : S.k1 + S.hp / (4 * 2 ^ 128) * ((2 ^ 127 - S.b0 : ℕ) : ℚ) ^ 2 / 2 ^ 127 ≤
     1 / 2 ^ 127
   avail : (1 - S.mass S.T) ^ (2 ^ 19 - 1) ≤ 1 / 2 ^ 128
   acc_le : S.mass S.T ≤ 1 / 2 ^ 10

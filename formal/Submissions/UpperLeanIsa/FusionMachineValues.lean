@@ -142,7 +142,7 @@ variable {f : HashTable} {v : ℕ → E} {xs : ℕ → ℕ}
 include hP in
 theorem v_one : v oneCell = oneV := (hP.pro _ pro_mem_init).1
 include hP in
-theorem v_len : v lenCell = natV 5503 := (hP.pro _ pro_mem_init).2
+theorem v_len : v lenCell = natV 5504 := (hP.pro _ pro_mem_init).2
 include hP in
 theorem v_g : v gCell = gV := hP.pro _ pro_mem_g
 
@@ -177,7 +177,7 @@ theorem sentinel_bits : cellBits (ofK (gpow sentinel)) = Fusion.tagWord 46 := by
   rw [if_neg (by decide),if_neg (by decide)]
   rfl
 
-theorem length_bits : cellBits (natV 5503) = Fusion.tagWord 45 := by
+theorem length_bits : cellBits (natV 5504) = Fusion.tagWord 45 := by
   rw [HLG3.cellBits_natV]
   unfold Fusion.tagWord Fusion.domainTag
   rw [if_neg (by decide),if_pos (by rfl)]

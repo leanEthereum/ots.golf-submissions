@@ -32,7 +32,7 @@ def scB (x y q r : ℝ≥0∞) : ℕ → ℝ≥0∞
   | k + 1 => q * ((k : ℝ≥0∞) * r * y ^ (k - 1)) + x * scB x y q r k
 
 /-- the row factor I/(I-L) -/
-def cIE : ℝ≥0∞ := 2 ^ 127 / (2 ^ 127 - 2 ^ 19)
+def cIE : ℝ≥0∞ := 2 ^ 128 / (2 ^ 128 - 2 ^ 19)
 
 theorem gsum_succ (x y : ℝ≥0∞) (k : ℕ) : gsum x y (k + 1) = y ^ k + x * gsum x y k := by
   unfold gsum
@@ -116,7 +116,7 @@ theorem ofReal_Lm1 : (2 ^ 19 - 1 : ℝ≥0∞) = ENNReal.ofReal (2 ^ 19 - 1) := 
 theorem cI_pos : 0 < cI := by norm_num [cI]
 
 theorem cIE_eq : cIE = ENNReal.ofReal (cI : ℝ) := by
-  have h : ((cI : ℚ) : ℝ) = 2 ^ 127 / (2 ^ 127 - 2 ^ 19) := by simp [cI]
+  have h : ((cI : ℚ) : ℝ) = 2 ^ 128 / (2 ^ 128 - 2 ^ 19) := by simp [cI]
   rw [h, ENNReal.ofReal_div_of_pos (by norm_num), ENNReal.ofReal_sub _ (by norm_num),
     ofReal_two_pow, ofReal_two_pow, cIE]
 
@@ -146,7 +146,7 @@ def k1E : ℝ≥0∞ := ENNReal.ofReal S.k1
 def hpE : ℝ≥0∞ := ENNReal.ofReal S.hp
 
 /-- The budget `K(b) = κ₁ b + H' / (4 I) ((b - b0)⁺) ^ 2`. -/
-def Kb (b : ℕ) : ℝ≥0∞ := S.k1E * b + S.hpE / (4 * 2 ^ 127) * ((b - S.b0 : ℕ) : ℝ≥0∞) ^ 2
+def Kb (b : ℕ) : ℝ≥0∞ := S.k1E * b + S.hpE / (4 * 2 ^ 128) * ((b - S.b0 : ℕ) : ℝ≥0∞) ^ 2
 
 theorem mass_succ (t : ℕ) : S.mass (t + 1) = S.mass t + (S.N t * S.a t : ℚ) / 2 ^ S.K := by
   simp only [mass, Finset.sum_range_succ, add_div]
@@ -363,7 +363,7 @@ theorem ofReal_SCf :
     ENNReal.ofReal_pow hc, cIE_eq, ofReal_Lm1]
 
 theorem Hprime_le (hS : S.Valid) :
-    cIE * ENNReal.ofReal S.Hsum + cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 127 ≤
+    cIE * ENNReal.ofReal S.Hsum + cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 128 ≤
       S.hpE := by
   have hc : (0 : ℝ) ≤ cI := Rat.cast_nonneg.mpr cI_pos.le
   have hH : (0 : ℝ) ≤ S.Hsum := Rat.cast_nonneg.mpr (S.Hsum_nonneg hS)
@@ -411,14 +411,14 @@ theorem Kb_mono {b b' : ℕ} (h : b ≤ b') : S.Kb b ≤ S.Kb b' := by
 theorem Kb_step {n b : ℕ} (h : n ≤ b) : S.Kb (b - n) + S.k1E * n ≤ S.Kb b := by
   unfold Kb
   have hb : ((b - n : ℕ) : ℝ≥0∞) + n = b := by rw [← Nat.cast_add, Nat.sub_add_cancel h]
-  calc S.k1E * ((b - n : ℕ) : ℝ≥0∞) + S.hpE / (4 * 2 ^ 127) * ((b - n - S.b0 : ℕ) : ℝ≥0∞) ^ 2 +
+  calc S.k1E * ((b - n : ℕ) : ℝ≥0∞) + S.hpE / (4 * 2 ^ 128) * ((b - n - S.b0 : ℕ) : ℝ≥0∞) ^ 2 +
         S.k1E * n
-      = S.k1E * b + S.hpE / (4 * 2 ^ 127) * ((b - n - S.b0 : ℕ) : ℝ≥0∞) ^ 2 := by
+      = S.k1E * b + S.hpE / (4 * 2 ^ 128) * ((b - n - S.b0 : ℕ) : ℝ≥0∞) ^ 2 := by
         rw [← hb]; ring
     _ ≤ _ := by gcongr; omega
 
 theorem Kb_eq (hS : S.Valid) (b : ℕ) :
-    S.Kb b = ENNReal.ofReal ((S.k1 : ℝ) * b + (S.hp : ℝ) / (4 * 2 ^ 127) *
+    S.Kb b = ENNReal.ofReal ((S.k1 : ℝ) * b + (S.hp : ℝ) / (4 * 2 ^ 128) *
       ((b - S.b0 : ℕ) : ℝ) ^ 2) := by
   have hk : (0 : ℝ) ≤ S.k1 := Rat.cast_nonneg.mpr (S.k1_nonneg hS)
   have hh : (0 : ℝ) ≤ S.hp := Rat.cast_nonneg.mpr (S.hp_nonneg hS)
@@ -430,18 +430,18 @@ theorem Kb_eq (hS : S.Valid) (b : ℕ) :
     ENNReal.ofReal_ofNat, ofReal_two_pow, Kb, k1E, hpE]
 
 theorem Kb_step_enc (hS : S.Valid) {b : ℕ} (hb : 2 ≤ b) :
-    S.Kb (b - 2) + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE ≤ S.Kb b := by
+    S.Kb (b - 2) + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128) * S.hpE ≤ S.Kb b := by
   have hk : (0 : ℝ) ≤ S.k1 := Rat.cast_nonneg.mpr (S.k1_nonneg hS)
   have hh : (0 : ℝ) ≤ S.hp := Rat.cast_nonneg.mpr (S.hp_nonneg hS)
-  have hE : (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) =
-      ENNReal.ofReal (1 + ((b - 2 : ℕ) : ℝ) / 2 ^ 127) := by
+  have hE : (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128) =
+      ENNReal.ofReal (1 + ((b - 2 : ℕ) : ℝ) / 2 ^ 128) := by
     rw [ENNReal.ofReal_add zero_le_one (by positivity), ENNReal.ofReal_one,
       ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_natCast, ofReal_two_pow]
   rw [S.Kb_eq hS, S.Kb_eq hS, hpE, hE, ← ENNReal.ofReal_mul (by positivity),
     ← ENNReal.ofReal_add (add_nonneg (mul_nonneg hk (Nat.cast_nonneg _))
       (mul_nonneg (div_nonneg hh (by norm_num)) (sq_nonneg _))) (mul_nonneg (by positivity) hh)]
   apply ENNReal.ofReal_le_ofReal
-  have hb0 : (S.hp : ℝ) * ((S.b0 : ℝ) - 1) ≤ 2 ^ 127 * (2 * S.k1 - S.hp) := by
+  have hb0 : (S.hp : ℝ) * ((S.b0 : ℝ) - 1) ≤ 2 ^ 128 * (2 * S.k1 - S.hp) := by
     exact_mod_cast hS.b0_le
   have hb2 : ((b - 2 : ℕ) : ℝ) = b - 2 := by rw [Nat.cast_sub hb]; norm_num
   rcases le_or_gt b (S.b0 + 1) with h | h
@@ -449,22 +449,22 @@ theorem Kb_step_enc (hS : S.Valid) {b : ℕ} (hb : 2 ≤ b) :
     have hB : (b : ℝ) - 2 ≤ S.b0 - 1 := by
       have : (b : ℝ) ≤ S.b0 + 1 := by exact_mod_cast h
       linarith
-    have : ((b : ℝ) - 2) * S.hp / 2 ^ 127 ≤ 2 * S.k1 - S.hp := by
+    have : ((b : ℝ) - 2) * S.hp / 2 ^ 128 ≤ 2 * S.k1 - S.hp := by
       rw [div_le_iff₀ (by positivity)]; nlinarith
-    have hQ := mul_nonneg (div_nonneg hh (by norm_num : (0 : ℝ) ≤ 4 * 2 ^ 127))
+    have hQ := mul_nonneg (div_nonneg hh (by norm_num : (0 : ℝ) ≤ 4 * 2 ^ 128))
       (sq_nonneg ((b - S.b0 : ℕ) : ℝ))
     push_cast
-    have : (1 + ((b : ℝ) - 2) / 2 ^ 127) * S.hp = S.hp + ((b : ℝ) - 2) * S.hp / 2 ^ 127 := by
+    have : (1 + ((b : ℝ) - 2) / 2 ^ 128) * S.hp = S.hp + ((b : ℝ) - 2) * S.hp / 2 ^ 128 := by
       ring
     linarith
   · rw [Nat.cast_sub (by omega : S.b0 ≤ b - 2), Nat.cast_sub (by omega : S.b0 ≤ b), hb2]
-    have : ((S.b0 : ℝ) - 1) * S.hp / 2 ^ 127 ≤ 2 * S.k1 - S.hp := by
+    have : ((S.b0 : ℝ) - 1) * S.hp / 2 ^ 128 ≤ 2 * S.k1 - S.hp := by
       rw [div_le_iff₀ (by positivity)]; nlinarith
-    have hsq : (S.hp : ℝ) / (4 * 2 ^ 127) * ((b : ℝ) - S.b0) ^ 2 -
-        S.hp / (4 * 2 ^ 127) * ((b : ℝ) - 2 - S.b0) ^ 2 =
-        ((b : ℝ) - 2) * S.hp / 2 ^ 127 - ((S.b0 : ℝ) - 1) * S.hp / 2 ^ 127 := by
+    have hsq : (S.hp : ℝ) / (4 * 2 ^ 128) * ((b : ℝ) - S.b0) ^ 2 -
+        S.hp / (4 * 2 ^ 128) * ((b : ℝ) - 2 - S.b0) ^ 2 =
+        ((b : ℝ) - 2) * S.hp / 2 ^ 128 - ((S.b0 : ℝ) - 1) * S.hp / 2 ^ 128 := by
       field_simp; ring
-    have : (1 + ((b : ℝ) - 2) / 2 ^ 127) * S.hp = S.hp + ((b : ℝ) - 2) * S.hp / 2 ^ 127 := by
+    have : (1 + ((b : ℝ) - 2) / 2 ^ 128) * S.hp = S.hp + ((b : ℝ) - 2) * S.hp / 2 ^ 128 := by
       ring
     linarith
 
@@ -476,7 +476,7 @@ theorem Kb_le (hS : S.Valid) {b : ℕ} (hb : b ≤ 2 ^ 127) :
       div_eq_mul_inv, mul_comm]
   rw [S.Kb_eq hS, hR]
   apply ENNReal.ofReal_le_ofReal
-  have hk : (S.k1 : ℝ) + S.hp / (4 * 2 ^ 127) * ((2 ^ 127 - S.b0 : ℕ) : ℝ) ^ 2 / 2 ^ 127 ≤
+  have hk : (S.k1 : ℝ) + S.hp / (4 * 2 ^ 128) * ((2 ^ 127 - S.b0 : ℕ) : ℝ) ^ 2 / 2 ^ 127 ≤
       1 / 2 ^ 127 := by
     have h := (Rat.cast_le (K := ℝ)).mpr hS.kmax_le
     push_cast at h
@@ -495,11 +495,11 @@ theorem Kb_le (hS : S.Valid) {b : ℕ} (hb : b ≤ 2 ^ 127) :
       have huv : (b : ℝ) - S.b0 ≤ I - S.b0 := by linarith
       nlinarith [mul_nonneg (mul_nonneg hu.le (hu.le.trans huv)) (sub_nonneg.2 huv),
         mul_le_mul_of_nonneg_left (mul_self_le_mul_self hu.le huv) hB0]
-  have hA : (0 : ℝ) ≤ S.hp / (4 * 2 ^ 127) := div_nonneg hh (by norm_num)
+  have hA : (0 : ℝ) ≤ S.hp / (4 * 2 ^ 128) := div_nonneg hh (by norm_num)
   have h1 := mul_le_mul_of_nonneg_left hsq hA
   have h2 := mul_le_mul_of_nonneg_right hk (Nat.cast_nonneg b : (0 : ℝ) ≤ b)
-  have e1 : (S.hp : ℝ) / (4 * 2 ^ 127) * (((2 ^ 127 - S.b0 : ℕ) : ℝ) ^ 2 / 2 ^ 127 * b) =
-      S.hp / (4 * 2 ^ 127) * ((2 ^ 127 - S.b0 : ℕ) : ℝ) ^ 2 / 2 ^ 127 * b := by ring
+  have e1 : (S.hp : ℝ) / (4 * 2 ^ 128) * (((2 ^ 127 - S.b0 : ℕ) : ℝ) ^ 2 / 2 ^ 127 * b) =
+      S.hp / (4 * 2 ^ 128) * ((2 ^ 127 - S.b0 : ℕ) : ℝ) ^ 2 / 2 ^ 127 * b := by ring
   have e2 : (1 : ℝ) / 2 ^ 127 * b = b / 2 ^ 127 := by ring
   nlinarith
 

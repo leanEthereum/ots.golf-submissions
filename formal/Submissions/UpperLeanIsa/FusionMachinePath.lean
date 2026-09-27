@@ -109,13 +109,20 @@ theorem cinstrAt_proList (T : Tab) {t : ℕ} (ht : t < proList.length) :
 theorem cinstrAt_24 (T : Tab) : cinstrAt T 24 = .dispatch 0 := by
   rw [cinstrAt_pro T (by omega)]; unfold prologue; rw [if_neg (by omega), if_pos rfl]
 
+/-- The existing cost constants are checked before the full-nonce length gate. -/
+theorem cinstrAt_setup (T : Tab) {s : ℕ} (hs : s < 15) :
+    cinstrAt T s = .setc (cCell (s + 1)) (cV (s + 1)) := by
+  rw [cinstrAt_pro T (by omega)]
+  unfold prologue proList
+  interval_cases s <;> rfl
+
 theorem pro_mem_init : CInstr.init ∈ proList := by unfold proList; simp
 theorem pro_mem_g : CInstr.setc gCell gV ∈ proList := by unfold proList; simp
 theorem pro_mem_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 16) (h16 : c ≠ 16) :
     CInstr.setc (cCell c) (cV c) ∈ proList := by
   unfold proList
   simp only [List.mem_append, List.mem_map, List.mem_range]
-  left; left; right
+  left; left; left
   exact ⟨c - 1, by omega, by rw [Nat.sub_add_cancel h1]⟩
 
 theorem pro_mem_frame {f : ℕ} (hf : f < 15) : CInstr.setc (fCell f) (frameV f) ∈ proList := by
@@ -530,34 +537,53 @@ section Prefix
 variable {κ : ℕ} {L : MemImage κ}
 
 /-- The relations of a straight prefix of a completing run. -/
-theorem rel_prefix (Sm : Sem) (B : BlakeRel)
-    (hst : ∀ s pc x, (cinstrAt T s).straight = true →
+theorem rel_prefix (Sm : Sem) (B : BlakeRel) (lim : ℕ)
+    (hst : ∀ s, s < lim → ∀ pc x, (cinstrAt T s).straight = true →
       x ∈ Sm.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr) →
         x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelB B (Lx L))) :
-    ∀ a t n c, (∀ i < a, (cinstrAt T (t + i)).straight = true) → t + a < sentinel →
+    ∀ a t n c, t + a ≤ lim →
+      (∀ i < a, (cinstrAt T (t + i)).straight = true) → t + a < sentinel →
       some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow t, 1⟩) →
         ∀ i < a, (cinstrAt T (t + i)).RelB B (Lx L) := by
   intro a
   induction a with
-  | zero => intro t n c _ _ _ i hi; omega
+  | zero => intro t n c _ _ _ _ i hi; omega
   | succ a ih =>
-    intro t n c hstr hta h i hi
+    intro t n c hlim hstr hta h i hi
     cases n with
     | zero => rw [runCost_zero_slot L (by omega)] at h; exact absurd h Sm.some_not_pure_none
     | succ m =>
       have hs0 : (cinstrAt T t).straight = true := by simpa using hstr 0 (by omega)
       rw [runCost_slot L m (by omega), Sm.bind_iff] at h
       obtain ⟨x, hx, hc⟩ := h
-      rcases hst t _ x hs0 hx with rfl | ⟨rfl, hrel⟩
+      rcases hst t (by omega) _ x hs0 hx with rfl | ⟨rfl, hrel⟩
       · exact absurd hc Sm.some_not_pure_none
       · rw [Option.elim_some, g_mul_gpow] at hc
         obtain ⟨c', -, hc'⟩ := Sm.some_map_add hc
         rcases Nat.eq_zero_or_pos i with rfl | hi0
         · simpa using hrel
-        · have := ih (t + 1) m c' (fun j hj => by
+        · have := ih (t + 1) m c' (by omega) (fun j hj => by
             rw [show t + 1 + j = t + (j + 1) by omega]; exact hstr (j + 1) (by omega))
             (by omega) hc' (i - 1) (by omega)
           rwa [show t + 1 + (i - 1) = t + i by omega] at this
+
+/-- A completing prefix establishes the constants that reject the four long aliases. -/
+theorem prepinned_of_sem (Sm : Sem) (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
+    {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow 0, 1⟩)) :
+    PrePinned (Lx L) := by
+  have hp := rel_prefix Sm trueRel 15 (fun s hs pc x _ hx => by
+    rw [cinstrAt_setup T hs, exec_setc h16 hκ L pc (by
+      simp only [CInstr.Bounded, cCell]; split_ifs <;> omega), Sm.pure_iff] at hx
+    rw [cinstrAt_setup T hs]
+    split_ifs at hx with hr
+    · exact Or.inr ⟨hx, hr⟩
+    · exact Or.inl hx) 15 0 n c (by omega)
+    (fun i hi => by rw [Nat.zero_add, cinstrAt_setup T hi]; rfl)
+    (by unfold sentinel; omega) h
+  intro k hk hk4
+  have hh := hp (k - 1) (by omega)
+  rw [Nat.zero_add, cinstrAt_setup T (by omega), Nat.sub_add_cancel hk] at hh
+  exact hh
 
 /-- A completing run from slot `0` has the constants `ONE` and `F_f` pinned. -/
 theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
@@ -566,7 +592,7 @@ theorem pinned_of_sem (Sm : Sem) (B : BlakeRel)
         x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelB B (Lx L)))
     {n c : ℕ} (h : some c ∈ Sm.S (LeanIsa.runCost (program T) L n ⟨gpow 0, 1⟩)) :
     Pinned (Lx L) := by
-  have hp := rel_prefix Sm B hst 24 0 n c
+  have hp := rel_prefix Sm B 24 (fun s _ => hst s) 24 0 n c (by omega)
     (fun i hi => by
       rw [cinstrAt_proList T (by rw [proList_length]; exact hi)]
       exact proList_straight _ (List.getElem_mem _))

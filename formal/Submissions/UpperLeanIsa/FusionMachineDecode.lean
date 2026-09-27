@@ -95,6 +95,10 @@ theorem xhCell_lt {k : ℕ} (hk : k < 42) : xhCell k + 1 < 346 := topCell_lt hk
 theorem dep_bounds : ∀ k < 42, depCv k + 1 < 346 ∧ fusedMdCell k < 214 ∧
     ∀ i < 5, depTop k i < 42 := by decide
 
+theorem cCell_bound {c : ℕ} (hc : c < 64) : cCell c + 1 < 128 := by
+  unfold cCell
+  split_ifs <;> omega
+
 theorem chainOp_bounded {k d t dst : ℕ} (hk : k < 42) (ht : t < d) (hd : d ≤ 64)
     (hdst : dst + 1 < 2^16) : (chainOp k d t dst).Bounded := by
   have hx := xcBase_bound k hk
@@ -106,8 +110,12 @@ theorem chainOp_bounded {k d t dst : ℕ} (hk : k < 42) (ht : t < d) (hd : d ≤
   have b7 := topCell_lt (k := 7) (by decide)
   have hp : tpos k d t / 81 < 64 := by
     have := OFFT_bound k hk; unfold tpos; omega
+  have hc0 := cCell_bound (c := tpos k d t % 9) (by omega)
+  have hc1 := cCell_bound (c := tpos k d t / 9 % 9) (by omega)
+  have hc2 := cCell_bound hp
+  have hcv : cCell 1 + 1 < 128 := by decide
   unfold chainOp
-  split_ifs <;> simp only [CInstr.Bounded,cCell,oneCell] <;>
+  split_ifs <;> simp only [CInstr.Bounded,oneCell] <;>
     (try split_ifs) <;> (simp only [wCell,xcCell]; omega)
 
 theorem rtopCell_lt {k d : ℕ} (hk : k < 42) : rtopCell k d < 346 := by
@@ -120,7 +128,7 @@ theorem rt_lt (T : Tab) {u v : ℕ} {z : Bool} {j : ℕ} (_hu : u < 13) (hj : j 
   · exact rtopCell_lt (by omega)
   · exact rtopCell_lt (by omega)
 
-theorem root_cells : ∀ u < 13, rootCv (hcall u)+1 < 346 ∧ stCell (hcall u)+1 < 346 ∧ rootMdCell (hcall u) < 72 := by decide
+theorem root_cells : ∀ u < 13, rootCv (hcall u)+1 < 346 ∧ stCell (hcall u)+1 < 346 ∧ rootMdCell (hcall u) < 108 := by decide
 
 theorem rootIns_bounded (T : Tab) {u v : ℕ} {z : Bool} (hu : u < 13) :
     ∀ x ∈ rootIns T u v z, x.Bounded := by
@@ -185,14 +193,14 @@ theorem proList_straight : ∀ x ∈ proList, x.straight = true := by
   unfold proList at hx
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hx
-  rcases hx with (((rfl | rfl) | ⟨c, -, rfl⟩) | ⟨c,hc,rfl⟩) | rfl | rfl <;> rfl
+  rcases hx with ((⟨c, -, rfl⟩ | (rfl | rfl)) | ⟨c,hc,rfl⟩) | rfl | rfl <;> rfl
 
 theorem proList_bounded : ∀ x ∈ proList, x.Bounded := by
   intro x hx
   unfold proList at hx
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hx
-  rcases hx with (((rfl | rfl) | ⟨c,hc,rfl⟩) | ⟨c,hc,rfl⟩) | rfl | rfl <;>
+  rcases hx with ((⟨c,hc,rfl⟩ | (rfl | rfl)) | ⟨c,hc,rfl⟩) | rfl | rfl <;>
     simp only [CInstr.Bounded, cCell, oneCell, lenCell, gCell, msgLo, msgHi,
       nonceCell, pkCell, idxCell, hCell, h1Cell] <;> (try split_ifs) <;> (try simp only [List.mem_cons,List.not_mem_nil,or_false] at hc) <;> omega
 

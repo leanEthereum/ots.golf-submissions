@@ -282,10 +282,10 @@ theorem ΦA_charge (hP : P.SecurityHyp) (hS : S.Valid) (hT : P.codec.TierHyp S) 
     rw [h4]
     calc (∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
             P.codec.Pre S (c.cacheQuery (P.codec.encQuery u₀) u) (b - 2)) + P.codec.PsiE S c + S.Kb (b - 2)
-        ≤ (P.codec.Pre S c b + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE) + P.codec.PsiE S c +
+        ≤ (P.codec.Pre S c b + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128) * S.hpE) + P.codec.PsiE S c +
             S.Kb (b - 2) := by gcongr
       _ = P.codec.Pre S c b + P.codec.PsiE S c +
-            (S.Kb (b - 2) + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 127) * S.hpE) := by ring
+            (S.Kb (b - 2) + (1 + ((b - 2 : ℕ) : ℝ≥0∞) / 2 ^ 128) * S.hpE) := by ring
       _ ≤ P.codec.Pre S c b + P.codec.PsiE S c + S.Kb b := by gcongr
   · have hne : ∀ u, q ≠ P.codec.encQuery u := fun u h => henc ⟨u, h⟩
     have h1 := P.hiddenHit_charge hP beforeSigning_valid v (P.fiber₀ v) (fun ξ h => h) c q

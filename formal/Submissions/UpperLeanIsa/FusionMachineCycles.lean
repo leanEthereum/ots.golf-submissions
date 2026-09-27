@@ -115,7 +115,8 @@ theorem cycles (hT : T.Hyp) (S : LeanIsa.Submission) (hS : S.program = program T
   intro pk m σ κ h16 hκ L n cost h
   unfold LeanIsa.Submission.exec at h
   rw [hS, initial_eq] at h
-  have hpin := pinned_of_sem suppSem trueRel (supp_straight hT h16 hκ (lengthDomain_load h16 pk m σ L)) h
+  have hpre := prepinned_of_sem suppSem h16 hκ h
+  have hpin := pinned_of_sem suppSem trueRel (supp_straight hT h16 hκ (lengthDomain_load h16 pk m σ L) hpre) h
   obtain ⟨hV, hP, hL, -, hc⟩ := walk_full hT (walk_of_supp hT h16 hκ (lengthDomain_load h16 pk m σ L) hpin (by norm_num) h)
   have h1 := totalCost_eq hT hV (layer_of_facts hT hV hP hL)
   rw [boundary_eq]

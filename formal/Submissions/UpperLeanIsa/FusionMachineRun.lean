@@ -46,7 +46,7 @@ def trueRel : BlakeRel := fun _ _ _ _ _ _ => True
 /-- The relation an instruction asserts on the cell values `v` in frame `1`. A dispatch's is its
 landing; entries (only executable in their frame) and the trap never hold. -/
 def CInstr.RelB (B : BlakeRel) (v : ℕ → E) : CInstr → Prop
-  | .init => v oneCell = oneV ∧ v lenCell = natV 5503
+  | .init => v oneCell = oneV ∧ v lenCell = natV 5504
   | .xor a b c => v c = v a + v b
   | .mul a b c => v c = v a * v b
   | .setc a k => v a = k
@@ -72,16 +72,37 @@ theorem CInstr.relNH_of_relB {B : BlakeRel} {v : ℕ → E} {ci : CInstr} (h : c
 /-- The constants every jump relies on: `ONE` and the 15 frames. -/
 def Pinned (v : ℕ → E) : Prop := v oneCell = oneV ∧ ∀ k < 15, v (fCell k) = frameV k
 
-/-- The loader's capped length, including every oversized raw signature. -/
-def LengthDomain (v : ℕ → E) : Prop := ∃ n ≤ 5505, v lenCell = natV n
+/-- The loader's capped length and its zero padding at short-length aliases. -/
+def LengthDomain (v : ℕ → E) : Prop := ∃ n ≤ 5505, v lenCell = natV n ∧
+  ∀ a, (n,a) ∈ OptimalOTS.HLG3.LengthGate128.lowAliases → v a = 0
+
+/-- Four existing cost constants rule out the remaining length aliases. -/
+def PrePinned (v : ℕ → E) : Prop := ∀ c, 1 ≤ c → c ≤ 4 → v (cCell c) = cV c
+
+theorem prepinned_of_pinned {v : ℕ → E} (h : Pinned v) : PrePinned v := by
+  intro c hc hc4
+  have hf := h.2 (c - 1) (by omega)
+  simpa only [fCell, frameV_eq_cV, Nat.sub_add_cancel hc] using hf
+
+theorem lengthDomain_exact {v : ℕ → E} (h : v lenCell = natV 5504) : LengthDomain v := by
+  refine ⟨5504, by omega, h, ?_⟩
+  intro a ha
+  simp [OptimalOTS.HLG3.LengthGate128.lowAliases] at ha
 
 theorem lengthDomain_load {κ : ℕ} (h16 : 16 ≤ κ) (pk : PublicKey) (m : Message)
     (σ : List Bool) (L : MemImage κ) : LengthDomain (Lx (LeanIsa.loadInput pk m σ L)) := by
-  refine ⟨min σ.length (OptimalOTS.maxSignatureBits + 1), Nat.min_le_right _ _, ?_⟩
-  have hc : lenCell < 2^κ := lt_of_lt_of_le (by decide : lenCell < 2^16)
-    (Nat.pow_le_pow_right (by norm_num) h16)
-  rw [Lx, dif_pos hc, LeanIsa.loadInput, if_pos (by change lenCell < LeanIsa.inputCells; decide)]
-  exact inputWord_len pk m σ
+  refine ⟨min σ.length (OptimalOTS.maxSignatureBits + 1), Nat.min_le_right _ _, ?_, ?_⟩
+  · have hc : lenCell < 2^κ := lt_of_lt_of_le (by decide : lenCell < 2^16)
+      (Nat.pow_le_pow_right (by norm_num) h16)
+    rw [Lx, dif_pos hc, LeanIsa.loadInput, if_pos (by change lenCell < LeanIsa.inputCells; decide)]
+    exact inputWord_len pk m σ
+  · intro a ha
+    obtain ⟨hn, h4, h47, hbits⟩ := OptimalOTS.HLG3.LengthGate128.low_alias_bounds _ ha
+    have hs : σ.length ≤ 128 * (a - 4) := by unfold maxSignatureBits at *; omega
+    have haκ : a < 2^κ := lt_of_lt_of_le (by omega : a < 2^16)
+      (Nat.pow_le_pow_right (by norm_num) h16)
+    rw [Lx, dif_pos haκ, LeanIsa.loadInput, if_pos (by change a < LeanIsa.inputCells; exact h47)]
+    exact OptimalOTS.HLG3.inputWord_suffix_zero pk m σ h4 hs
 
 /-! ## The successor slot -/
 
@@ -214,15 +235,15 @@ theorem exec_setc {a : ℕ} {k : E} (hb : (CInstr.setc a k).Bounded) :
   exact guard_some _
 
 /-- One indirect read checks the capped length and asserts ONE = fp = 1. -/
-theorem exec_init (hd : LengthDomain (Lx L)) :
+theorem exec_init (hd : LengthDomain (Lx L)) (hp : PrePinned (Lx L)) :
     LeanIsa.execute L ⟨pc, 1⟩ CInstr.init.toInstr =
-      pure (if Lx L oneCell = oneV ∧ Lx L lenCell = natV 5503
+      pure (if Lx L oneCell = oneV ∧ Lx L lenCell = natV 5504
         then some ⟨g * pc, 1⟩ else none) := by
-  obtain ⟨n, hn, hv⟩ := hd
-  have hnat : natV n = ofK (BitVec.ofNat 64 n) := OptimalOTS.HLG3.LengthGate.natV_ofK hn
+  obtain ⟨n, hn, hv, hz⟩ := hd
+  have hnat : natV n = ofK (BitVec.ofNat 64 n) := OptimalOTS.HLG3.LengthGate128.natV_ofK hn
   have hk : IsInK (natV n) := by rw [hnat]; exact isInK_ofK _
   have hl : (natV n).limb 0 = BitVec.ofNat 64 n := by rw [hnat]; exact limb_ofK_zero _
-  have heq : natV n = natV 5503 ↔ n = 5503 := by
+  have heq : natV n = natV 5504 ↔ n = 5504 := by
     constructor
     · intro h
       have h' := congrArg (fun x => (LeanIsa.cellBits x).toNat) h
@@ -232,21 +253,52 @@ theorem exec_init (hd : LengthDomain (Lx L)) :
       exact h'
     · rintro rfl; rfl
   show pure (LeanerVM.Semantics.execute L ⟨pc, 1⟩
-    (.deref (gpow lenCell) OptimalOTS.HLG3.LengthGate.scale (gpow lenCell) .fp)) = _
+    (.deref (gpow lenCell) OptimalOTS.HLG3.LengthGate128.scale (gpow lenCell) .fp)) = _
   simp only [LeanerVM.Semantics.execute, read_one h16 hκ L (by decide : lenCell < 2^16),
     Option.bind_eq_bind, Option.bind_some, hv]
   rw [show (guard (IsInK (natV n)) : Option Unit) = some () from if_pos hk]
   simp only [Option.bind_some, hl]
-  by_cases he : n = 5503
+  by_cases he : n = 5504
   · subst n
-    rw [OptimalOTS.HLG3.LengthGate.target_address,
+    rw [OptimalOTS.HLG3.LengthGate128.target_address,
       show L.read (gpow 48) = some (Lx L oneCell) from by
         change L.read (gpow oneCell) = some (Lx L oneCell)
         simpa only [one_mul] using read_one h16 hκ L (by decide : oneCell < 2^16)]
     simp only [Option.bind_some, LeanerVM.Semantics.derefSource, heq, and_true]
     exact congrArg pure (guard_some _)
-  · rw [OptimalOTS.HLG3.LengthGate.wrong_length_read hκ hn he L]
-    simp [heq, he]
+  · have hrne := OptimalOTS.HLG3.LengthGate128.wrong_length_read_ne_one hκ hn he L
+      (fun a ha => by
+        have hb : ∀ p ∈ OptimalOTS.HLG3.LengthGate128.aliases, p.2 < 2^16 := by decide
+        have hc : a < 2^κ := lt_of_lt_of_le (hb _ ha)
+          (Nat.pow_le_pow_right (by norm_num) h16)
+        rw [show L.read (gpow a) = some (Lx L a) from read_gpow_some hκ L
+          (by rw [Nat.mod_eq_of_lt (by have := hb _ ha; unfold ordG; omega)]) hc]
+        intro h
+        have h1 : Lx L a = oneV := Option.some.inj h
+        have cases_alias : ∀ p ∈ OptimalOTS.HLG3.LengthGate128.aliases,
+            p ∈ OptimalOTS.HLG3.LengthGate128.lowAliases ∨
+              ∃ c : Fin 4, p.2 = cCell (c.val + 1) := by decide
+        rcases cases_alias _ ha with ha0 | ⟨c, hc⟩
+        · rw [hz a ha0] at h1
+          exact ofK_one_ne_zero h1.symm
+        · change a = cCell (c.val + 1) at hc
+          rw [hc, hp (c.val + 1) (by omega) (by omega), ← cV_zero] at h1
+          have hfac := ofK_injective h1
+          change LeanIsaFieldRescale.costFactor (c.val + 1) =
+            LeanIsaFieldRescale.costFactor 0 at hfac
+          have := LeanIsaFieldRescale.factor_injective (by omega) (by omega) hfac
+          omega)
+    cases hr : L.read ((BitVec.ofNat 64 n : K) * OptimalOTS.HLG3.LengthGate128.scale) with
+    | none => simp [hr, heq, he]
+    | some z =>
+      have hz1 : z ≠ ofK 1 := by intro hh; exact hrne (hr.trans (congrArg some hh))
+      simp only [Option.bind_some, LeanerVM.Semantics.derefSource]
+      simp [heq, he]
+      intro a ha
+      unfold guard at ha
+      have hz1' : z ≠ ofK (1#64) := hz1
+      erw [if_neg hz1'] at ha
+      cases ha
 
 theorem exec_blake {m0 m1 m2 m3 cv out md : ℕ} (hb : (CInstr.blake m0 m1 m2 m3 cv out md).Bounded) :
     LeanIsa.execute L ⟨pc, 1⟩ (CInstr.blake m0 m1 m2 m3 cv out md).toInstr =
@@ -653,7 +705,7 @@ theorem walk_of_sem (Sm : Sem) (B : BlakeRel) (hpin : Pinned (Lx L))
 
 include hT h16 hκ in
 /-- The fixed-table straight-line step. -/
-theorem sim_straight (hd : LengthDomain (Lx L)) (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
+theorem sim_straight (hd : LengthDomain (Lx L)) (hp : PrePinned (Lx L)) (f : HashTable) (s : ℕ) (pc : K) (x : Option (Regs K))
     (hs : (cinstrAt T s).straight = true)
     (hx : x ∈ (simSem f).S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr)) :
     x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).Rel f (Lx L)) := by
@@ -662,7 +714,7 @@ theorem sim_straight (hd : LengthDomain (Lx L)) (f : HashTable) (s : ℕ) (pc : 
   change x ∈ support (simulateQ (unifFwdAnswerImpl f) _) at hx
   cases ci with
   | init =>
-    rw [exec_init h16 hκ L pc hd, simulateQ_pure, mem_support_pure_iff] at hx
+    rw [exec_init h16 hκ L pc hd hp, simulateQ_pure, mem_support_pure_iff] at hx
     split_ifs at hx with hr
     · exact Or.inr ⟨hx, hr⟩
     · exact Or.inl hx
@@ -691,7 +743,7 @@ theorem sim_straight (hd : LengthDomain (Lx L)) (f : HashTable) (s : ℕ) (pc : 
 
 include hT h16 hκ in
 /-- The cache-free straight-line step. -/
-theorem supp_straight (hd : LengthDomain (Lx L)) (s : ℕ) (pc : K) (x : Option (Regs K))
+theorem supp_straight (hd : LengthDomain (Lx L)) (hp : PrePinned (Lx L)) (s : ℕ) (pc : K) (x : Option (Regs K))
     (hs : (cinstrAt T s).straight = true)
     (hx : x ∈ suppSem.S (LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr)) :
     x = none ∨ (x = some ⟨g * pc, 1⟩ ∧ (cinstrAt T s).RelNH (Lx L)) := by
@@ -700,7 +752,7 @@ theorem supp_straight (hd : LengthDomain (Lx L)) (s : ℕ) (pc : K) (x : Option 
   change x ∈ support _ at hx
   cases ci with
   | init =>
-    rw [exec_init h16 hκ L pc hd, mem_support_pure_iff] at hx
+    rw [exec_init h16 hκ L pc hd hp, mem_support_pure_iff] at hx
     split_ifs at hx with hr
     · exact Or.inr ⟨hx, hr⟩
     · exact Or.inl hx
@@ -734,14 +786,14 @@ theorem walk_of_sim (hd : LengthDomain (Lx L)) (f : HashTable) (hpin : Pinned (L
     (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
       (LeanIsa.runCost (program T) L n ⟨gpow s, 1⟩))) :
     Walk T (oracleRel f) (Lx L) n s c :=
-  walk_of_sem hT h16 hκ (simSem f) (oracleRel f) hpin (sim_straight hT h16 hκ hd f) n s c hs h
+  walk_of_sem hT h16 hκ (simSem f) (oracleRel f) hpin (sim_straight hT h16 hκ hd (prepinned_of_pinned hpin) f) n s c hs h
 
 include hT h16 hκ in
 /-- **Walk of a `support` run.** -/
 theorem walk_of_supp (hd : LengthDomain (Lx L)) (hpin : Pinned (Lx L)) {n s c : ℕ} (hs : s < 2 ^ 18)
     (h : some c ∈ support (LeanIsa.runCost (program T) L n ⟨gpow s, 1⟩)) :
     Walk T trueRel (Lx L) n s c :=
-  walk_of_sem hT h16 hκ suppSem trueRel hpin (supp_straight hT h16 hκ hd) n s c hs h
+  walk_of_sem hT h16 hκ suppSem trueRel hpin (supp_straight hT h16 hκ hd (prepinned_of_pinned hpin)) n s c hs h
 
 include hT h16 hκ in
 /-- **Run of a walk.** Under a fixed table, a walk whose relations hold is a completing run of
@@ -765,9 +817,9 @@ theorem sim_of_walk (f : HashTable) (hpin : Pinned (Lx L)) {n s c : ℕ}
         intro hR hb
         cases ci with
         | init =>
-          have hd : LengthDomain (Lx L) := ⟨5503, by omega, hR.2⟩
-          have hR' : Lx L oneCell = oneV ∧ Lx L lenCell = natV 5503 := hR
-          rw [exec_init h16 hκ L _ hd, if_pos hR', simulateQ_pure]
+          have hd : LengthDomain (Lx L) := lengthDomain_exact hR.2
+          have hR' : Lx L oneCell = oneV ∧ Lx L lenCell = natV 5504 := hR
+          rw [exec_init h16 hκ L _ hd (prepinned_of_pinned hpin), if_pos hR', simulateQ_pure]
         | xor a b c =>
           have hR' : Lx L c = Lx L a + Lx L b := hR
           rw [exec_xor h16 hκ L _ hb, if_pos hR', simulateQ_pure]

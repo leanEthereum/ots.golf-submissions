@@ -144,7 +144,7 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
     bits.length = sigBits ∧ P.codec.Accepted (idxValue f P m (decodeNonce bits) pk) ∧
       rootValue f P (topsOf f P (idxValue f P m (decodeNonce bits) pk) bits) = pk := by
   -- the length
-  have hlen : bits.length = 5503 :=
+  have hlen : bits.length = 5504 :=
     length_of_inputWord_len pk m bits ((hpin 3 (by omega)).symm.trans (v_len hP))
   -- the index
   have hidx : (ans f (P.codec.idxInput m (decodeNonce bits) pk)).extractLsb' 0 128 = cellBits (v idxCell) := by
@@ -275,7 +275,8 @@ theorem fixed_sound (hT : T.Hyp) (hC : Compat P T) {κ : ℕ} (h16 : 16 ≤ κ) 
     bits.length = sigBits ∧ P.codec.Accepted (idxValue f P m (decodeNonce bits) pk) ∧
       rootValue f P (topsOf f P (idxValue f P m (decodeNonce bits) pk) bits) = pk := by
   rw [initial_eq] at h
-  have hpin := pinned_of_sem (simSem f) (oracleRel f) (sim_straight hT h16 hκ (lengthDomain_load h16 pk m bits L) f) h
+  have hpre := prepinned_of_sem (simSem f) h16 hκ h
+  have hpin := pinned_of_sem (simSem f) (oracleRel f) (sim_straight hT h16 hκ (lengthDomain_load h16 pk m bits L) hpre f) h
   have hw := walk_of_sim hT h16 hκ (lengthDomain_load h16 pk m bits L) f hpin (by norm_num) h
   obtain ⟨hV, hP, hL, -, -⟩ := walk_full hT hw
   exact accept_of_path hT hC (fun c hc => Lx_loadInput_pin h16 pk m bits L hc) hV hP hL

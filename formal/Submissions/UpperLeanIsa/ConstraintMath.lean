@@ -11,7 +11,7 @@ Pure facts the machine proofs share, none of them about the bytecode:
    the exact decision `fixed_verify` on arbitrary raw inputs, and `probTrue_zero_of_fixed`;
 2. cells and bits: `natV` cells, `cellOfBits` turning `XOR` into field addition, disjoint bit
    fields adding, the output pair of a `BLAKE2S`;
-3. the loader's cells for a signature of `5503` bits.
+3. the loader's cells for a signature of `5504` bits.
 -/
 
 namespace OptimalOTS.HLG3
@@ -294,9 +294,21 @@ theorem inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool) :
   unfold inputWord
   rw [h, ofBits_bits]; rfl
 
+/-- Every signature cell past the supplied bits is pinned to zero by the loader. -/
+theorem inputWord_suffix_zero (pk : PublicKey) (msg : Message) (σ : List Bool)
+    {c : ℕ} (hc : 4 ≤ c) (hs : σ.length ≤ 128 * (c - 4)) :
+    inputWord pk msg σ c = 0 := by
+  have hl : (statementBits pk msg σ).length ≤ 512 + σ.length := by
+    simp only [statementBits, List.length_append, length_bits, List.length_take]
+    change 128 + 256 + 128 + min maxSignatureBits σ.length ≤ 512 + σ.length
+    omega
+  have hz : (statementBits pk msg σ).length ≤ c * 128 := by omega
+  rw [inputWord, List.drop_eq_nil_of_le hz]
+  rfl
+
 /-- For a signature of the admitted length, cell `4 + i` holds signature cell `i`. -/
 theorem inputWord_sig (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 5503) (i : ℕ) :
+    (hlen : σ.length = 5504) (i : ℕ) :
     inputWord pk msg σ (4 + i) = cellOfBits (ofBits 128 ((σ.drop (128 * i)).take 128)) := by
   have hpre : (toBits pk ++ toBits msg ++
       toBits (BitVec.ofNat 128 (min σ.length (maxSignatureBits + 1)))).length = 512 := by
@@ -309,7 +321,7 @@ theorem inputWord_sig (pk : PublicKey) (msg : Message) (σ : List Bool)
     htake]
 
 theorem inputWord_word (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 5503) (k : Fin numChains) :
+    (hlen : σ.length = 5504) (k : Fin numChains) :
     inputWord pk msg σ (4 + k.val) = cellOfBits (decodeWord σ k) :=
   inputWord_sig pk msg σ hlen k.val
 
@@ -322,25 +334,13 @@ theorem fold_bits_lt (xs : List Bool) :
     cases b <;> simp only [Bool.toNat_false, Bool.toNat_true] <;> omega
 
 theorem inputWord_nonce (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (hlen : σ.length = 5503) : inputWord pk msg σ 46 = cellOfBits (nonceWord (decodeNonce σ)) := by
+    (hlen : σ.length = 5504) : inputWord pk msg σ 46 = cellOfBits (nonceWord (decodeNonce σ)) := by
   rw [show 46 = 4 + 42 from rfl, inputWord_sig pk msg σ hlen]
-  have hs : (σ.drop (128 * 42)).length = 127 := by simp [List.length_drop, hlen]
-  rw [List.take_of_length_le (by omega)]
-  unfold decodeNonce
-  rw [List.take_of_length_le (by simpa [numChains] using le_of_eq hs)]
-  apply congrArg cellOfBits
-  apply BitVec.eq_of_toNat_eq
-  have hb := fold_bits_lt (σ.drop (128 * 42))
-  rw [hs] at hb
-  simp only [ofBits, nonceWord, BitVec.toNat_append, BitVec.toNat_ofNat, BitVec.toNat_zero,
-    Nat.zero_mul, Nat.zero_add, Nat.shiftLeft_zero]
-  norm_num only [numChains] at *
-  rw [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt hb]
-  simp
+  rfl
 
-/-- The length cell pins the admitted length: `5503 < 5505`, so the capped length is exact. -/
+/-- The length cell pins the admitted length: `5504 < 5505`, so the capped length is exact. -/
 theorem length_of_inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (h : inputWord pk msg σ 3 = natV 5503) : σ.length = 5503 := by
+    (h : inputWord pk msg σ 3 = natV 5504) : σ.length = 5504 := by
   rw [inputWord_len] at h
   have hb := congrArg cellBits h
   rw [cellBits_natV, cellBits_natV] at hb
@@ -351,12 +351,12 @@ theorem length_of_inputWord_len (pk : PublicKey) (msg : Message) (σ : List Bool
     have : min σ.length (5504 + 1) ≤ 5505 := Nat.min_le_right _ _
     have h2 : (5505 : ℕ) < 2 ^ 128 := by norm_num
     omega
-  have h3 : (5503 : ℕ) < 2 ^ 128 := by norm_num
+  have h3 : (5504 : ℕ) < 2 ^ 128 := by norm_num
   rw [Nat.mod_eq_of_lt h1, Nat.mod_eq_of_lt h3] at hn
   omega
 
 theorem inputWord_len_of (pk : PublicKey) (msg : Message) (σ : List Bool)
-    (h : σ.length = 5503) : inputWord pk msg σ 3 = natV 5503 := by
+    (h : σ.length = 5504) : inputWord pk msg σ 3 = natV 5504 := by
   rw [inputWord_len, h]; rfl
 
 end
