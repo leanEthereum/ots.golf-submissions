@@ -132,24 +132,22 @@ theorem zexp_home (T : Tab) {u v : ℕ} (hu : ¬ isExp u) : zexp T u v = 0 := by
   have hcopy : ∀ i, ¬ copied u i := fun _ => hu
   simp [zexp, hcopy]
 
-theorem zexp_le (T : Tab) (u v : ℕ) (hc : 1 ≤ cost T u v) : zexp T u v ≤ 2 := by
-  by_cases hu : isExp u
-  · have hk : gk u = 3 := by unfold gk; rw [if_neg (by unfold isExp at hu; omega)]
-    have hcopy : ∀ i, copied u i := fun _ => hu
-    unfold cost at hc
-    simp only [zexp, hk, hcopy, true_and, show List.range 3 = [0, 1, 2] from rfl,
-      List.map_cons, List.map_nil, List.sum_cons, List.sum_nil] at hc ⊢
+/-- A tuple of positive cost has at most `gk u − 1` zero coordinates. -/
+theorem zexp_le (T : Tab) (u v : ℕ) (hc : 1 ≤ cost T u v) : zexp T u v + 1 ≤ gk u := by
+  unfold cost at hc
+  unfold zexp
+  unfold gk at hc ⊢
+  split_ifs at hc ⊢ <;>
+    simp only [show List.range 3 = [0, 1, 2] from rfl, show List.range 4 = [0, 1, 2, 3] from rfl,
+      List.map_cons, List.map_nil, List.sum_cons, List.sum_nil] at hc ⊢ <;>
     split_ifs <;> omega
-  · rw [zexp_home T hu]; omega
 
-theorem zexp_le3 (T : Tab) (u v : ℕ) : zexp T u v ≤ 3 := by
-  by_cases hu : isExp u
-  · have hk : gk u = 3 := by unfold gk; rw [if_neg (by unfold isExp at hu; omega)]
-    have hcopy : ∀ i, copied u i := fun _ => hu
-    simp only [zexp, hk, hcopy, true_and, show List.range 3 = [0, 1, 2] from rfl,
-      List.map_cons, List.map_nil, List.sum_cons, List.sum_nil]
+theorem zexp_le_gk (T : Tab) (u v : ℕ) : zexp T u v ≤ gk u := by
+  unfold zexp gk
+  split_ifs <;>
+    simp only [show List.range 3 = [0, 1, 2] from rfl, show List.range 4 = [0, 1, 2, 3] from rfl,
+      List.map_cons, List.map_nil, List.sum_cons, List.sum_nil] <;>
     split_ifs <;> omega
-  · rw [zexp_home T hu]; omega
 
 theorem fbody_len (s : ℕ) : (fbody s).length = 3+s := by
   unfold fbody
@@ -159,7 +157,7 @@ theorem fbody_len (s : ℕ) : (fbody s).length = 3+s := by
 theorem fbody_lcost (s : ℕ) : lcost (fbody s) = 3+10*s := by
   unfold fbody
   rw [lcost_append,lcost_append,chainOps_lcost]
-  have h1 : lcost [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 86 s))] = 1 := rfl
+  have h1 : lcost [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 82 s))] = 1 := rfl
   have h2 : lcost [copy (if s = 0 then wCell 0 else tfCell) tfCell,.mul (hCell 1) gCell (h1Cell 1)] = 2 := rfl
   rw [h1,h2]
   omega
@@ -177,7 +175,6 @@ theorem fbody_straight (s : ℕ) : ∀ x ∈ fbody s, x.straight = true := by
 
 theorem origin_count : ∀ u < 13, pn u 0 ≤ 1 := by decide
 
-theorem origin_first : pn 0 0 = 0 := rfl
 
 /-- A nonzero raw field cannot encode an origin tuple. -/
 theorem band_pos {u v : ℕ} (hu : u < 13) (hv : v < VF u) (hz : v ≠ 0) :
@@ -189,35 +186,46 @@ theorem band_pos {u v : ℕ} (hu : u < 13) (hv : v < VF u) (hz : v ≠ 0) :
   have := origin_count u hu
   omega
 
-theorem first_band_pos {v : ℕ} (hv : v < VF 0) : 1 ≤ band 0 v := by
-  obtain ⟨-,-,h2⟩ := band_spec (by decide : 0 < 13) hv
+/-- The binding units have no cost-0 tuple. -/
+theorem origin_empty : ∀ u < 13, (u = 0 ∨ 5 ≤ u) → pn u 0 = 0 := by decide
+
+/-- Every live tuple of a binding unit has positive cost. -/
+theorem bind_band_pos {u v : ℕ} (hu : u < 13) (hb : u = 0 ∨ 5 ≤ u) (hv : v < VF u) :
+    1 ≤ band u v := by
+  obtain ⟨-,-,h2⟩ := band_spec hu hv
   by_contra hn
-  have hb : band 0 v = 0 := by omega
-  rw [hb,A_succ,show A 0 0 = 0 from rfl,origin_first] at h2
+  have hz : band u v = 0 := by omega
+  rw [hz,A_succ,show A u 0 = 0 from rfl,origin_empty u hu hb] at h2
   omega
+
+theorem bind_cost_pos {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hb : u = 0 ∨ 5 ≤ u)
+    (hv : v < VF u) : 1 ≤ cost T u v := by
+  rw [hT.cost_eq u hu v hv]; exact bind_band_pos hu hb hv
 
 /-- The fixed ordinary-instruction allowance includes all zero-digit copies. -/
 theorem pad_fit {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
     (tie u v).length + zexp T u v + 4 ≤ gcu u := by
   rw [tie_len]
-  by_cases h0 : u = 0
-  · subst u
-    have hc : 1 ≤ cost T 0 v := by rw [hT.cost_eq 0 (by decide) v hv]; exact first_band_pos hv
-    have hh := zexp_le T 0 v hc
-    simp only [ne_eq,not_true_eq_false,false_and,if_false,gcu,if_true]
-    omega
-  · by_cases he : isExp u
-    · have h3 := zexp_le3 T u v
-      have hg : gcu u = 8 := by simp only [gcu,if_neg h0,if_pos he]
-      rw [hg]
-      by_cases hz : v ≠ 0
-      · have hc : 1 ≤ cost T u v := by rw [hT.cost_eq u hu v hv]; exact band_pos hu hv hz
-        have hh := zexp_le T u v hc
-        split_ifs <;> omega
-      · split_ifs <;> omega
-    · have hz := zexp_home T (v := v) he
-      simp only [gcu,if_neg h0,if_neg he]
+  have hgcu : gcu u = if u = 0 then 7 else if u = 6 then 9 else if u = 5 then 6 else 8 := by
+    unfold gcu
+    by_cases h : isExp u <;> simp only [h, if_true, if_false] <;> unfold isExp at h <;>
       split_ifs <;> omega
+  have hgk : gk u = if u = 5 ∨ u = 6 then 4 else 3 := rfl
+  have hk := zexp_le_gk T u v
+  have h5 : u ≠ 5 ∨ zexp T u v = 0 := by
+    by_cases h : u = 5
+    · exact Or.inr (zexp_home T (by unfold isExp; omega))
+    · exact Or.inl h
+  rw [hgcu]; rw [hgk] at hk
+  by_cases hb : u = 0 ∨ 5 ≤ u
+  · have hh := zexp_le T u v (bind_cost_pos hT hu hb hv)
+    rw [hgk] at hh
+    split_ifs at * <;> omega
+  · by_cases hz : v = 0
+    · split_ifs at * <;> omega
+    · have hh := zexp_le T u v (by rw [hT.cost_eq u hu v hv]; exact band_pos hu hv hz)
+      rw [hgk] at hh
+      split_ifs at * <;> omega
 
 theorem body_len {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (hv : v < VF u) :
     (body T u v z).length = gcu u - 2 + cost T u v + hm u := by
@@ -240,9 +248,9 @@ theorem body_lcost {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (
   omega
 
 
-theorem proList_length : proList.length = 24 := by unfold proList; rfl
+theorem proList_length : proList.length = 19 := by unfold proList; rfl
 
-theorem proList_lcost : lcost proList = 33 := by unfold proList lcost; rfl
+theorem proList_lcost : lcost proList = 28 := by unfold proList lcost; rfl
 
 theorem cinstrAt_sentinel (T : Tab) : cinstrAt T sentinel = .pad := by
   unfold cinstrAt
@@ -263,15 +271,15 @@ def canonicalSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
   proList.length + 2 + (fbody (xs 0)).length + 2 +
     ∑ u ∈ Finset.range 13, ((body T u (xs (u+1)) false).length + (ctlF (u+1)).steps)
 
-theorem sum_ordinary_bodies : (∑ u ∈ Finset.range 13, (gcu u - 2)) = 73 := by decide
-theorem sum_roots : (∑ u ∈ Finset.range 13, hm u) = 2 := by decide
+theorem sum_ordinary_bodies : (∑ u ∈ Finset.range 13, (gcu u - 2)) = 76 := by decide
+theorem sum_roots : (∑ u ∈ Finset.range 13, hm u) = 1 := by decide
 theorem sum_controls : (∑ u ∈ Finset.range 13, (ctlF (u+1)).cost) = 25 := by decide
 theorem sum_control_steps : (∑ u ∈ Finset.range 13, (ctlF (u+1)).steps) = 25 := by decide
 
 theorem canonical_cost (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
     (hx : ∀ u < 13, xs (u+1) < VF u)
     (hlayer : xs 0 + ∑ u ∈ Finset.range 13, cost T u (xs (u+1)) = 86) :
-    canonicalCost T xs + 120 = 1138 := by
+    canonicalCost T xs + 120 = 1126 := by
   have hb : ∀ u ∈ Finset.range 13, lcost (body T u (xs (u+1)) false) =
       gcu u - 2 + 10 * cost T u (xs (u+1)) + 10 * hm u := by
     intro u hu
@@ -287,7 +295,7 @@ theorem canonical_cost (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
 theorem canonical_steps (T : Tab) (hT : T.Hyp) (xs : ℕ → ℕ)
     (hx : ∀ u < 13, xs (u+1) < VF u)
     (hlayer : xs 0 + ∑ u ∈ Finset.range 13, cost T u (xs (u+1)) = 86) :
-    canonicalSteps T xs = 217 := by
+    canonicalSteps T xs = 214 := by
   have hb : ∀ u ∈ Finset.range 13, (body T u (xs (u+1)) false).length =
       gcu u - 2 + cost T u (xs (u+1)) + hm u :=
     fun u hu => body_len hT (Finset.mem_range.mp hu) (hx u (Finset.mem_range.mp hu))

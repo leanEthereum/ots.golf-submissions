@@ -109,29 +109,39 @@ theorem topsV_at (T : Tab) (v : ℕ → E) (xs : ℕ → ℕ) {k : ℕ} (hk : k 
 theorem topsV_top (T : Tab) (v : ℕ → E) (xs : ℕ → ℕ) {k : ℕ} (hk : k < 42) (he : exported k) :
     topsV T v xs k = cellBits (v (topCell k)) := by rw [topsV_at T v xs hk,rtopCell_exported he]
 
-theorem binds_owner : ∀ k : Fin 42, binds k.val ↔ Fusion.owner k ≠ none ∧ Fusion.owner k ≠ some 6 := by
+theorem binds_owner : ∀ k : Fin 42, binds k.val → ∃ u : Fin 9, Fusion.owner k = some u ∧ u.val < 5 := by
   decide
 
-theorem light_owner : ∀ k : Fin 42, light k.val ↔ Fusion.owner k = some 6 := by decide
+theorem tri_owner : ∀ k : Fin 42, tri k.val → ∃ u : Fin 9, Fusion.owner k = some u ∧ 5 ≤ u.val := by
+  decide
 
-theorem chainInput_fused {t : Fusion.Tops} {k : Fin 42} {j : ℕ} {u : Fin 7}
-    (ha : P.active k j = some u) (hu : u.val ≠ 6) (x : Word) :
+/-- Every owned chain is a five-dep or a three-dep parent. -/
+theorem owner_kind : ∀ k : Fin 42, ∀ u : Fin 9, Fusion.owner k = some u → binds k.val ∨ tri k.val := by
+  decide
+
+theorem chainInput_fused {t : Fusion.Tops} {k : Fin 42} {j : ℕ} {u : Fin 9}
+    (ha : P.active k j = some u) (hu : u.val < 5) (x : Word) :
     P.chainInput t k j x = Fusion.packet (Fusion.fusionWords t u x (P.fusedMd k)) := by
   unfold Fusion.Params.chainInput Fusion.Params.groupInput
   rw [ha]
-  exact if_neg hu
+  exact if_pos hu
 
-theorem chainInput_light {t : Fusion.Tops} {k : Fin 42} {j : ℕ} (ha : P.active k j = some 6)
-    (x : Word) : P.chainInput t k j x = Fusion.lightPacket P.lightCv (P.codec.tag k j 1)
-      (P.codec.tag k j 2) t x P.codec.chainMd := by
+theorem chainInput_triple {t : Fusion.Tops} {k : Fin 42} {j : ℕ} {u : Fin 9}
+    (ha : P.active k j = some u) (hu : 5 ≤ u.val) (x : Word) :
+    P.chainInput t k j x = Fusion.triplePacket (P.tripleCv k) t u x P.codec.chainMd := by
   unfold Fusion.Params.chainInput Fusion.Params.groupInput
   rw [ha]
-  rfl
+  exact if_neg (by omega)
 
-theorem fusion_cells : ∀ k : Fin 42, binds k.val → ∀ u : Fin 7, Fusion.owner k = some u →
+theorem fusion_cells : ∀ k : Fin 42, binds k.val → ∀ u : Fin 9, Fusion.owner k = some u →
     depCv k.val = topCell ((Fusion.children u).getD 0 0) ∧
     depCv k.val+1 = topCell ((Fusion.children u).getD 1 0) ∧
     ∀ i < 5, depTop k.val i = (Fusion.children u).getD i 0 ∧
+      exported ((Fusion.children u).getD i 0) ∧ (Fusion.children u).getD i 0 < 42 := by decide
+
+theorem triple_cells : ∀ k : Fin 42, tri k.val → ∀ u : Fin 9, Fusion.owner k = some u →
+    1 ≤ triA k.val ∧ triA k.val ≤ 13 ∧
+    ∀ i < 3, depTop k.val i = (Fusion.children u).getD i 0 ∧
       exported ((Fusion.children u).getD i 0) ∧ (Fusion.children u).getD i 0 < 42 := by decide
 
 section Path
@@ -146,19 +156,8 @@ theorem v_len : v lenCell = natV 5503 := (hP.pro _ pro_mem_init).2
 include hP in
 theorem v_g : v gCell = gV := hP.pro _ pro_mem_g
 
-theorem pro_mem_extra {c : ℕ} (hlo : 17 ≤ c) (hhi : c ≤ 21) :
-    CInstr.setc (cCell c) (cV c) ∈ proList := by
-  unfold proList
-  simp only [List.mem_append,List.mem_map]
-  left; right; refine ⟨c,?_,rfl⟩
-  simp only [List.mem_cons,List.mem_singleton]
-  omega
-
 include hP in
-theorem v_c {c : ℕ} (hc : c ≤ 21) : v (cCell c) = cV c := by
-  by_cases hh : c ≤ 16
-  · exact cCell_val hP.pro hh
-  · exact hP.pro _ (pro_mem_extra (by omega) hc)
+theorem v_c {c : ℕ} (hc : c ≤ 16) : v (cCell c) = cV c := cCell_val hP.pro hc
 
 include hP in
 theorem cb_cv (hC : Compat P T) : cellBits (v (oneCell+1)) ++ cellBits (v oneCell) = P.codec.cv := by
@@ -188,7 +187,7 @@ theorem fusedMd_cell (hC : Compat P T) (k : Fin 42) (hk : binds k.val) :
     cellBits (v (fusedMdCell k.val)) = P.fusedMd k := by
   rw [hC.fusedMd]
   have hsmall : ∀ k : Fin 42, binds k.val → k.val ≠ 5 → k.val ≠ 6 →
-      fusedMdCell k.val = cCell (Fusion.tagIndex k).val ∧ (Fusion.tagIndex k).val ≤ 21 := by decide
+      fusedMdCell k.val = cCell (Fusion.tagIndex k).val ∧ (Fusion.tagIndex k).val ≤ 16 := by decide
   by_cases h5 : k.val = 5
   · have he : k = 5 := Fin.ext h5
     subst k
@@ -203,7 +202,7 @@ theorem fusedMd_cell (hC : Compat P T) (k : Fin 42) (hk : binds k.val) :
       rw [he,v_c hP hi,factor_bits _ (by omega)]
 
 include hP in
-theorem fusion_query (hC : Compat P T) (k : Fin 42) (hk : binds k.val) (u : Fin 7)
+theorem fusion_query (hC : Compat P T) (k : Fin 42) (hk : binds k.val) (u : Fin 9)
     (hu : Fusion.owner k = some u) (x : E) :
     blake2sQuery ![x,v (topCell (depTop k.val 2)),v (topCell (depTop k.val 3)),v (topCell (depTop k.val 4))]
       (v (depCv k.val)) (v (depCv k.val+1)) (v (fusedMdCell k.val)) =
@@ -221,25 +220,28 @@ theorem fusion_query (hC : Compat P T) (k : Fin 42) (hk : binds k.val) (u : Fin 
     topsV_top T v xs (hd 4 (by omega)).2.2 (hd 4 (by omega)).2.1]
   rfl
 
+theorem cCell_succ {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 14) : cCell c + 1 = cCell (c + 1) := by
+  unfold cCell
+  rw [if_neg (by omega), if_neg (by omega), if_neg (by omega), if_neg (by omega)]
+  omega
+
 include hP in
-/-- The light final step of chain `k`: top 7 in message slot 1, the tag digits `B, C`, the cv
-pair `(C_1, C_2)` and the ordinary chain metadata. -/
-theorem light_query (hC : Compat P T) {k : ℕ} (hk : k < 42) {d t : ℕ} (hd : d < LEN k)
-    (ht : t < d) (x : E) :
-    blake2sQuery ![x, v (topCell 7), v (cCell (tpos k d t / 9 % 9)), v (cCell (tpos k d t / 81))]
-        (v (cCell 1)) (v (cCell 1 + 1)) (v oneCell) =
-      Fusion.lightPacket P.lightCv (P.codec.tag ⟨k, hk⟩ (LEN k - 1 - d + t) 1)
-        (P.codec.tag ⟨k, hk⟩ (LEN k - 1 - d + t) 2) (topsV T v xs) (cellBits x) P.codec.chainMd := by
-  have hj : LEN k - 1 - d + t + 1 < LEN k := by omega
-  obtain ⟨-, h1, h2⟩ := hC.tag ⟨k, hk⟩ _ hj
-  have hp : tpos k d t / 81 ≤ 16 := by
-    have := OFFT_bound k hk; unfold tpos; omega
-  rw [blake2sQuery_eq, show cCell 1 + 1 = cCell 2 from rfl, v_c hP (c := 1) (by omega),
-    v_c hP (c := 2) (by omega), v_c hP (c := tpos k d t / 9 % 9) (by omega),
-    v_c hP (c := tpos k d t / 81) (by omega), v_one hP, h1, h2, hC.lightCv, hC.chainMd]
-  unfold Fusion.lightPacket
-  rw [topsV_top T v xs (k := 7) (by decide) (by decide)]
-  rfl
+/-- The three-dep final step of chain `k`: three dependency tops in message slots 1–3, the cv pair
+`(C_a, C_(a+1))` and the ordinary chain metadata. -/
+theorem triple_query (hC : Compat P T) (k : Fin 42) (hk : tri k.val) (u : Fin 9)
+    (hu : Fusion.owner k = some u) (x : E) :
+    blake2sQuery ![x, v (topCell (depTop k.val 0)), v (topCell (depTop k.val 1)),
+        v (topCell (depTop k.val 2))] (v (cCell (triA k.val))) (v (cCell (triA k.val) + 1))
+        (v oneCell) =
+      Fusion.triplePacket (P.tripleCv k) (topsV T v xs) u (cellBits x) P.codec.chainMd := by
+  obtain ⟨ha1, ha2, hd⟩ := triple_cells k hk u hu
+  rw [blake2sQuery_eq, cCell_succ ha1 (by omega), v_c hP (c := triA k.val) (by omega),
+    v_c hP (c := triA k.val + 1) (by omega), v_one hP, hC.tripleCv k hk, hC.chainMd]
+  unfold Fusion.triplePacket
+  rw [(hd 0 (by omega)).1, (hd 1 (by omega)).1, (hd 2 (by omega)).1,
+    topsV_top T v xs (hd 0 (by omega)).2.2 (hd 0 (by omega)).2.1,
+    topsV_top T v xs (hd 1 (by omega)).2.2 (hd 1 (by omega)).2.1,
+    topsV_top T v xs (hd 2 (by omega)).2.2 (hd 2 (by omega)).2.1]
 
 theorem chainOp_plain_query (hP : PathFacts T (oracleRel f) v xs) (hC : Compat P T) {k : ℕ}
     (hk : k < 42) {d t : ℕ} (hd : d < LEN k) (ht : t < d) (x : E) :
@@ -251,7 +253,7 @@ theorem chainOp_plain_query (hP : PathFacts T (oracleRel f) v xs) (hC : Compat P
   have hp : tpos k d t / 81 ≤ 16 := by
     have := OFFT_bound k hk; unfold tpos; omega
   rw [blake2sQuery_eq, v_c hP (c := tpos k d t % 9) (by omega),
-    v_c hP (c := tpos k d t / 9 % 9) (by omega), v_c hP (by omega : tpos k d t / 81 ≤ 21), cb_cv hP hC, v_one hP]
+    v_c hP (c := tpos k d t / 9 % 9) (by omega), v_c hP (by omega : tpos k d t / 81 ≤ 16), cb_cv hP hC, v_one hP]
   unfold Params.chainInput
   rw [h0, h1, h2, hC.chainMd]
   rfl
@@ -273,24 +275,22 @@ theorem chainOp_pair (hC : Compat P T) {k d t dst : ℕ} (hk : k < 42)
   dsimp only at h
   by_cases hb : t+1=d ∧ binds k
   · rw [if_pos hb] at h
-    obtain ⟨u,hu⟩ : ∃ u, Fusion.owner ⟨k,hk⟩ = some u :=
-      Option.ne_none_iff_exists'.mp ((binds_owner ⟨k,hk⟩).mp hb.2).1
-    have hu6 : u.val ≠ 6 := fun h6 =>
-      ((binds_owner ⟨k,hk⟩).mp hb.2).2 (by rw [hu, show u = 6 from Fin.ext h6])
+    obtain ⟨u,hu,hu5⟩ := binds_owner ⟨k,hk⟩ hb.2
     have hp := oracle_pair h
     rw [fusion_query hP hC ⟨k,hk⟩ hb.2 u hu] at hp
     have hs : P.active ⟨k,hk⟩ (LEN k-1-d+t) = some u := by
       rw [ha,if_pos hb.1,hu]
-    rw [chainInput_fused hs hu6]
+    rw [chainInput_fused hs hu5]
     exact hp
   · rw [if_neg hb] at h
-    by_cases hl : t+1=d ∧ light k
+    by_cases hl : t+1=d ∧ tri k
     · rw [if_pos hl] at h
+      obtain ⟨u,hu,hu5⟩ := tri_owner ⟨k,hk⟩ hl.2
       have hp := oracle_pair h
-      rw [light_query hP hC hk hd ht] at hp
-      have hs : P.active ⟨k,hk⟩ (LEN k-1-d+t) = some 6 := by
-        rw [ha,if_pos hl.1,(light_owner ⟨k,hk⟩).mp hl.2]
-      rw [chainInput_light hs]
+      rw [triple_query hP hC ⟨k,hk⟩ hl.2 u hu] at hp
+      have hs : P.active ⟨k,hk⟩ (LEN k-1-d+t) = some u := by
+        rw [ha,if_pos hl.1,hu]
+      rw [chainInput_triple hs hu5]
       exact hp
     · rw [if_neg hl] at h
       have hp := oracle_pair h
@@ -302,9 +302,9 @@ theorem chainOp_pair (hC : Compat P T) {k d t dst : ℕ} (hk : k < 42)
           | none => rfl
           | some u =>
             exfalso
-            by_cases h6 : u = 6
-            · subst h6; exact hl ⟨hh, (light_owner ⟨k,hk⟩).mpr ho⟩
-            · exact hb ⟨hh, (binds_owner ⟨k,hk⟩).mpr ⟨by simp [ho], by simp [ho, h6]⟩⟩
+            rcases owner_kind ⟨k,hk⟩ u ho with h5 | h5
+            · exact hb ⟨hh, h5⟩
+            · exact hl ⟨hh, h5⟩
         · rfl
       rw [Fusion.Params.chainInput,hn]
       exact hp

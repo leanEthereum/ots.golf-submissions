@@ -22,7 +22,7 @@ theorem reconstruction_spec (P : Fusion.Params) (f : HashTable) (I : Index) (bit
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
     let t' := P.reconFromValue f I bits (k::l) t
-    have hdep : ∀ u : Fin 7, owner k = some u → ∀ d ∈ children u, t d = t' d := by
+    have hdep : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d := by
       intro u hu d hd
       apply (P.reconFromValue_preserves f I bits (k::l) t d ?_).symm
       intro hmem
@@ -152,7 +152,7 @@ theorem hv_c {c : ℕ} (h1 : 47 ≤ c) (h2 : c < 2 ^ 16) {x : E}
 
 theorem hv_one : hv P T f pk m bits oneCell = oneV := hv_c (by decide) (by decide) (hc_one ..)
 theorem hv_g : hv P T f pk m bits gCell = gV := hv_c (by decide) (by decide) (hc_g ..)
-theorem hv_cc {c : ℕ} (hc : c ≤ 21) : hv P T f pk m bits (cCell c) = cV c := by
+theorem hv_cc {c : ℕ} (hc : c ≤ 16) : hv P T f pk m bits (cCell c) = cV c := by
   rcases Nat.eq_zero_or_pos c with rfl | h0
   · rw [cV_zero]; exact hv_one
   · exact hv_c (by unfold cCell; split_ifs <;> omega)
@@ -210,10 +210,10 @@ theorem hv_xh {k : ℕ} (hk : k<42) (_hk0 : k≠0) (_he : ¬ exported k) :
     hv P T f pk m bits (xhCell k) = cellOfBits (topOf T bits (y0F P f pk m bits) (AF P T f pk m bits) k) ∧
       hv P T f pk m bits (junkCell k (xhCell k)) = hiOf T (y0F P f pk m bits) (AF P T f pk m bits) k := hv_top hk trivial
 
-theorem hv_st {r : ℕ} (hr : r<2) :
+theorem hv_st {r : ℕ} (hr : r<1) :
     hv P T f pk m bits (stCell r) = loC (RAF P T f pk m bits r) ∧
       hv P T f pk m bits (stCell r+1) = hiC (RAF P T f pk m bits r) := by
-  have hh : ∀ r<2, 256 ≤ stCell r ∧ stCell r+1<346 := by decide
+  have hh : ∀ r<1, 256 ≤ stCell r ∧ stCell r+1<346 := by decide
   have hb := hh r hr
   obtain ⟨e1,e2⟩ := hc_st T bits (y0F P f pk m bits) (AF P T f pk m bits) (RAF P T f pk m bits) hr
   exact ⟨hv_c (by omega) (by omega) e1,hv_c (by omega) (by omega) e2⟩
@@ -330,7 +330,7 @@ theorem honest_idx_query :
 theorem honest_gp {u : ℕ} (hu : u ≤ 13) :
     hv P T f pk m bits (gpCell u) = gpV T (IF P f pk m bits) u := hv_gpl hu
 
-include hC hacc in
+include hT hC hacc in
 /-- On an accepted index the last landing product is `g ^ sentinel`: the exit target. -/
 theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   rw [honest_gp (by omega)]
@@ -339,7 +339,7 @@ theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   have hs := hsum hC hacc
   change hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,
     cost T w (hxs T (IF P f pk m bits) (w + 1)) = 86 at hs
-  exact (LeanIsaFieldRescale.checksum_exact (by omega : 86 ≤ 300) (by omega)).mpr hs
+  rw [landing_total hT (hxs_valid T _ (hlive hC hacc)), hs, seedExp_86]
 
 include hC hlen hacc in
 /-- **The honest prologue.** -/
@@ -348,14 +348,12 @@ theorem honest_pro : ∀ y ∈ proList, y.Rel f (hv P T f pk m bits) := by
   unfold proList at hy
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hy
-  rcases hy with (((h | h) | ⟨c,hc,rfl⟩) | ⟨c,hc,rfl⟩) | h | h
+  rcases hy with ((h | h) | ⟨c,hc,rfl⟩) | h | h
   · subst h; refine ⟨hv_one, ?_⟩
     show hv P T f pk m bits 3 = natV 5503
     rw [hv_lt P T f pk m bits (by omega)]; exact inputWord_len_of pk m bits hlen
   · subst h; exact hv_g
   · exact hv_cc (by omega)
-  · apply hv_cc
-    omega
   · subst h
     refine blake_rel (a := y0F P f pk m bits) ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hv_idx hv_idx1
     · rw [show msgLo = 1 from rfl, hv_lt P T f pk m bits (by omega), inputWord_one]

@@ -168,7 +168,7 @@ def matchingAnswers (ξ : Record P) : Loc P → Finset (BitVec hashBits)
 theorem matchingAnswers_inl (ξ : Record P) (a : ChainLoc P) :
     matchingAnswers ξ (.inl a) = sliceAnswers (P := P) a.1 a.2.val (ξ.2 (.inl a)) := rfl
 
-theorem matchingAnswers_inr (ξ : Record P) (r : Fin 2) :
+theorem matchingAnswers_inr (ξ : Record P) (r : Fin 1) :
     matchingAnswers ξ (.inr r) = lowAnswers (ξ.2 (.inr r)) := rfl
 
 theorem matchingAnswers_card (ξ : Record P) (a : Loc P) : (matchingAnswers ξ a).card ≤ 2 ^ 128 := by

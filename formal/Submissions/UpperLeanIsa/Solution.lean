@@ -2,9 +2,9 @@ import Submissions.UpperLeanIsa.FusionSecurity
 import Submissions.UpperLeanIsa.FusionAdmissible
 import Submissions.UpperLeanIsa.FusionMachine
 
-/-! The 1138-cycle leanISA submission: six groups fuse chain endpoints with dependency
-binding, a light seventh group binds top 7 through the final steps of chains 39, 40, 41,
-two hashes finish the root, and a landing checksum forces 86 chain steps.
+/-! The 1126-cycle leanISA submission: nine groups bind chain endpoints, five with five-dep
+fused packets and four with three-dep packets, one hash finishes the root, and a landing
+checksum forces 86 chain steps.
 The certificate includes the exact rarest-cut signing bound and strong unforgeability. -/
 
 namespace OptimalOTS.Challenge.UpperLeanIsa
@@ -17,8 +17,8 @@ noncomputable def submission : LeanIsa.Submission := HLFusion.fusionMachine
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1138` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1138 where
+`1126` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1126 where
   admissible := Fusion.concrete_admissible
   secure := Fusion.concrete_secure
   valid := HLFusion.fusion_valid

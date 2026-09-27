@@ -103,13 +103,13 @@ theorem chain_support (t : Tops) (k : Fin 42) (j n : ℕ) (x : Word) (c : Cache)
         rw [chainValue_succ,hst,show j+(i+1)=j+1+i by omega]
         exact hpath i (by omega)
 
-def RootPath (c : Cache) (t : Tops) : List (Fin 2) → BitVec 256 → Prop
+def RootPath (c : Cache) (t : Tops) : List (Fin 1) → BitVec 256 → Prop
   | [],_ => True
   | r::l,st => (c ⟨896,P.rootInput t r st⟩).isSome ∧
       RootPath c t l (table c ⟨896,P.rootInput t r st⟩)
 
 theorem RootPath.mono {c c' : Cache} (h : Cache.Sub c c') (t : Tops)
-    (l : List (Fin 2)) (st : BitVec 256) (hp : P.RootPath c t l st) :
+    (l : List (Fin 1)) (st : BitVec 256) (hp : P.RootPath c t l st) :
     P.RootPath c' t l st ∧ P.rootFromValue (table c') t l st = P.rootFromValue (table c) t l st := by
   induction l generalizing st with
   | nil => exact ⟨trivial,rfl⟩
@@ -121,7 +121,7 @@ theorem RootPath.mono {c c' : Cache} (h : Cache.Sub c c') (t : Tops)
     · rw [rootFromValue,rootFromValue,he]
       exact hv
 
-theorem rootFrom_support (t : Tops) (l : List (Fin 2)) (st : BitVec 256) (c : Cache) :
+theorem rootFrom_support (t : Tops) (l : List (Fin 1)) (st : BitVec 256) (c : Cache) :
     ∀ p ∈ support (run (P.rootFrom t l st) c), Cache.Sub c p.2 ∧
       p.1 = P.rootFromValue (table p.2) t l st ∧ P.RootPath p.2 t l st := by
   induction l generalizing st c with
@@ -146,12 +146,12 @@ theorem rootFrom_support (t : Tops) (l : List (Fin 2)) (st : BitVec 256) (c : Ca
       exact hpath
 
 theorem root_support (t : Tops) (c : Cache) : ∀ p ∈ support (run (P.root t) c),
-    Cache.Sub c p.2 ∧ p.1 = P.rootValue (table p.2) t ∧ P.RootPath p.2 t [0,1] 0 := by
+    Cache.Sub c p.2 ∧ p.1 = P.rootValue (table p.2) t ∧ P.RootPath p.2 t [0] 0 := by
   intro p hp
   unfold root at hp
   rw [run_map,support_map,Set.mem_image] at hp
   obtain ⟨q,hq,rfl⟩ := hp
-  obtain ⟨hsub,hval,hpath⟩ := P.rootFrom_support t [0,1] 0 c q hq
+  obtain ⟨hsub,hval,hpath⟩ := P.rootFrom_support t [0] 0 c q hq
   exact ⟨hsub,congrArg (fun z : BitVec 256 => z.extractLsb' 0 128) hval,hpath⟩
 
 def ReconPath (c : Cache) (I : Index) (bits : List Bool) : List (Fin 42) → Tops → Prop
@@ -200,7 +200,7 @@ theorem reconFrom_support (I : Index) (bits : List Bool) (l : List (Fin 42)) (t 
       exact hpath₂
 
 theorem chainValue_context (f : HashTable) (t t' : Tops) (k : Fin 42) (j n : ℕ) (x : Word)
-    (ht : ∀ u : Fin 7, owner k = some u → ∀ d ∈ children u, t d = t' d) :
+    (ht : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d) :
     P.chainValue f t k j n x = P.chainValue f t' k j n x := by
   induction n generalizing j x with
   | zero => rfl
@@ -212,7 +212,7 @@ theorem chainValue_context (f : HashTable) (t t' : Tops) (k : Fin 42) (j n : ℕ
     exact ih (j+1) _
 
 theorem ChainPath.context (c : Cache) (t t' : Tops) (k : Fin 42) (j n : ℕ) (x : Word)
-    (ht : ∀ u : Fin 7, owner k = some u → ∀ d ∈ children u, t d = t' d)
+    (ht : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d)
     (hp : P.ChainPath c t k j n x) : P.ChainPath c t' k j n x := by
   intro i hi
   rw [← P.chainValue_context (table c) t t' k j i x ht,
@@ -242,7 +242,7 @@ theorem reconFrom_normalized (c : Cache) (I : Index) (bits : List Bool) (l : Lis
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
     let t' := P.reconFromValue (table c) I bits (k::l) t
-    have hdep : ∀ u : Fin 7, owner k = some u → ∀ d ∈ children u, t d = t' d := by
+    have hdep : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d := by
       intro u hu d hd
       apply (P.reconFromValue_preserves (table c) I bits (k::l) t d ?_).symm
       intro hmem
@@ -282,7 +282,7 @@ structure Accepts (c : Cache) (pk : PublicKey) (m : Message) (bits : List Bool) 
   reconstruction : P.ReconPath c (P.codec.idxValue (table c) m (decodeNonce bits) pk)
     bits chainOrder (fun _ => 0)
   rootPath : P.RootPath c (P.reconWords (table c) (P.codec.idxValue (table c) m (decodeNonce bits) pk)
-    bits) [0,1] 0
+    bits) [0] 0
   root : P.rootValue (table c)
     (P.reconWords (table c) (P.codec.idxValue (table c) m (decodeNonce bits) pk) bits) = pk
 

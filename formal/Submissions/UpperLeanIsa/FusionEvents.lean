@@ -205,21 +205,20 @@ namespace Params
 variable (P : Params)
 
 def rootStates (f : HashTable) (t : Tops) (n : ℕ) : BitVec 256 :=
-  P.rootFromValue f t ([0,1].take n) 0
+  P.rootFromValue f t ([0].take n) 0
 
 theorem cached_table {c : Cache} {q : Query} (h : (c q).isSome) : c q = some (table c q) := by
   obtain ⟨v,hv⟩ := Option.isSome_iff_exists.mp h
   rw [table_eq_of_some hv]
   exact hv
 
-theorem rootPath_cached (c : Cache) (t : Tops) (hp : P.RootPath c t [0,1] 0) :
-    ∀ r : Fin 2, c ⟨896,P.rootInput t r (P.rootStates (table c) t r.val)⟩ =
+theorem rootPath_cached (c : Cache) (t : Tops) (hp : P.RootPath c t [0] 0) :
+    ∀ r : Fin 1, c ⟨896,P.rootInput t r (P.rootStates (table c) t r.val)⟩ =
       some (P.rootStates (table c) t (r.val+1)) := by
-  obtain ⟨h0,h1,-⟩ := hp
+  obtain ⟨h0,-⟩ := hp
   intro r
   fin_cases r
-  · exact cached_table h0
-  · exact cached_table h1
+  exact cached_table h0
 
 theorem accepts_chains {c : Cache} {pk : PublicKey} {m : Message} {bits : List Bool}
     (ha : P.Accepts c pk m bits) (k : Fin 42) :
