@@ -179,7 +179,7 @@ theorem yv_hash_ch (hy : graph.ReconEqs d (fins A) given y) {k : Fin 33} {t : Fi
   exact ⟨w, hd, hw⟩
 
 theorem yv_hash_rh (hy : graph.ReconEqs d (fins A) given y) (he : Evaluated A rh) :
-    ∃ w : BitVec 256, d ⟨6608, yv y rc⟩ = some w ∧ yv y rh = w := by
+    ∃ w : BitVec 256, d ⟨6400, yv y rc⟩ = some w ∧ yv y rh = w := by
   obtain ⟨w, hd, hw⟩ := yv_hash hy (h := rh) (p := rc) rfl he
   exact ⟨w, hd, hw⟩
 
@@ -344,7 +344,7 @@ theorem events_none {A' : Finset Name} (hA' : IsCut A') {ξ : Rec} {d : Cache}
   obtain ⟨w, hd, -⟩ := yv_hash_rh hy hrE
   by_cases hne : yv y rc = val ξ rc
   · right
-    refine ⟨⟨6608, yv y rc⟩, ?_, by rw [hd]; rfl⟩
+    refine ⟨⟨6400, yv y rc⟩, ?_, by rw [hd]; rfl⟩
     rw [kc_isSome_iff]
     exact ⟨rh, rc, rfl, by rw [hne]; rfl⟩
   · left

@@ -1,3 +1,32 @@
+# RISC-V upper bound: 345 cycles with descending chain buffers
+
+This improves the 346-cycle non-hinted image by placing the chain buffers in
+descending address order. The final chain finishes with its input pointer at
+the start of the root, so the root needs one fewer pointer instruction.
+
+The layout has one cap chain and one width change. Relative to the 346-cycle
+image, the additional mandatory hash and the removed width instruction cancel;
+removing the root pointer instruction saves one cycle. The 128-bit nonce,
+5464-bit signature, state-width multiset, accepted digit language and security
+target are unchanged. The wire permutation and root commitment are new.
+
+The certificate proves **at most 345 cycles on every execution**, accepting or
+rejecting: `35 + (6 + v) + (137 + S) + 21`, with `S + v = 146` on an accepting
+path. A full-length accepting run costs **192 hash compressions + 153 ordinary
+instructions**. The image is **62,552 bytes**: 15,616 instructions and 88 data
+bytes.
+
+The full Lean certificate builds. Exact challenge-statement comparison, the
+permitted-axiom check, and fresh Lean-kernel replay of all 22,241 exported
+declarations pass. All 16,560 independent executions of the Lean-exported
+image agree with the staged verifier's decisions and exact oracle queries.
+
+Hosted verification is pending: the official local runner stops because this
+host lacks Landlock. See `NOTES.md` for details. The material below describes
+historical versions.
+
+---
+
 # RISC-V upper bound: 346 cycles with a free count digit and two caps
 
 This extends the 348-cycle candidate. A 33rd chain takes its hash count from

@@ -19,7 +19,7 @@ theorem index_take (bits : List Bool) : ofBits 128 (bits.take 128) = ofBits 128 
 theorem image_code : image.code = verifier := rfl
 
 /-- The certified cycle bound on every execution. -/
-def cycleBound : ℕ := 346
+def cycleBound : ℕ := 345
 
 /-- A slice inside the first 5504 bits reads the same from the loaded, zero-extended signature. -/
 theorem padded_drop (bits : List Bool) (off n : ℕ) (h : off + n ≤ 5504) :
@@ -48,9 +48,7 @@ theorem initial_chains (pk : PublicKey) (m : Message) (bits : List Bool) (answer
       ← List.drop_drop]
     exact afterIndex_payloadFrom pk m bits answer j hj
   · intro j hj; omega
-  · unfold TailInv
-    rw [if_pos (by omega), List.drop_drop, padded_drop bits _ _ (by norm_num), ← List.drop_drop]
-    exact afterIndex_tail pk m bits answer
+  · exact afterIndex_tail pk m bits answer
 
 theorem stagedVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
     some <$> stagedVerify pk m bits = (do
@@ -99,17 +97,17 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   have e : verifier = indexPhase ++ (freePrologue ++ freeTable ++ prologue 0 ++ tables) := by
     simp only [verifier, List.append_assoc]
   rw [e] at located
-  rw [stagedVerify_unfold, show cycleBound = 311 + 35 from rfl]
+  rw [stagedVerify_unfold, show cycleBound = 310 + 35 from rfl]
   have hwire : 5328 ≤ ((padded bits).drop 128).length := by
     rw [List.length_drop, length_padded]; norm_num
-  apply indexPhase_refines pk m bits _ 1299 1337 _ 311 (by norm_num) located
+  apply indexPhase_refines pk m bits _ 1299 1337 _ 310 (by norm_num) located
     (by rw [indexPhase_length])
   intro answer check left hleft
   set v := rawCountByte bits
   have hv256 : v < 256 := countByte_lt bits
   have inv := initial_chains pk m bits answer global
   have pc := afterIndex_pc pk m bits answer
-  have small : v < 16 → 6 + v + stagedCost (rawIdx answer) v 16 0 ≤ 311 :=
+  have small : v < 16 → 6 + v + stagedCost (rawIdx answer) v 16 0 ≤ 310 :=
     fun hs => stagedCost_le (rawIdx answer) v hs check
   have run := free_refines (rawIdx answer) v ((padded bits).drop 128) pk hv256
     (fun r' => some <$> stagedBlocks (rawIdx answer) v (Payload.permute ((padded bits).drop 128)) pk

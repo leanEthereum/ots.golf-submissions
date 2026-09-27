@@ -19,7 +19,7 @@ def wireOffset (k : ℕ) : ℕ := 8 * valueOffs.getD k 0
 def slotAddr (k : Fin 33) : ℕ := regionAddr + slotPos k / 8
 
 /-- The six bytes past the region, read by the root query of an oversized signature. -/
-def tailAddr : ℕ := regionAddr + 826
+def tailAddr : ℕ := regionAddr + 800
 
 theorem valueAddr_eq' : ∀ k : Fin 33, valueAddr k = payloadAddr + wireOffset k / 8 := by
   decide +kernel
@@ -34,7 +34,7 @@ theorem chainBits_bytes' : ∀ k : Fin 33, chainBits k = 8 * chainBytes k := by 
 theorem truncOff_bytes' : ∀ k : Fin 33, truncOff k = 8 * truncBytes k := by decide +kernel
 
 theorem output_bounds' : ∀ k : Fin 33,
-    regionAddr ≤ outAddr k ∧ outAddr k + 32 ≤ laneBase ∧ outAddr k % 8 = 0 := by
+    regionAddr - 8 ≤ outAddr k ∧ outAddr k + 32 ≤ laneBase ∧ outAddr k % 8 = 0 := by
   decide +kernel
 
 theorem value_bounds' : ∀ k : Fin 33,
@@ -71,12 +71,11 @@ theorem completed_disjoint' : ∀ j k : Fin 33, j.val < k.val →
     slotAddr j + topBits j / 8 ≤ outAddr k ∨ outAddr k + 32 ≤ slotAddr j := by
   decide +kernel
 
-/-- Only the high cap's answer buffer reaches the six bytes past the region. -/
-theorem tail_disjoint' : ∀ k : Fin 33, k.val ≠ 1 →
+/-- Every chain answer buffer is disjoint from the six bytes past the region. -/
+theorem tail_disjoint' : ∀ k : Fin 33,
     tailAddr + 6 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := by
   decide +kernel
 
-theorem tail_in_cap : tailAddr = outAddr 1 + 18 := by decide
 
 theorem valueAddr_eq (k : Fin 33) : valueAddr k = payloadAddr + wireOffset k / 8 := valueAddr_eq' k
 theorem wireOffset_aligned (k : Fin 33) : wireOffset k % 8 = 0 := wireOffset_aligned' k
@@ -85,7 +84,7 @@ theorem wireOffset_contained (k : Fin 33) : wireOffset k + chainBits k ≤ 5328 
 theorem chainBits_bytes (k : Fin 33) : chainBits k = 8 * chainBytes k := chainBits_bytes' k
 theorem truncOff_bytes (k : Fin 33) : truncOff k = 8 * truncBytes k := truncOff_bytes' k
 theorem output_bounds (k : Fin 33) :
-    regionAddr ≤ outAddr k ∧ outAddr k + 32 ≤ laneBase ∧ outAddr k % 8 = 0 := output_bounds' k
+    regionAddr - 8 ≤ outAddr k ∧ outAddr k + 32 ≤ laneBase ∧ outAddr k % 8 = 0 := output_bounds' k
 theorem value_bounds (k : Fin 33) :
     payloadAddr ≤ valueAddr k ∧ valueAddr k + chainBytes k ≤ tailAddr := value_bounds' k
 theorem slot_eq (k : Fin 33) : slotAddr k = outAddr k + topOff k / 8 := slot_eq' k
@@ -96,7 +95,7 @@ theorem unread_disjoint (k j : Fin 33) (h : k.val < j.val) :
 theorem completed_disjoint (j k : Fin 33) (h : j.val < k.val) :
     slotAddr j + topBits j / 8 ≤ outAddr k ∨ outAddr k + 32 ≤ slotAddr j :=
   completed_disjoint' j k h
-theorem tail_disjoint (k : Fin 33) (h : k.val ≠ 1) :
-    tailAddr + 6 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := tail_disjoint' k h
+theorem tail_disjoint (k : Fin 33) :
+    tailAddr + 6 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := tail_disjoint' k
 
 end OptimalOTS.RiscvMixedProgram

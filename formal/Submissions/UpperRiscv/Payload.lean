@@ -14,20 +14,19 @@ namespace OptimalOTS.Payload
 def valueBits : ℕ := 5328
 
 /-- Width of the value of chain `k`. -/
-def width (k : ℕ) : ℕ := if 15 ≤ k ∧ k < 27 then 192 else 144
+def width (k : ℕ) : ℕ := if 21 ≤ k then 192 else 144
 
 /-- Graph offset of the value of chain `k`. -/
 def graphOff (k : ℕ) : ℕ :=
-  if k < 15 then 144 * k else if k < 27 then 2160 + 192 * (k - 15) else 4464 + 144 * (k - 27)
+  if k < 21 then 144 * k else 3024 + 192 * (k - 21)
 
 /-- Wire offset of the value of chain `k`: its payload byte in memory. -/
 def wireOff (k : ℕ) : ℕ :=
-  8 * [42, 648, 78, 24, 114, 60, 204, 96, 258, 222, 276, 240, 612, 294, 630, 0, 312, 570, 336,
-    360, 384, 408, 432, 456, 480, 504, 528, 552, 594, 150, 132, 168, 186].getD k 0
+  8 * [612, 594, 324, 540, 522, 648, 630, 468, 576, 558, 396, 504, 486, 450, 432, 414, 378, 360, 342, 306, 288, 264, 240, 216, 192, 168, 144, 120, 96, 72, 48, 24, 0].getD k 0
 
 /-- The chain of graph payload bit `i`. -/
 def graphChain (i : ℕ) : ℕ :=
-  if i < 2160 then i / 144 else if i < 4464 then 15 + (i - 2160) / 192 else 27 + (i - 4464) / 144
+  if i < 3024 then i / 144 else 21 + (i - 3024) / 192
 
 /-- The chain of wire bit `j`. -/
 def wireChain (j : ℕ) : ℕ :=

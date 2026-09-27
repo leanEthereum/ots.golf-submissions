@@ -9,9 +9,8 @@ digits and `v` sum to 146 modulo 255. It hashes the free chain once, rejects `v 
 the free chain with `v` as its digit, and then runs the sixteen pairs; an expanding left chain is
 hashed once before its pair's cap is tested. Every signature runs through the whole verifier: the
 chains read the signature padded with zeros to 5504 bits (`padded`), and the root query is the
-first `a + 1144` bits of the memory from the root region on, where `a = min |σ| 5505` is the
-loaded length. The six bytes past the region are the last answer of cap chain 1 when it hashed,
-else the loaded signature bytes (`rootTail`). The verdict is the public-key test and `a < 5465`.
+first `a + 936` bits of the memory from the root region on, where `a = min |σ| 5505` is the
+loaded length. The six bytes past the region remain zero (`rootTail`). The verdict is the public-key test and `a < 5465`.
 
 `strictVerify` is the verifier of the security proof (`Forest.WireVerifier`): the forest verifier
 on full-length signatures, this verifier on shorter ones, and immediate rejection of longer
@@ -50,23 +49,21 @@ theorem length_padded (bits : List Bool) : (padded bits).length = 5504 := by
 /-- The count byte: the free digit as the machine loads it. -/
 def countByte (bits : List Bool) : ℕ := (ofBits 8 ((padded bits).drop 5456)).toNat
 
-/-- The loaded signature bytes past the root region. -/
+/-- The loaded signature suffix retained as an argument of the staged interface. -/
 def sigTail (bits : List Bool) : BitVec 48 := ofBits 48 ((padded bits).drop 5456)
 
 /-- The chain tops of an assignment. -/
 def topsOf (x : graph.Assignment) : (k : Fin 33) → BitVec (topBits k) :=
   fun k => (x (tp k).fin).cast (lenF_fin _)
 
-/-- The six bytes past the root region: bytes 18–23 of the last answer of cap chain 1 when it
-hashed, else the loaded signature. -/
+/-- The six bytes past the root region: outside all loader and chain writes, hence zero. -/
 def rootTail (index : RawIdx) (v : ℕ) (tail : BitVec 48) (x : graph.Assignment) : BitVec 48 :=
-  if RiscvUpperForest.ForestVerifier.pos index v 1 = 32 then tail
-  else ((x (cv 1 31).fin).cast (lenF_fin (cv 1 31)) : BitVec 256).extractLsb' 144 48
+  0
 
 /-- The root query for the loaded length `a`, and the decision. -/
 def rootStep (index : RawIdx) (v : ℕ) (pk : PublicKey) (a : ℕ) (tail : BitVec 48)
     (x : graph.Assignment) : OracleComp Spec Bool := do
-  let y ← hash ((rootTail index v tail x ++ rootRegion (topsOf x)).setWidth (a + 1144))
+  let y ← hash ((rootTail index v tail x ++ rootRegion (topsOf x)).setWidth (a + 936))
   return (decide (y.setWidth 128 = pk) && decide (a < 5465))
 
 /-- The exact staged oracle program of the pairs. `payload` is already in chain execution
@@ -103,7 +100,7 @@ theorem stagedBlocks_some_succ (index : RawIdx) (v : ℕ) (payload : List Bool) 
 theorem stagedBlocks_some_zero (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
     (a : ℕ) (tail : BitVec 48) (q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
     some <$> stagedBlocks index v payload pk a tail 0 q x cursor = (do
-      let y ← hash ((rootTail index v tail x ++ rootRegion (topsOf x)).setWidth (a + 1144))
+      let y ← hash ((rootTail index v tail x ++ rootRegion (topsOf x)).setWidth (a + 936))
       return some (decide (y.setWidth 128 = pk) && decide (a < 5465))) := by
   simp only [stagedBlocks, rootStep, map_bind, map_pure]
 
@@ -196,7 +193,7 @@ theorem stagedBlocks_accept (index : RawIdx) (v : ℕ) (payload : List Bool) (pk
     (p : Bool × Cache)
     (hp : p ∈ support (run (stagedBlocks index v payload pk a tail n q x cursor) c))
     (hok : p.1 = true) :
-    ∃ u : BitVec (a + 1144), ∃ w, p.2 ⟨a + 1144, u⟩ = some w ∧ w.setWidth 128 = pk ∧ a < 5465 := by
+    ∃ u : BitVec (a + 936), ∃ w, p.2 ⟨a + 936, u⟩ = some w ∧ w.setWidth 128 = pk ∧ a < 5465 := by
   induction n generalizing q x cursor c with
   | zero =>
     rw [stagedBlocks, rootStep, run_bind, support_bind] at hp
@@ -285,8 +282,8 @@ theorem chainNodes_cost (k : Fin 33) : ((chainNodes k).map Name.cost).sum = 32 :
   have h : ∀ k : Fin 33, ((chainNodes k).map Name.cost).sum = 32 := by decide +kernel
   exact h k
 
-/-- A root query of at most 6656 bits costs at most thirteen compressions. -/
-theorem blockCost_root_le {a : ℕ} (ha : a ≤ 5505) : blockCost (a + 1144) ≤ 13 := by
+/-- A root query of at most 6448 bits costs at most thirteen compressions. -/
+theorem blockCost_root_le {a : ℕ} (ha : a ≤ 5505) : blockCost (a + 936) ≤ 13 := by
   unfold blockCost blockBits
   exact max_le (by norm_num) (by omega)
 
@@ -490,7 +487,7 @@ theorem stagedChains_oversized (index : RawIdx) (v : ℕ) (payload : List Bool) 
 theorem stagedChains_accept (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
     (a : ℕ) (tail : BitVec 48) (c : Cache) (p : Bool × Cache)
     (hp : p ∈ support (run (stagedChains index v payload pk a tail) c)) (hok : p.1 = true) :
-    ∃ u : BitVec (a + 1144), ∃ w, p.2 ⟨a + 1144, u⟩ = some w ∧ w.setWidth 128 = pk ∧ a < 5465 := by
+    ∃ u : BitVec (a + 936), ∃ w, p.2 ⟨a + 936, u⟩ = some w ∧ w.setWidth 128 = pk ∧ a < 5465 := by
   unfold stagedChains at hp
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
@@ -661,7 +658,7 @@ theorem rootStep_eq (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : Publi
       pure (decide ((r.1 rh.fin).setWidth 128 = pk)) := by
   have hlt : decide (5464 < 5465) = true := rfl
   unfold rootStep
-  rw [show (5464 + 1144 : ℕ) = Name.rootBits from rfl, setWidth_append_lo]
+  rw [show (5464 + 936 : ℕ) = Name.rootBits from rfl, setWidth_append_lo]
   simp only [runNodes', cursorStep_rc, cursorStep_rh, pure_bind, bind_assoc, bind_map_left,
     Function.update_self]
   refine hash_bind_congr (graph_len_fin rc).symm rfl fun y => ?_
@@ -757,7 +754,7 @@ def strictVerify (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp 
 
 theorem stagedVerify_accept (pk : PublicKey) (m : Message) (bits : List Bool) (c : Cache)
     (p : Bool × Cache) (hp : p ∈ support (run (stagedVerify pk m bits) c)) (hok : p.1 = true) :
-    ∃ u : BitVec (min bits.length 5505 + 1144), ∃ w, p.2 ⟨_, u⟩ = some w ∧ trunc128 w = pk ∧
+    ∃ u : BitVec (min bits.length 5505 + 936), ∃ w, p.2 ⟨_, u⟩ = some w ∧ trunc128 w = pk ∧
       min bits.length 5505 < 5465 := by
   rw [stagedVerify_eq] at hp
   rw [run_bind, support_bind] at hp
@@ -891,7 +888,7 @@ theorem strictScheme_admissible : strictScheme.Admissible where
 
 end Scheme
 
-/-- The 346-cycle scheme retains the restricted forest's keys and signer. -/
+/-- The 345-cycle scheme retains the restricted forest's keys and signer. -/
 def stagedScheme : OracleAlgorithm.Scheme := RejectAdapter.scheme strictScheme stagedVerify
 
 theorem stagedScheme_secure : stagedScheme.Secure :=

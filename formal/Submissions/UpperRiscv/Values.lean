@@ -191,9 +191,9 @@ theorem child_hashParent {h p : Name} (hp : hashParent h = some p) : child p = s
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   all_goals rfl
 
-/-- The input of a hash node has length 144, 192 (chains) or 6608 (root). -/
+/-- The input of a hash node has length 144, 192 (chains) or 6400 (root). -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 144 ∨ p.len = 192 ∨ p.len = 6608 := by
+    p.len = 144 ∨ p.len = 192 ∨ p.len = 6400 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · rename_i k t
     rcases chainBits_cases k with hk | hk <;> simp [Name.len, hk]
@@ -477,9 +477,9 @@ def SprHash (c : Cache) (ξ : Rec) : Prop :=
   ∃ h p, hashParent h = some p ∧ ∃ u : BitVec p.len, u ≠ val ξ p ∧
     ∃ w, c ⟨p.len, u⟩ = some w ∧ sim ξ h w
 
-/-- The root query lengths of signatures shorter than the full `5464` bits: `ℓ + 1144` for
+/-- The root query lengths of signatures shorter than the full `5464` bits: `ℓ + 936` for
 `ℓ < 5464`. No hash node and no index query has such an input length. -/
-def ShortLen (n : ℕ) : Prop := 1144 ≤ n ∧ n < 6608
+def ShortLen (n : ℕ) : Prop := 936 ≤ n ∧ n < 6400
 
 /-- Some cached answer at a short root length begins with the public key. -/
 def SprShort (c : Cache) (ξ : Rec) : Prop :=
@@ -687,7 +687,7 @@ theorem mem_hashNodes {h : Name} : h ∈ hashNodes ↔ (hashParent h).isSome := 
 
 attribute [irreducible] hashNodes
 
-theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 6608) :
+theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 6400) :
     h = rh := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · simp [Name.len, chainBits] at hl
@@ -719,7 +719,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
     rcases hw with ⟨-, ⟨h, p, hp, hl, -⟩ | ⟨-, hs⟩⟩
     · exact absurd (hl ▸ hsn) (not_shortLen_of_hashParent hp)
     · exact ⟨Finset.mem_univ _, hs⟩
-  by_cases hn : n = 6608
+  by_cases hn : n = 6400
   · subst hn
     refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_trunc128_le (trunc128 (ξ.2 rh.fin)))
     rw [simSet, Finset.mem_filter] at hw

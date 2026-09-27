@@ -12,14 +12,13 @@ attribute [local irreducible] Forest.fixedDigits
 
 variable (index : RawIdx) (v : ℕ) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
-/-- The six bytes past the region once the high cap has run: its signature bytes if it made no
-hash, else bytes 18 to 23 of its last answer. -/
-def tailAfter (x : graph.Assignment) : BitVec 48 :=
-  if RiscvUpperForest.ForestVerifier.pos index v 1 = 32 then ofBits 48 (wire.drop 5328) else (lastAnswer x 1).extractLsb' 144 48
+/-- The six bytes past the region stay zero throughout the chain phase. -/
+def tailAfter (_index : RawIdx) (_v : ℕ) (_wire : List Bool) (_x : graph.Assignment) : BitVec 48 := 0
 
 /-- The six bytes past the region at the boundary before chain `k`. -/
-def TailInv (s : MachineState) (x : graph.Assignment) (k : ℕ) : Prop :=
-  MemBits s (W tailAddr) (if k ≤ 1 then ofBits 48 (wire.drop 5328) else tailAfter index v wire x)
+def TailInv (_index : RawIdx) (_v : ℕ) (_wire : List Bool)
+    (s : MachineState) (_x : graph.Assignment) (_k : ℕ) : Prop :=
+  MemBits s (W tailAddr) (0 : BitVec 48)
 
 variable (a) in
 /-- Invariant at a chain hash, with either its value or its working input address. -/
@@ -31,13 +30,12 @@ structure HashInv (s : MachineState) (x : graph.Assignment) (k : Fin 33) (base :
   out : s.getReg .x12 = W (outAddr k)
   payload : PayloadFrom s wire (k.val+1)
   done : Completed s x k
-  tail : k.val ≠ 1 → TailInv index v wire s x k
+  tail : TailInv index v wire s x k
 
 theorem tailAfter_tripleUpdate (x : graph.Assignment) (k : Fin 33) (hk : k.val ≠ 1) (t : Fin 32)
     (u : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) :
     tailAfter index v wire (tripleUpdate x k t u y) = tailAfter index v wire x := by
-  unfold tailAfter
-  rw [lastAnswer_tripleUpdate_ne x k t u y 1 (fun h => hk (by rw [← h]; rfl))]
+  rfl
 
 theorem HashInv.writeHash {s : MachineState} {x : graph.Assignment} {k : Fin 33} {base : ℕ}
     (inv : HashInv index v wire pk a s x k base) (t : Fin 32)
@@ -52,11 +50,7 @@ theorem HashInv.writeHash {s : MachineState} {x : graph.Assignment} {k : Fin 33}
     intro j hj
     rw [tops_tripleUpdate x k t u y j]
     exact h j hj
-  · intro hk
-    have h := tail_writeHash _ (inv.tail hk) k hk y inv.out
-    unfold TailInv at h ⊢
-    rw [tailAfter_tripleUpdate index v wire x k hk t u y]
-    exact h
+  · exact tail_writeHash _ inv.tail k y inv.out
 
 theorem HashInv.frame {s t : MachineState} {x : graph.Assignment} {k : Fin 33} {base : ℕ}
     (inv : HashInv index v wire pk a s x k base) (next : ℕ) (hp : t.getReg .x10 = W next)
@@ -69,7 +63,7 @@ theorem HashInv.frame {s t : MachineState} {x : graph.Assignment} {k : Fin 33} {
   · rw [regs .x12 (by decide) (by decide)]; exact inv.out
   · intro j hj; exact memBits_of_mem_eq mem (inv.payload j hj)
   · intro j hj; exact memBits_of_mem_eq mem (inv.done j hj)
-  · intro hk; exact memBits_of_mem_eq mem (inv.tail hk)
+  · exact memBits_of_mem_eq mem inv.tail
 
 /-- A graph hash triple and one actual HASH have the same oracle input and state effect. -/
 theorem step_refines (k : Fin 33) (t : Fin 32) (base : ℕ)

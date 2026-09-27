@@ -287,10 +287,10 @@ theorem laneSum_bound (a : MachineState) (hm : MasksLoaded a) :
 /-- The four lane words sum with exactly three 64-bit wraps. -/
 theorem addressSum_toNat (a : MachineState) (hm : MasksLoaded a)
     (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) :
-    (addressSum a 4).toNat = 18321511289191483004 - (laneSum a 4).toNat := by
+    (addressSum a 4).toNat = 17871142667683973024 - (laneSum a 4).toNat := by
   have bound := laneSum_bound a hm
   rw [addressSum_eq a hb]
-  have eb : (W (4 * baseWord 0)).toNat = 18321511289191483004 := by
+  have eb : (W (4 * baseWord 0)).toNat = 17871142667683973024 := by
     decide +kernel
   rw [BitVec.toNat_sub_of_le, eb]
   rw [BitVec.le_def, eb]

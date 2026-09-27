@@ -1,7 +1,7 @@
 import Submissions.UpperRiscv.Program
 
-/-! The 346-cycle image: a free first chain whose hash count is the signature's count byte, then
-sixteen dispatched pairs, two of whose first chains are caps (no extra hash), and the root.
+/-! The 345-cycle image: a free first chain whose hash count is the signature's count byte, then
+sixteen dispatched pairs, whose final chain is a cap (no extra hash), and the root.
 
 Chains are numbered by execution position `k < 33`. Chain `k` reads its signature value at
 `valueAddr k`, writes every answer at `outAddr k`, and after its first hash reads its state
@@ -17,32 +17,30 @@ open RiscvZkvm.Rv64
 open Riscv2Program (Code imm12 reject indexPrefix wordReg
   laneWordAddr hashBase laneBase wordBytes broadcast nop)
 
-/-- The payload (signature bits from 128) and the root region, 160 bytes below it. -/
+/-- The payload (signature bits from 128) and root region start at the same address. -/
 def payloadAddr : ℕ := 0x400040
-def regionAddr : ℕ := 0x3FFFA0
+def regionAddr : ℕ := 0x400040
 
 def valueOffs : List ℕ :=
-  [42,648,78,24,114,60,204,96,258,222,276,240,612,294,630,0,312,570,336,360,384,408,432,456,
-   480,504,528,552,594,150,132,168,186]
+  [612, 594, 324, 540, 522, 648, 630, 468, 576, 558, 396, 504, 486, 450, 432, 414, 378, 360, 342, 306, 288, 264, 240, 216, 192, 168, 144, 120, 96, 72, 48, 24, 0]
 def outOffs : List ℕ :=
-  [0,808,24,184,48,208,72,256,96,368,232,392,416,440,776,152,464,128,488,512,536,560,584,608,
-   632,656,680,704,752,728,288,312,336]
+  [776, 752, 728, 704, 680, 656, 632, 608, 584, 560, 536, 512, 488, 464, 440, 416, 392, 368, 344, 320, 296, 272, 248, 224, 200, 176, 152, 128, 104, 80, 56, 32, 0]
 def truncs : List ℕ :=
-  [0,0,0,0,0,12,0,0,0,14,0,8,0,14,14,8,8,0,8,8,8,8,8,8,8,8,8,8,2,0,4,0,10]
+  [0, 0, 0, 0, 0, 0, 6, 0, 0, 6, 0, 0, 6, 0, 0, 6, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8]
 
 /-- Signature value of chain `k`. -/
 def valueAddr (k : ℕ) : ℕ := payloadAddr + valueOffs.getD k 0
 /-- Answer buffer of chain `k` (8-byte aligned). -/
-def outAddr (k : ℕ) : ℕ := regionAddr + outOffs.getD k 0
+def outAddr (k : ℕ) : ℕ := regionAddr - 8 + outOffs.getD k 0
 def truncBytes (k : ℕ) : ℕ := truncs.getD k 0
 /-- The input address while the chain hashes. -/
 def work (k : ℕ) : ℕ := outAddr k + truncBytes k
-/-- State bytes: chains 15 to 26 are 192-bit, the others 144-bit. -/
-def chainBytes (k : ℕ) : ℕ := if 15 ≤ k ∧ k < 27 then 24 else 18
+/-- State bytes: chains 21 to 32 are 192-bit, the others 144-bit. -/
+def chainBytes (k : ℕ) : ℕ := if 21 ≤ k then 24 else 18
 /-- Chains whose first hash moves the value into the answer buffer. -/
-def expands (k : ℕ) : Bool := k ∈ [0,2,4,6,8,10,12,17,29,31]
+def expands (k : ℕ) : Bool := k ∈ [0, 1, 2, 3, 4, 7, 10, 13, 16, 19]
 /-- Caps: the hash count is the digit itself. -/
-def capChain (k : ℕ) : Bool := k = 1 ∨ k = 15
+def capChain (k : ℕ) : Bool := k = 32
 /-- Chains whose table row has fifteen hash steps: a cap, or an expanding chain whose first
 hash precedes the landing. -/
 def shortRow (k : ℕ) : Bool := expands k || capChain k
@@ -54,16 +52,16 @@ def pairCap (q : ℕ) : ℕ := if q < 5 then 20 else if q < 10 then 21 else 30
 def indexStub : ℕ := 34
 def freeTableAt : ℕ := 44
 def prologue0At : ℕ := 299
-def copiesAt : ℕ := 303
+def copiesAt : ℕ := 305
 /-- Column of pair `q`: its `d = 15` body; body `d` lies `256 * (15 - d)` instructions later. -/
 def place (q : ℕ) : ℕ :=
-  [0,3723,7449,11174,38,3762,7488,11213,77,3801,7782,11507,114,4094,7820,11545].getD q 0
+  [0, 3610, 7321, 11072, 64, 3711, 7361, 11109, 170, 3673, 7681, 11403, 210, 4073, 7719, 11441].getD q 0
 def bodyAt (q d : ℕ) : ℕ := copiesAt + place q + 256*(15-d)
 def copyStart (q d : ℕ) : ℕ := 4096 + 4*bodyAt q d
 def landing0 (q : ℕ) : ℕ := copyStart q 0 + 60
 /-- The shared base of lane `j` of every word; lane 0 is offset so that the sum check
 residue is zero exactly at `S + v = 146 (mod 255)`. -/
-def baseLane (q : ℕ) : ℕ := landing0 (q % 4) + if q % 4 = 0 then 167 else 0
+def baseLane (q : ℕ) : ℕ := landing0 (q % 4) + if q % 4 = 0 then 232 else 0
 def baseWord (g : ℕ) : ℕ :=
   (List.range 4).foldl (fun n j => n + baseLane (4 * g + j) * 2 ^ (16 * j)) 0
 def jumpImm (q : ℕ) : ℤ := (landing0 q : ℤ) - baseLane q
@@ -119,16 +117,16 @@ def prologue (q : ℕ) : Code :=
   widthChange (2*q+1) (2*q) ++ enter (2*q+1) (work (2*q)) ++
     [.LHU .x28 .x12 (imm12 ((laneAddr q : ℤ) - outAddr (2*q+1))),
      .JALR .x0 .x28 (imm12 (jumpImm q))]
-/-- The root reads the first `a3 + 1144` bits of the region: 6608 bits for a full signature. -/
+/-- The root reads the first `a3 + 936` bits of the region: 6400 bits for a full signature. -/
 def root : Code :=
-  [.ADDI .x10 .x10 (imm12 ((regionAddr : ℤ) - work 32)), .ADDI .x11 .x13 1144, .ECALL]
+  [.ADDI .x11 .x13 936, .ECALL]
 /-- Accept exactly when both root words match the public key and `a3 < 5465`. -/
 def decision : Code :=
   [.LD .x26 .x12 0, .BNE .x26 .x30 24, .LD .x28 .x12 8, .BNE .x28 .x31 16,
    .SLTU .x10 .x13 .x1, .ADDI .x5 .x0 0, .ECALL] ++ reject
 
 /-- Rejection fragments in padding, each within branch range of the rows it serves. -/
-def rejectStubs : List ℕ := [456,1580,2604,3998,5047,6071,7722,8773,9797,11448,12498,13522]
+def rejectStubs : List ℕ := [408, 1535, 2555, 4056, 4983, 6007, 7703, 8723, 9743, 11453, 12434, 13458]
 def stubFor (ip : ℕ) : ℕ :=
   (rejectStubs.find? fun (s : ℕ) => decide (-4096 ≤ 4*((s : ℤ)-ip) ∧ 4*((s : ℤ)-ip) < 4096)).getD 456
 def rowInstr (q d i : ℕ) : Instr :=
@@ -170,7 +168,7 @@ def image : Riscv.Image := ⟨verifier, dataImage⟩
 theorem index_length : indexPhase.length = 38 := by decide +kernel
 theorem head_length : (indexPhase ++ freePrologue ++ freeTable ++ prologue 0).length = copiesAt := by
   decide +kernel
-theorem code_length : verifier.length = 15719 := by decide +kernel
+theorem code_length : verifier.length = 15616 := by decide +kernel
 theorem data_length : dataImage.length = 88 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel
 theorem image_valid : image.Valid := by
