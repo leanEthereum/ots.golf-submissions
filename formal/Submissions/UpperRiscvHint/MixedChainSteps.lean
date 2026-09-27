@@ -14,7 +14,7 @@ variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 
 /-- Invariant at a chain hash, with either its wire or expanded input address. -/
 structure HashInv (s : MachineState) (x : graph.Assignment) (k : Fin 32) (base : ℕ) : Prop where
-  ctx : Ctx s index pk
+  ctx : Ctx s index wire pk
   input : s.getReg .x10 = W base
   inputRange : 32 ≤ base ∧ base+24 ≤ 0x78000000
   length : s.getReg .x11 = W (chainBits k)
@@ -31,17 +31,15 @@ theorem HashInv.writeHash {s : MachineState} {x : graph.Assignment} {k : Fin 32}
   · rw [writeHash_regs]; exact inv.input
   · rw [writeHash_regs]; exact inv.length
   · rw [writeHash_regs]; exact inv.out
-  · have h := inv.done.writeHash k y inv.out
-    intro j hj
-    rw [tops_tripleUpdate x k t v y j (by intro he; subst j; omega)]
-    exact h j hj
+  · rw [tops_tripleUpdate]
+    exact inv.done.writeHash k y inv.out
 
 /-- A graph hash triple and one actual HASH have the same oracle input and state effect. -/
 theorem step_refines (k : Fin 32) (t : Fin 32) (base : ℕ)
     (tail : Code) (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool))
     (c budget cursor cursor' : ℕ) (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (v : BitVec (graph.len (ci k t).fin))
-    (hrun : runNodes' index (Payload.permute wire) [ci k t, ch k t, cv k t] x cursor =
+    (hrun : runNodes' index (viewPayload wire) [ci k t, ch k t, cv k t] x cursor =
       hash v >>= fun y => pure (tripleUpdate x k t v y, cursor'))
     (inv : HashInv index wire pk s x k base) (held : MemBits s (W base) v)
     (located : Riscv.CodeAt s s.pc (.ECALL :: tail)) (bound : 1+budget ≤ fuel)
@@ -50,7 +48,7 @@ theorem step_refines (k : Fin 32) (t : Fin 32) (base : ℕ)
       MemBits u (W (outAddr k)) y → Riscv.CodeAt u u.pc tail →
       ∀ left, budget ≤ left → Riscv.Refines left u (K (tripleUpdate x k t v y, cursor')) c) :
     Riscv.Refines fuel s
-      (runNodes' index (Payload.permute wire) [ci k t, ch k t, cv k t] x cursor >>= K) (1+c) := by
+      (runNodes' index (viewPayload wire) [ci k t, ch k t, cv k t] x cursor >>= K) (1+c) := by
   rw [hrun]
   simp only [bind_assoc, pure_bind]
   have valid := chain_hashValid s k base inv.input inv.out inv.length inv.inputRange
@@ -73,12 +71,12 @@ theorem step_refines (k : Fin 32) (t : Fin 32) (base : ℕ)
   apply continuation (Riscv.writeHash s y) y (HashInv.writeHash index wire pk inv t v y) answer
     (located.tail.code_eq (writeHash_code s y)) (fuel-1) (by omega)
 
-/-- What the working address holds before level t, or the full output after level 31. -/
+/-- What the working address holds before level t, or the full last answer after level 31. -/
 def HoldsAt (s : MachineState) (x : graph.Assignment) (k : Fin 32) (t : ℕ) : Prop :=
   if h : t < 32 then
     MemBits s (W (work k))
       ((Forest.trunc k (x (prev k ⟨t,h⟩).fin)).cast (graph_len_fin (ci k ⟨t,h⟩)).symm)
-  else MemBits s (W (outAddr k)) (tops x k)
+  else MemBits s (W (outAddr k)) (lastOut x k)
 
 theorem prev_succ (k : Fin 32) (t : Fin 32) (ht : t.val < 31) :
     prev k ⟨t.val+1, by omega⟩ = cv k t := by simp [prev]
@@ -106,7 +104,7 @@ theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Fin 32} {t :
   · rw [dif_neg h]
     have ht : t = 31 := Fin.ext (by have := t.isLt; omega)
     subst ht
-    unfold tops
+    unfold lastOut
     rw [tripleUpdate_cv]
     apply (memBits_cast _ _ _ _).mpr
     apply (memBits_cast _ _ _ _).mpr
@@ -118,16 +116,16 @@ theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Fin 32} {t :
 theorem steps_refines (k : Fin 32) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest' cursor : ℕ)
     (continuation : ∀ (u : MachineState) (y : graph.Assignment),
-      HashInv index wire pk u y k (work k) → MemBits u (W (outAddr k)) (tops y k) →
+      HashInv index wire pk u y k (work k) → MemBits u (W (outAddr k)) (lastOut y k) →
       Riscv.CodeAt u u.pc tail →
       ∀ left, rest' ≤ left → Riscv.Refines left u (K (y, cursor)) c) :
-    ∀ (n t : ℕ), 32 - t = n → t ≤ 32 → RiscvUpperForest.ForestVerifier.pos index k < t →
+    ∀ (n t : ℕ), 32 - t = n → t ≤ 32 → firstAt index k < t →
     ∀ (s : MachineState) (x : graph.Assignment) (fuel : ℕ),
       HashInv index wire pk s x k (work k) → HoldsAt s x k t →
       Riscv.CodeAt s s.pc (List.replicate (32 - t) .ECALL ++ tail) →
       (32 - t) + rest' ≤ fuel →
       Riscv.Refines fuel s
-        (runNodes' index (Payload.permute wire) ((List.range' t (32 - t)).flatMap (tripleN k)) x cursor >>= K)
+        (runNodes' index (viewPayload wire) ((List.range' t (32 - t)).flatMap (tripleN k)) x cursor >>= K)
         ((32 - t) + c) := by
   intro n
   induction n with
@@ -155,10 +153,10 @@ theorem steps_refines (k : Fin 32) (tail : Code)
     rw [dif_pos ht'] at held
     apply step_refines index wire pk k ⟨t, ht'⟩ (work k)
       (tail := List.replicate (32 - (t + 1)) .ECALL ++ tail)
-      (fun r => runNodes' index (Payload.permute wire) ((List.range' (t + 1) (32 - (t + 1))).flatMap (tripleN k))
+      (fun r => runNodes' index (viewPayload wire) ((List.range' (t + 1) (32 - (t + 1))).flatMap (tripleN k))
         r.1 r.2 >>= K)
       (32 - (t + 1) + c) (32 - (t + 1) + rest') cursor cursor s x fuel _
-      (triple_run_step index (Payload.permute wire) k ⟨t, ht'⟩ hp x cursor) inv held located (by omega)
+      (triple_run_step index (viewPayload wire) k ⟨t, ht'⟩ hp x cursor) inv held located (by omega)
     intro u y inv' answer located' left hleft
     exact ih (t + 1) (by omega) (by omega) (by omega) u _ left inv' (holdsAt_succ answer)
       located' (by omega)

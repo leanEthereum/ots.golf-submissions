@@ -7,8 +7,9 @@ The paper scheme of `OptimalOTS.Dag` accepts an index when it is below `numCuts`
 scheme of this root reads its index as `pack` of the 256-bit answer to `H(message ‖ nonce)` (the
 low bits of the first 28 bytes, packed) and accepts it when it lies in `validSet` (its 28 digits
 sum to `target`), so that the machine reads the chain positions directly from the answer bytes.
-Everything else (graph, key generation, signing loop, verification, strong-forgery experiment)
-is the paper's definition verbatim.
+The public key is the root's low 128 bits with bit 64 flipped (`flipHi`), which lets the machine
+test the key with one `XOR` per word. Everything else (graph, key generation, signing loop,
+verification, strong-forgery experiment) is the paper's definition verbatim.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -141,12 +142,22 @@ the graph's hash nodes. -/
 def packIndex (M : EMessage) (η : Nonce) : OracleComp Spec ℕ :=
   (fun y => pack y) <$> hash (swapHalves (M ++ η))
 
+/-- The public key with bit 64, the low bit of its high word, flipped. -/
+def flipHi (pk : PublicKey) : PublicKey := pk ^^^ BitVec.twoPow _ 64
+
+@[simp] theorem flipHi_flipHi (pk : PublicKey) : flipHi (flipHi pk) = pk := by
+  simp [flipHi]
+
+theorem flipHi_injective : Function.Injective flipHi :=
+  Function.LeftInverse.injective flipHi_flipHi
+
 namespace GScheme
 
 variable (S : GScheme)
 
-/-- Resize the root value to `pkBits`: truncation keeps the low bits; extension pads with zeros. -/
-def publicKey (x : S.graph.Assignment) : PublicKey := (x S.graph.root).setWidth pkBits
+/-- Resize the root value to `pkBits` (truncation keeps the low bits; extension pads with zeros),
+then flip bit 64. -/
+def publicKey (x : S.graph.Assignment) : PublicKey := flipHi ((x S.graph.root).setWidth pkBits)
 
 /-- Key generation; the secret key is the value of every node. -/
 def keygen : OracleComp Spec (PublicKey × S.graph.Assignment) := do

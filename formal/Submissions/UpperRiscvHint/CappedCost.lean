@@ -3,12 +3,11 @@ import Submissions.UpperRiscvHint.Valid
 /-! Arithmetic envelope for every path through the capped-pair verifier. -/
 namespace OptimalOTS.CappedCost
 
-def overhead (q : ℕ) : ℕ :=
-  8 + (if q = 0 ∨ q = 1 then 2 else if q = 2 ∨ q = 4 ∨ q = 5 ∨ q = 7 then 1 else 0) +
-    (if q = 8 then 1 else 0)
+/-- Per-pair cycles besides one hash per digit unit: the length setup before pair 8, the prologue
+(with pair 0's raw-form test), the pointer move, and the extra hash of each normal chain. -/
+def overhead (q : ℕ) : ℕ := (if q < 8 then 6 else 8) + (if q = 8 then 1 else 0) + if q = 0 then 1 else 0
 
-def rejectCost (q : ℕ) : ℕ :=
-  8 + (if q = 0 ∨ q = 1 ∨ q = 4 ∨ q = 7 then 2 else 0) + (if q = 8 then 1 else 0)
+def rejectCost (q : ℕ) : ℕ := 8 + (if q = 8 then 1 else 0) + if q = 0 then 1 else 0
 
 def cost (w : ℕ → ℕ) : (n q : ℕ) → ℕ
   | 0, _ => 21
@@ -22,7 +21,7 @@ early. Rank 413 cannot pass all caps, whose sum is only 412. -/
 theorem bound (w : ℕ → ℕ) (hw : ∀ q < 16, w q ≤ 30)
     (rank : (∑ q ∈ Finset.range 16, w q) = 158 ∨
             (∑ q ∈ Finset.range 16, w q) = 413) :
-    cost w 16 0 ≤ 316 := by
+    cost w 16 0 ≤ 293 := by
   have h10 := hw 10 (by omega)
   have h11 := hw 11 (by omega)
   have h12 := hw 12 (by omega)

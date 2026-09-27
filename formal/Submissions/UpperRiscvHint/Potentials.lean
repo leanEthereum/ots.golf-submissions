@@ -104,10 +104,10 @@ theorem trunc128_cast_pot {n m : ℕ} (h : n = m) (x : BitVec n) :
   subst h; rfl
 
 theorem publicKey_eq_pkOf (ξ : Rec) : forestScheme.publicKey (graph.evalRec ξ) = pkOf ξ := by
-  show trunc128 (graph.evalRec ξ rh.fin) = trunc128 (ξ.2 rh.fin)
+  show flipHi (trunc128 (graph.evalRec ξ rh.fin)) = flipHi (trunc128 (ξ.2 rh.fin))
   rw [← val_rh]
   unfold val
-  exact (trunc128_cast_pot _ _).symm
+  exact congrArg flipHi (trunc128_cast_pot _ _).symm
 
 theorem sign_eq (ξ : Rec) (m : Message) :
     forestScheme.sign (graph.evalRec ξ) m = sigOf ξ <$> signIdx (emsg m (pkOf ξ)) := by

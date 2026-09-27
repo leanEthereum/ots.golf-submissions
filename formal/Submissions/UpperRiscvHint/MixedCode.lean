@@ -78,8 +78,8 @@ theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
 theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (q : Fin 16) (d : Fin (copies q)) :
     Riscv.CodeAt s (W (copyStart q d)) (copyCode q d) := by
-  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 5 nop) (last := tables)
-  rw [show (indexPhase ++ prologue 0 ++ List.replicate 5 nop).length = 50 by decide, W_add] at ht
+  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 14 nop) (last := tables)
+  rw [show (indexPhase ++ prologue 0 ++ List.replicate 14 nop).length = 50 by decide, W_add] at ht
   have mem : (groupOffset (group q)+256*(15-d.val)+slotOffset q, copyCode q d) ∈ fragments :=
     (mem_addStubs _ _).mpr (Or.inl
       (List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩))
@@ -89,8 +89,8 @@ theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifi
 theorem rejectStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (ip : ℕ) (hi : ip ∈ rejectStubs) :
     Riscv.CodeAt s (W (4096+4*ip)) reject := by
-  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 5 nop) (last := tables)
-  rw [show (indexPhase ++ prologue 0 ++ List.replicate 5 nop).length = 50 by decide, W_add] at ht
+  have ht := global.append_right (first := indexPhase ++ prologue 0 ++ List.replicate 14 nop) (last := tables)
+  rw [show (indexPhase ++ prologue 0 ++ List.replicate 14 nop).length = 50 by decide, W_add] at ht
   have mem : (ip-50,reject) ∈ fragments :=
     (mem_addStubs _ _).mpr (Or.inr ⟨ip,hi,rfl⟩)
   have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem

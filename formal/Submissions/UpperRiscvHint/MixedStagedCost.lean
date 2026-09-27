@@ -9,15 +9,24 @@ def pairWeight (index : RawIdx) (q : ℕ) : ℕ :=
 
 theorem pairCost_overhead (index : RawIdx) (q : Fin 16) :
     pairCost index q = CappedCost.overhead q.val + pairWeight index q.val := by
-  have h : (lengthSetup q).length + 8 + earlyHash (leftChain q) + earlyHash (rightChain q) =
-      CappedCost.overhead q.val := by
+  have h : (lengthSetup q).length + (if q.val = 0 then 1 else 0) + 8 =
+      CappedCost.overhead q.val + 2 * lead q := by
     revert q
     decide +kernel
   rw [pairCost_eq, steps_eq_digit, steps_eq_digit]
   dsimp only [pairWeight, leftChain, rightChain] at *
-  omega
+  unfold lead at h
+  have hA := digit_lt_16 index.val (2*q.val)
+  have hB := digit_lt_16 index.val (2*q.val+1)
+  by_cases hq8 : q.val < 8
+  · simp only [hq8, show 2*q.val < 16 by omega, show 2*q.val+1 < 16 by omega, if_true] at h ⊢
+    omega
+  · simp only [hq8, show ¬ 2*q.val < 16 by omega, show ¬ 2*q.val+1 < 16 by omega, if_false] at h ⊢
+    omega
 
 theorem badPairCost_eq (q : Fin 16) : badPairCost q = CappedCost.rejectCost q.val := by
+  unfold badPairCost
+  rw [dispatchCode_length]
   revert q
   decide +kernel
 
@@ -33,9 +42,9 @@ theorem stagedCost_eq (index : RawIdx) (n q : ℕ) (hq : q+n ≤ 16) :
     · rw [pairCost_overhead, ih (q+1) (by omega)]
     · exact badPairCost_eq _
 
-/-- Every chain/root path fits in 316 cycles, including the first forbidden pair. -/
+/-- Every chain/root path fits in 293 cycles, including the first forbidden pair. -/
 theorem stagedCost_le (index : RawIdx) (rank : IndexRank index.val) :
-    stagedCost index 16 0 ≤ 316 := by
+    stagedCost index 16 0 ≤ 293 := by
   rw [stagedCost_eq index 16 0 (by decide)]
   apply CappedCost.bound
   · intro q _

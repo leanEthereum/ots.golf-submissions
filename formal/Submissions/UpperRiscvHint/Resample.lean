@@ -246,17 +246,19 @@ theorem len_of_hashParent {h p : Name} (hp : hashParent h = some p) : h.len = 25
 
 /-- A hash node lies strictly above its coordinate. -/
 theorem above_coordOf {h p : Name} (hp : hashParent h = some p) : Above h (coordOf h) := by
-  have hc := child_hashParent hp
-  rcases coordOf_below hp with e | e | ⟨m, e1, e2⟩
-  · rw [e]; exact Above.child hc
-  · exact Above.step e (Above.child hc)
-  · exact Above.step e1 (Above.step e2 (Above.child hc))
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
+  · rename_i k t
+    simp only [coordOf]
+    split_ifs with ht
+    · exact Above.step (child_src_ci k t ht) (Above.child rfl)
+    · exact Above.step rfl (Above.step (child_cv_ci k t ht) (Above.child rfl))
+  · exact Above.step rfl (Above.step rfl (Above.step rfl (Above.child rfl)))
 
 theorem coordOf_hiddenCoord {A : Finset Name} (hA : IsCut A) {h p : Name}
     (hp : hashParent h = some p) (hh : ¬ Evaluated A h) : HiddenCoord A (coordOf h) := by
   have hhA : h ∉ A := fun hm => by
-    obtain ⟨_, _, e⟩ := hA.values h hm
-    cases h <;> simp only [hashParent, reduceCtorEq] at hp <;> cases e
+    have := hA.values h hm
+    cases h <;> simp only [hashParent, reduceCtorEq] at hp <;> exact this
   obtain ⟨a, haA, hah⟩ : ∃ a ∈ A, Above a h := by
     by_contra hcon
     push Not at hcon
@@ -265,35 +267,40 @@ theorem coordOf_hiddenCoord {A : Finset Name} (hA : IsCut A) {h p : Name}
   have has : Above a (coordOf h) := hah.trans hhs
   refine ⟨fun he => he.2 a has haA, fun hsA => hA.antichain _ hsA a has haA, fun a' ha' hd => ?_⟩
   -- a cut node reading the coordinate feeds the hash node `h`, which is then evaluated
-  obtain ⟨k, t, rfl⟩ := hA.values a' ha'
-  have hchild : child (ci k t) = some h := by
-    cases h with
-    | ch k' t' =>
-      simp only [coordOf] at hd
-      by_cases ht : t.val = 0
-      · rw [deps_ci_zero k t ht, Finset.mem_singleton] at hd
+  cases h with
+  | ch k' t' =>
+    have hchild : child a' = some (ch k' t') := by
+      have hrev := hA.values a' ha'
+      cases a' with
+      | ci k t =>
+        simp only [coordOf] at hd
+        by_cases ht : t.val = 0
+        · rw [deps_ci_zero k t ht, Finset.mem_singleton] at hd
+          split_ifs at hd with ht'
+          obtain rfl := Name.src.inj hd
+          obtain rfl : t = 0 := Fin.ext ht
+          obtain rfl : t' = 0 := Fin.ext ht'
+          rfl
+        · rw [deps_ci_succ k t ht, Finset.mem_singleton] at hd
+          split_ifs at hd with ht'
+          obtain ⟨e1, e2⟩ := Name.ch.inj hd
+          have e3 : t' = t := Fin.ext (by have := Fin.ext_iff.mp e2; simp only at this; omega)
+          subst e1; subst e3
+          rfl
+      | top k =>
+        simp only [coordOf, deps, Finset.mem_singleton] at hd
         split_ifs at hd with ht'
-        obtain rfl := Name.src.inj hd
-        obtain rfl : t = 0 := Fin.ext ht
-        obtain rfl : t' = 0 := Fin.ext ht'
-        rfl
-      · rw [deps_ci_succ k t ht, Finset.mem_singleton] at hd
-        split_ifs at hd with ht'
-        obtain ⟨e1, e2⟩ := Name.ch.inj hd
-        have e3 : t' = t := Fin.ext (by have := Fin.ext_iff.mp e2; simp only at this; omega)
-        subst e1; subst e3
-        rfl
-    | rh =>
-      simp only [coordOf] at hd
-      by_cases ht : t.val = 0
-      · rw [deps_ci_zero k t ht, Finset.mem_singleton] at hd; cases hd
-      · rw [deps_ci_succ k t ht, Finset.mem_singleton] at hd
-        have e := (Name.ch.inj hd).2
-        have := Fin.ext_iff.mp e
-        simp only at this
-        omega
-    | src _ | ci _ _ | cv _ _ | rc => simp [hashParent] at hp
-  exact hh ⟨hhA, fun m hm => hA.antichain (ci k t) ha' m (Above.step hchild hm)⟩
+        all_goals first
+          | (have h3 := Fin.ext_iff.mp (Name.ch.inj hd).2
+             have h4 : (31 : Fin 32).val = 31 := rfl
+             have := t'.isLt
+             simp only at h3
+             omega)
+          | simp at hd
+      | src _ | ch _ _ | cv _ _ | rc | rh => exact (hrev : False).elim
+    exact hh ⟨hhA, fun m hm => hA.antichain a' ha' m (Above.step hchild hm)⟩
+  | rh => exact hh ⟨hhA, fun m hm => absurd hm (not_above_rh m)⟩
+  | src _ | ci _ _ | cv _ _ | top _ | rc => simp [hashParent] at hp
 
 /-- If `s` is not in `A` and its child is evaluated, then `s` is evaluated. -/
 theorem evaluated_of_child_res {A : Finset Name} {s n : Name} (hc : child s = some n) (hsA : s ∉ A)
@@ -304,11 +311,14 @@ theorem evaluated_of_child_res {A : Finset Name} {s n : Name} (hc : child s = so
     · exact hn.1
     · exact hn.2 m hm⟩
 
-/-- Every coordinate a node reads is the node itself, its own feeder, or two steps below it
-through a value node. -/
+/-- Every coordinate a node reads is the node itself, its own feeder, two steps below it through a
+value node, or (for the root input) three steps below it through a value node and a top that
+reads it. -/
 theorem mem_deps_cases' {s n : Name} (h : s ∈ deps n) :
     s = n ∨ child s = some n ∨
-      ∃ m, child s = some m ∧ child m = some n ∧ ∀ k t, m ≠ ci k t := by
+      (∃ m, child s = some m ∧ child m = some n ∧ ¬ Revealable m) ∨
+      ∃ m m', child s = some m ∧ child m = some m' ∧ child m' = some n ∧ ¬ Revealable m ∧
+        s ∈ deps m' := by
   cases n with
   | src k => simp only [deps, Finset.mem_singleton] at h; exact Or.inl h
   | ci k t =>
@@ -318,13 +328,18 @@ theorem mem_deps_cases' {s n : Name} (h : s ∈ deps n) :
       exact Or.inr (Or.inl (child_src_ci k t ht))
     · rw [deps_ci_succ k t ht, Finset.mem_singleton] at h
       subst h
-      exact Or.inr (Or.inr ⟨cv k ⟨t.val - 1, by omega⟩, rfl, child_cv_ci k t ht, fun _ _ e => by cases e⟩)
+      exact Or.inr (Or.inr (Or.inl ⟨cv k ⟨t.val - 1, by omega⟩, rfl, child_cv_ci k t ht, id⟩))
   | ch k t => simp only [deps, Finset.mem_singleton] at h; exact Or.inl h
   | cv k t => simp only [deps, Finset.mem_singleton] at h; subst h; exact Or.inr (Or.inl rfl)
+  | top k =>
+    simp only [deps, Finset.mem_singleton] at h
+    subst h
+    exact Or.inr (Or.inr (Or.inl ⟨cv k 31, rfl, rfl, id⟩))
   | rc =>
     simp only [deps, Finset.mem_image, Finset.mem_univ, true_and] at h
     obtain ⟨k, rfl⟩ := h
-    exact Or.inr (Or.inr ⟨cv k 31, rfl, rfl, fun _ _ e => by cases e⟩)
+    exact Or.inr (Or.inr (Or.inr ⟨cv k 31, top k, rfl, rfl, rfl, id,
+      Finset.mem_singleton_self _⟩))
   | rh => simp only [deps, Finset.mem_singleton] at h; exact Or.inl h
 
 theorem not_mem_deps_of_hiddenCoord {A : Finset Name} (hA : IsCut A) {s n : Name}
@@ -332,11 +347,13 @@ theorem not_mem_deps_of_hiddenCoord {A : Finset Name} (hA : IsCut A) {s n : Name
   intro hd
   obtain ⟨hsE, hsA, hsD⟩ := hs
   rcases hn with hn | hn
-  · rcases mem_deps_cases' hd with rfl | hc | ⟨m, hc1, hc2, hm⟩
+  · rcases mem_deps_cases' hd with rfl | hc | ⟨m, hc1, hc2, hm⟩ | ⟨m, m', hc1, hc2, hc3, hm, hd'⟩
     · exact hsE hn
     · exact hsE (evaluated_of_child_res hc hsA hn)
-    · have hmA : m ∉ A := fun h => by obtain ⟨k, t, e⟩ := hA.values m h; exact hm k t e
-      exact hsE (evaluated_of_child_res hc1 hsA (evaluated_of_child_res hc2 hmA hn))
+    · exact hsE (evaluated_of_child_res hc1 hsA (evaluated_of_child_res hc2 (hA.not_mem hm) hn))
+    · have hm'A : m' ∉ A := fun h => hsD m' h hd'
+      exact hsE (evaluated_of_child_res hc1 hsA (evaluated_of_child_res hc2 (hA.not_mem hm)
+        (evaluated_of_child_res hc3 hm'A hn)))
   · exact hsD n hn hd
 
 theorem hiddenCoord_ne_rh {A : Finset Name} {s : Name} (hs : HiddenCoord A s) : s ≠ rh := by
@@ -350,7 +367,7 @@ def revealed (A : Finset Name) (ξ : Rec) : List Bool := graph.encode (fins A) (
 
 theorem pkOf_updHash (ξ : Rec) {s : Name} (hs : s ≠ rh) (b : BitVec 256) :
     pkOf (updHash ξ s b) = pkOf ξ := by
-  exact congrArg trunc128 (snd_updHash_of_ne ξ s b rh (Ne.symm hs))
+  exact congrArg (fun w => flipHi (trunc128 w)) (snd_updHash_of_ne ξ s b rh (Ne.symm hs))
 
 theorem pkOf_updSrc (ξ : Rec) (k : Fin 32) (b : BitVec (chainBits k)) : pkOf (updSrc ξ k b) = pkOf ξ := by
   unfold pkOf

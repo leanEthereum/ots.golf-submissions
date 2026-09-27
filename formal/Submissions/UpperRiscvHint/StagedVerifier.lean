@@ -1,12 +1,13 @@
-import Submissions.UpperRiscvHint.MixedChain
+import Submissions.UpperRiscvHint.Reader
 import Submissions.UpperRiscvHint.RejectAdapter
+import Submissions.UpperRiscvHint.Valid
 
 /-!
 # The verifier with dispatch-time rejection
 
-The machine hashes an expanding left chain once before the digit-pair cap is tested. This
-interpreter preserves that query, including on invalid indices. Strict DAG verification is a
-terminal pruning of this computation, not equality of oracle traces on rejected inputs.
+The machine tests each digit-pair cap at the pair's table landing, before any hash of the pair;
+a pair's two chains follow only when the cap holds. Strict DAG verification is a terminal
+pruning of this computation, not equality of oracle traces on rejected inputs.
 -/
 
 noncomputable section
@@ -28,43 +29,69 @@ def pairNodes : (n q : ℕ) → List Name
       chainNodes ⟨2*q, by omega⟩ ++ chainNodes ⟨2*q+1, by omega⟩ ++ pairNodes n (q+1)
     else []
 
-/-- The exact staged oracle program. `payload` is already in chain execution order. -/
+/-- The exact staged oracle program; `payload` lists the disclosed values in chain order. -/
 def stagedBlocks (index : RawIdx) (payload : List Bool) (pk : PublicKey) :
     (n q : ℕ) → graph.Assignment → ℕ → OracleComp Spec Bool
   | 0, _, x, cursor => do
       let r ← runNodes' index payload [rc, rh] x cursor
-      return decide ((r.1 rh.fin).setWidth 128 = pk)
-  | n+1, q, x, cursor => if hq : q < 16 then do
-      let r ← runNodes' index payload (entryNodes index ⟨2*q, by omega⟩) x cursor
-      if PairAllowed index.val q then
-        let r' ← runNodes' index payload
-          (tableNodes index ⟨2*q, by omega⟩ ++ chainNodes ⟨2*q+1, by omega⟩) r.1 r.2
-        stagedBlocks index payload pk n (q+1) r'.1 r'.2
+      return decide (flipHi ((r.1 rh.fin).setWidth 128) = pk)
+  | n+1, q, x, cursor => if hq : q < 16 then
+      if PairAllowed index.val q then do
+        let r ← runNodes' index payload
+          (chainNodes ⟨2*q, by omega⟩ ++ chainNodes ⟨2*q+1, by omega⟩) x cursor
+        stagedBlocks index payload pk n (q+1) r.1 r.2
       else pure false
     else pure false
 
+/-- The same query trace, returning the low 128 root bits, or `none` at a forbidden pair. -/
+def stagedRun (index : RawIdx) (payload : List Bool) :
+    (n q : ℕ) → graph.Assignment → ℕ → OracleComp Spec (Option (BitVec 128))
+  | 0, _, x, cursor => do
+      let r ← runNodes' index payload [rc, rh] x cursor
+      return some ((r.1 rh.fin).setWidth 128)
+  | n+1, q, x, cursor => if hq : q < 16 then
+      if PairAllowed index.val q then do
+        let r ← runNodes' index payload
+          (chainNodes ⟨2*q, by omega⟩ ++ chainNodes ⟨2*q+1, by omega⟩) x cursor
+        stagedRun index payload n (q+1) r.1 r.2
+      else pure none
+    else pure none
+
+theorem stagedBlocks_eq_stagedRun (index : RawIdx) (payload : List Bool) (pk : PublicKey) :
+    ∀ (n q : ℕ) (x : graph.Assignment) (cursor : ℕ),
+      stagedBlocks index payload pk n q x cursor =
+        (fun o => o.elim false fun r => decide (flipHi r = pk)) <$> stagedRun index payload n q x cursor := by
+  intro n
+  induction n with
+  | zero => intro q x cursor; simp only [stagedBlocks, stagedRun, map_bind, map_pure]; rfl
+  | succ n ih =>
+    intro q x cursor
+    rw [stagedBlocks, stagedRun]
+    split_ifs
+    · simp only [map_bind, ih]
+    · rfl
+    · rfl
+
 attribute [local irreducible] stagedBlocks
+attribute [local irreducible] stagedRun
 
 /-- Machine-facing expansion: `some` changes the output interface, never the query trace. -/
 theorem stagedBlocks_some_succ (index : RawIdx) (payload : List Bool) (pk : PublicKey)
     (n q : ℕ) (hq : q < 16) (x : graph.Assignment) (cursor : ℕ) :
-    some <$> stagedBlocks index payload pk (n+1) q x cursor = (do
-      let r ← runNodes' index payload (entryNodes index ⟨2*q, by omega⟩) x cursor
-      if PairAllowed index.val q then
-        let r' ← runNodes' index payload
-          (tableNodes index ⟨2*q, by omega⟩ ++ chainNodes ⟨2*q+1, by omega⟩) r.1 r.2
-        some <$> stagedBlocks index payload pk n (q+1) r'.1 r'.2
-      else pure (some false)) := by
-  rw [stagedBlocks, dif_pos hq, map_bind]
-  congr 1
-  funext r
+    some <$> stagedBlocks index payload pk (n+1) q x cursor =
+      if PairAllowed index.val q then (do
+        let r ← runNodes' index payload
+          (chainNodes ⟨2*q, by omega⟩ ++ chainNodes ⟨2*q+1, by omega⟩) x cursor
+        some <$> stagedBlocks index payload pk n (q+1) r.1 r.2)
+      else pure (some false) := by
+  rw [stagedBlocks, dif_pos hq]
   split_ifs <;> simp only [map_bind, map_pure]
 
 theorem stagedBlocks_some_zero (index : RawIdx) (payload : List Bool) (pk : PublicKey)
     (q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
     some <$> stagedBlocks index payload pk 0 q x cursor = (do
       let r ← runNodes' index payload [rc, rh] x cursor
-      return some (decide ((r.1 rh.fin).setWidth 128 = pk))) := by
+      return some (decide (flipHi ((r.1 rh.fin).setWidth 128) = pk))) := by
   simp only [stagedBlocks, map_bind, map_pure]
 
 theorem stagedBlocks_eq_of_allowed (index : RawIdx) (payload : List Bool) (pk : PublicKey)
@@ -73,22 +100,18 @@ theorem stagedBlocks_eq_of_allowed (index : RawIdx) (payload : List Bool) (pk : 
     (x : graph.Assignment) (cursor : ℕ) :
     stagedBlocks index payload pk n q x cursor = (do
       let r ← runNodes' index payload (pairNodes n q) x cursor
-      return decide ((r.1 rh.fin).setWidth 128 = pk)) := by
+      return decide (flipHi ((r.1 rh.fin).setWidth 128) = pk)) := by
   induction n generalizing q x cursor with
   | zero => rw [stagedBlocks, pairNodes]
   | succ n ih =>
     have hq16 : q < 16 := by omega
-    rw [stagedBlocks, dif_pos hq16, pairNodes, dif_pos hq16]
-    rw [chain_entry_split index ⟨2*q, by omega⟩]
+    rw [stagedBlocks, dif_pos hq16, pairNodes, dif_pos hq16, if_pos (caps q le_rfl (by omega))]
     simp only [List.append_assoc, runNodes'_append, bind_assoc]
     apply bind_congr
     intro r
-    rw [if_pos (caps q le_rfl (by omega))]
     apply bind_congr
     intro r'
-    apply bind_congr
-    intro r''
-    exact ih (q+1) (by omega) (fun j hj hj' => caps j (by omega) (by omega)) r''.1 r''.2
+    exact ih (q+1) (by omega) (fun j hj hj' => caps j (by omega) (by omega)) r'.1 r'.2
 
 /-- A failed cap eventually returns false, despite any earlier chain queries. -/
 theorem stagedBlocks_rejects (index : RawIdx) (payload : List Bool) (pk : PublicKey)
@@ -102,9 +125,6 @@ theorem stagedBlocks_rejects (index : RawIdx) (payload : List Bool) (pk : Public
     by_cases hq : q < 16
     · rw [dif_pos hq]
       intro b hb
-      rw [support_bind] at hb
-      simp only [Set.mem_iUnion] at hb
-      obtain ⟨r, _, hb⟩ := hb
       split_ifs at hb with allowed
       · rw [support_bind] at hb
         simp only [Set.mem_iUnion] at hb
@@ -135,7 +155,7 @@ def stagedVerify (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp 
   let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits (bits.take 128)))
   let index : RawIdx := ⟨pack answer, pack_lt answer⟩
   if stagedRank index.val ∧ bits.length = 5504 then
-    stagedBlocks index (Payload.permute (bits.drop 128)) pk 16 0 (fun _ => 0) 0
+    stagedBlocks index (bits.drop 128) pk 16 0 (fun _ => 0) 0
   else pure false
 
 theorem evalName_cost (x : graph.Assignment) (n : Name) :
@@ -169,7 +189,7 @@ theorem chainNodes_cost (k : Fin 32) : ((chainNodes k).map Name.cost).sum = 32 :
 
 theorem stagedBlocks_cost (index : RawIdx) (payload : List Bool) (pk : PublicKey)
     (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
-    CostAtMost (stagedBlocks index payload pk n q x cursor) (64*n+12) := by
+    CostAtMost (stagedBlocks index payload pk n q x cursor) (64*n+14) := by
   induction n generalizing q x cursor with
   | zero =>
     unfold stagedBlocks
@@ -182,24 +202,14 @@ theorem stagedBlocks_cost (index : RawIdx) (payload : List Bool) (pk : PublicKey
     · rw [dif_pos hq]
       let k₀ : Fin 32 := ⟨2*q, by omega⟩
       let k₁ : Fin 32 := ⟨2*q+1, by omega⟩
-      let e := ((entryNodes index k₀).map Name.cost).sum
-      let t := ((tableNodes index k₀ ++ chainNodes k₁).map Name.cost).sum
-      have total : e+t = 64 := by
-        dsimp [e, t]
-        rw [List.map_append, List.sum_append, ← Nat.add_assoc,
-          ← List.sum_append, ← List.map_append, ← chain_entry_split, chainNodes_cost,
-          chainNodes_cost]
-      apply AlgorithmCosts.CostAtMost.bind_le
-        (runNodes'_cost index payload (entryNodes index k₀) x cursor)
-        (b₂ := t+(64*n+12))
-      · intro r
-        split_ifs
-        · exact AlgorithmCosts.CostAtMost.bind
-            (runNodes'_cost index payload (tableNodes index k₀ ++ chainNodes k₁) r.1 r.2)
-            (fun r' => ih (q+1) r'.1 r'.2)
-        · exact AlgorithmCosts.costAtMost_pure _ _
-      · change e + (t + (64*n+12)) ≤ 64*(n+1)+12
-        omega
+      have total : ((chainNodes k₀ ++ chainNodes k₁).map Name.cost).sum = 64 := by
+        rw [List.map_append, List.sum_append, chainNodes_cost, chainNodes_cost]
+      split_ifs
+      · apply AlgorithmCosts.CostAtMost.bind_le
+          (runNodes'_cost index payload (chainNodes k₀ ++ chainNodes k₁) x cursor)
+          (b₂ := 64*n+14) (fun r => ih (q+1) r.1 r.2)
+        rw [total]; omega
+      · exact AlgorithmCosts.costAtMost_pure _ _
     · rw [dif_neg hq]
       exact AlgorithmCosts.costAtMost_pure _ _
 
@@ -239,11 +249,28 @@ theorem stagedBlocks_deterministic (index : RawIdx) (payload : List Bool) (pk : 
     rw [stagedBlocks]
     by_cases hq : q < 16
     · rw [dif_pos hq]
-      apply Deterministic.bind (runNodes'_deterministic _ _ _ _ _)
-      intro r
       split_ifs
       · exact Deterministic.bind (runNodes'_deterministic _ _ _ _ _)
-          fun r' => ih (q+1) r'.1 r'.2
+          fun r => ih (q+1) r.1 r.2
+      · exact Deterministic.of_pure _
+    · rw [dif_neg hq]
+      exact Deterministic.of_pure _
+
+theorem stagedRun_deterministic (index : RawIdx) (payload : List Bool)
+    (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
+    Deterministic (stagedRun index payload n q x cursor) := by
+  induction n generalizing q x cursor with
+  | zero =>
+    rw [stagedRun]
+    exact Deterministic.bind (runNodes'_deterministic _ _ _ _ _)
+      fun _ => Deterministic.of_pure _
+  | succ n ih =>
+    rw [stagedRun]
+    by_cases hq : q < 16
+    · rw [dif_pos hq]
+      split_ifs
+      · exact Deterministic.bind (runNodes'_deterministic _ _ _ _ _)
+          fun r => ih (q+1) r.1 r.2
       · exact Deterministic.of_pure _
     · rw [dif_neg hq]
       exact Deterministic.of_pure _
@@ -267,26 +294,26 @@ theorem stagedVerify_deterministic (pk : PublicKey) (m : Message) (bits : List B
   intro answer
   dsimp only
   exact deterministic_ite (stagedRank (pack answer) ∧ bits.length = 5504)
-    (stagedBlocks ⟨pack answer, pack_lt answer⟩ (Payload.permute (bits.drop 128)) pk 16 0 (fun _ => 0) 0)
+    (stagedBlocks ⟨pack answer, pack_lt answer⟩ (bits.drop 128) pk 16 0 (fun _ => 0) 0)
     (pure false)
     (stagedBlocks_deterministic ⟨pack answer, pack_lt answer⟩
-      (Payload.permute (bits.drop 128)) pk 16 0 (fun _ => 0) 0)
+      (bits.drop 128) pk 16 0 (fun _ => 0) 0)
     (Deterministic.of_pure false)
 
-/-- A deliberately loose independent admission bound; the machine proof establishes 349 cycles. -/
+/-- A deliberately loose independent admission bound; the machine proof establishes the cycle count. -/
 theorem stagedVerify_cost (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (stagedVerify pk m bits) 1037 := by
+    CostAtMost (stagedVerify pk m bits) 1039 := by
   unfold stagedVerify
   apply AlgorithmCosts.CostAtMost.bind_le
-    (AlgorithmCosts.costAtMost_hash _ (b := 1) (by decide)) (b₂ := 1036)
+    (AlgorithmCosts.costAtMost_hash _ (b := 1) (by decide)) (b₂ := 1038)
   · intro answer
     dsimp only
     exact cost_ite (stagedRank (pack answer) ∧ bits.length = 5504)
-      (stagedBlocks ⟨pack answer, pack_lt answer⟩ (Payload.permute (bits.drop 128)) pk 16 0 (fun _ => 0) 0)
-      (pure false) 1036
+      (stagedBlocks ⟨pack answer, pack_lt answer⟩ (bits.drop 128) pk 16 0 (fun _ => 0) 0)
+      (pure false) 1038
       (stagedBlocks_cost ⟨pack answer, pack_lt answer⟩
-        (Payload.permute (bits.drop 128)) pk 16 0 (fun _ => 0) 0)
-      (AlgorithmCosts.costAtMost_pure false 1036)
+        (bits.drop 128) pk 16 0 (fun _ => 0) 0)
+      (AlgorithmCosts.costAtMost_pure false 1038)
   · decide
 
 theorem staged_pair_sum (i : ℕ) :
@@ -323,7 +350,7 @@ theorem stagedRank_and_caps_iff (i : ℕ) :
 theorem stagedBlocks_eq_direct (index : Idx) (payload : List Bool) (pk : PublicKey) :
     stagedBlocks index payload pk 16 0 (fun _ => 0) 0 = (do
       let y ← directReconstruct index payload
-      return decide ((y rh.fin).setWidth 128 = pk)) := by
+      return decide (flipHi ((y rh.fin).setWidth 128) = pk)) := by
   rw [stagedBlocks_eq_of_allowed index payload pk 16 0 (by omega) ?_]
   · rw [pairNodes_all]
     unfold directReconstruct
@@ -346,15 +373,13 @@ theorem directVerify_prunes_stagedVerify (pk : PublicKey) (m : Message) (bits : 
     by_cases hlen : bits.length = 5504
     · rw [if_pos hlen, if_pos ⟨rank, hlen⟩]
       have he := stagedBlocks_eq_direct (⟨pack answer, hi⟩ : Idx)
-        (Payload.permute (bits.drop 128)) pk
+        (bits.drop 128) pk
       dsimp only [Idx.toRaw] at he
       rw [he]
       apply RejectAdapter.Prunes.bind_left
       intro y
       convert RejectAdapter.Prunes.refl
-        (pure (decide ((y rh.fin).setWidth 128 = pk)) : OracleComp Spec Bool) using 1
-      congr 1
-      exact decide_eq_decide.mpr Iff.rfl
+        (pure (decide (flipHi ((y rh.fin).setWidth 128) = pk)) : OracleComp Spec Bool) using 1
     · rw [if_neg hlen, if_neg (fun h => hlen h.2)]
       exact RejectAdapter.Prunes.refl _
   · rw [dif_neg hi]
@@ -370,7 +395,7 @@ theorem directVerify_prunes_stagedVerify (pk : PublicKey) (m : Message) (bits : 
         ⟨q.val, Nat.zero_le _, by simpa using q.isLt, hq⟩ _ _
     · exact RejectAdapter.Prunes.refl _
 
-/-- The 349-cycle scheme retains the restricted forest's keys and signer. -/
+/-- The scheme retains the restricted forest's keys and signer. -/
 def stagedScheme : OracleAlgorithm.Scheme :=
   RejectAdapter.scheme RiscvUpperForest.Wire.scheme stagedVerify
 

@@ -6,36 +6,26 @@ open RiscvZkvm.Rv64
 open Riscv2Program
 open Forest
 
-def PayloadFrom (s : MachineState) (payload : List Bool) (k : ℕ) : Prop :=
+/-- Every chain from `k` on still has its view value at its working address. -/
+def PayloadFrom (s : MachineState) (view : List Bool) (k : ℕ) : Prop :=
   ∀ j : Fin 32, k ≤ j.val →
-    MemBits s (W (wireSlot j)) (ofBits (chainBits j) (payload.drop (wireOffset j)))
+    MemBits s (W (work j)) (ofBits (chainBits j) (view.drop (wireOffset j)))
 
-def rootSliceStart (_k : ℕ) : ℕ := 0
-def rootSlice (k : ℕ) (y : BitVec 256) : BitVec (rootSliceBits k) :=
-  y.extractLsb' (rootSliceStart k) (rootSliceBits k)
+/-- Every chain below `k` has its committed top at its answer buffer. -/
+def Completed (s : MachineState) (tops : (k : Fin 32) → BitVec (topBits k)) (k : ℕ) : Prop :=
+  ∀ j : Fin 32, j.val < k → MemBits s (W (outAddr j)) (tops j)
 
-def Completed (s : MachineState) (tops : Fin 32 → BitVec 256) (k : ℕ) : Prop :=
-  ∀ j : Fin 32, j.val < k → MemBits s (W (rootSliceAddr j)) (rootSlice j (tops j))
+/-- The low bits of a represented vector are represented at the same address. -/
+theorem memBits_setWidth {n w : ℕ} {s : MachineState} {base : Word} {v : BitVec n}
+    (hm : MemBits s base v) (hw : w ≤ n) : MemBits s base (v.setWidth w) := by
+  intro i hi
+  rw [BitVec.getLsbD_setWidth, hm i (by omega)]
+  simp [hi]
 
-theorem rootSlice_contained (k : ℕ) : rootSliceStart k + rootSliceBits k ≤ 256 := by
-  unfold rootSliceStart rootSliceBits; omega
-
-theorem rootSlice_aligned (k : ℕ) : rootSliceStart k % 8 = 0 := by
-  unfold rootSliceStart; decide
-
-theorem rootSlice_address (k : Fin 32) :
-    rootSliceAddr k = outAddr k + rootSliceStart k / 8 := by
-  unfold rootSliceAddr rootSliceStart; omega
-
-/-- A hash writes exactly the slice needed by the root: the low 192 bits of its cell. -/
-theorem rootSlice_of_answer (s : MachineState) (k : Fin 32) (y : BitVec 256)
-    (ho : s.getReg .x12 = W (outAddr k)) :
-    MemBits (Riscv.writeHash s y) (W (rootSliceAddr k)) (rootSlice k y) := by
-  have h := writeHash_memBits s y (by rw [ho]; exact aligned_W _ (output_bounds k).2.2 (by have := output_bounds k; omega))
-  rw [ho] at h
-  have e := memBits_extract h (rootSlice_aligned k) (rootSlice_contained k)
-  rw [W_add, ← rootSlice_address k] at e
-  exact e
+/-- A hash writes the chain's top as the low bits of its answer buffer. -/
+theorem top_of_answer {s : MachineState} (k : Fin 32) {y : BitVec 256}
+    (answer : MemBits s (W (outAddr k)) y) : MemBits s (W (outAddr k)) (topOf k y) :=
+  memBits_setWidth answer (topBits_le k)
 
 /-- Byte intervals disjoint from the aligned 32-byte hash output retain their bits. -/
 theorem writeHash_preserves (s : MachineState) (y : BitVec 256) (base out n : ℕ)
@@ -63,25 +53,24 @@ theorem PayloadFrom.writeHash {s : MachineState} {payload : List Bool} (k : Fin 
   have bj := wireOffset_contained j
   have bw := chainBits_le j
   have hn : chainBits j % 8 = 0 := by have := chainBits_cases j; omega
-  apply writeHash_preserves s y (wireSlot j) (outAddr k) (chainBits j) _ (hp j hj)
+  apply writeHash_preserves s y (work j) (outAddr k) (chainBits j) _ (hp j hj)
     ho bo.2.2 hn
-  · rw [wireSlot_eq j]; omega
+  · rw [work_eq_view j]; unfold honestViewBits at bj; omega
   · omega
   · exact unread_disjoint k j (by omega)
 
-/-- A chain hash preserves the committed root slices of every earlier chain. -/
-theorem Completed.writeHash {s : MachineState} {tops : Fin 32 → BitVec 256} (k : Fin 32)
-    (hp : Completed s tops k) (y : BitVec 256) (ho : s.getReg .x12 = W (outAddr k)) :
+/-- A chain hash preserves the committed tops of every earlier chain. -/
+theorem Completed.writeHash {s : MachineState} {tops : (k : Fin 32) → BitVec (topBits k)}
+    (k : Fin 32) (hp : Completed s tops k) (y : BitVec 256)
+    (ho : s.getReg .x12 = W (outAddr k)) :
     Completed (Riscv.writeHash s y) tops k := by
   intro j hj
   have bo := output_bounds k
-  have bj := slot_bounds j
-  have hn : rootSliceBits j % 8 = 0 := by unfold rootSliceBits; decide
-  apply writeHash_preserves s y (rootSliceAddr j) (outAddr k) (rootSliceBits j) _ (hp j hj)
-    ho bo.2.2 hn
-  · unfold rootSliceAddr rootSliceBits outAddr
-    omega
-  · omega
-  · exact completed_disjoint j k hj
+  have bj := output_bounds j
+  have hn : topBits j % 8 = 0 := by unfold topBits; split_ifs <;> decide
+  have hl := topBits_le j
+  apply writeHash_preserves s y (outAddr j) (outAddr k) (topBits j) _ (hp j hj)
+    ho bo.2.2 hn (by omega) (by omega)
+  exact completed_disjoint j k hj
 
 end OptimalOTS.RiscvMixedProgram
