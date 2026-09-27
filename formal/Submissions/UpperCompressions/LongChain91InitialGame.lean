@@ -3,7 +3,7 @@ import Submissions.UpperCompressions.LongChain91Continuation
 import Submissions.UpperCompressions.ProofBundle09
 
 /-!
-# Actual initial game for the cost-91 long-chain construction
+# Actual initial game for the cost-90 long-chain construction
 
 This is the concrete adaptive choose/sign/forge reduction.  It preserves the
 actual shared cache and the exact remaining query clock while averaging over
@@ -76,14 +76,14 @@ theorem E_experiment (F : Bool × Cache → ℝ≥0∞) :
 
 theorem keygen_remaining {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) :
-    1219 ≤ B ∧ ∀ ξ : Rec,
-      CostAtMost (afterKeygen A (pkOf ξ,graph.evalRec ξ)) (B-1219) := by
+    1087 ≤ B ∧ ∀ ξ : Rec,
+      CostAtMost (afterKeygen A (pkOf ξ,graph.evalRec ξ)) (B-1087) := by
   rw [experiment_eq,WeightedScheme.Scheme.keygen] at hB
   obtain ⟨hc,hr⟩ := GraphKeygenBridge.costAtMost_keygen_bind scheme.graph scheme.publicKey (afterKeygen A) hB
   rw [scheme_keygenCost] at hc hr
   refine ⟨hc,fun ξ => ?_⟩
   have hh := hr ξ
-  change CostAtMost (afterKeygen A (scheme.publicKey (graph.evalRec ξ),graph.evalRec ξ)) (B-1219) at hh
+  change CostAtMost (afterKeygen A (scheme.publicKey (graph.evalRec ξ),graph.evalRec ξ)) (B-1087) at hh
   rwa [publicKey_record] at hh
 
 theorem afterChoose_loop (pk : PublicKey) (ξ : Rec) (x : Message × A.State) :
@@ -320,20 +320,20 @@ theorem choose_supported_sign_reserve (pk : PublicKey) (b : ℕ)
 theorem experiment_choose_reserve {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B)
     (pk : PublicKey) (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1219))) :
-    signBudget ≤ r.2.2 ∧ r.2.2 ≤ B-1219 ∧
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1087))) :
+    signBudget ≤ r.2.2 ∧ r.2.2 ≤ B-1087 ∧
       ∀ ξ ∈ fiberA pk, ∀ c p,
         p ∈ support (run (loop 86 signedDecode signedTier r.1.1 signBudget) c) →
         CostAtMost (stBWithForgery A pk r.1.1 r.1.2 (signatureFromWinner ξ p.1)) (r.2.2-signBudget) :=
-  choose_supported_sign_reserve A pk (B-1219) (fun ξ _ => (keygen_remaining A hB).2 ξ) r hr
+  choose_supported_sign_reserve A pk (B-1087) (fun ξ _ => (keygen_remaining A hB).2 ξ) r hr
 
 theorem choose_spent_remaining_le {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey) :
     expectedCharge (fun t => queryCost t) (A.choose pk) ∅ +
-      E (runRemaining (A.choose pk) ∅ (B-1219)) (fun r => (r.2.2:ℝ≥0∞)) ≤ (B-1219:ℕ) := by
+      E (runRemaining (A.choose pk) ∅ (B-1087)) (fun r => (r.2.2:ℝ≥0∞)) ≤ (B-1087:ℕ) := by
   letI : Nonempty {ξ : Rec // ξ ∈ fiberA pk} := (fiber_nonempty pk).to_subtype
   apply expected_spent_remaining_le (A.choose pk)
-    (fun j : {ξ : Rec // ξ ∈ fiberA pk} => afterChoose A pk (graph.evalRec j.1)) ∅ (B-1219)
+    (fun j : {ξ : Rec // ξ ∈ fiberA pk} => afterChoose A pk (graph.evalRec j.1)) ∅ (B-1087)
   intro j
   have h := (keygen_remaining A hB).2 j.1
   have hpk := pkOf_of_subset_fiberA (Finset.Subset.refl _) j.1 j.2
@@ -517,7 +517,7 @@ theorem conditional_actual_master (A : scheme.toAlgorithm.Adversary) (pk : Publi
 theorem supportedPostBudget_of_experiment (A : scheme.toAlgorithm.Adversary) {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey)
     (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1219))) :
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1087))) :
     SupportedPostBudget A pk r.1.1 r.1.2 r.2.1 signBudget (r.2.2-signBudget) := by
   intro ξ hξ g p hp
   have h := (experiment_choose_reserve A hB pk r hr).2.2 ξ hξ _ p hp
@@ -537,8 +537,8 @@ theorem global_actual_game_payoff (A : scheme.toAlgorithm.Adversary) {B : ℕ}
     E (run (scheme.toAlgorithm.experiment A) ∅) successValue ≤
       (∑ pk : PublicKey, (authRate*sumW (fiberA pk))*
         expectedCharge (otherPaid (isIndexLength (msgBits+86))) (A.choose pk) ∅) +
-      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1219)) (continuationPayoff A pk) := by
-  apply global_payoff_clock A (B-1219) (isIndexLength (msgBits+86))
+      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1087)) (continuationPayoff A pk) := by
+  apply global_payoff_clock A (B-1087) (isIndexLength (msgBits+86))
     (fun q hq => exists_encQuery_of_length q hq) (continuationPayoff A)
   intro pk r hr
   exact conditional_actual_master A pk r.1.1 r.1.2 r.2.1 (r.2.2-signBudget)
@@ -591,7 +591,7 @@ theorem conditional_supported_gated (A : scheme.toAlgorithm.Adversary) {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B)
     (good : PublicKey → ((Message × A.State) × Cache × ℕ) → Prop)
     (pk : PublicKey) (r : (Message × A.State) × Cache × ℕ)
-    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1219))) :
+    (hr : r ∈ support (runRemaining (A.choose pk) ∅ (B-1087))) :
     conditional A pk r.1 r.2.1 ≤ survivingSpr pk r.2.1 + gatedContinuationPayoff A good pk r := by
   by_cases hg : good pk r
   · rw [gatedContinuationPayoff,if_pos hg]
@@ -609,9 +609,9 @@ theorem global_actual_game_payoff_gated (A : scheme.toAlgorithm.Adversary) {B : 
     E (run (scheme.toAlgorithm.experiment A) ∅) successValue ≤
       (∑ pk : PublicKey, (authRate*sumW (fiberA pk))*
         expectedCharge (otherPaid (isIndexLength (msgBits+86))) (A.choose pk) ∅) +
-      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1219))
+      ∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1087))
         (gatedContinuationPayoff A good pk) := by
-  apply global_payoff_clock A (B-1219) (isIndexLength (msgBits+86))
+  apply global_payoff_clock A (B-1087) (isIndexLength (msgBits+86))
     (fun q hq => exists_encQuery_of_length q hq) (gatedContinuationPayoff A good)
   exact conditional_supported_gated A hB good
 

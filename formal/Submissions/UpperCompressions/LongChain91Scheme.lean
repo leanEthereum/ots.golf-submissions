@@ -3,10 +3,10 @@ import Submissions.UpperCompressions.LongChain91Codec
 import Submissions.UpperCompressions.ProofBundle04
 
 /-!
-# The concrete cost-91 long-chain scheme
+# The concrete cost-90 long-chain scheme
 
 This module selects the schedule's classes injectively from the certified
-cost-90 cut family, instantiates the generic 86-bit weighted signer, and
+cost-89 cut family, instantiates the generic 86-bit weighted signer, and
 discharges the honest-party resource and availability obligations.
 -/
 
@@ -53,18 +53,18 @@ def scheme : WeightedScheme.Scheme M where
     norm_num [keygenBudget]
 
 theorem scheme_reconstructCost (i : Fin M) :
-    scheme.graph.reconstructCost (scheme.sets i) ≤ 90 :=
+    scheme.graph.reconstructCost (scheme.sets i) ≤ 89 :=
   family_reconstructCost (setsName_mem i)
 
 theorem scheme_revealBits (i : Fin M) :
     scheme.graph.revealBits (scheme.sets i) + 86 ≤ 5504 :=
   family_disclosure_and_nonce (setsName_mem i)
 
-theorem scheme_keygenCost : scheme.graph.keygenCost = 1219 := graph_keygenCost
+theorem scheme_keygenCost : scheme.graph.keygenCost = 1087 := graph_keygenCost
 
 abbrev typed : TypedScheme := scheme.toAlgorithm
 
-theorem typed_cost : typed.VerifyCostAtMost 91 :=
+theorem typed_cost : typed.VerifyCostAtMost 90 :=
   scheme.verifyCost scheme_reconstructCost
 
 theorem typed_correct : typed.Correct := scheme.correct
@@ -91,17 +91,6 @@ theorem decodeWire_encode (s : WeightedScheme.Signature) :
     decodeWire (typed.encodeSignature s) = s :=
   NonceCodec.decode_encode s
 
-theorem family_revealBits_pos {A : Finset Name} (hA : A ∈ family) :
-    0 < graph.revealBits (fins A) := by
-  obtain ⟨c, hc, rfl⟩ := (mem_family_iff A).1 hA
-  rw [revealBits_fins]
-  calc
-    0 < (selected c 0).len := by
-      have hv := cutOf_values c (selected c 0) (selected_mem_cutOf c 0)
-      omega
-    _ ≤ ∑ n ∈ cutOf c, n.len :=
-      Finset.single_le_sum (fun n _ => Nat.zero_le n.len) (selected_mem_cutOf c 0)
-
 theorem accepted_payload_positive (pk : PublicKey) (m : Message)
     (s : WeightedScheme.Signature)
     (h : true ∈ support (scheme.verify pk m s)) : 0 < s.2.length := by
@@ -125,8 +114,8 @@ theorem wire_canonical (pk : PublicKey) (m : Message) (bits : List Bool)
 
 def wireScheme : OracleAlgorithm.Scheme := WireAdapter.scheme typed decodeWire
 
-theorem wire_cost : wireScheme.VerifyCostAtMost 91 :=
-  WireAdapter.verifyCost typed decodeWire 91 typed_cost
+theorem wire_cost : wireScheme.VerifyCostAtMost 90 :=
+  WireAdapter.verifyCost typed decodeWire 90 typed_cost
 
 theorem wire_correct : wireScheme.Correct :=
   WireAdapter.correct typed decodeWire decodeWire_encode typed_correct
@@ -282,6 +271,7 @@ theorem typed_admissible :
 
 theorem wire_admissible : wireScheme.Admissible :=
   WireAdapter.admissible typed decodeWire decodeWire_encode wire_canonical typed_admissible
+    typed_cost (by norm_num [verifyBudget])
 
 #print axioms typed_cost
 #print axioms typed_correct

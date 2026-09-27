@@ -2,10 +2,10 @@ import Submissions.UpperCompressions.LongChain91Scheme
 import Submissions.UpperCompressions.ProofBundle05
 
 /-!
-# Authentication bridge for the cost-91 long-chain construction
+# Authentication bridge for the cost-90 shared-DAG construction
 
 This module identifies the concrete key-generation oracle points of the
-long-chain graph, splits them into exposed and hidden points after signing,
+shared-DAG graph, splits them into exposed and hidden points after signing,
 and defines the spurious-output authentication event used by the accepted
 weighted-game proof.  The final section proves the fresh-query charge for
 that event, including the 128-bit public root.
@@ -36,12 +36,8 @@ theorem ne_encQuery_of_length_ne {q : Query} (hq : q.1 ≠ msgBits + 86)
   intro h
   exact hq (congrArg Sigma.fst h)
 
-/-! ## Concrete record values -/
 
-abbrev Rec := graph.Rec
-
-def val (ξ : Rec) (n : Name) : BitVec n.len :=
-  (graph.evalRec ξ n.fin).cast (graph_len_fin n)
+/-! ## Bit-vector helpers -/
 
 theorem lowWord_cast {n m : ℕ} (h : n = m) (x : BitVec n) :
     lowWord (x.cast h) = lowWord x := by
@@ -56,6 +52,455 @@ theorem cast_cast_eq {n m : ℕ} (h₁ : n = m) (h₂ : m = n) (x : BitVec n) :
   subst h₁
   rfl
 
+theorem lowWord_eq_self (x : BitVec 129) : lowWord x = x := BitVec.setWidth_eq _
+
+theorem cast_injective {n m : ℕ} (h : n = m) {x y : BitVec n}
+    (e : x.cast h = y.cast h) : x = y := by
+  subst h
+  simpa using e
+
+theorem eq_of_lowWord_eq {n : ℕ} (hn : n = 129) {x y : BitVec n}
+    (h : lowWord x = lowWord y) : x = y := by
+  subst n
+  simpa only [lowWord_eq_self] using h
+
+theorem bv_append_inj {n m : ℕ} {x x' : BitVec n} {y y' : BitVec m}
+    (h : x ++ y = x' ++ y') : x = x' ∧ y = y' := by
+  have key : ∀ i, (x ++ y).getLsbD i = (x' ++ y').getLsbD i :=
+    fun i => by rw [h]
+  simp only [BitVec.getLsbD_append] at key
+  constructor
+  · apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    have hh := key (i + m)
+    simp only [show ¬ (i + m < m) by omega, if_false,
+      Nat.add_sub_cancel] at hh
+    exact hh
+  · apply BitVec.eq_of_getLsbD_eq
+    intro i hi
+    have hh := key i
+    simpa [hi] using hh
+
+theorem cat3_inj {a b c a' b' c' : BitVec 129}
+    (h : cat3 a b c = cat3 a' b' c') :
+    a = a' ∧ b = b' ∧ c = c' := by
+  unfold cat3 at h
+  obtain ⟨h12, h3⟩ := bv_append_inj (cast_injective _ h)
+  obtain ⟨h1, h2⟩ := bv_append_inj h12
+  exact ⟨h1, h2, h3⟩
+
+theorem cat7_inj {a b : Fin 7 → BitVec 129} (h : cat7 a = cat7 b) : a = b := by
+  unfold cat7 at h
+  obtain ⟨hprefix5, h6⟩ := bv_append_inj (cast_injective _ h)
+  obtain ⟨hprefix4, h5⟩ := bv_append_inj hprefix5
+  obtain ⟨hprefix3, h4⟩ := bv_append_inj hprefix4
+  obtain ⟨hprefix2, h3⟩ := bv_append_inj hprefix3
+  obtain ⟨hprefix1, h2⟩ := bv_append_inj hprefix2
+  obtain ⟨h0, h1⟩ := bv_append_inj hprefix1
+  funext u
+  fin_cases u <;> assumption
+
+theorem lowWord_tw_append {n : ℕ} (hn : 129 ≤ n) (a : BitVec 16) (x : BitVec n) :
+    lowWord (a ++ x) = lowWord x := by
+  unfold lowWord
+  rw [BitVec.setWidth_append, dif_pos hn]
+
+theorem lowWord_cat3 (x y z : BitVec 129) : lowWord (cat3 x y z) = z := by
+  unfold cat3
+  rw [lowWord_cast]
+  unfold lowWord
+  rw [BitVec.setWidth_append, dif_pos le_rfl, BitVec.setWidth_eq]
+
+theorem lowWord_cat7 (a : Fin 7 → BitVec 129) : lowWord (cat7 a) = a 6 := by
+  unfold cat7
+  rw [lowWord_cast]
+  unfold lowWord
+  rw [BitVec.setWidth_append, dif_pos le_rfl, BitVec.setWidth_eq]
+
+/-! ## Node roles
+
+Every node is a source, a hash node, the input of exactly one hash node (a
+compression input), or a 129-bit value node reading exactly one hash node. -/
+
+/-- The input of a hash node. -/
+def hashParent : Name → Option Name
+  | .ch b k t => some (.ci b k t)
+  | .hh b j => some (.hc b j)
+  | .rh => some .rc
+  | _ => none
+
+/-- The hash node read by a non-source 129-bit value node. -/
+def hashOf : Name → Option Name
+  | .cv b k t => some (.ch b k t)
+  | .hv b j => some (.hh b j)
+  | _ => none
+
+/-- The hash node behind a kid's 129-bit value in block `b`. -/
+def Kid.coord (b : Fin 7) : Kid → Name
+  | .c k => .ch b k 17
+  | .h j => .hh b j
+
+/-- The exclusive kid of a hash node: the 129-bit value in the low slot of
+its input, read by no other node. -/
+def exclOf : Name → Name
+  | .ch b k t => prev b k t
+  | .hh b j => (kid j 2).name b
+  | .rh => .hv 6 10
+  | n => n
+
+/-- The independent record coordinate behind the exclusive kid. -/
+def coordOf : Name → Name
+  | .ch b k t => if h : t.val = 0 then .src b k else .ch b k ⟨t.val - 1, by omega⟩
+  | .hh b j => (kid j 2).coord b
+  | .rh => .hh 6 10
+  | n => n
+
+theorem hashParent_isSome_iff (h : Name) :
+    (hashParent h).isSome ↔ h.cost ≠ 0 := by
+  cases h <;> simp [hashParent, Name.cost]
+
+theorem cost_ne_zero_of_hashParent {h p : Name} (hp : hashParent h = some p) :
+    h.cost ≠ 0 :=
+  (hashParent_isSome_iff h).1 (by rw [hp]; rfl)
+
+/-- The hash node reading a compression input. -/
+def hashOfInput : Name → Option Name
+  | .ci b k t => some (.ch b k t)
+  | .hc b j => some (.hh b j)
+  | .rc => some .rh
+  | _ => none
+
+/-- The value node reading a hash node. -/
+def valueOfHash : Name → Option Name
+  | .ch b k t => some (.cv b k t)
+  | .hh b j => some (.hv b j)
+  | _ => none
+
+theorem hashOfInput_of_hashParent {h p : Name} (hp : hashParent h = some p) :
+    hashOfInput p = some h := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> rfl
+
+theorem valueOfHash_of_hashOf {v h : Name} (hh : hashOf v = some h) :
+    valueOfHash h = some v := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
+    subst hh <;> rfl
+
+theorem hashParent_injective {h h' p : Name} (hp : hashParent h = some p)
+    (hp' : hashParent h' = some p) : h = h' :=
+  Option.some.inj ((hashOfInput_of_hashParent hp).symm.trans
+    (hashOfInput_of_hashParent hp'))
+
+theorem hashOf_injective {v v' h : Name} (hh : hashOf v = some h)
+    (hh' : hashOf v' = some h) : v = v' :=
+  Option.some.inj ((valueOfHash_of_hashOf hh).symm.trans (valueOfHash_of_hashOf hh'))
+
+theorem len_of_hashParent {h p : Name} (hp : hashParent h = some p) :
+    h.len = 256 := by
+  cases h <;> simp_all [hashParent, Name.len]
+
+theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
+    p.len = 145 ∨ p.len = 403 ∨ p.len = 919 := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> simp [Name.len]
+
+theorem len_hashParent_ne_129 {h p : Name} (hp : hashParent h = some p) :
+    p.len ≠ 129 := by
+  rcases len_hashParent_cases hp with e | e | e <;> omega
+
+theorem len_hashParent_ne_enc {h p : Name} (hp : hashParent h = some p) :
+    p.len ≠ msgBits + 86 := by
+  have he : msgBits + 86 = 342 := rfl
+  rw [he]
+  rcases len_hashParent_cases hp with h | h | h <;> omega
+
+theorem cost_hashParent {h p : Name} (hp : hashParent h = some p) :
+    p.cost = 0 := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> rfl
+
+theorem hashParent_ne_src {h p : Name} (hp : hashParent h = some p)
+    (b : Fin 7) (k : Fin 8) : p ≠ .src b k := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> intro e <;> nomatch e
+
+theorem hashParent_hashParent {h p : Name} (hp : hashParent h = some p) :
+    hashParent p = none := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> rfl
+
+theorem hashOf_hashParent {h p : Name} (hp : hashParent h = some p) :
+    hashOf p = none := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> rfl
+
+theorem hashOf_of_hashParent {h p : Name} (hp : hashParent h = some p) :
+    hashOf h = none := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> rfl
+
+theorem len_of_hashOf {v h : Name} (hh : hashOf v = some h) : h.len = 256 := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
+    subst hh <;> rfl
+
+theorem len_value_of_hashOf {v h : Name} (hh : hashOf v = some h) :
+    v.len = 129 := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;> rfl
+
+theorem cost_of_hashOf {v h : Name} (hh : hashOf v = some h) : v.cost = 0 := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;> rfl
+
+theorem hashParent_of_hashOf {v h : Name} (hh : hashOf v = some h) :
+    ∃ p, hashParent h = some p := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
+    subst hh <;> exact ⟨_, rfl⟩
+
+theorem hashParent_value {v h : Name} (hh : hashOf v = some h) :
+    hashParent v = none := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;> rfl
+
+theorem ne_rh_of_hashOf {v h : Name} (hh : hashOf v = some h) : h ≠ .rh := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
+    subst hh <;> intro e <;> nomatch e
+
+theorem hashOf_rh : hashOf .rh = none := rfl
+
+theorem one_le_cost_of_hashParent {h p : Name} (hp : hashParent h = some p) :
+    1 ≤ h.cost := Nat.one_le_iff_ne_zero.2 (cost_ne_zero_of_hashParent hp)
+
+/-- The four node roles. -/
+theorem role_cases (n : Name) :
+    (∃ b k, n = .src b k) ∨ (∃ p, hashParent n = some p) ∨
+      (∃ h, hashParent h = some n) ∨ ∃ h, hashOf n = some h := by
+  cases n with
+  | src b k => exact Or.inl ⟨b, k, rfl⟩
+  | ci b k t => exact Or.inr (Or.inr (Or.inl ⟨.ch b k t, rfl⟩))
+  | ch b k t => exact Or.inr (Or.inl ⟨_, rfl⟩)
+  | cv b k t => exact Or.inr (Or.inr (Or.inr ⟨_, rfl⟩))
+  | hc b j => exact Or.inr (Or.inr (Or.inl ⟨.hh b j, rfl⟩))
+  | hh b j => exact Or.inr (Or.inl ⟨_, rfl⟩)
+  | hv b j => exact Or.inr (Or.inr (Or.inr ⟨_, rfl⟩))
+  | rc => exact Or.inr (Or.inr (Or.inl ⟨.rh, rfl⟩))
+  | rh => exact Or.inr (Or.inl ⟨_, rfl⟩)
+
+theorem len_eq_129_cases {n : Name} (hn : n.len = 129) :
+    (∃ b k, n = .src b k) ∨ ∃ h, hashOf n = some h := by
+  rcases role_cases n with hs | ⟨p, hp⟩ | ⟨h, hp⟩ | hv
+  · exact Or.inl hs
+  · rw [len_of_hashParent hp] at hn
+    omega
+  · exact absurd hn (len_hashParent_ne_129 hp)
+  · exact Or.inr hv
+
+theorem hashOf_kidName (κ : Kid) (b : Fin 7) :
+    hashOf (κ.name b) = some (κ.coord b) := by
+  cases κ <;> rfl
+
+theorem hashOf_prev (b : Fin 7) (k : Fin 8) (t : Fin 18) (ht : t.val ≠ 0) :
+    hashOf (prev b k t) = some (.ch b k ⟨t.val - 1, by omega⟩) := by
+  simp [prev, ht, hashOf]
+
+/-! ### Parents by role -/
+
+theorem mem_parents_hash {h p n : Name} (hp : hashParent h = some p) :
+    n ∈ parents h ↔ n = p := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> simp [parents]
+
+theorem mem_parents_value {v h n : Name} (hh : hashOf v = some h) :
+    n ∈ parents v ↔ n = h := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
+    subst hh <;> simp [parents]
+
+theorem not_mem_parents_src (b : Fin 7) (k : Fin 8) (n : Name) :
+    n ∉ parents (.src b k) := by
+  simp [parents]
+
+/-- The inputs of a compression node are sources or value nodes. -/
+theorem mem_parents_compress {h p n : Name} (hp : hashParent h = some p)
+    (hn : n ∈ parents p) : (∃ b k, n = .src b k) ∨ ∃ s, hashOf n = some s := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> simp only [parents, Finset.mem_singleton, Finset.mem_image,
+      Finset.mem_univ, true_and] at hn
+  · rename_i b k t
+    subst hn
+    by_cases ht : t.val = 0
+    · exact Or.inl ⟨b, k, by simp [prev, ht]⟩
+    · exact Or.inr ⟨_, hashOf_prev b k t ht⟩
+  · obtain ⟨a, rfl⟩ := hn
+    exact Or.inr ⟨_, hashOf_kidName _ _⟩
+  · obtain ⟨b, rfl⟩ := hn
+    exact Or.inr ⟨_, rfl⟩
+
+theorem len_of_mem_parents_compress {h p n : Name} (hp : hashParent h = some p)
+    (hn : n ∈ parents p) : n.len = 129 := by
+  rcases mem_parents_compress hp hn with ⟨b, k, rfl⟩ | ⟨s, hs⟩
+  · rfl
+  · exact len_value_of_hashOf hs
+
+/-- A parent of any node, classified by the role of the node. -/
+theorem mem_parents_cases {m n : Name} (hn : n ∈ parents m) :
+    (∃ p, hashParent m = some p ∧ n = p) ∨ hashOf m = some n ∨
+      ∃ h, hashParent h = some m ∧
+        ((∃ b k, n = .src b k) ∨ ∃ s, hashOf n = some s) := by
+  rcases role_cases m with ⟨b, k, rfl⟩ | ⟨p, hp⟩ | ⟨h, hp⟩ | ⟨s, hs⟩
+  · exact absurd hn (not_mem_parents_src b k n)
+  · exact Or.inl ⟨p, hp, (mem_parents_hash hp).1 hn⟩
+  · exact Or.inr (Or.inr ⟨h, hp, mem_parents_compress hp hn⟩)
+  · exact Or.inr (Or.inl (by rw [(mem_parents_value hs).1 hn] ; exact hs))
+
+theorem mem_parents_hashParent {h p : Name} (hp : hashParent h = some p) :
+    p ∈ parents h := (mem_parents_hash hp).2 rfl
+
+theorem mem_parents_hashOf {v h : Name} (hh : hashOf v = some h) :
+    h ∈ parents v := (mem_parents_value hh).2 rfl
+
+/-- A compression input is read only by its hash node. -/
+theorem consumer_of_hashParent {h p m : Name} (hp : hashParent h = some p)
+    (hm : p ∈ parents m) : m = h := by
+  rcases mem_parents_cases hm with ⟨p', hp', rfl⟩ | hv | ⟨h', -, ⟨b, k, rfl⟩ | ⟨s, hs⟩⟩
+  · exact hashParent_injective hp' hp
+  · obtain ⟨q, hq⟩ := hashParent_of_hashOf hv
+    rw [hashParent_hashParent hp] at hq
+    exact absurd hq (by simp)
+  · exact absurd rfl (hashParent_ne_src hp b k)
+  · rw [hashOf_hashParent hp] at hs
+    exact absurd hs (by simp)
+
+/-- A hash node is read only by its value node. -/
+theorem consumer_of_hashOf {v h m : Name} (hh : hashOf v = some h)
+    (hm : h ∈ parents m) : m = v := by
+  obtain ⟨p, hp⟩ := hashParent_of_hashOf hh
+  rcases mem_parents_cases hm with ⟨p', hp', rfl⟩ | hv | ⟨h', -, ⟨b, k, rfl⟩ | ⟨s, hs⟩⟩
+  · rw [hashParent_hashParent hp'] at hp
+    exact absurd hp (by simp)
+  · exact hashOf_injective hv hh
+  · simp [hashParent] at hp
+  · rw [hashOf_of_hashParent hp] at hs
+    exact absurd hs (by simp)
+
+theorem exclOf_mem {h p : Name} (hp : hashParent h = some p) :
+    exclOf h ∈ parents p := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> simp [exclOf, parents]
+
+theorem kid_ne_top (j : Fin 11) (a : Fin 3) : kid j a ≠ Kid.h 10 := by
+  revert j a
+  decide
+
+theorem prev_ne_chainEnd (b b' : Fin 7) (k k' : Fin 8) (t : Fin 18) :
+    prev b k t ≠ .cv b' k' 17 := by
+  unfold prev
+  split_ifs with ht
+  · intro e
+    nomatch e
+  · intro e
+    simp only [Name.cv.injEq] at e
+    have := congrArg Fin.val e.2.2
+    simp at this
+    omega
+
+theorem prev_injective {b b' : Fin 7} {k k' : Fin 8} {t t' : Fin 18}
+    (e : prev b k t = prev b' k' t') : b = b' ∧ k = k' ∧ t = t' := by
+  unfold prev at e
+  split_ifs at e with ht ht' <;>
+    simp only [Name.src.injEq, Name.cv.injEq, Fin.mk.injEq] at e
+  · exact ⟨e.1, e.2, Fin.ext (by omega)⟩
+  · exact ⟨e.1, e.2.1, Fin.ext (by omega)⟩
+
+theorem kidName_injective {κ κ' : Kid} {b b' : Fin 7}
+    (e : κ.name b = κ'.name b') : b = b' ∧ κ = κ' := by
+  cases κ <;> cases κ' <;>
+    simp only [Kid.name, Name.cv.injEq, Name.hv.injEq, reduceCtorEq] at e
+  · exact ⟨e.1, by rw [e.2.1]⟩
+  · exact ⟨e.1, by rw [e.2]⟩
+
+theorem prev_ne_kidName (b b' : Fin 7) (k : Fin 8) (t : Fin 18) (κ : Kid) :
+    prev b k t ≠ κ.name b' := by
+  cases κ with
+  | c k' => exact prev_ne_chainEnd b b' k k' t
+  | h j =>
+      unfold prev
+      split_ifs <;> intro e <;> nomatch e
+
+/-- A compression node reading the exclusive kid of `h` is the input of `h`. -/
+theorem compress_reader_of_exclOf {h p h' m : Name} (hp : hashParent h = some p)
+    (hm' : hashParent h' = some m) (hm : exclOf h ∈ parents m) : m = p := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;>
+    cases h' <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hm' <;>
+    subst hm' <;> simp only [exclOf] at hm
+  · simp only [parents, Finset.mem_singleton] at hm
+    obtain ⟨rfl, rfl, rfl⟩ := prev_injective hm
+    rfl
+  · obtain ⟨a, ha⟩ := (mem_parents_hc _ _ _).1 hm
+    exact absurd ha.symm (prev_ne_kidName _ _ _ _ _)
+  · obtain ⟨b', hb'⟩ := (mem_parents_rc _).1 hm
+    exact absurd hb'.symm (prev_ne_kidName _ _ _ _ (Kid.h 10))
+  · simp only [parents, Finset.mem_singleton] at hm
+    exact absurd hm.symm (prev_ne_kidName _ _ _ _ _)
+  · obtain ⟨a, ha⟩ := (mem_parents_hc _ _ _).1 hm
+    obtain ⟨rfl, hk⟩ := kidName_injective ha
+    rw [((kid_eq_kid_two_iff _ _ a).1 hk).1]
+  · obtain ⟨b', hb'⟩ := (mem_parents_rc _).1 hm
+    exact absurd (kidName_injective (κ := Kid.h 10) hb').2.symm (kid_ne_top _ 2)
+  · simp only [parents, Finset.mem_singleton] at hm
+    exact absurd hm.symm (prev_ne_kidName _ _ _ _ (Kid.h 10))
+  · obtain ⟨a, ha⟩ := (mem_parents_hc _ _ _).1 hm
+    exact absurd (kidName_injective (κ' := Kid.h 10) ha).2 (kid_ne_top _ a)
+  · rfl
+
+/-- The exclusive kid is read only by the input of its hash node. -/
+theorem consumer_of_exclOf {h p m : Name} (hp : hashParent h = some p)
+    (hm : exclOf h ∈ parents m) : m = p := by
+  have hlen := len_of_mem_parents_compress hp (exclOf_mem hp)
+  rcases mem_parents_cases hm with ⟨p', hp', e⟩ | hv | ⟨h', hp', -⟩
+  · rw [e] at hlen
+    exact absurd hlen (len_hashParent_ne_129 hp')
+  · rw [len_of_hashOf hv] at hlen
+    omega
+  · exact compress_reader_of_exclOf hp hp' hm
+
+/-- The low 129 input bits of a hash node are its exclusive kid. -/
+theorem lowWord_detVal_compress {h p : Name} (hp : hashParent h = some p)
+    (x : Asg) : lowWord (detVal p x) = lowWord (x (exclOf h).fin) := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp
+  · show lowWord (tw _ ++ lowWord (x _)) = _
+    rw [lowWord_tw_append le_rfl, lowWord_lowWord]
+    rfl
+  · show lowWord (tw _ ++ cat3 _ _ _) = _
+    rw [lowWord_tw_append (by norm_num), lowWord_cat3]
+    rfl
+  · show lowWord (tw _ ++ cat7 _) = _
+    rw [lowWord_tw_append (by norm_num), lowWord_cat7]
+    rfl
+
+/-- A compression input determines the low 129 bits of each of its inputs. -/
+theorem compress_inj {h p : Name} (hp : hashParent h = some p) {x x' : Asg}
+    (e : detVal p x = detVal p x') {n : Name} (hn : n ∈ parents p) :
+    lowWord (x n.fin) = lowWord (x' n.fin) := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> simp only [parents, Finset.mem_singleton, Finset.mem_image,
+      Finset.mem_univ, true_and] at hn
+  · subst hn
+    exact (bv_append_inj e).2
+  · rename_i b j
+    obtain ⟨a, rfl⟩ := hn
+    obtain ⟨h0, h1, h2⟩ := cat3_inj (bv_append_inj e).2
+    fin_cases a
+    · exact h0
+    · exact h1
+    · exact h2
+  · obtain ⟨b, rfl⟩ := hn
+    exact congrFun (cat7_inj (bv_append_inj e).2) b
+
+/-! ## Concrete record values -/
+
+abbrev Rec := graph.Rec
+
+def val (ξ : Rec) (n : Name) : BitVec n.len :=
+  (graph.evalRec ξ n.fin).cast (graph_len_fin n)
+
 theorem evalRec_apply_fin (ξ : Rec) (n : Name) :
     graph.evalRec ξ n.fin =
       (kindOf n.fin n (Name.ofFin_fin n)).value
@@ -68,177 +513,57 @@ theorem lowWord_evalRec (ξ : Rec) (n : Name) :
   unfold val
   exact (lowWord_cast _ _).symm
 
-theorem val_src (ξ : Rec) (k : Fin 66) :
-    val ξ (Name.src k) = (ξ.1 (Name.src k).fin).cast (graph_len_fin _) := by
+theorem val_src (ξ : Rec) (b : Fin 7) (k : Fin 8) :
+    val ξ (.src b k) = (ξ.1 (Name.src b k).fin).cast (graph_len_fin _) := by
   unfold val
   rw [evalRec_apply_fin]
   rfl
 
-theorem lowWord_eq_self (x : BitVec 129) : lowWord x = x := BitVec.setWidth_eq _
-
-theorem val_ci (ξ : Rec) (k : Fin 66) (t : Fin 18) :
-    val ξ (Name.ci k t) = tw (Name.ch k t) ++ lowWord (val ξ (prev k t)) := by
+/-- A deterministic node evaluates its public function on the record values. -/
+theorem val_det {n : Name} (hc : n.cost = 0) (hs : ∀ b k, n ≠ .src b k)
+    (ξ : Rec) : val ξ n = detVal n (graph.evalRec ξ) := by
   unfold val
   rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  refine (cast_cast_eq _ _ _).trans ?_
-  show tw (Name.ch k t) ++ lowWord (graph.evalRec ξ (prev k t).fin) = _
-  rw [lowWord_evalRec]
-  rfl
+  cases n
+  all_goals first
+    | exact (hs _ _ rfl).elim
+    | (simp only [kindOf, NodeKind.value]; exact cast_cast_eq _ _ _)
+    | (exfalso; simp [Name.cost] at hc)
 
-theorem val_ch (ξ : Rec) (k : Fin 66) (t : Fin 18) :
-    val ξ (Name.ch k t) = ξ.2 (Name.ch k t).fin := by
+theorem lowWord_val_hash {h p : Name} (hp : hashParent h = some p) (ξ : Rec) :
+    lowWord (val ξ h) = lowWord (ξ.2 h.fin) := by
+  unfold val
+  rw [lowWord_cast, evalRec_apply_fin]
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    simp only [kindOf, NodeKind.value] <;> exact lowWord_cast _ _
+
+theorem val_rh (ξ : Rec) : val ξ .rh = ξ.2 Name.rh.fin := by
   unfold val
   rw [evalRec_apply_fin]
   simp only [kindOf, NodeKind.value]
   exact cast_cast_eq _ _ _
 
-theorem lowWord_val_ch (ξ : Rec) (k : Fin 66) (t : Fin 18) :
-    lowWord (graph.evalRec ξ (Name.ch k t).fin) = lowWord (ξ.2 (Name.ch k t).fin) := by
-  rw [lowWord_evalRec, val_ch]
-  rfl
+theorem lowWord_detVal_value {v h : Name} (hh : hashOf v = some h) (x : Asg) :
+    lowWord (detVal v x) = lowWord (x h.fin) := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
+    subst hh <;> exact lowWord_lowWord _
 
-theorem val_cv (ξ : Rec) (k : Fin 66) (t : Fin 18) :
-    val ξ (Name.cv k t) = lowWord (ξ.2 (Name.ch k t).fin) := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  refine (cast_cast_eq _ _ _).trans ?_
-  exact lowWord_val_ch ξ k t
+theorem not_src_of_hashOf {v h : Name} (hh : hashOf v = some h) :
+    ∀ b k, v ≠ .src b k := by
+  intro b k e
+  subst e
+  simp [hashOf] at hh
 
-theorem lowWord_val_cv (ξ : Rec) (k : Fin 66) (t : Fin 18) :
-    lowWord (graph.evalRec ξ (Name.cv k t).fin) = lowWord (ξ.2 (Name.ch k t).fin) := by
-  rw [lowWord_evalRec, val_cv]
-  exact lowWord_lowWord _
-
-theorem val_sc (ξ : Rec) (j : Fin 18) :
-    val ξ (Name.sc j) = tw (Name.sh j) ++ cat3
-      (lowWord (ξ.2 (Name.ch (Name.lowerChain j 0) 17).fin))
-      (lowWord (ξ.2 (Name.ch (Name.lowerChain j 1) 17).fin))
-      (lowWord (ξ.2 (Name.ch (Name.lowerChain j 2) 17).fin)) := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  refine (cast_cast_eq _ _ _).trans ?_
-  show tw (Name.sh j) ++ cat3
-      (lowWord (graph.evalRec ξ (Name.cv (Name.lowerChain j 0) 17).fin))
-      (lowWord (graph.evalRec ξ (Name.cv (Name.lowerChain j 1) 17).fin))
-      (lowWord (graph.evalRec ξ (Name.cv (Name.lowerChain j 2) 17).fin)) = _
-  rw [lowWord_val_cv, lowWord_val_cv, lowWord_val_cv]
-
-theorem val_sh (ξ : Rec) (j : Fin 18) : val ξ (Name.sh j) = ξ.2 (Name.sh j).fin := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  exact cast_cast_eq _ _ _
-
-theorem lowWord_val_sh (ξ : Rec) (j : Fin 18) :
-    lowWord (graph.evalRec ξ (Name.sh j).fin) = lowWord (ξ.2 (Name.sh j).fin) := by
-  rw [lowWord_evalRec, val_sh]
-  rfl
-
-theorem val_sv (ξ : Rec) (j : Fin 18) :
-    val ξ (Name.sv j) = lowWord (ξ.2 (Name.sh j).fin) := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  refine (cast_cast_eq _ _ _).trans ?_
-  exact lowWord_val_sh ξ j
-
-theorem lowWord_val_sv (ξ : Rec) (j : Fin 18) :
-    lowWord (graph.evalRec ξ (Name.sv j).fin) = lowWord (ξ.2 (Name.sh j).fin) := by
-  rw [lowWord_evalRec, val_sv]
-  exact lowWord_lowWord _
-
-theorem val_mc (ξ : Rec) (u : Fin 10) :
-    val ξ (Name.mc u) = tw (Name.mh u) ++ cat3
-      (lowWord (val ξ (midChild u 0)))
-      (lowWord (val ξ (midChild u 1)))
-      (lowWord (val ξ (midChild u 2))) := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  refine (cast_cast_eq _ _ _).trans ?_
-  show tw (Name.mh u) ++ cat3
-      (lowWord (graph.evalRec ξ (midChild u 0).fin))
-      (lowWord (graph.evalRec ξ (midChild u 1).fin))
-      (lowWord (graph.evalRec ξ (midChild u 2).fin)) = _
-  rw [lowWord_evalRec, lowWord_evalRec, lowWord_evalRec]
-  rfl
-
-theorem val_mh (ξ : Rec) (u : Fin 10) : val ξ (Name.mh u) = ξ.2 (Name.mh u).fin := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  exact cast_cast_eq _ _ _
-
-theorem lowWord_val_mh (ξ : Rec) (u : Fin 10) :
-    lowWord (graph.evalRec ξ (Name.mh u).fin) = lowWord (ξ.2 (Name.mh u).fin) := by
-  rw [lowWord_evalRec, val_mh]
-  rfl
-
-theorem val_mv (ξ : Rec) (u : Fin 10) :
-    val ξ (Name.mv u) = lowWord (ξ.2 (Name.mh u).fin) := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  refine (cast_cast_eq _ _ _).trans ?_
-  exact lowWord_val_mh ξ u
-
-theorem lowWord_val_mv (ξ : Rec) (u : Fin 10) :
-    lowWord (graph.evalRec ξ (Name.mv u).fin) = lowWord (ξ.2 (Name.mh u).fin) := by
-  rw [lowWord_evalRec, val_mv]
-  exact lowWord_lowWord _
-
-theorem val_rc (ξ : Rec) :
-    val ξ Name.rc = tw Name.rh ++ cat10 (fun u => lowWord (ξ.2 (Name.mh u).fin)) := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  refine (cast_cast_eq _ _ _).trans ?_
-  show tw Name.rh ++ cat10 (fun u => lowWord (graph.evalRec ξ (Name.mv u).fin)) = _
-  exact congrArg (fun a => tw Name.rh ++ cat10 a) (funext fun u => lowWord_val_mv ξ u)
-
-theorem val_rh (ξ : Rec) : val ξ Name.rh = ξ.2 Name.rh.fin := by
-  unfold val
-  rw [evalRec_apply_fin]
-  simp only [kindOf, NodeKind.value]
-  exact cast_cast_eq _ _ _
+/-- A value node is the low word of the hash output it reads. -/
+theorem lowWord_val_value {v h : Name} (hh : hashOf v = some h) (ξ : Rec) :
+    lowWord (val ξ v) = lowWord (ξ.2 h.fin) := by
+  obtain ⟨p, hp⟩ := hashParent_of_hashOf hh
+  rw [val_det (cost_of_hashOf hh) (not_src_of_hashOf hh)]
+  refine (lowWord_detVal_value hh (graph.evalRec ξ)).trans ?_
+  exact (lowWord_evalRec ξ h).trans (lowWord_val_hash hp ξ)
 
 def pkOf (ξ : Rec) : BitVec 128 := lowPk (ξ.2 Name.rh.fin)
-
 /-! ## Hash inputs and graph tagging -/
-
-def hashParent : Name → Option Name
-  | Name.ch k t => some (Name.ci k t)
-  | Name.sh j => some (Name.sc j)
-  | Name.mh u => some (Name.mc u)
-  | Name.rh => some Name.rc
-  | _ => none
-
-theorem hashParent_isSome_iff (h : Name) :
-    (hashParent h).isSome ↔ h.cost ≠ 0 := by
-  cases h <;> simp [hashParent, Name.cost]
-
-theorem cost_ne_zero_of_hashParent {h p : Name} (hp : hashParent h = some p) :
-    h.cost ≠ 0 :=
-  (hashParent_isSome_iff h).1 (by rw [hp]; rfl)
-
-theorem child_hashParent {h p : Name} (hp : hashParent h = some p) :
-    child p = some h := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
-    subst hp <;> rfl
-
-theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 145 ∨ p.len = 403 ∨ p.len = 1306 := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
-    subst hp <;> simp [Name.len]
-
-theorem len_hashParent_ne_enc {h p : Name} (hp : hashParent h = some p) :
-    p.len ≠ msgBits + 86 := by
-  have he : msgBits + 86 = 342 := rfl
-  rw [he]
-  rcases len_hashParent_cases hp with h | h | h <;> omega
 
 def pointOf (ξ : Rec) (_h p : Name) : Query := ⟨p.len, val ξ p⟩
 
@@ -256,13 +581,25 @@ theorem tagNat_cast {n m : ℕ} (e : n = m) (u : BitVec n) :
     tagNat ⟨m, u.cast e⟩ = tagNat ⟨n, u⟩ :=
   WideForest.tagNat_cast e u
 
+theorem tagNat_detVal_of_hashParent {h p : Name}
+    (hp : hashParent h = some p) (x : Asg) :
+    tagNat ⟨p.len, detVal p x⟩ = h.idx := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    subst hp <;> exact tagNat_tw_append _ _
+
+theorem tagNat_cast_detVal_of_hashParent {h p : Name}
+    (hp : hashParent h = some p) (x : Asg) {m : ℕ} (e : p.len = m) :
+    tagNat ⟨m, (detVal p x).cast e⟩ = h.idx := by
+  rw [tagNat_cast, tagNat_detVal_of_hashParent hp]
+
+theorem val_hashParent {h p : Name} (hp : hashParent h = some p) (ξ : Rec) :
+    val ξ p = detVal p (graph.evalRec ξ) :=
+  val_det (cost_hashParent hp) (hashParent_ne_src hp) ξ
+
 theorem tagNat_val {h p : Name} (hp : hashParent h = some p) (ξ : Rec) :
     tagNat ⟨p.len, val ξ p⟩ = h.idx := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
-  · rw [val_ci]; exact tagNat_tw_append _ _
-  · rw [val_sc]; exact tagNat_tw_append _ _
-  · rw [val_mc]; exact tagNat_tw_append _ _
-  · rw [val_rc]; exact tagNat_tw_append _ _
+  rw [val_hashParent hp]
+  exact tagNat_detVal_of_hashParent hp _
 
 theorem tagNat_pointOf {h p : Name} (hp : hashParent h = some p) (ξ : Rec) :
     tagNat (pointOf ξ h p) = h.idx := tagNat_val hp ξ
@@ -293,7 +630,7 @@ theorem sigma_mk_cast_eq {n m : ℕ} (h : n = m) (x : BitVec n) :
   rfl
 
 theorem sigma_val (ξ : Rec) (p : Name) :
-    (⟨lenF p.fin, graph.evalRec ξ p.fin⟩ : Σ k, BitVec k) =
+    (⟨graph.len p.fin, graph.evalRec ξ p.fin⟩ : Σ k, BitVec k) =
       ⟨p.len, val ξ p⟩ := by
   unfold val
   generalize graph.evalRec ξ p.fin = x
@@ -305,10 +642,7 @@ theorem graph_point_fin (ξ : Rec) (h : Name) :
   unfold Graph.point
   rw [graph_kind_fin]
   cases h <;> simp only [kindOf, hashParent, Option.map_some, Option.map_none, pointOf]
-  case ch k t => exact congrArg some (sigma_val ξ (Name.ci k t))
-  case sh j => exact congrArg some (sigma_val ξ (Name.sc j))
-  case mh u => exact congrArg some (sigma_val ξ (Name.mc u))
-  case rh => exact congrArg some (sigma_val ξ Name.rc)
+  all_goals exact congrArg some (sigma_val ξ _)
 
 def tagOf (q : Query) : Option (Fin N) :=
   if h : tagNat q < N then some ⟨tagNat q, h⟩ else none
@@ -331,24 +665,7 @@ theorem graph_kind_eq_hash {h : Name} {q : Fin N} {hq : q < h.fin}
     ∃ p, hashParent h = some p ∧ q = p.fin := by
   rw [graph_kind_fin] at hk
   cases h <;> simp only [kindOf, reduceCtorEq] at hk
-  case ch k t => exact ⟨Name.ci k t, rfl, (NodeKind.hash.inj hk).symm⟩
-  case sh j => exact ⟨Name.sc j, rfl, (NodeKind.hash.inj hk).symm⟩
-  case mh u => exact ⟨Name.mc u, rfl, (NodeKind.hash.inj hk).symm⟩
-  case rh => exact ⟨Name.rc, rfl, (NodeKind.hash.inj hk).symm⟩
-
-theorem tagNat_detVal_of_hashParent {h p : Name}
-    (hp : hashParent h = some p) (x : Asg) :
-    tagNat ⟨p.len, detVal p x⟩ = h.idx := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
-  · exact tagNat_tw_append _ _
-  · exact tagNat_tw_append _ _
-  · exact tagNat_tw_append _ _
-  · exact tagNat_tw_append _ _
-
-theorem tagNat_cast_detVal_of_hashParent {h p : Name}
-    (hp : hashParent h = some p) (x : Asg) {m : ℕ} (e : p.len = m) :
-    tagNat ⟨m, (detVal p x).cast e⟩ = h.idx := by
-  rw [tagNat_cast, tagNat_detVal_of_hashParent hp]
+  all_goals exact ⟨_, rfl, (NodeKind.hash.inj hk).symm⟩
 
 def tagging : graph.Tagging where
   tag q := if h : tagNat q < N then some ⟨tagNat q, h⟩ else none
@@ -616,10 +933,9 @@ theorem sprRate_le_query_cost {h p : Name} (hp : hashParent h = some p)
     simp only [hashParent, Option.some.injEq] at hp
     subst p
     rw [sprRate, if_pos rfl, hlen]
-    change ε + ε ≤ ε * (blockCost 1306 : ℝ≥0∞)
-    have hc : blockCost 1306 = 3 := by norm_num [blockCost, blockBits]
-    rw [hc, ← mul_two]
-    exact mul_le_mul_of_nonneg_left (by norm_num : (2 : ℝ≥0∞) ≤ 3) zero_le
+    change ε + ε ≤ ε * (blockCost 919 : ℝ≥0∞)
+    have hc : blockCost 919 = 2 := by norm_num [blockCost, blockBits]
+    rw [hc, Nat.cast_ofNat, mul_two]
   · rw [sprRate, if_neg hh]
     exact epsilon_le_query_cost q
 

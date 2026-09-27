@@ -11,7 +11,7 @@ theorem admissible : scheme.Admissible :=
 theorem secure : scheme.Secure :=
   WeightedConstruction.LongChain91Secure.raw_secure
 
-theorem cost : scheme.VerifyCostAtMost 91 :=
+theorem cost : scheme.VerifyCostAtMost 90 :=
   WeightedConstruction.LongChain91.wire_cost
 
 end OptimalOTS.Challenge.UpperCompressions

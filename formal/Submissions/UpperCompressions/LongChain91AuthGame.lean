@@ -4,11 +4,11 @@ import Submissions.UpperCompressions.LongChain91CachedRow
 /-!
 # Authentication game bridge for the cost-91 long-chain construction
 
-This module isolates the two remaining graph-specific obligations behind
-small propositions.  Everything after those obligations is ordinary
-potential algebra or the accepted-verifier event decomposition.  It also
-closes the same-cut, changed-payload route directly from the concrete
-long-chain reconstruction walk.
+This module proves the two hidden-input charges and closes the same-cut,
+changed-payload route from the descent of `LongChain91AuthClosure`.  The
+hidden-input charge resamples the record coordinate behind the exclusive kid
+of a hidden hash node: that kid is read by no other node, so it stays hidden
+after signing even though other kids of the node are shared.
 -/
 
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
@@ -156,183 +156,126 @@ theorem authPotential_charge_of (hbase : SignedHitsCharge)
 
 /-! ## Coordinate resampling -/
 
-/-- The direct chain occupying the low (third) input of upper ternary node
-`u`.  Its final hash output supplies the low 129 bits of the upper input. -/
-def upperLastChain (u : Fin 10) : Fin 66 :=
-  if hu : u.val < 8 then ⟨54 + u.val, by omega⟩
-  else ⟨62 + 2 * (u.val - 8) + 1, by omega⟩
+def updSrc (xi : Rec) (b : Fin 7) (k : Fin 8) (z : BitVec 129) : Rec :=
+  (Function.update xi.1 (Name.src b k).fin
+    (z.cast (graph_len_fin (Name.src b k)).symm), xi.2)
 
-theorem midChild_two (u : Fin 10) :
-    midChild u 2 = Name.cv (upperLastChain u) 17 := by
-  unfold midChild upperLastChain
-  split_ifs <;> simp_all [Fin.ext_iff] <;> omega
+def updHash (xi : Rec) (s : Name) (z : BitVec 256) : Rec :=
+  (xi.1, Function.update xi.2 s.fin z)
 
-/-- The independent record coordinate whose low 129 bits determine the low
-129 bits of a hash input. -/
-def coordOf : Name → Name
-  | .ch k t => if h : t.val = 0 then .src k else .ch k ⟨t.val - 1, by omega⟩
-  | .sh j => .ch (Name.lowerChain j 2) 17
-  | .mh u => .ch (upperLastChain u) 17
-  | .rh => .mh 9
-  | n => n
-
-def updSrc (xi : Rec) (k : Fin 66) (b : BitVec 129) : Rec :=
-  (Function.update xi.1 (Name.src k).fin
-    (b.cast (graph_len_fin (Name.src k)).symm), xi.2)
-
-def updHash (xi : Rec) (s : Name) (b : BitVec 256) : Rec :=
-  (xi.1, Function.update xi.2 s.fin b)
-
-theorem updHash_snd_self (xi : Rec) (s : Name) (b : BitVec 256) :
-    (updHash xi s b).2 s.fin = b :=
+theorem updHash_snd_self (xi : Rec) (s : Name) (z : BitVec 256) :
+    (updHash xi s z).2 s.fin = z :=
   Function.update_self _ _ _
 
-theorem updHash_snd_ne (xi : Rec) (s : Name) (b : BitVec 256)
-    {n : Name} (h : n ≠ s) : (updHash xi s b).2 n.fin = xi.2 n.fin := by
+theorem updHash_snd_ne (xi : Rec) (s : Name) (z : BitVec 256)
+    {n : Name} (h : n ≠ s) : (updHash xi s z).2 n.fin = xi.2 n.fin := by
   simp only [updHash]
   exact Function.update_of_ne (fun e => h (Name.fin_injective e)) _ _
 
-theorem updSrc_snd (xi : Rec) (k : Fin 66) (b : BitVec 129) :
-    (updSrc xi k b).2 = xi.2 := rfl
+theorem updSrc_snd (xi : Rec) (b : Fin 7) (k : Fin 8) (z : BitVec 129) :
+    (updSrc xi b k z).2 = xi.2 := rfl
 
-theorem updSrc_fst_self (xi : Rec) (k : Fin 66) (b : BitVec 129) :
-    (updSrc xi k b).1 (Name.src k).fin =
-      b.cast (graph_len_fin (Name.src k)).symm :=
+theorem updSrc_fst_self (xi : Rec) (b : Fin 7) (k : Fin 8) (z : BitVec 129) :
+    (updSrc xi b k z).1 (Name.src b k).fin =
+      z.cast (graph_len_fin (Name.src b k)).symm :=
   Function.update_self _ _ _
 
-theorem val_updSrc_self (xi : Rec) (k : Fin 66) (b : BitVec 129) :
-    val (updSrc xi k b) (Name.src k) = b := by
+theorem val_updSrc_self (xi : Rec) (b : Fin 7) (k : Fin 8) (z : BitVec 129) :
+    val (updSrc xi b k z) (Name.src b k) = z := by
   rw [val_src, updSrc_fst_self]
   exact cast_cast_eq _ _ _
 
 theorem coordOf_ne_rh (h : Name) (hh : h.cost ≠ 0) : coordOf h ≠ Name.rh := by
-  cases h <;> simp_all [Name.cost, coordOf] <;> split_ifs <;> simp
+  cases h <;> simp [Name.cost] at hh
+  · simp only [coordOf]
+    split_ifs <;> simp
+  · rename_i b j
+    simp only [coordOf]
+    cases kid j 2 <;> simp [Kid.coord]
+  · simp [coordOf]
 
-theorem lowWord_cat3_game (x y z : BitVec 129) :
-    lowWord (cat3 x y z) = z := by
-  unfold cat3
-  rw [lowWord_cast]
-  unfold lowWord
-  rw [BitVec.setWidth_append, dif_pos le_rfl, BitVec.setWidth_eq]
+theorem hashOf_ne_src {v h : Name} (hh : hashOf v = some h) (b : Fin 7) (k : Fin 8) :
+    h ≠ Name.src b k := by
+  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
+    subst hh <;> intro e <;> nomatch e
 
-theorem lowWord_cat10_game (a : Fin 10 → BitVec 129) :
-    lowWord (cat10 a) = a 9 := by
-  unfold cat10
-  rw [lowWord_cast]
-  unfold lowWord
-  rw [BitVec.setWidth_append, dif_pos le_rfl, BitVec.setWidth_eq]
+/-- The exclusive kid is a source equal to its coordinate, or a value node
+reading its coordinate. -/
+theorem exclOf_cases {h p : Name} (hp : hashParent h = some p) :
+    (∃ b k, exclOf h = Name.src b k ∧ coordOf h = Name.src b k) ∨
+      hashOf (exclOf h) = some (coordOf h) := by
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp
+  · rename_i b k t
+    by_cases ht : t.val = 0
+    · exact Or.inl ⟨b, k, by simp [exclOf, prev, ht], by simp [coordOf, ht]⟩
+    · refine Or.inr ?_
+      simp only [exclOf, coordOf, dif_neg ht]
+      exact hashOf_prev b k t ht
+  · exact Or.inr (hashOf_kidName _ _)
+  · exact Or.inr rfl
 
-theorem lowWord_tw_append_game {n : ℕ} (hn : 129 ≤ n)
-    (a : BitVec 16) (x : BitVec n) : lowWord (a ++ x) = lowWord x := by
-  unfold lowWord
-  rw [BitVec.setWidth_append, dif_pos hn]
-
-theorem lowWord_of_tw_eq_game {a : BitVec 16} {x : BitVec 129}
-    {u : BitVec 145} (e : a ++ x = u) : lowWord u = x := by
-  subst u
-  exact (lowWord_tw_append_game le_rfl a x).trans (lowWord_eq_self x)
-
-theorem lowWord_of_tw_cat3_eq_game {a : BitVec 16}
-    {x y z : BitVec 129} {u : BitVec 403}
-    (e : a ++ cat3 x y z = u) : lowWord u = z := by
-  subst u
-  exact (lowWord_tw_append_game (n := 387) (by norm_num) a _).trans
-    (lowWord_cat3_game x y z)
-
-theorem lowWord_of_tw_cat10_eq_game {a : BitVec 16}
-    {b : Fin 10 → BitVec 129} {u : BitVec 1306}
-    (e : a ++ cat10 b = u) : lowWord u = b 9 := by
-  subst u
-  exact (lowWord_tw_append_game (n := 1290) (by norm_num) a _).trans
-    (lowWord_cat10_game b)
+theorem lowWord_val_compress {h p : Name} (hp : hashParent h = some p)
+    (xi : Rec) : lowWord (val xi p) = lowWord (val xi (exclOf h)) := by
+  rw [val_hashParent hp]
+  exact (lowWord_detVal_compress hp (graph.evalRec xi)).trans (lowWord_evalRec xi _)
 
 theorem card_filter_le_of_imp_game (p : BitVec 256 → Prop)
     [DecidablePred p] (a : BitVec 129)
-    (hp : ∀ b, p b → lowWord b = a) :
+    (hp : ∀ z, p z → lowWord z = a) :
     (Finset.univ.filter p).card ≤ 2 ^ 127 :=
-  le_trans (Finset.card_le_card fun b hb => Finset.mem_filter.2
-    ⟨Finset.mem_univ _, hp b (Finset.mem_filter.1 hb).2⟩)
+  le_trans (Finset.card_le_card fun z hz => Finset.mem_filter.2
+    ⟨Finset.mem_univ _, hp z (Finset.mem_filter.1 hz).2⟩)
     (WideForest.card_filter_lowWord_le a)
 
 /-- Resampling `coordOf h` leaves at most 127 unconstrained answer bits in a
 fixed input to hash node `h`. -/
 theorem card_updHash_input_le {h p : Name}
     (hp : hashParent h = some p) (xi : Rec)
-    (hs : ∀ k, coordOf h ≠ Name.src k) (u : BitVec p.len) :
-    (Finset.univ.filter fun b : BitVec 256 =>
-      val (updHash xi (coordOf h) b) p = u).card ≤ 2 ^ 127 := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
-    subst hp
-  · rename_i k t
-    have ht : ¬ t.val = 0 := fun ht => hs k (by simp [coordOf, ht])
-    have hc : coordOf (Name.ch k t) =
-        Name.ch k ⟨t.val - 1, by omega⟩ := by simp [coordOf, ht]
-    rw [hc]
-    refine card_filter_le_of_imp_game _ (lowWord u) fun b hb => ?_
-    rw [val_ci] at hb
-    have hz := lowWord_of_tw_eq_game hb
-    have hprev : prev k t = Name.cv k ⟨t.val - 1, by omega⟩ := by
-      simp [prev, ht]
-    rw [hprev, val_cv, updHash_snd_self] at hz
-    exact (lowWord_lowWord b).symm.trans hz.symm
-  · rename_i j
-    refine card_filter_le_of_imp_game _ (lowWord u) fun b hb => ?_
-    rw [val_sc] at hb
-    have hz := lowWord_of_tw_cat3_eq_game hb
-    simp [coordOf, updHash_snd_self, lowWord_lowWord] at hz
-    exact hz.symm
-  · rename_i uidx
-    refine card_filter_le_of_imp_game _ (lowWord u) fun b hb => ?_
-    rw [val_mc] at hb
-    have hz := lowWord_of_tw_cat3_eq_game hb
-    rw [midChild_two, val_cv] at hz
-    simp [coordOf, updHash_snd_self, lowWord_lowWord] at hz
-    exact hz.symm
-  · refine card_filter_le_of_imp_game _ (lowWord u) fun b hb => ?_
-    rw [val_rc] at hb
-    have hz := lowWord_of_tw_cat10_eq_game hb
-    simp [coordOf, updHash_snd_self, lowWord_lowWord] at hz
-    exact hz.symm
+    (hs : ∀ b k, coordOf h ≠ Name.src b k) (u : BitVec p.len) :
+    (Finset.univ.filter fun z : BitVec 256 =>
+      val (updHash xi (coordOf h) z) p = u).card ≤ 2 ^ 127 := by
+  have hv : hashOf (exclOf h) = some (coordOf h) := by
+    rcases exclOf_cases hp with ⟨b, k, -, e⟩ | e
+    · exact absurd e (hs b k)
+    · exact e
+  refine card_filter_le_of_imp_game _ (lowWord u) fun z hz => ?_
+  rw [← hz, lowWord_val_compress hp, lowWord_val_value hv, updHash_snd_self]
+  rfl
 
 theorem card_updSrc_input_le {h p : Name}
-    (hp : hashParent h = some p) (xi : Rec) {k : Fin 66}
-    (hs : coordOf h = Name.src k) (u : BitVec p.len) :
-    (Finset.univ.filter fun b : BitVec 129 =>
-      val (updSrc xi k b) p = u).card ≤ 1 := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
-    subst hp <;> simp only [coordOf] at hs
-  · rename_i k' t
-    by_cases ht : t.val = 0
-    · rw [dif_pos ht] at hs
-      obtain rfl : k = k' := (Name.src.inj hs).symm
-      rw [Finset.card_le_one]
-      intro a ha b hb
-      simp only [Finset.mem_filter, Finset.mem_univ, true_and] at ha hb
-      have hprev : prev k t = Name.src k := by simp [prev, ht]
-      rw [val_ci] at ha hb
-      rw [hprev, val_updSrc_self] at ha hb
-      have he := (bv_append_inj (ha.trans hb.symm)).2
-      exact eq_of_lowWord_eq rfl he
-    · rw [dif_neg ht] at hs
-      exact absurd hs (by simp)
-  all_goals exact absurd hs (by simp)
+    (hp : hashParent h = some p) (xi : Rec) {b : Fin 7} {k : Fin 8}
+    (hs : coordOf h = Name.src b k) (u : BitVec p.len) :
+    (Finset.univ.filter fun z : BitVec 129 =>
+      val (updSrc xi b k z) p = u).card ≤ 1 := by
+  have he : exclOf h = Name.src b k := by
+    rcases exclOf_cases hp with ⟨b', k', e, e'⟩ | e
+    · rw [e, ← e', hs]
+    · rw [hs] at e
+      exact absurd rfl (hashOf_ne_src e b k)
+  rw [Finset.card_le_one]
+  intro z hz z' hz'
+  simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hz hz'
+  have e := congrArg lowWord (hz.trans hz'.symm)
+  rw [lowWord_val_compress hp, lowWord_val_compress hp, he, val_updSrc_self,
+    val_updSrc_self] at e
+  exact eq_of_lowWord_eq rfl e
 
 /-! ## Closed record fibers and the initial charge -/
 
 def ClosedAt (S : Finset Rec) (s : Name) : Prop :=
   match s with
-  | .src k => ∀ xi ∈ S, ∀ b : BitVec 129, updSrc xi k b ∈ S
-  | _ => ∀ xi ∈ S, ∀ b : BitVec 256, updHash xi s b ∈ S
+  | .src b k => ∀ xi ∈ S, ∀ z : BitVec 129, updSrc xi b k z ∈ S
+  | _ => ∀ xi ∈ S, ∀ z : BitVec 256, updHash xi s z ∈ S
 
-theorem closedAt_src (S : Finset Rec) (k : Fin 66) :
-    ClosedAt S (Name.src k) ↔
-      ∀ xi ∈ S, ∀ b : BitVec 129, updSrc xi k b ∈ S := by
+theorem closedAt_src (S : Finset Rec) (b : Fin 7) (k : Fin 8) :
+    ClosedAt S (Name.src b k) ↔
+      ∀ xi ∈ S, ∀ z : BitVec 129, updSrc xi b k z ∈ S := by
   rfl
 
 theorem closedAt_of_ne_src (S : Finset Rec) {s : Name}
-    (hs : ∀ k, s ≠ Name.src k) :
+    (hs : ∀ b k, s ≠ Name.src b k) :
     ClosedAt S s ↔
-      ∀ xi ∈ S, ∀ b : BitVec 256, updHash xi s b ∈ S := by
+      ∀ xi ∈ S, ∀ z : BitVec 256, updHash xi s z ∈ S := by
   cases s <;> simp_all [ClosedAt]
 
 theorem bv_cast_cast_game {n m : ℕ} (h₁ : n = m) (h₂ : m = n)
@@ -340,10 +283,10 @@ theorem bv_cast_cast_game {n m : ℕ} (h₁ : n = m) (h₂ : m = n)
   subst m
   rfl
 
-theorem updHash_updHash (xi : Rec) (s : Name) (b : BitVec 256) :
-    updHash (updHash xi s b) s (xi.2 s.fin) = xi :=
+theorem updHash_updHash (xi : Rec) (s : Name) (z : BitVec 256) :
+    updHash (updHash xi s z) s (xi.2 s.fin) = xi :=
   Prod.ext rfl (funext fun v => by
-    show Function.update (Function.update xi.2 s.fin b) s.fin
+    show Function.update (Function.update xi.2 s.fin z) s.fin
       (xi.2 s.fin) v = xi.2 v
     by_cases hv : v = s.fin
     · subst hv
@@ -351,41 +294,40 @@ theorem updHash_updHash (xi : Rec) (s : Name) (b : BitVec 256) :
     · exact (Function.update_of_ne hv _ _).trans
         (Function.update_of_ne hv _ _))
 
-theorem updSrc_updSrc (xi : Rec) (k : Fin 66) (b : BitVec 129) :
-    updSrc (updSrc xi k b) k
-      ((xi.1 (Name.src k).fin).cast (graph_len_fin _)) = xi :=
+theorem updSrc_updSrc (xi : Rec) (b : Fin 7) (k : Fin 8) (z : BitVec 129) :
+    updSrc (updSrc xi b k z) b k
+      ((xi.1 (Name.src b k).fin).cast (graph_len_fin _)) = xi :=
   Prod.ext (funext fun v => by
     show Function.update
-      (Function.update xi.1 (Name.src k).fin (b.cast _))
-      (Name.src k).fin
-      (((xi.1 (Name.src k).fin).cast (graph_len_fin _)).cast
+      (Function.update xi.1 (Name.src b k).fin (z.cast _))
+      (Name.src b k).fin
+      (((xi.1 (Name.src b k).fin).cast (graph_len_fin _)).cast
         (graph_len_fin _).symm) v = xi.1 v
-    by_cases hv : v = (Name.src k).fin
+    by_cases hv : v = (Name.src b k).fin
     · subst hv
       exact (Function.update_self ..).trans (bv_cast_cast_game _ _ _)
     · exact (Function.update_of_ne hv _ _).trans
         (Function.update_of_ne hv _ _)) rfl
 
-theorem fst_updSrc_self (xi : Rec) (k : Fin 66) (b : BitVec 129) :
-    ((updSrc xi k b).1 (Name.src k).fin).cast (graph_len_fin _) = b := by
+theorem fst_updSrc_self (xi : Rec) (b : Fin 7) (k : Fin 8) (z : BitVec 129) :
+    ((updSrc xi b k z).1 (Name.src b k).fin).cast (graph_len_fin _) = z := by
   rw [updSrc_fst_self]
   exact bv_cast_cast_game _ _ _
 
 theorem sum_updHash (S : Finset Rec) (s : Name)
-    (_hs : ∀ k, s ≠ Name.src k)
-    (hS : ∀ xi ∈ S, ∀ b : BitVec 256, updHash xi s b ∈ S)
+    (hS : ∀ xi ∈ S, ∀ z : BitVec 256, updHash xi s z ∈ S)
     (f : Rec → ℝ≥0∞) :
     ∑ xi ∈ S, f xi = ∑ xi ∈ S,
       (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
-        ∑ b, f (updHash xi s b) := by
-  have key : ∑ xi ∈ S, ∑ b, f (updHash xi s b) =
-      ∑ xi ∈ S, ∑ _b : BitVec 256, f xi := by
+        ∑ z, f (updHash xi s z) := by
+  have key : ∑ xi ∈ S, ∑ z, f (updHash xi s z) =
+      ∑ xi ∈ S, ∑ _z : BitVec 256, f xi := by
     calc
-      ∑ xi ∈ S, ∑ b, f (updHash xi s b) =
+      ∑ xi ∈ S, ∑ z, f (updHash xi s z) =
           ∑ p ∈ S ×ˢ (Finset.univ : Finset (BitVec 256)),
             f (updHash p.1 s p.2) :=
         (Finset.sum_product' S Finset.univ
-          (fun xi b => f (updHash xi s b))).symm
+          (fun xi z => f (updHash xi s z))).symm
       _ = ∑ p ∈ S ×ˢ (Finset.univ : Finset (BitVec 256)), f p.1 := by
         refine Finset.sum_nbij'
           (fun p => (updHash p.1 s p.2, p.1.2 s.fin))
@@ -402,7 +344,7 @@ theorem sum_updHash (S : Finset Rec) (s : Name)
           exact Prod.ext (updHash_updHash _ _ _) (updHash_snd_self _ _ _)
         · intro p _
           rfl
-      _ = ∑ xi ∈ S, ∑ _b : BitVec 256, f xi :=
+      _ = ∑ xi ∈ S, ∑ _z : BitVec 256, f xi :=
         Finset.sum_product' S Finset.univ (fun xi _ => f xi)
   have hc0 : (Fintype.card (BitVec 256) : ℝ≥0∞) ≠ 0 := by
     exact_mod_cast Fintype.card_ne_zero
@@ -413,26 +355,26 @@ theorem sum_updHash (S : Finset Rec) (s : Name)
   rw [← Finset.mul_sum, ← mul_assoc,
     ENNReal.inv_mul_cancel hc0 hct, one_mul]
 
-theorem sum_updSrc (S : Finset Rec) (k : Fin 66)
-    (hS : ∀ xi ∈ S, ∀ b : BitVec 129, updSrc xi k b ∈ S)
+theorem sum_updSrc (S : Finset Rec) (b : Fin 7) (k : Fin 8)
+    (hS : ∀ xi ∈ S, ∀ z : BitVec 129, updSrc xi b k z ∈ S)
     (f : Rec → ℝ≥0∞) :
     ∑ xi ∈ S, f xi = ∑ xi ∈ S,
       (Fintype.card (BitVec 129) : ℝ≥0∞)⁻¹ *
-        ∑ b, f (updSrc xi k b) := by
-  have key : ∑ xi ∈ S, ∑ b, f (updSrc xi k b) =
-      ∑ xi ∈ S, ∑ _b : BitVec 129, f xi := by
+        ∑ z, f (updSrc xi b k z) := by
+  have key : ∑ xi ∈ S, ∑ z, f (updSrc xi b k z) =
+      ∑ xi ∈ S, ∑ _z : BitVec 129, f xi := by
     calc
-      ∑ xi ∈ S, ∑ b, f (updSrc xi k b) =
+      ∑ xi ∈ S, ∑ z, f (updSrc xi b k z) =
           ∑ p ∈ S ×ˢ (Finset.univ : Finset (BitVec 129)),
-            f (updSrc p.1 k p.2) :=
+            f (updSrc p.1 b k p.2) :=
         (Finset.sum_product' S Finset.univ
-          (fun xi b => f (updSrc xi k b))).symm
+          (fun xi z => f (updSrc xi b k z))).symm
       _ = ∑ p ∈ S ×ˢ (Finset.univ : Finset (BitVec 129)), f p.1 := by
         refine Finset.sum_nbij'
-          (fun p => (updSrc p.1 k p.2,
-            (p.1.1 (Name.src k).fin).cast (graph_len_fin _)))
-          (fun p => (updSrc p.1 k p.2,
-            (p.1.1 (Name.src k).fin).cast (graph_len_fin _))) ?_ ?_ ?_ ?_ ?_
+          (fun p => (updSrc p.1 b k p.2,
+            (p.1.1 (Name.src b k).fin).cast (graph_len_fin _)))
+          (fun p => (updSrc p.1 b k p.2,
+            (p.1.1 (Name.src b k).fin).cast (graph_len_fin _))) ?_ ?_ ?_ ?_ ?_
         · intro p hp
           rw [Finset.mem_product] at hp ⊢
           exact ⟨hS _ hp.1 _, Finset.mem_univ _⟩
@@ -440,12 +382,12 @@ theorem sum_updSrc (S : Finset Rec) (k : Fin 66)
           rw [Finset.mem_product] at hp ⊢
           exact ⟨hS _ hp.1 _, Finset.mem_univ _⟩
         · intro p _
-          exact Prod.ext (updSrc_updSrc _ _ _) (fst_updSrc_self _ _ _)
+          exact Prod.ext (updSrc_updSrc _ _ _ _) (fst_updSrc_self _ _ _ _)
         · intro p _
-          exact Prod.ext (updSrc_updSrc _ _ _) (fst_updSrc_self _ _ _)
+          exact Prod.ext (updSrc_updSrc _ _ _ _) (fst_updSrc_self _ _ _ _)
         · intro p _
           rfl
-      _ = ∑ xi ∈ S, ∑ _b : BitVec 129, f xi :=
+      _ = ∑ xi ∈ S, ∑ _z : BitVec 129, f xi :=
         Finset.sum_product' S Finset.univ (fun xi _ => f xi)
   have hc0 : (Fintype.card (BitVec 129) : ℝ≥0∞) ≠ 0 := by
     exact_mod_cast Fintype.card_ne_zero
@@ -465,40 +407,40 @@ theorem sum_input_eq_le {h p : Name} (hp : hashParent h = some p)
     ∑ xi ∈ S, (if val xi p = u then w else 0) ≤
       ε * ∑ _xi ∈ S, w := by
   rw [Finset.mul_sum]
-  by_cases hsrc : ∃ k, coordOf h = Name.src k
-  · obtain ⟨k, hk⟩ := hsrc
+  by_cases hsrc : ∃ b k, coordOf h = Name.src b k
+  · obtain ⟨b, k, hk⟩ := hsrc
     rw [hk, closedAt_src] at hS
-    rw [sum_updSrc S k hS
+    rw [sum_updSrc S b k hS
       (fun xi => if val xi p = u then w else 0)]
     refine Finset.sum_le_sum fun xi _ => ?_
     rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
     have hle := card_updSrc_input_le hp xi hk u
-    have hle' : ((Finset.univ.filter fun b : BitVec 129 =>
-        val (updSrc xi k b) p = u).card : ℝ≥0∞) ≤ 1 := by
+    have hle' : ((Finset.univ.filter fun z : BitVec 129 =>
+        val (updSrc xi b k z) p = u).card : ℝ≥0∞) ≤ 1 := by
       exact_mod_cast hle
     calc
       (Fintype.card (BitVec 129) : ℝ≥0∞)⁻¹ *
-          (((Finset.univ.filter fun b : BitVec 129 =>
-            val (updSrc xi k b) p = u).card : ℝ≥0∞) * w)
+          (((Finset.univ.filter fun z : BitVec 129 =>
+            val (updSrc xi b k z) p = u).card : ℝ≥0∞) * w)
           ≤ (Fintype.card (BitVec 129) : ℝ≥0∞)⁻¹ * (1 * w) := by
             gcongr
       _ = ε * w := by
         rw [one_mul, card_bitVec_ennreal_game, ε]
   · push Not at hsrc
     rw [closedAt_of_ne_src S hsrc] at hS
-    rw [sum_updHash S (coordOf h) hsrc hS
+    rw [sum_updHash S (coordOf h) hS
       (fun xi => if val xi p = u then w else 0)]
     refine Finset.sum_le_sum fun xi _ => ?_
     rw [← Finset.sum_filter, Finset.sum_const, nsmul_eq_mul]
     have hle := card_updHash_input_le hp xi hsrc u
-    have hle' : ((Finset.univ.filter fun b : BitVec 256 =>
-        val (updHash xi (coordOf h) b) p = u).card : ℝ≥0∞) ≤
+    have hle' : ((Finset.univ.filter fun z : BitVec 256 =>
+        val (updHash xi (coordOf h) z) p = u).card : ℝ≥0∞) ≤
           2 ^ 127 := by
       exact_mod_cast hle
     calc
       (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
-          (((Finset.univ.filter fun b : BitVec 256 =>
-            val (updHash xi (coordOf h) b) p = u).card : ℝ≥0∞) * w)
+          (((Finset.univ.filter fun z : BitVec 256 =>
+            val (updHash xi (coordOf h) z) p = u).card : ℝ≥0∞) * w)
           ≤ (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ *
             (2 ^ 127 * w) := by
               gcongr
@@ -507,27 +449,27 @@ theorem sum_input_eq_le {h p : Name} (hp : hashParent h = some p)
           congrArg (fun z : ℝ≥0∞ => z * w) inv_card_bitVec_mul_two_pow
 
 theorem pkOf_updHash (xi : Rec) {s : Name} (hs : s ≠ Name.rh)
-    (b : BitVec 256) : pkOf (updHash xi s b) = pkOf xi := by
-  exact congrArg lowPk (updHash_snd_ne xi s b (Ne.symm hs))
+    (z : BitVec 256) : pkOf (updHash xi s z) = pkOf xi := by
+  exact congrArg lowPk (updHash_snd_ne xi s z (Ne.symm hs))
 
-theorem pkOf_updSrc (xi : Rec) (k : Fin 66) (b : BitVec 129) :
-    pkOf (updSrc xi k b) = pkOf xi := by
+theorem pkOf_updSrc (xi : Rec) (b : Fin 7) (k : Fin 8) (z : BitVec 129) :
+    pkOf (updSrc xi b k z) = pkOf xi := by
   unfold pkOf
   rw [updSrc_snd]
 
 theorem fiberA_closedAt (pk : BitVec 128) {s : Name}
     (hs : s ≠ Name.rh) : ClosedAt (fiberA pk) s := by
-  by_cases hsrc : ∃ k, s = Name.src k
-  · obtain ⟨k, rfl⟩ := hsrc
+  by_cases hsrc : ∃ b k, s = Name.src b k
+  · obtain ⟨b, k, rfl⟩ := hsrc
     rw [closedAt_src]
     simp only [fiberA, Finset.mem_filter, Finset.mem_univ, true_and]
-    intro xi hxi b
+    intro xi hxi z
     rw [pkOf_updSrc]
     exact hxi
   · push Not at hsrc
     rw [closedAt_of_ne_src _ hsrc]
     simp only [fiberA, Finset.mem_filter, Finset.mem_univ, true_and]
-    intro xi hxi b
+    intro xi hxi z
     rw [pkOf_updHash _ hs]
     exact hxi
 
@@ -570,342 +512,127 @@ theorem initialHitsCharge : InitialHitsCharge := by
 
 /-! ## Locality of record coordinates -/
 
-/-- The independent record coordinate directly underlying a 129-bit value
-node.  The fallback cases are irrelevant to the locality lemmas. -/
-def valueCoord : Name → Name
-  | .src k => .src k
-  | .cv k t => .ch k t
-  | .sv j => .sh j
-  | .mv u => .mh u
-  | n => n
+/-- The independent record coordinate underlying a 129-bit value: the hash
+node it reads, or the source itself. -/
+def valueCoord (n : Name) : Name := (hashOf n).getD n
 
-/-- The hash-output node directly underlying a non-source value node. -/
-def hashOf : Name → Option Name
-  | .cv k t => some (.ch k t)
-  | .sv j => some (.sh j)
-  | .mv u => some (.mh u)
-  | _ => none
+theorem valueCoord_of_hashOf {v h : Name} (hh : hashOf v = some h) :
+    valueCoord v = h := by
+  simp [valueCoord, hh]
 
-theorem child_hashOf {v h : Name} (hh : hashOf v = some h) :
-    child h = some v := by
-  cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
-    subst h <;> rfl
-
-theorem hashOf_midChild (u : Fin 10) (a : Fin 3) :
-    hashOf (midChild u a) = some (valueCoord (midChild u a)) := by
-  unfold midChild
-  split_ifs <;> rfl
+theorem valueCoord_of_hashOf_none {n : Name} (hn : hashOf n = none) :
+    valueCoord n = n := by
+  simp [valueCoord, hn]
 
 /-- Record coordinates read by the honest value at a node. -/
-def deps : Name → Finset Name
-  | .src k => {.src k}
-  | .ci k t =>
-      if h : t.val = 0 then {.src k}
-      else {.ch k ⟨t.val - 1, by omega⟩}
-  | .ch k t => {.ch k t}
-  | .cv k t => {.ch k t}
-  | .sc j =>
-      {.ch (Name.lowerChain j 0) 17,
-       .ch (Name.lowerChain j 1) 17,
-       .ch (Name.lowerChain j 2) 17}
-  | .sh j => {.sh j}
-  | .sv j => {.sh j}
-  | .mc u =>
-      {valueCoord (midChild u 0), valueCoord (midChild u 1),
-       valueCoord (midChild u 2)}
-  | .mh u => {.mh u}
-  | .mv u => {.mh u}
-  | .rc => Finset.univ.image Name.mh
-  | .rh => {.rh}
+def deps (n : Name) : Finset Name :=
+  if ∃ h, hashParent h = some n then (parents n).image valueCoord
+  else {valueCoord n}
 
-theorem deps_ci_zero (k : Fin 66) (t : Fin 18) (ht : t.val = 0) :
-    deps (Name.ci k t) = {Name.src k} := by
-  simp [deps, ht]
+theorem evalRec_fin_congr {xi xi' : Rec} {a : Name}
+    (h : val xi a = val xi' a) :
+    graph.evalRec xi a.fin = graph.evalRec xi' a.fin := by
+  unfold val at h
+  simpa using congrArg (BitVec.cast (graph_len_fin a).symm) h
 
-theorem deps_ci_succ (k : Fin 66) (t : Fin 18) (ht : ¬ t.val = 0) :
-    deps (Name.ci k t) = {Name.ch k ⟨t.val - 1, by omega⟩} := by
-  simp [deps, ht]
+theorem val_hash_congr {xi xi' : Rec} {h p : Name} (hp : hashParent h = some p)
+    (e : xi.2 h.fin = xi'.2 h.fin) : val xi h = val xi' h := by
+  unfold val
+  rw [evalRec_apply_fin, evalRec_apply_fin]
+  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
+    simp only [kindOf, NodeKind.value, e]
 
-theorem val_updHash_value {xi : Rec} {s v : Name} (b : BitVec 256)
-    (hv : v.len = 129) (hs : s ≠ valueCoord v) :
-    val (updHash xi s b) v = val xi v := by
-  cases v with
-  | src k => rw [val_src, val_src]; rfl
-  | cv k t =>
-      rw [val_cv, val_cv, updHash_snd_ne _ _ _]
-      exact Ne.symm hs
-  | sv j =>
-      rw [val_sv, val_sv, updHash_snd_ne _ _ _]
-      exact Ne.symm hs
-  | mv u =>
-      rw [val_mv, val_mv, updHash_snd_ne _ _ _]
-      exact Ne.symm hs
-  | ci k t | ch k t | sc k | sh k | mc k | mh k | rc | rh =>
-      simp [Name.len] at hv
+theorem val_src_congr {xi xi' : Rec} {b : Fin 7} {k : Fin 8}
+    (e : xi.1 (Name.src b k).fin = xi'.1 (Name.src b k).fin) :
+    val xi (Name.src b k) = val xi' (Name.src b k) := by
+  rw [val_src, val_src, e]
 
-theorem val_updSrc_src_of_ne (xi : Rec) (k : Fin 66) (b : BitVec 129)
-    {k' : Fin 66} (h : k ≠ k') :
-    val (updSrc xi k b) (Name.src k') = val xi (Name.src k') := by
-  have he : (updSrc xi k b).1 (Name.src k').fin =
-      xi.1 (Name.src k').fin :=
-    Function.update_of_ne
-      (fun e => h (Name.src.inj (Name.fin_injective e)).symm) _ _
-  rw [val_src, val_src, he]
+/-- A 129-bit value depends only on its record coordinate. -/
+theorem val_input_congr {xi xi' : Rec} {e : Name} (he : e.len = 129)
+    (hsrc : ∀ b k, e = Name.src b k → xi.1 e.fin = xi'.1 e.fin)
+    (hval : ∀ h, hashOf e = some h → xi.2 h.fin = xi'.2 h.fin) :
+    val xi e = val xi' e := by
+  rcases len_eq_129_cases he with ⟨b, k, rfl⟩ | ⟨h, hh⟩
+  · exact val_src_congr (hsrc b k rfl)
+  · apply eq_of_lowWord_eq he
+    rw [lowWord_val_value hh, lowWord_val_value hh, hval h hh]
 
-theorem val_updSrc_midChild (xi : Rec) (k : Fin 66) (b : BitVec 129)
-    (u : Fin 10) (a : Fin 3) :
-    val (updSrc xi k b) (midChild u a) = val xi (midChild u a) := by
-  have hh := hashOf_midChild u a
-  generalize hn : midChild u a = n at hh ⊢
-  cases n <;> simp_all [hashOf, val_cv, val_sv, val_mv, updSrc_snd] <;> rfl
+/-- A compression input depends only on the values of its inputs. -/
+theorem val_compress_congr {xi xi' : Rec} {h p : Name}
+    (hp : hashParent h = some p)
+    (H : ∀ e ∈ parents p, val xi e = val xi' e) : val xi p = val xi' p := by
+  rw [val_hashParent hp, val_hashParent hp]
+  apply detVal_local
+  intro v hv
+  rw [Name.parentFins, Finset.mem_map] at hv
+  obtain ⟨e, he, rfl⟩ := hv
+  exact evalRec_fin_congr (H e he)
+
+theorem not_mem_deps_compress {s p e : Name} (hc : ∃ h, hashParent h = some p)
+    (hs : s ∉ deps p) (he : e ∈ parents p) : s ≠ valueCoord e := by
+  intro hse
+  apply hs
+  rw [deps, if_pos hc, Finset.mem_image]
+  exact ⟨e, he, hse.symm⟩
+
+theorem not_mem_deps_other {s n : Name} (hc : ¬ ∃ h, hashParent h = some n)
+    (hs : s ∉ deps n) : s ≠ valueCoord n := by
+  intro hse
+  apply hs
+  rw [deps, if_neg hc, hse, Finset.mem_singleton]
 
 theorem val_updHash_of_not_mem_deps (xi : Rec) (s : Name)
-    (b : BitVec 256) (n : Name) (h : s ∉ deps n) :
-    val (updHash xi s b) n = val xi n := by
-  cases n with
-  | src k => rw [val_src, val_src]; rfl
-  | ci k t =>
-      by_cases ht : t.val = 0
-      · have hprev : prev k t = Name.src k := by simp [prev, ht]
-        rw [val_ci, val_ci, hprev]
-        exact congrArg (fun z => tw (Name.ch k t) ++ lowWord z)
-          (val_updHash_value b rfl (by
-            rw [deps_ci_zero k t ht, Finset.mem_singleton] at h
-            simpa [valueCoord] using h))
-      · rw [deps_ci_succ k t ht, Finset.mem_singleton] at h
-        have hprev : prev k t = Name.cv k ⟨t.val - 1, by omega⟩ := by
-          simp [prev, ht]
-        rw [val_ci, val_ci, hprev]
-        exact congrArg (fun z => tw (Name.ch k t) ++ lowWord z)
-          (val_updHash_value b rfl (by simpa [valueCoord] using h))
-  | ch k t =>
-      simp only [deps, Finset.mem_singleton] at h
-      rw [val_ch, val_ch, updHash_snd_ne _ _ _ (Ne.symm h)]
-  | cv k t =>
-      simp only [deps, Finset.mem_singleton] at h
-      rw [val_cv, val_cv, updHash_snd_ne _ _ _ (Ne.symm h)]
-  | sc j =>
-      simp only [deps, Finset.mem_insert, Finset.mem_singleton, not_or] at h
-      obtain ⟨h0, h1, h2⟩ := h
-      rw [val_sc, val_sc,
-        updHash_snd_ne _ _ _ (Ne.symm h0),
-        updHash_snd_ne _ _ _ (Ne.symm h1),
-        updHash_snd_ne _ _ _ (Ne.symm h2)]
-  | sh j =>
-      simp only [deps, Finset.mem_singleton] at h
-      rw [val_sh, val_sh, updHash_snd_ne _ _ _ (Ne.symm h)]
-  | sv j =>
-      simp only [deps, Finset.mem_singleton] at h
-      rw [val_sv, val_sv, updHash_snd_ne _ _ _ (Ne.symm h)]
-  | mc u =>
-      simp only [deps, Finset.mem_insert, Finset.mem_singleton, not_or] at h
-      obtain ⟨h0, h1, h2⟩ := h
-      rw [val_mc, val_mc,
-        val_updHash_value b (midChild_len u 0) h0,
-        val_updHash_value b (midChild_len u 1) h1,
-        val_updHash_value b (midChild_len u 2) h2]
-  | mh u =>
-      simp only [deps, Finset.mem_singleton] at h
-      rw [val_mh, val_mh, updHash_snd_ne _ _ _ (Ne.symm h)]
-  | mv u =>
-      simp only [deps, Finset.mem_singleton] at h
-      rw [val_mv, val_mv, updHash_snd_ne _ _ _ (Ne.symm h)]
-  | rc =>
-      simp only [deps, Finset.mem_image, Finset.mem_univ, true_and,
-        not_exists] at h
-      rw [val_rc, val_rc]
-      exact congrArg (fun a => tw Name.rh ++ cat10 a)
-        (funext fun u => by rw [updHash_snd_ne _ _ _ (h u)])
-  | rh =>
-      simp only [deps, Finset.mem_singleton] at h
-      rw [val_rh, val_rh, updHash_snd_ne _ _ _ (Ne.symm h)]
+    (z : BitVec 256) (n : Name) (h : s ∉ deps n) :
+    val (updHash xi s z) n = val xi n := by
+  have hin : ∀ e : Name, e.len = 129 → s ≠ valueCoord e →
+      val (updHash xi s z) e = val xi e := fun e he hse =>
+    val_input_congr he (fun _ _ _ => rfl) fun h hh =>
+      updHash_snd_ne xi s z (fun e' => hse (by rw [valueCoord_of_hashOf hh, e']))
+  rcases role_cases n with ⟨b, k, rfl⟩ | ⟨p, hp⟩ | ⟨h', hp⟩ | ⟨h', hh⟩
+  · exact val_src_congr rfl
+  · have hc : ¬ ∃ h, hashParent h = some n := fun ⟨h₀, h₀p⟩ => by
+      rw [hashParent_hashParent h₀p] at hp
+      exact absurd hp (by simp)
+    have hsn := not_mem_deps_other hc h
+    rw [valueCoord_of_hashOf_none (hashOf_of_hashParent hp)] at hsn
+    exact val_hash_congr hp (updHash_snd_ne xi s z (Ne.symm hsn))
+  · exact val_compress_congr hp fun e he =>
+      hin e (len_of_mem_parents_compress hp he)
+        (not_mem_deps_compress ⟨h', hp⟩ h he)
+  · have hc : ¬ ∃ h, hashParent h = some n := fun ⟨h₀, h₀p⟩ => by
+      rw [hashOf_hashParent h₀p] at hh
+      exact absurd hh (by simp)
+    exact hin n (len_value_of_hashOf hh) (not_mem_deps_other hc h)
 
-theorem val_updSrc_of_not_mem_deps (xi : Rec) (k : Fin 66)
-    (b : BitVec 129) (n : Name) (h : Name.src k ∉ deps n) :
-    val (updSrc xi k b) n = val xi n := by
-  cases n with
-  | src k' =>
-      simp only [deps, Finset.mem_singleton, Name.src.injEq] at h
-      exact val_updSrc_src_of_ne xi k b h
-  | ci k' t =>
-      by_cases ht : t.val = 0
-      · rw [deps_ci_zero k' t ht, Finset.mem_singleton,
-          Name.src.injEq] at h
-        have hprev : prev k' t = Name.src k' := by simp [prev, ht]
-        rw [val_ci, val_ci, hprev]
-        exact congrArg (fun z => tw (Name.ch k' t) ++ lowWord z)
-          (val_updSrc_src_of_ne xi k b h)
-      · have hprev : prev k' t = Name.cv k' ⟨t.val - 1, by omega⟩ := by
-          simp [prev, ht]
-        rw [val_ci, val_ci, hprev]
-        exact congrArg (fun z => tw (Name.ch k' t) ++ lowWord z)
-          (by rw [val_cv, val_cv, updSrc_snd])
-  | ch k' t => rw [val_ch, val_ch, updSrc_snd]
-  | cv k' t => rw [val_cv, val_cv, updSrc_snd]
-  | sc j => rw [val_sc, val_sc, updSrc_snd]
-  | sh j => rw [val_sh, val_sh, updSrc_snd]
-  | sv j => rw [val_sv, val_sv, updSrc_snd]
-  | mc u =>
-      rw [val_mc, val_mc, val_updSrc_midChild, val_updSrc_midChild,
-        val_updSrc_midChild]
-  | mh u => rw [val_mh, val_mh, updSrc_snd]
-  | mv u => rw [val_mv, val_mv, updSrc_snd]
-  | rc => rw [val_rc, val_rc, updSrc_snd]
-  | rh => rw [val_rh, val_rh, updSrc_snd]
+theorem val_updSrc_src_of_ne (xi : Rec) (b : Fin 7) (k : Fin 8)
+    (z : BitVec 129) {b' : Fin 7} {k' : Fin 8}
+    (h : Name.src b k ≠ Name.src b' k') :
+    val (updSrc xi b k z) (Name.src b' k') = val xi (Name.src b' k') :=
+  val_src_congr (Function.update_of_ne (fun e => h (Name.fin_injective e).symm) _ _)
 
-/-! ## Cut antichains in the concrete one-child graph -/
-
-/-- All nodes on the unique source-to-root branch of `k`, including the
-deterministic and hash nodes omitted by `OnPath`. -/
-def Branch (k : Fin 66) : Name → Prop
-  | .src k' | .ci k' _ | .ch k' _ | .cv k' _ => k' = k
-  | .sc j | .sh j | .sv j => lowerOfChain k = some j
-  | .mc u | .mh u | .mv u => upperOfChain k = u
-  | .rc | .rh => True
-
-theorem branch_child {k : Fin 66} {n p : Name}
-    (hn : Branch k n) (hc : child n = some p) : Branch k p := by
-  cases n with
-  | src k' =>
-      simp only [Branch] at hn
-      subst k'
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      rfl
-  | ci k' t =>
-      simp only [Branch] at hn
-      subst k'
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      rfl
-  | ch k' t =>
-      simp only [Branch] at hn
-      subst k'
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      rfl
-  | cv k' t =>
-      simp only [Branch] at hn
-      subst k'
-      simp only [Name.child] at hc
-      split_ifs at hc with ht
-      · cases hl : lowerOfChain k with
-        | none =>
-            simp only [hl, Option.some.injEq] at hc
-            subst p
-            rfl
-        | some j =>
-            simp only [hl, Option.some.injEq] at hc
-            subst p
-            exact hl
-      · simp only [Option.some.injEq] at hc
-        subst p
-        rfl
-  | sc j =>
-      simp only [Branch] at hn
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      exact hn
-  | sh j =>
-      simp only [Branch] at hn
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      exact hn
-  | sv j =>
-      simp only [Branch] at hn
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      exact upperOfChain_eq_upperOfLower hn
-  | mc u =>
-      simp only [Branch] at hn
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      exact hn
-  | mh u =>
-      simp only [Branch] at hn
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      exact hn
-  | mv u =>
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      trivial
-  | rc =>
-      simp only [Name.child, Option.some.injEq] at hc
-      subst p
-      trivial
-  | rh => simp [Name.child] at hc
-
-theorem branch_above {k : Fin 66} {m n : Name}
-    (hn : Branch k n) (h : Above m n) : Branch k m := by
-  induction h with
-  | child hc => exact branch_child hn hc
-  | step hc _ ih => exact ih (branch_child hn hc)
-
-theorem onPath_iff_branch_of_len {k : Fin 66} {n : Name}
-    (hn : n.len = 129) : OnPath k n ↔ Branch k n := by
-  cases n <;> simp_all [OnPath, Branch, Name.len, eq_comm]
-
-theorem upperOfChain_surjective (u : Fin 10) :
-    ∃ k : Fin 66, upperOfChain k = u := by
-  by_cases hu : u.val < 9
-  · refine ⟨⟨54 + u.val, by omega⟩, ?_⟩
-    apply Fin.ext
-    unfold upperOfChain
-    simp only [Fin.val_mk]
-    split_ifs
-    · omega
-    · change 54 + u.val - 54 = u.val
-      omega
-    · change 8 = u.val
-      omega
-    · omega
-  · have hu9 : u.val = 9 := by omega
-    refine ⟨64, ?_⟩
-    apply Fin.ext
-    simp [upperOfChain, hu9]
-
-theorem exists_onPath_of_len129 {n : Name} (hn : n.len = 129) :
-    ∃ k : Fin 66, OnPath k n := by
-  cases n with
-  | src k => exact ⟨k, by simp [OnPath]⟩
-  | cv k t => exact ⟨k, by simp [OnPath]⟩
-  | sv j =>
-      have hj := j.isLt
-      refine ⟨Name.lowerChain j 0, ?_⟩
-      simp [OnPath, Name.lowerChain, lowerOfChain]
-      omega
-  | mv u =>
-      obtain ⟨k, hk⟩ := upperOfChain_surjective u
-      exact ⟨k, (onPath_mv_iff k u).2 hk.symm⟩
-  | ci k t | ch k t | sc k | sh k | mc k | mh k | rc | rh =>
-      simp [Name.len] at hn
-
-theorem height_lt_of_above {m n : Name} (h : Above m n) :
-    height m < height n := by
-  induction h with
-  | child hc =>
-      have hh := height_child hc
-      omega
-  | step hc _ ih =>
-      have hh := height_child hc
-      omega
-
-/-- The source-path uniqueness field of `IsCut` implies the usual tree
-antichain statement needed by the authentication walk. -/
-theorem cut_mem_clearAbove {A : Finset Name} (hA : IsCut A)
-    {a : Name} (ha : a ∈ A) : ∀ m, Above m a → m ∉ A := by
-  have halen : a.len = 129 := hA.values a ha
-  obtain ⟨k, hka⟩ := exists_onPath_of_len129 halen
-  intro m hma hmA
-  have hmlen : m.len = 129 := hA.values m hmA
-  have hba : Branch k a := (onPath_iff_branch_of_len halen).1 hka
-  have hbm : Branch k m := branch_above hba hma
-  have hkm : OnPath k m := (onPath_iff_branch_of_len hmlen).2 hbm
-  have heq : m = a := hA.unique_on_path k a ha hka m hmA hkm
-  subst m
-  have hlt := height_lt_of_above hma
-  omega
+theorem val_updSrc_of_not_mem_deps (xi : Rec) (b : Fin 7) (k : Fin 8)
+    (z : BitVec 129) (n : Name) (h : Name.src b k ∉ deps n) :
+    val (updSrc xi b k z) n = val xi n := by
+  have hin : ∀ e : Name, e.len = 129 → Name.src b k ≠ valueCoord e →
+      val (updSrc xi b k z) e = val xi e := fun e he hse =>
+    val_input_congr he
+      (fun b' k' e' => by
+        subst e'
+        rw [valueCoord_of_hashOf_none rfl] at hse
+        exact Function.update_of_ne (fun e => hse (Name.fin_injective e).symm) _ _)
+      fun _ _ => rfl
+  rcases role_cases n with ⟨b', k', rfl⟩ | ⟨p, hp⟩ | ⟨h', hp⟩ | ⟨h', hh⟩
+  · have hc : ¬ ∃ h, hashParent h = some (Name.src b' k') := fun ⟨h₀, h₀p⟩ =>
+      hashParent_ne_src h₀p b' k' rfl
+    exact hin _ rfl (not_mem_deps_other hc h)
+  · exact val_hash_congr hp rfl
+  · exact val_compress_congr hp fun e he =>
+      hin e (len_of_mem_parents_compress hp he)
+        (not_mem_deps_compress ⟨h', hp⟩ h he)
+  · have hc : ¬ ∃ h, hashParent h = some n := fun ⟨h₀, h₀p⟩ => by
+      rw [hashOf_hashParent h₀p] at hh
+      exact absurd hh (by simp)
+    exact hin n (len_value_of_hashOf hh) (not_mem_deps_other hc h)
 
 /-! ## Hidden-coordinate locality after signing -/
 
@@ -913,217 +640,42 @@ def HiddenCoord (A : Finset Name) (s : Name) : Prop :=
   ¬ Evaluated A s ∧ s ∉ A ∧
     ∀ a ∈ A, hashOf a ≠ some s
 
-theorem len_of_hashParent {h p : Name} (hp : hashParent h = some p) :
-    h.len = 256 := by
-  cases h <;> simp_all [hashParent, Name.len]
-
-theorem child_upperLastChain (u : Fin 10) :
-    child (Name.cv (upperLastChain u) 17) = some (Name.mc u) := by
-  rw [← midChild_two u]
-  exact child_midChild u 2
-
-theorem coordOf_below {h p : Name} (hp : hashParent h = some p) :
-    child (coordOf h) = some p ∨
-      ∃ m, child (coordOf h) = some m ∧ child m = some p := by
-  cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
-    subst hp
-  · rename_i k t
-    simp only [coordOf]
-    split_ifs with ht
-    · have ht' : t = 0 := Fin.ext ht
-      subst t
-      exact Or.inl rfl
-    · have hc := child_prev k t
-      have hprev : prev k t = Name.cv k ⟨t.val - 1, by omega⟩ := by
-        simp [prev, ht]
-      rw [hprev] at hc
-      exact Or.inr ⟨Name.cv k ⟨t.val - 1, by omega⟩, rfl, hc⟩
-  · rename_i j
-    exact Or.inr ⟨Name.cv (Name.lowerChain j 2) 17, rfl,
-      child_lowerChain j 2⟩
-  · rename_i u
-    exact Or.inr ⟨Name.cv (upperLastChain u) 17, rfl,
-      child_upperLastChain u⟩
-  · exact Or.inr ⟨Name.mv 9, rfl, rfl⟩
-
-theorem above_coordOf {h p : Name} (hp : hashParent h = some p) :
-    Above h (coordOf h) := by
-  have hc := child_hashParent hp
-  rcases coordOf_below hp with e | ⟨m, e₁, e₂⟩
-  · exact Above.step e (Above.child hc)
-  · exact Above.step e₁ (Above.step e₂ (Above.child hc))
-
-theorem evaluated_of_child_res {A : Finset Name} {s n : Name}
-    (hc : child s = some n) (hsA : s ∉ A)
-    (hn : Evaluated A n) : Evaluated A s := by
-  apply (clearEvaluated_iff A s).1
-  have hnC := (clearEvaluated_iff A n).2 hn
-  refine ⟨hsA, fun m hm => ?_⟩
-  rw [above_of_child hc] at hm
-  rcases hm with rfl | hm
-  · exact hnC.1
-  · exact hnC.2 m hm
-
-theorem coordOf_hiddenCoord {A : Finset Name} (hA : IsCut A)
-    {h p : Name} (hp : hashParent h = some p)
-    (hh : ¬ Evaluated A h) : HiddenCoord A (coordOf h) := by
-  have hhA : h ∉ A := fun hm => by
-    have hv := hA.values h hm
-    rw [len_of_hashParent hp] at hv
-    omega
-  obtain ⟨a, haA, hah⟩ : ∃ a ∈ A, Above a h := by
-    by_contra hcon
-    push Not at hcon
-    apply hh
-    apply (clearEvaluated_iff A h).1
-    exact ⟨hhA, fun m hm hmA => hcon m hmA hm⟩
-  have hhs : Above h (coordOf h) := above_coordOf hp
-  have has : Above a (coordOf h) := hah.trans hhs
-  refine ⟨?_, ?_, ?_⟩
-  · intro he
-    have heC := (clearEvaluated_iff A _).2 he
-    exact heC.2 a has haA
-  · intro hsA
-    exact (cut_mem_clearAbove hA hsA a has) haA
-  · intro a' ha' he
-    have hc : child (coordOf h) = some a' := child_hashOf he
-    rw [above_of_child hc] at hhs
-    rcases hhs with rfl | hhs
-    · exact hhA ha'
-    · exact (cut_mem_clearAbove hA ha' a (hah.trans hhs)) haA
-
-theorem mem_deps_cases {s n : Name} (h : s ∈ deps n) :
-    s = n ∨ hashOf n = some s ∨
-      (∃ m, hashOf m = some s ∧ child m = some n) ∨
-      (child s = some n ∧ n.len ≠ 129) := by
-  cases n with
-  | src k =>
-      simp only [deps, Finset.mem_singleton] at h
-      exact Or.inl h
-  | ci k t =>
-      by_cases ht : t.val = 0
-      · rw [deps_ci_zero k t ht, Finset.mem_singleton] at h
-        subst s
-        exact Or.inr (Or.inr (Or.inr
-          ⟨by simpa [prev, ht] using child_prev k t, by simp [Name.len]⟩))
-      · rw [deps_ci_succ k t ht, Finset.mem_singleton] at h
-        subst s
-        exact Or.inr (Or.inr (Or.inl
-          ⟨prev k t, by simp [prev, ht, hashOf], child_prev k t⟩))
-  | ch k t =>
-      simp only [deps, Finset.mem_singleton] at h
-      exact Or.inl h
-  | cv k t =>
-      simp only [deps, Finset.mem_singleton] at h
-      subst s
-      exact Or.inr (Or.inl rfl)
-  | sc j =>
-      simp only [deps, Finset.mem_insert, Finset.mem_singleton] at h
-      rcases h with rfl | rfl | rfl
-      · exact Or.inr (Or.inr (Or.inl
-          ⟨Name.cv (Name.lowerChain j 0) 17, rfl, child_lowerChain j 0⟩))
-      · exact Or.inr (Or.inr (Or.inl
-          ⟨Name.cv (Name.lowerChain j 1) 17, rfl, child_lowerChain j 1⟩))
-      · exact Or.inr (Or.inr (Or.inl
-          ⟨Name.cv (Name.lowerChain j 2) 17, rfl, child_lowerChain j 2⟩))
-  | sh j =>
-      simp only [deps, Finset.mem_singleton] at h
-      exact Or.inl h
-  | sv j =>
-      simp only [deps, Finset.mem_singleton] at h
-      subst s
-      exact Or.inr (Or.inl rfl)
-  | mc u =>
-      simp only [deps, Finset.mem_insert, Finset.mem_singleton] at h
-      rcases h with h | h | h
-      · subst s
-        exact Or.inr (Or.inr (Or.inl
-          ⟨midChild u 0, hashOf_midChild u 0, child_midChild u 0⟩))
-      · subst s
-        exact Or.inr (Or.inr (Or.inl
-          ⟨midChild u 1, hashOf_midChild u 1, child_midChild u 1⟩))
-      · subst s
-        exact Or.inr (Or.inr (Or.inl
-          ⟨midChild u 2, hashOf_midChild u 2, child_midChild u 2⟩))
-  | mh u =>
-      simp only [deps, Finset.mem_singleton] at h
-      exact Or.inl h
-  | mv u =>
-      simp only [deps, Finset.mem_singleton] at h
-      subst s
-      exact Or.inr (Or.inl rfl)
-  | rc =>
-      simp only [deps, Finset.mem_image, Finset.mem_univ, true_and] at h
-      obtain ⟨u, rfl⟩ := h
-      exact Or.inr (Or.inr (Or.inl ⟨Name.mv u, rfl, rfl⟩))
-  | rh =>
-      simp only [deps, Finset.mem_singleton] at h
-      exact Or.inl h
-
-theorem len_child_of_hashOf {m s n : Name}
-    (hm : hashOf m = some s) (hc : child m = some n) :
-    n.len ≠ 129 := by
-  cases m <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hm
-  case cv k t =>
-    subst s
-    simp only [Name.child] at hc
-    by_cases ht : t.val = 17
-    · rw [dif_pos ht] at hc
-      cases hl : lowerOfChain k with
-      | none =>
-          rw [hl] at hc
-          simp only [Option.some.injEq] at hc
-          subst n
-          simp [Name.len]
-      | some j =>
-          rw [hl] at hc
-          simp only [Option.some.injEq] at hc
-          subst n
-          simp [Name.len]
-    · rw [dif_neg ht] at hc
-      simp only [Option.some.injEq] at hc
-      subst n
-      simp [Name.len]
-  case sv j =>
-    subst s
-    simp only [Name.child, Option.some.injEq] at hc
-    subst n
-    simp [Name.len]
-  case mv u =>
-    subst s
-    simp only [Name.child, Option.some.injEq] at hc
-    subst n
-    simp [Name.len]
-
 theorem not_mem_deps_of_hiddenCoord {A : Finset Name} (hA : IsCut A)
     {s n : Name} (hs : HiddenCoord A s)
     (hn : Evaluated A n ∨ n ∈ A) : s ∉ deps n := by
-  intro hd
   obtain ⟨hsE, hsA, hsH⟩ := hs
-  rcases mem_deps_cases hd with rfl | hh | ⟨m, hm, hc⟩ | ⟨hc, hl⟩
-  · rcases hn with hn | hn
-    · exact hsE hn
-    · exact hsA hn
-  · rcases hn with hn | hn
-    · exact hsE (evaluated_of_child_res (child_hashOf hh) hsA hn)
-    · exact hsH n hn hh
-  · have hcs : child s = some m := child_hashOf hm
+  -- `s` read at the value level of a visited 129-bit node `e` forces `s` visible.
+  have hval : ∀ e, (Evaluated A e ∨ e ∈ A) → s ≠ valueCoord e := by
+    intro e he hse
+    cases hh : hashOf e with
+    | none =>
+        rw [valueCoord_of_hashOf_none hh] at hse
+        subst hse
+        rcases he with he | he
+        · exact hsE he
+        · exact hsA he
+    | some h =>
+        rw [valueCoord_of_hashOf hh] at hse
+        subst hse
+        rcases he with he | he
+        · exact hsE ⟨(visited_hash_iff hh).2 he, hsA⟩
+        · exact hsH e he hh
+  intro hd
+  unfold deps at hd
+  split_ifs at hd with hc
+  · obtain ⟨h, hp⟩ := hc
+    rw [Finset.mem_image] at hd
+    obtain ⟨e, he, rfl⟩ := hd
     rcases hn with hn | hn
-    · by_cases hmA : m ∈ A
-      · exact hsH m hmA hm
-      · exact hsE (evaluated_of_child_res hcs hsA
-          (evaluated_of_child_res hc hmA hn))
-    · exact len_child_of_hashOf hm hc (hA.values n hn)
-  · rcases hn with hn | hn
-    · exact hsE (evaluated_of_child_res hc hsA hn)
-    · exact hl (hA.values n hn)
+    · exact hval e (evaluated_or_mem_of_mem_parents hn he) rfl
+    · exact not_mem_of_cut_len_ne hA (len_hashParent_ne_129 hp) hn
+  · rw [Finset.mem_singleton] at hd
+    exact hval n hn hd
 
 theorem hiddenCoord_ne_rh {A : Finset Name} {s : Name}
     (hs : HiddenCoord A s) : s ≠ Name.rh := by
   rintro rfl
-  apply hs.1
-  apply (clearEvaluated_iff A Name.rh).1
-  exact ⟨hs.2.1, fun m hm => absurd hm (not_above_rh m)⟩
+  exact hs.1 ⟨Graph.Visited.root, hs.2.1⟩
 
 theorem encode_congr_game (G : Graph) (B : Finset (Fin G.size))
     {x x' : G.Assignment} (h : ∀ v ∈ B, x v = x' v) :
@@ -1133,15 +685,9 @@ theorem encode_congr_game (G : Graph) (B : Finset (Fin G.size))
   rw [List.mem_filter, decide_eq_true_iff] at hv
   rw [h v hv.2]
 
-theorem evalRec_fin_congr {xi xi' : Rec} {a : Name}
-    (h : val xi a = val xi' a) :
-    graph.evalRec xi a.fin = graph.evalRec xi' a.fin := by
-  unfold val at h
-  simpa using congrArg (BitVec.cast (graph_len_fin a).symm) h
-
 theorem revealed_updHash {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {s : Name} (hs : HiddenCoord A s) (b : BitVec 256) :
-    revealed A (updHash xi s b) = revealed A xi := by
+    (xi : Rec) {s : Name} (hs : HiddenCoord A s) (z : BitVec 256) :
+    revealed A (updHash xi s z) = revealed A xi := by
   unfold revealed
   apply encode_congr_game
   intro v hv
@@ -1149,12 +695,12 @@ theorem revealed_updHash {A : Finset Name} (hA : IsCut A)
     ⟨Name.ofFin v, Name.fin_ofFin v⟩
   have haA : a ∈ A := (mem_fins_embedding A a).1 hv
   exact evalRec_fin_congr
-    (val_updHash_of_not_mem_deps xi s b a
+    (val_updHash_of_not_mem_deps xi s z a
       (not_mem_deps_of_hiddenCoord hA hs (Or.inr haA)))
 
 theorem revealed_updSrc {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {k : Fin 66} (hs : HiddenCoord A (Name.src k))
-    (b : BitVec 129) : revealed A (updSrc xi k b) = revealed A xi := by
+    (xi : Rec) {b : Fin 7} {k : Fin 8} (hs : HiddenCoord A (Name.src b k))
+    (z : BitVec 129) : revealed A (updSrc xi b k z) = revealed A xi := by
   unfold revealed
   apply encode_congr_game
   intro v hv
@@ -1162,34 +708,27 @@ theorem revealed_updSrc {A : Finset Name} (hA : IsCut A)
     ⟨Name.ofFin v, Name.fin_ofFin v⟩
   have haA : a ∈ A := (mem_fins_embedding A a).1 hv
   exact evalRec_fin_congr
-    (val_updSrc_of_not_mem_deps xi k b a
+    (val_updSrc_of_not_mem_deps xi b k z a
       (not_mem_deps_of_hiddenCoord hA hs (Or.inr haA)))
 
-theorem evaluated_or_mem_of_child {A : Finset Name} {p h : Name}
-    (hc : child p = some h) (he : Evaluated A h) :
-    Evaluated A p ∨ p ∈ A := by
-  by_cases hpA : p ∈ A
-  · exact Or.inr hpA
-  · exact Or.inl (evaluated_of_child_res hc hpA he)
-
 theorem pointOf_updHash {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {s : Name} (hs : HiddenCoord A s) (b : BitVec 256)
+    (xi : Rec) {s : Name} (hs : HiddenCoord A s) (z : BitVec 256)
     {h p : Name} (hp : hashParent h = some p) (he : Evaluated A h) :
-    pointOf (updHash xi s b) h p = pointOf xi h p := by
+    pointOf (updHash xi s z) h p = pointOf xi h p := by
   unfold pointOf
   rw [val_updHash_of_not_mem_deps _ _ _ _
     (not_mem_deps_of_hiddenCoord hA hs
-      (evaluated_or_mem_of_child (child_hashParent hp) he))]
+      (evaluated_or_mem_of_mem_parents he (mem_parents_hashParent hp)))]
 
 theorem pointOf_updSrc {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {k : Fin 66} (hs : HiddenCoord A (Name.src k))
-    (b : BitVec 129) {h p : Name} (hp : hashParent h = some p)
+    (xi : Rec) {b : Fin 7} {k : Fin 8} (hs : HiddenCoord A (Name.src b k))
+    (z : BitVec 129) {h p : Name} (hp : hashParent h = some p)
     (he : Evaluated A h) :
-    pointOf (updSrc xi k b) h p = pointOf xi h p := by
+    pointOf (updSrc xi b k z) h p = pointOf xi h p := by
   unfold pointOf
-  rw [val_updSrc_of_not_mem_deps _ _ _ _
+  rw [val_updSrc_of_not_mem_deps _ _ _ _ _
     (not_mem_deps_of_hiddenCoord hA hs
-      (evaluated_or_mem_of_child (child_hashParent hp) he))]
+      (evaluated_or_mem_of_mem_parents he (mem_parents_hashParent hp)))]
 
 theorem kc_pointOf (xi : Rec) {h p : Name}
     (hp : hashParent h = some p) :
@@ -1197,15 +736,15 @@ theorem kc_pointOf (xi : Rec) {h p : Name}
   (kc_apply_iff xi _ _).2 ⟨h, p, hp, rfl, rfl⟩
 
 theorem fExp_updHash {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {s : Name} (hs : HiddenCoord A s) (b : BitVec 256) :
-    fExp (some A) (updHash xi s b) = fExp (some A) xi := by
+    (xi : Rec) {s : Name} (hs : HiddenCoord A s) (z : BitVec 256) :
+    fExp (some A) (updHash xi s z) = fExp (some A) xi := by
   funext q
   have hpt : ∀ h p, hashParent h = some p → Exposed (some A) h →
-      pointOf (updHash xi s b) h p = pointOf xi h p :=
-    fun h p hp he => pointOf_updHash hA xi hs b hp
+      pointOf (updHash xi s z) h p = pointOf xi h p :=
+    fun h p hp he => pointOf_updHash hA xi hs z hp
       ((exposed_some_iff_evaluated A h).1 he)
   have hcond : (∃ h p, hashParent h = some p ∧ Exposed (some A) h ∧
-      q = pointOf (updHash xi s b) h p) ↔
+      q = pointOf (updHash xi s z) h p) ↔
       ∃ h p, hashParent h = some p ∧ Exposed (some A) h ∧
         q = pointOf xi h p := by
     constructor
@@ -1225,16 +764,16 @@ theorem fExp_updHash {A : Finset Name} (hA : IsCut A)
   · rw [if_neg (fun h' => hq (hcond.1 h')), if_neg hq]
 
 theorem fExp_updSrc {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {k : Fin 66} (hs : HiddenCoord A (Name.src k))
-    (b : BitVec 129) :
-    fExp (some A) (updSrc xi k b) = fExp (some A) xi := by
+    (xi : Rec) {b : Fin 7} {k : Fin 8} (hs : HiddenCoord A (Name.src b k))
+    (z : BitVec 129) :
+    fExp (some A) (updSrc xi b k z) = fExp (some A) xi := by
   funext q
   have hpt : ∀ h p, hashParent h = some p → Exposed (some A) h →
-      pointOf (updSrc xi k b) h p = pointOf xi h p :=
-    fun h p hp he => pointOf_updSrc hA xi hs b hp
+      pointOf (updSrc xi b k z) h p = pointOf xi h p :=
+    fun h p hp he => pointOf_updSrc hA xi hs z hp
       ((exposed_some_iff_evaluated A h).1 he)
   have hcond : (∃ h p, hashParent h = some p ∧ Exposed (some A) h ∧
-      q = pointOf (updSrc xi k b) h p) ↔
+      q = pointOf (updSrc xi b k z) h p) ↔
       ∃ h p, hashParent h = some p ∧ Exposed (some A) h ∧
         q = pointOf xi h p := by
     constructor
@@ -1251,32 +790,63 @@ theorem fExp_updSrc {A : Finset Name} (hA : IsCut A)
   · rw [if_neg (fun h' => hq (hcond.1 h')), if_neg hq]
 
 theorem dataOf_updHash {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {s : Name} (hs : HiddenCoord A s) (b : BitVec 256) :
-    dataOf A (updHash xi s b) = dataOf A xi := by
+    (xi : Rec) {s : Name} (hs : HiddenCoord A s) (z : BitVec 256) :
+    dataOf A (updHash xi s z) = dataOf A xi := by
   simp only [dataOf, pkOf_updHash _ (hiddenCoord_ne_rh hs),
     revealed_updHash hA _ hs, fExp_updHash hA _ hs]
 
 theorem dataOf_updSrc {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {k : Fin 66} (hs : HiddenCoord A (Name.src k))
-    (b : BitVec 129) : dataOf A (updSrc xi k b) = dataOf A xi := by
+    (xi : Rec) {b : Fin 7} {k : Fin 8} (hs : HiddenCoord A (Name.src b k))
+    (z : BitVec 129) : dataOf A (updSrc xi b k z) = dataOf A xi := by
   simp only [dataOf, pkOf_updSrc, revealed_updSrc hA _ hs,
     fExp_updSrc hA _ hs]
 
 theorem fiberB_closedAt {A : Finset Name} (hA : IsCut A) (dt : Data)
     {s : Name} (hs : HiddenCoord A s) : ClosedAt (fiberB A dt) s := by
-  by_cases hsrc : ∃ k, s = Name.src k
-  · obtain ⟨k, rfl⟩ := hsrc
+  by_cases hsrc : ∃ b k, s = Name.src b k
+  · obtain ⟨b, k, rfl⟩ := hsrc
     rw [closedAt_src]
     simp only [fiberB, Finset.mem_filter, Finset.mem_univ, true_and]
-    intro xi hxi b
+    intro xi hxi z
     rw [dataOf_updSrc hA _ hs]
     exact hxi
   · push Not at hsrc
     rw [closedAt_of_ne_src _ hsrc]
     simp only [fiberB, Finset.mem_filter, Finset.mem_univ, true_and]
-    intro xi hxi b
+    intro xi hxi z
     rw [dataOf_updHash hA _ hs]
     exact hxi
+
+/-- If a hash node is not reconstructed, its exclusive kid is not visited:
+that kid is read only by the input of the hash node. -/
+theorem not_visited_exclOf {A : Finset Name} {h p : Name}
+    (hp : hashParent h = some p) (hh : ¬ Evaluated A h) :
+    ¬ graph.Visited (fins A) (exclOf h).fin := by
+  intro hv
+  have hlen : (exclOf h).len = 129 :=
+    len_of_mem_parents_compress hp (exclOf_mem hp)
+  rcases visited_cases hv with e | ⟨m, hm, hmE⟩
+  · rw [e] at hlen
+    simp [Name.len] at hlen
+  · rw [consumer_of_exclOf hp hm] at hmE
+    exact hh ((visited_compress_iff hp).1 hmE.1)
+
+/-- The coordinate behind the exclusive kid of a hidden hash node is hidden. -/
+theorem coordOf_hiddenCoord {A : Finset Name} (hA : IsCut A)
+    {h p : Name} (hp : hashParent h = some p)
+    (hh : ¬ Evaluated A h) : HiddenCoord A (coordOf h) := by
+  have hnv := not_visited_exclOf hp hh
+  have hnA : exclOf h ∉ A := fun hm => hnv (hA.visited_of_mem hm)
+  rcases exclOf_cases hp with ⟨b, k, he, hc⟩ | hv
+  · rw [hc]
+    rw [he] at hnv hnA
+    exact ⟨fun hE => hnv hE.1, hnA, fun a _ ha => hashOf_ne_src ha b k rfl⟩
+  · refine ⟨fun hE => hnv ((visited_hash_iff hv).1 hE.1).1, fun hm => ?_,
+      fun a ha hac => hnA ?_⟩
+    · have := hA.values _ hm
+      rw [len_of_hashOf hv] at this
+      omega
+    · rwa [← hashOf_injective hac hv]
 
 /-- The concrete post-sign public-data fiber satisfies the raw hidden-input
 charge used by `authPotential_charge`. -/
@@ -1337,145 +907,6 @@ theorem authPotential_charge {A : Finset Name} (hA : IsCut A) (dt : Data)
         authRate * sumW (fiberB A dt) * queryCost (.inr q) :=
   authPotential_charge_of signedHitsCharge hA dt hT c q hq
 
-theorem clearEvaluated_child_of_clearAbove {A : Finset Name}
-    {a p : Name} (ha : ∀ m, Above m a → m ∉ A)
-    (hc : child a = some p) : ClearEvaluated A p := by
-  exact ⟨ha p (Above.child hc),
-    fun m hm => ha m (Above.step hc hm)⟩
-
-/-! ## Starting the authentication walk at a disclosed value -/
-
-theorem up_from_cut {A : Finset Name} (hA : IsCut A)
-    {xi : Rec} {d : Cache} {given y : graph.Assignment}
-    (hy : graph.ReconEqs d (fins A) given y)
-    (hacc : lowPk (yv y Name.rh) = pkOf xi)
-    {a : Name} (ha : a ∈ A) (hne : yv y a ≠ val xi a) : Spr d xi := by
-  have hclear := cut_mem_clearAbove hA ha
-  have halen := hA.values a ha
-  cases a with
-  | src k =>
-      have hc : child (Name.src k) = some (Name.ci k 0) := rfl
-      have hpC := clearEvaluated_child_of_clearAbove hclear hc
-      have hpE := (clearEvaluated_iff A _).1 hpC
-      apply up hy hacc hpC rfl
-      intro heq
-      rw [yv_ci hy hpE, val_ci] at heq
-      apply hne
-      exact eq_of_lowWord_eq (show (Name.src k).len = 129 by rfl)
-        (bv_append_inj heq).2
-  | cv k t =>
-      by_cases ht : t.val = 17
-      · have ht' : t = 17 := Fin.ext ht
-        subst t
-        cases hl : lowerOfChain k with
-        | some j =>
-            have hc : child (Name.cv k 17) = some (Name.sc j) := by
-              simp [Name.child, hl]
-            have hpC := clearEvaluated_child_of_clearAbove hclear hc
-            have hpE := (clearEvaluated_iff A _).1 hpC
-            apply up hy hacc hpC rfl
-            intro heq
-            rw [yv_sc hy hpE, val_sc'] at heq
-            obtain ⟨h0, h1, h2⟩ := cat3_inj (bv_append_inj heq).2
-            obtain ⟨b, hb⟩ := lowerChain_witness hl
-            fin_cases b
-            · subst k
-              apply hne
-              have hz : ((fun i : Fin 3 => i) ⟨0, by omega⟩) =
-                  (0 : Fin 3) := by apply Fin.ext; rfl
-              rw [hz]
-              exact h0
-            · subst k
-              apply hne
-              have ho : ((fun i : Fin 3 => i) ⟨1, by omega⟩) =
-                  (1 : Fin 3) := by apply Fin.ext; rfl
-              rw [ho]
-              exact h1
-            · subst k
-              apply hne
-              have ht : ((fun i : Fin 3 => i) ⟨2, by omega⟩) =
-                  (2 : Fin 3) := by apply Fin.ext; rfl
-              rw [ht]
-              exact h2
-        | none =>
-            have hc : child (Name.cv k 17) =
-                some (Name.mc (upperOfChain k)) := by
-              simp [Name.child, hl]
-            have hpC := clearEvaluated_child_of_clearAbove hclear hc
-            have hpE := (clearEvaluated_iff A _).1 hpC
-            apply up hy hacc hpC rfl
-            intro heq
-            rw [yv_mc hy hpE, val_mc] at heq
-            obtain ⟨h0, h1, h2⟩ := cat3_inj (bv_append_inj heq).2
-            obtain ⟨b, hb⟩ := direct_midChild_witness hl
-            fin_cases b
-            · apply hne
-              apply eq_of_lowWord_eq
-                (show (Name.cv k 17).len = 129 by rfl)
-              have hb' : midChild (upperOfChain k) 0 = Name.cv k 17 := by
-                simpa using hb
-              exact transport_lowWord_eq hb' h0
-            · apply hne
-              apply eq_of_lowWord_eq
-                (show (Name.cv k 17).len = 129 by rfl)
-              have hb' : midChild (upperOfChain k) 1 = Name.cv k 17 := by
-                simpa using hb
-              exact transport_lowWord_eq hb' h1
-            · apply hne
-              apply eq_of_lowWord_eq
-                (show (Name.cv k 17).len = 129 by rfl)
-              have hb' : midChild (upperOfChain k) 2 = Name.cv k 17 := by
-                simpa using hb
-              exact transport_lowWord_eq hb' h2
-      · have hc : child (Name.cv k t) =
-            some (Name.ci k ⟨t.val + 1, by omega⟩) := by
-          simp [Name.child, ht]
-        have hpC := clearEvaluated_child_of_clearAbove hclear hc
-        have hpE := (clearEvaluated_iff A _).1 hpC
-        apply up hy hacc hpC rfl
-        intro heq
-        rw [yv_ci hy hpE, val_ci] at heq
-        have hp := (bv_append_inj heq).2
-        apply hne
-        rw [prev_succ k t (by omega)] at hp
-        exact eq_of_lowWord_eq (show (Name.cv k t).len = 129 by rfl) hp
-  | sv j =>
-      have hc : child (Name.sv j) =
-          some (Name.mc (upperOfLower j)) := rfl
-      have hpC := clearEvaluated_child_of_clearAbove hclear hc
-      have hpE := (clearEvaluated_iff A _).1 hpC
-      apply up hy hacc hpC rfl
-      intro heq
-      rw [yv_mc hy hpE, val_mc] at heq
-      obtain ⟨h0, h1, h2⟩ := cat3_inj (bv_append_inj heq).2
-      obtain ⟨b, hb⟩ := lower_midChild_witness j
-      fin_cases b
-      · apply hne
-        apply eq_of_lowWord_eq (show (Name.sv j).len = 129 by rfl)
-        have hb' : midChild (upperOfLower j) 0 = Name.sv j := by
-          simpa using hb
-        exact transport_lowWord_eq hb' h0
-      · apply hne
-        apply eq_of_lowWord_eq (show (Name.sv j).len = 129 by rfl)
-        have hb' : midChild (upperOfLower j) 1 = Name.sv j := by
-          simpa using hb
-        exact transport_lowWord_eq hb' h1
-      · apply hne
-        apply eq_of_lowWord_eq (show (Name.sv j).len = 129 by rfl)
-        have hb' : midChild (upperOfLower j) 2 = Name.sv j := by
-          simpa using hb
-        exact transport_lowWord_eq hb' h2
-  | mv u =>
-      have hc : child (Name.mv u) = some Name.rc := rfl
-      have hpC := clearEvaluated_child_of_clearAbove hclear hc
-      have hpE := (clearEvaluated_iff A _).1 hpC
-      apply up hy hacc hpC rfl
-      intro heq
-      rw [yv_rc hy hpE, val_rc'] at heq
-      exact hne (congrFun (cat10_inj (bv_append_inj heq).2) u)
-  | ci k t | ch k t | sc k | sh k | mc k | mh k | rc | rh =>
-      simp [Name.len] at halen
-
 /-! ## Same-class payload authentication -/
 
 theorem encode_congr (G : Graph) (A : Finset (Fin G.size))
@@ -1505,12 +936,13 @@ theorem events_same {A : Finset Name} (hA : IsCut A)
     obtain ⟨a, ha, rfl⟩ := Finset.mem_map.mp hv
     exact hcon a ha
   obtain ⟨a, ha, hne'⟩ := hex
-  apply up_from_cut hA hy hacc ha
-  intro heq
-  apply hne'
-  rw [yv_mem hy ha] at heq
-  unfold val at heq
-  exact cast_injective _ heq
+  rcases descent_mem hA hy hacc ha with hs | heq
+  · exact hs
+  · exfalso
+    apply hne'
+    rw [yv_mem hy ha] at heq
+    unfold val at heq
+    exact cast_injective _ heq
 
 /-! ## Accepted-run decomposition with one explicit cross-cut seam -/
 

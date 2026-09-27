@@ -544,7 +544,7 @@ theorem acceptedAliases_bounds : 90 * 2^236 ≤ acceptedAliases ∧ acceptedAlia
   rw [acceptedAliases_exact]
   norm_num [R]
 
-theorem keygen_compressions : 66*18+18+10+3 = 1219 := rfl
+theorem keygen_compressions : 7*(8*18+11)+2 = 1087 := rfl
 
 theorem signature_bits : 42*129+86 = 5504 := rfl
 
