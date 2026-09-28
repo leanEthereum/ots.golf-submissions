@@ -33,16 +33,16 @@ theorem ofBits_take (payload : List Bool) (c n : ℕ) :
 
 /-- The first chain hash includes the reader's pure prefix and its one disclosed input. -/
 theorem read_prefix_refines (k : Chain) (h32 : firstAt index k < 32) (tail : Code)
-    (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
+    (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ) (P : Word)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
       HashInv index wire pk u z k (work k) →
       HoldsAt u z k (firstAt index k+1) →
-      Riscv.CodeAt u u.pc tail → ∀ left, rest ≤ left →
+      Riscv.CodeAt u u.pc tail → u.pc = P → ∀ left, rest ≤ left →
       Riscv.Refines left u (K (z,cursor k+chainBits k)) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (inv : HashInv index wire pk s x k (work k))
     (held : MemBits s (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k))))
-    (located : Riscv.CodeAt s s.pc (.ECALL::tail)) (bound : 1+rest ≤ fuel) :
+    (located : Riscv.CodeAt s s.pc (.ECALL::tail)) (hP : s.pc + W 4 = P) (bound : 1+rest ≤ fuel) :
     Riscv.Refines fuel s
       (runNodes' index (viewPayload wire) (readNodes index k) x (cursor k) >>= K) (1+c) := by
   set p := firstAt index k with hp
@@ -66,7 +66,7 @@ theorem read_prefix_refines (k : Chain) (h32 : firstAt index k < 32) (tail : Cod
     (cursor k) (cursor k+chainBits k) s x' fuel _
     (triple_run_read index (viewPayload wire) k ⟨p,h32⟩ rfl x' (cursor k))
     inv' held' located bound
-  intro u y invU answer locatedU left hleft
-  exact continuation u _ invU (holdsAt_succ answer) locatedU left hleft
+  intro u y invU answer locatedU upc left hleft
+  exact continuation u _ invU (holdsAt_succ answer) locatedU (upc.trans hP) left hleft
 
 end OptimalOTS.RiscvMixedProgram

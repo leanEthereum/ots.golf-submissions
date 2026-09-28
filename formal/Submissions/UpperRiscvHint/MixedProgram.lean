@@ -1,6 +1,6 @@
 import Submissions.UpperRiscvHint.Program
 
-/-! The 316-cycle free-chain image. Caps 31 and 32 occupy the opposite boundaries
+/-! The 315-cycle free-chain image. Caps 31 and 32 occupy the opposite boundaries
 of an 884-byte root at 0x400046; caps 0 through 12 have 192-bit states, and the boundary
 caps have 144-bit states. Other chains have 144-bit states and a mandatory final hash.
 Chain 32's state uses answer bits [112,256), leaving its input pointer at the root start.
@@ -11,7 +11,10 @@ The loader supplies the capped view length L in x13. ANDI with -1924 preserves i
 and displacement 4*(31-c) together, removing one ADD before the indirect jump.
 The adjusted checksum equals the HASH call number exactly when S+c = 145 modulo 255.
 Other banks either fault outside the image or land in reserved rejection windows.
-Counts at least 16 reject within the honest bank. Raw forms are padded into a guarded bank. -/
+Counts at least 16 reject within the honest bank. Raw forms are padded into a guarded bank.
+
+Pair 0's prologue occurs once, so its jump links a fixed address into x1: the root length is
+that address plus 2044, and no constant load is needed. -/
 
 set_option maxRecDepth 100000
 set_option maxHeartbeats 2000000
@@ -36,7 +39,7 @@ def work (k : ℕ) : ℕ := 0x400040 + wireByte k
 def honestViewBits : ℕ := 7248
 /-- The former count byte, now unused by execution. -/
 def freeByte : ℕ := 0x400070
-/-- The constant in `x1`: the free dispatch base and, plus 928, the root length. -/
+/-- The honest bank's dispatch base: the masked tag of an honest view length less `4*(31-c)`. -/
 def freeBase : ℕ := 6144
 def fineWidth (_q : ℕ) : ℕ := 4
 def copies (_q : ℕ) : ℕ := 16
@@ -49,14 +52,14 @@ def slotOffset (q : ℕ) : ℕ :=
   [0,3899,7446,11596,37,3705,7506,11407,352,4253,7861,11558,181,4093,7799,11517].getD q 0
 /-- The code index of the first copy: after the index phase, the free dispatch, the free row and
 pair 0's prologue. -/
-def copiesIndex : ℕ := 105
+def copiesIndex : ℕ := 233
 def copiesStart : ℕ := 4096 + 4 * copiesIndex
 def copyStart (q d : ℕ) : ℕ :=
   copiesStart + 4 * (groupOffset (group q) + 256 * (copies q - 1 - d) + slotOffset q)
 def landing0 (q : ℕ) : ℕ := copyStart q 0 + 4 * (2 ^ fineWidth q - 1)
 /-- Lane 0 carries the bias for the masked tag: adding `6144 + 4*(31-c)` gives
 residue 1 exactly when the digit sum plus `c` is 145 modulo 255. -/
-def baseLane (q : ℕ) : ℕ := min (landing0 (q % 4)) 65532 + if q % 4 = 0 then 239 else 0
+def baseLane (q : ℕ) : ℕ := min (landing0 (q % 4)) 65532 + if q % 4 = 0 then 233 else 0
 def baseWord (g : ℕ) : ℕ :=
   (List.range 4).foldl (fun n j => n + baseLane (4 * g + j) * 2 ^ (16 * j)) 0
 /-- A cap pair's first chain hashes once per digit unit, one hash fewer than a normal chain, so
@@ -65,11 +68,10 @@ def lead (q : ℕ) : ℕ := if q < 6 ∨ 15 ≤ q then 1 else 0
 def jumpImm (q : ℕ) : ℤ := (landing0 q : ℤ) + 4 * lead q - baseLane q
 def baseReg (_g : ℕ) : Reg := .x3
 
-/-- The four index words, the lane mask, the checksum modulus, the dispatch base and the free
-base. -/
+/-- The four index words, the lane mask, the checksum modulus and the dispatch base. -/
 def loadWords : Code :=
   [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
-   .LD .x25 .x12 32, .LD .x2 .x12 40, .LD .x3 .x12 48, .LD .x1 .x12 56]
+   .LD .x25 .x12 32, .LD .x2 .x12 40, .LD .x3 .x12 48]
 /-- The length bank and complemented count: `x6 = cappedViewLength & ~0x783`. -/
 def freeCount : Code :=
   [.ANDI .x6 .x13 (imm12 (-1924))]
@@ -93,34 +95,40 @@ def enter (k previous : ℕ) : Code :=
   [.ADDI .x10 .x10 (imm12 ((work k : ℤ) - previous)),
    .ADDI .x12 .x10 (imm12 ((outAddr k : ℤ) - work k))]
 /-- Pair 0's prologue, where the free dispatch lands for count 0. -/
-def freeLanding : ℕ := 4096 + 4 * 101
-/-- The free chain's pointers, then the jump `c` cells before pair 0's prologue. -/
+def freeLanding : ℕ := 4096 + 4 * 229
+/-- The link of pair 0's jump, from which the root length is computed. -/
+def rootBase : ℕ := freeLanding + 16
+/-- The free chain's pointers, then the jump `c` cells before pair 0's prologue. The padding
+places pair 0's jump within `ADDI` reach of the root length. -/
 def freeDispatch : Code :=
-  enter 0 hashBase ++ [.JALR .x0 .x6 (imm12 ((freeLanding : ℤ) - freeBase - 124)), nop]
+  enter 0 hashBase ++ .JALR .x0 .x6 (imm12 ((freeLanding : ℤ) - freeBase - 124)) ::
+    List.replicate 130 nop
+/-- Only pair 0's jump links: its prologue is the one copy at `freeLanding`. -/
+def linkReg (q : ℕ) : Reg := if q = 0 then .x1 else .x0
 /-- The table-row register `x28` changes only while `x12` points at neither chain of the pair. -/
 def prologue (q : ℕ) : Code :=
   (if q = 6 then [.ADDI .x11 .x0 144] else []) ++
     [.ADDI .x12 .x10 (imm12 ((outAddr (2*q+1) : ℤ) - work (2*q))),
      .LHU .x28 .x12 (imm12 ((laneBase + 2*q : ℤ) - outAddr (2*q+1))),
      .ADDI .x10 .x12 (imm12 ((work (2*q+1) : ℤ) - outAddr (2*q+1))),
-     .JALR .x0 .x28 (imm12 (jumpImm q))]
+     .JALR (linkReg q) .x28 (imm12 (jumpImm q))]
 /-- The last chain's state is the root input's first slot, so `x10` needs no move. The root length
-is the free base plus 928. -/
-def root : Code := [.ADDI .x11 .x1 (imm12 (7072 - (freeBase : ℤ))), .ECALL]
+is pair 0's link plus 2044. -/
+def root : Code := [.ADDI .x11 .x1 (imm12 (7072 - (rootBase : ℤ))), .ECALL]
 def pairCap (_q : ℕ) : ℕ := 24
 /-- Each unexpected length bank has 32 rejection targets and a preceding rejection stub. -/
-def guardStart (bank : ℕ) : ℕ := 70 + 512*(bank-3)
+def guardStart (bank : ℕ) : ℕ := 198 + 512*(bank-3)
 def guardBanks : List ℕ := (List.range 509).map (· + 4)
 def rejectStubs : List ℕ := guardBanks.map (fun bank => guardStart bank - 3)
 def guardCode : Code := (List.range 32).map fun d =>
   .BEQ .x0 .x0 (BitVec.ofInt 13 (-12 - 4*(d : ℤ)))
 def stubFor (ip : ℕ) : ℕ :=
-  (rejectStubs.find? fun (s : ℕ) => decide (-4096 ≤ 4*((s : ℤ)-ip) ∧ 4*((s : ℤ)-ip) < 4096)).getD 579
+  (rejectStubs.find? fun (s : ℕ) => decide (-4096 ≤ 4*((s : ℤ)-ip) ∧ 4*((s : ℤ)-ip) < 4096)).getD 707
 def rejectJump (ip : ℕ) : Instr :=
   .BEQ .x0 .x0 (BitVec.ofInt 13 (4*((stubFor ip : ℤ)-ip)))
 /-- The free cell `c` instructions before pair 0's prologue: a hash of the free chain, or for
 `c ≥ 16` a jump to a rejection stub. -/
-def freeCell (c : ℕ) : Instr := if c < 16 then .ECALL else rejectJump (101 - c)
+def freeCell (c : ℕ) : Instr := if c < 16 then .ECALL else rejectJump (229 - c)
 def freeRow : Code := [nop] ++ (List.range 63).map fun p => freeCell (63 - p)
 /-- Landing at row `i` hashes the first chain `16 - i` times, that is for digit
 `15 - i + lead q`. A cap row's entry 0 would need digit 16 and is never a landing. -/
@@ -207,15 +215,14 @@ def verifier : Code := indexPhase ++ freeDispatch ++ freeRow ++ prologue 0 ++ ta
 
 /-- The 32-byte index answer buffer, then the words loaded after the index query. -/
 def dataImage : List (BitVec 8) :=
-  List.replicate 32 0 ++ wordBytes (broadcast 0x3c3c) ++ wordBytes 255 ++ wordBytes (baseWord 0) ++
-    wordBytes freeBase
+  List.replicate 32 0 ++ wordBytes (broadcast 0x3c3c) ++ wordBytes 255 ++ wordBytes (baseWord 0)
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
-theorem index_length : indexPhase.length = 33 := by decide +kernel
-theorem code_length : verifier.length = 260710 := by
+theorem index_length : indexPhase.length = 32 := by decide +kernel
+theorem code_length : verifier.length = 260838 := by
   simp only [verifier, List.length_append, tables, assemble_length]
   decide +kernel
-theorem data_length : dataImage.length = 64 := by decide +kernel
+theorem data_length : dataImage.length = 56 := by decide +kernel
 theorem admitted : verifier.all Riscv.admittedInstruction = true := by
   have h : fragments.all (fun p => p.2.all Riscv.admittedInstruction) = true := by decide +kernel
   have ht := assemble_admitted 0 fragments (List.all_eq_true.mp h)

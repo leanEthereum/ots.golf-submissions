@@ -258,7 +258,7 @@ theorem addressSum_toNat (a : MachineState) (hm : MasksLoaded a)
     decide +kernel
   rw [BitVec.toNat_sub_of_le, eb]
   rw [BitVec.le_def, eb]
-  have en : baseWord 0 = 18445831721905311439 := by decide +kernel
+  have en : baseWord 0 = 18445833920962121929 := by decide +kernel
   rw [en]
   omega
 
@@ -305,11 +305,11 @@ theorem free_remainder_iff (a : MachineState) (hm : MasksLoaded a)
         omega
       _ = 480 := by norm_num
   have hs := addressSum_toNat a hm hb
-  have en : baseWord 0 = 18445831721905311439 := by decide +kernel
+  have en : baseWord 0 = 18445833920962121929 := by decide +kernel
   rw [en] at hs
   have hc' : (W (6144 + 4 * (31-c))).toNat = 6144 + 4 * (31-c) := W_toNat _ (by omega)
   rw [BitVec.toNat_add, hc', hs, Nat.mod_eq_of_lt (show
-    4 * 18445831721905311439 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) < 2^64 by omega),
+    4 * 18445833920962121929 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) < 2^64 by omega),
     freeDigit, digitSum_pack]
   omega
 

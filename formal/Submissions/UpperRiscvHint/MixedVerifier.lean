@@ -96,7 +96,7 @@ theorem walk_zero (index : RawIdx) (q : Fin 16) (hq : q.val < 6)
   have hl : lengthSetup q = [] := by simp only [lengthSetup]; rw [if_neg (by omega)]
   rw [prologue_parts, hl, List.nil_append] at loc
   apply dispatch_refines index q s junk w.x10 (w.lanes q) loc Q (2+c) fuel (by omega)
-  intro t tpc t10 t12 t28 tregs tmem tcode
+  intro t tpc t10 t12 t28 tregs _ tmem tcode
   have tglobal : Riscv.CodeAt t (W 4096) verifier := w.global.code_eq tcode
   unfold pairWeight at zero
   have good : digit index.val (2*q.val)+coarseDigit index q ≤ pairCap q := by
@@ -125,7 +125,7 @@ theorem walk_zero (index : RawIdx) (q : Fin 16) (hq : q.val < 6)
     unfold prevInput rightChain
     rw [if_neg (by omega)]
     congr 2
-  · rw [E.regs .x5 (by decide) (by decide), tregs .x5 (by decide) (by decide) (by decide)]
+  · rw [E.regs .x5 (by decide) (by decide), tregs .x5 (by decide) (by decide) (by decide) (by decide)]
     exact w.x5
   · intro q'
     have hm : ((enter (rightChain q) (prevInput (rightChain q))).foldl execInstrBr t).mem = s.mem := by
@@ -161,10 +161,10 @@ theorem walk_busy (index : RawIdx) (q : Fin 16) (hq : q.val ≤ 6)
   apply dispatch_refines index q s1 junk (by rw [s1regs .x10 (by decide)]; exact w.x10)
     (by simpa only [MachineState.getHalfword, MachineState.getMem, s1mem] using w.lanes q)
     s1loc _ 4 _ (by omega)
-  intro t tpc t10 t12 t28 tregs tmem tcode
+  intro t tpc t10 t12 t28 tregs _ tmem tcode
   have tglobal : Riscv.CodeAt t (W 4096) verifier := w.global.code_eq (tcode.trans s1code)
   have t5 : t.getReg .x5 ≠ Riscv.hashCall := by
-    rw [tregs .x5 (by decide) (by decide) (by decide), s1regs .x5 (by decide)]; exact w.x5
+    rw [tregs .x5 (by decide) (by decide) (by decide) (by decide), s1regs .x5 (by decide)]; exact w.x5
   obtain ⟨f, hf'⟩ : ∃ f, fuel - (lengthSetup q).length - (dispatchCode q).length = f + 3 :=
     ⟨fuel - (lengthSetup q).length - (dispatchCode q).length - 3, by omega⟩
   rw [hf']
@@ -252,10 +252,10 @@ theorem free_sum (index : RawIdx) (c : ℕ) (hc : c < 16) (rank : freeDigit inde
 
 set_option maxRecDepth 100000 in
 /-- Every execution on every view refines `trapVerify`, and every accepting path costs at most
-316 cycles. -/
+315 cycles. -/
 theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n : ℕ)
     (hn : 1337 ≤ n) :
-    Riscv.Refines n (RiscvHint.loadView image pk m view) (trapVerify pk m view) 316 := by
+    Riscv.Refines n (RiscvHint.loadView image pk m view) (trapVerify pk m view) 315 := by
   have initial := Riscv.CodeAt.initial image pk m view image_valid
   rw [image_code] at initial
   have global : Riscv.CodeAt (S0 pk m view) (W 4096) verifier :=
@@ -266,8 +266,8 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
     rw [pc0]
     simpa only [verifier, List.append_assoc] using global
   unfold trapVerify
-  rw [show (316 : ℕ) = 283 + 33 from rfl]
-  apply indexPhase_refines pk m view _ (n - 33) n _ _ located (by rw [indexPhase_length]; omega)
+  rw [show (315 : ℕ) = 283 + 32 from rfl]
+  apply indexPhase_refines pk m view _ (n - 32) n _ _ located (by rw [indexPhase_length]; omega)
   intro answer left hleft
   set index := rawIdx answer
   set s := afterIndex pk m view answer
@@ -311,9 +311,9 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
     rw [if_pos rank]
     have sctx := afterIndex_ctx pk m view answer global rank bank
     have tctx : Ctx t index view pk :=
-      sctx.free t12 (fun r hr => tregs r (by rcases hr with rfl | rfl | rfl | rfl <;> decide)
-        (by rcases hr with rfl | rfl | rfl | rfl <;> decide)
-        (by rcases hr with rfl | rfl | rfl | rfl <;> decide)) tmem tcode
+      sctx.free t12 (fun r hr => tregs r (by rcases hr with rfl | rfl | rfl <;> decide)
+        (by rcases hr with rfl | rfl | rfl <;> decide)
+        (by rcases hr with rfl | rfl | rfl <;> decide)) tmem tcode
     have t11 : t.getReg .x11 = W 192 := by rw [tregs .x11 (by decide) (by decide) (by decide), x11]
     have tpay : PayloadFrom t view 0 := fun j hj =>
       memBits_of_mem_eq tmem (afterIndex_payloadFrom pk m view answer j hj)

@@ -170,13 +170,14 @@ theorem hidden_refines (k : Chain) (hidden : 32 ≤ firstAt index k)
 /-- The table row runs every hash of the chain, the first on its view value, then commits the
 top. -/
 theorem table_refines (k : Chain) (tail : Code)
-    (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ)
+    (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ) (P : Word)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      ChainsInv index wire pk u z (k.val+1) → Riscv.CodeAt u u.pc tail →
+      ChainsInv index wire pk u z (k.val+1) → Riscv.CodeAt u u.pc tail → u.pc = P →
       ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursor k+chainBits k)) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (prep : Prepared index wire pk s x k)
     (located : Riscv.CodeAt s s.pc (List.replicate (remaining index k) .ECALL ++ tail))
+    (hP : s.pc + W (4 * remaining index k) = P)
     (bound : remaining index k+rest ≤ fuel) :
     Riscv.Refines fuel s
       (runNodes' index (viewPayload wire) (chainNodes k) x (cursor k) >>= K)
@@ -184,19 +185,20 @@ theorem table_refines (k : Chain) (tail : Code)
   set p := firstAt index k with hp
   by_cases h32 : 32 ≤ p
   · have hr : remaining index k = 0 := by unfold remaining; omega
-    rw [hr] at located bound ⊢
+    rw [hr] at located bound hP ⊢
     simp only [List.replicate_zero, List.nil_append, Nat.zero_add] at located bound ⊢
+    have hpc : s.pc = P := by simpa using hP
     exact hidden_refines index wire pk k h32 s x fuel K c
-      (fun z inv => continuation s z inv located fuel bound) prep
+      (fun z inv => continuation s z inv located hpc fuel bound) prep
   have hp32 : p < 32 := by omega
   have finish : ∀ (u : MachineState) (z : graph.Assignment),
       HashInv index wire pk u z k (work k) → MemBits u (W (outAddr k)) (lastOut z k) →
-      Riscv.CodeAt u u.pc tail → ∀ left, rest ≤ left →
+      Riscv.CodeAt u u.pc tail → u.pc = P → ∀ left, rest ≤ left →
       Riscv.Refines left u
         (runNodes' index (viewPayload wire) [top k] z (cursor k+chainBits k) >>= K) c := by
-    intro u z invU lastU locatedU left hleft
+    intro u z invU lastU locatedU upc left hleft
     rw [top_run_eval index (viewPayload wire) k hp32, pure_bind]
-    apply continuation u _ _ locatedU left hleft
+    apply continuation u _ _ locatedU upc left hleft
     refine HashInv.complete index wire pk ⟨invU.ctx, invU.input, invU.inputRange, invU.length,
       invU.out, invU.payload, ?_⟩ ?_
     · intro j hj
@@ -207,18 +209,22 @@ theorem table_refines (k : Chain) (tail : Code)
       apply (memBits_cast _ _ _ _).mpr
       exact top_of_answer k lastU
   have he : remaining index k = (32-(p+1))+1 := by unfold remaining; omega
-  rw [he] at located bound ⊢
+  rw [he] at located bound hP ⊢
   rw [chain_split_first index k hp32, runNodes'_append, runNodes'_append, bind_assoc, bind_assoc]
   rw [List.replicate_succ, List.cons_append] at located
   rw [show 32-(p+1)+1+c = 1+(32-(p+1)+c) by omega]
   apply read_prefix_refines index wire pk k hp32 (List.replicate (32-(p+1)) .ECALL ++ tail)
     (fun r => runNodes' index (viewPayload wire) (suffixNodes index k) r.1 r.2 >>= fun r' =>
       runNodes' index (viewPayload wire) [top k] r'.1 r'.2 >>= K)
-    (32-(p+1)+c) (32-(p+1)+rest) ?_ s x fuel prep.inv prep.ready located (by omega)
-  intro u z invU heldU locatedU left hleft
-  exact steps_refines index wire pk k tail
+    (32-(p+1)+c) (32-(p+1)+rest) (s.pc + W 4) ?_ s x fuel prep.inv prep.ready located rfl
+    (by omega)
+  intro u z invU heldU locatedU upc left hleft
+  refine steps_refines index wire pk k tail
     (fun r => runNodes' index (viewPayload wire) [top k] r.1 r.2 >>= K) c rest
-    (cursor k+chainBits k) finish
-    (32-(p+1)) (p+1) rfl (by omega) (by omega) u z left invU heldU locatedU hleft
+    (cursor k+chainBits k) P finish
+    (32-(p+1)) (p+1) rfl (by omega) (by omega) u z left invU heldU locatedU ?_ hleft
+  rw [upc, BitVec.add_assoc, W_add, ← hP]
+  congr 2
+  omega
 
 end OptimalOTS.RiscvMixedProgram
