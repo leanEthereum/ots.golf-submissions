@@ -179,7 +179,7 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if c = 106 then cV T 2
   else if c = 107 then cV T 4
   else if 100 ≤ c ∧ c < 113 then fpat (c-100) (hxs T (idxOf y0) (c-100+1))
-  else if 120 ≤ c ∧ c < 132 then natV (ofDigitsW gb (fun w => hxs T (idxOf y0) (w+1)) (c-120+1))
+  else if 120 ≤ c ∧ c < 132 then cellOfBits (accBits (fun w => hxs T (idxOf y0) (w+1)) (c-120))
   else if 140 ≤ c ∧ c < 143 then fpat (c-135) (hxs T (idxOf y0) (c-135+1))
   else if 160 ≤ c ∧ c < 174 then ofK (gpow (ent (c-160) (hxs T (idxOf y0) (c-160))))
   else if 180 ≤ c ∧ c < 194 then ofK (blockFrame T (c-180) (hxs T (idxOf y0) (c-180)))

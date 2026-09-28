@@ -1,4 +1,5 @@
 import Submissions.UpperLeanIsa.AffineCore
+import Submissions.UpperLeanIsa.HintTie
 
 /-! Completing affine paths compute the chains and index tie of the secure
 abstract codec, with the new domain words. -/
@@ -277,55 +278,59 @@ theorem top_eq (hT : T.Hyp) (hC : Compat P T) {k : ℕ} (hk : k < 42) :
         exact chain_val hP hC (groupRead T u (xs (u+1))) hk hread hd hd0 (xhCell_pos hk hk0 he) (fun t ht => hb _ (mem_chainOps.mpr ⟨t, ht, rfl⟩))
 
 include hV hP in
-/-- **The tie.** The accumulator after group `u` holds the field values `xs 1, …, xs (u + 1)`. -/
-theorem acc_eq : ∀ u < 13,
-    v (accCell u) = natV (ofDigitsW gb (fun w => xs (w + 1)) (u + 1)) := by
-  have hlt : ∀ w, (fun w => if w < 13 then xs (w + 1) else 0) w < 2 ^ gb w := by
+/-- **The tie.** The accumulator after group `u` holds `accBits` of the field values
+`xs 1, …, xs (u + 1)`; unit 11 contributes its landing hint. -/
+theorem acc_eq (hL : Landing v xs) : ∀ u < 13,
+    v (accCell u) = cellOfBits (accBits (fun w => xs (w + 1)) u) := by
+  set x : ℕ → ℕ := fun w => if w < 13 then xs (w + 1) else 0 with hxdef
+  have hlt : ∀ w, x w < 2 ^ gb w := by
     intro w
     by_cases hw : w < 13
-    · simp only [if_pos hw]; have := hV (w + 1) (by omega); rw [Wf_succ hw] at this
+    · simp only [hxdef, if_pos hw]; have := hV (w + 1) (by omega); rw [Wf_succ hw] at this
       exact lt_of_lt_of_le this (VF_le w hw)
-    · simp only [if_neg hw]; positivity
-  have hofd : ∀ n ≤ 13, ofDigitsW gb (fun w => xs (w + 1)) n =
-      ofDigitsW gb (fun w => if w < 13 then xs (w + 1) else 0) n := by
-    intro n hn
-    unfold ofDigitsW
-    exact Finset.sum_congr rfl fun w hw => by
-      simp only [if_pos (show w < 13 by have := Finset.mem_range.mp hw; omega)]
-  intro u
+    · simp only [hxdef, if_neg hw]; positivity
+  have hcg : ∀ u < 13, accBits (fun w => xs (w + 1)) u = accBits x u := fun u hu =>
+    accBits_congr (fun w hw => by simp only [hxdef, if_pos hw]) hu
+  intro u hu
+  rw [hcg u hu]
   induction u with
   | zero =>
-    intro hu
     have h : v (accCell 0) = fpat 0 (xs (0+1)) :=
       hP.tie_rel (u:=0) (ci:=.setc (accCell 0) (fpat 0 (xs 1))) (by decide) (by unfold tie; simp)
-    rw [h, ofDigitsW_succ, ofDigitsW_zero]
-    unfold fpat POS; simp only [Nat.zero_add]
+    rw [h, accBits_zero hlt]
+    simp [hxdef]
   | succ u ih =>
-    intro hu
     have hmem : ∀ y ∈ tie (u+1) (xs (u+1+1)), y.Rel f v := fun _ hy => hP.tie_rel (by omega) hy
-    unfold tie at hmem
-    rw [if_neg (by omega), Nat.add_sub_cancel] at hmem
     have hprev := ih (by omega)
-    have hl1 := ofDigitsW_lt gb _ hlt (u + 1)
-    have hl2 := ofDigitsW_lt gb _ hlt (u + 1 + 1)
-    have hpos : 2 ^ posW gb (u + 1 + 1) ≤ 2 ^ 128 := by
-      rw [← POS_13]; exact Nat.pow_le_pow_right (by norm_num) (posW_mono gb (by omega))
-    rw [← hofd _ (by omega)] at hl1 hl2
+    have hx1 : x (u + 1) = xs (u + 1 + 1) := by simp only [hxdef, if_pos hu]
+    unfold tie at hmem
+    rw [if_neg (by omega)] at hmem
+    by_cases h11 : u + 1 = 11
+    · obtain rfl : u = 10 := by omega
+      rw [if_pos rfl] at hmem
+      have hx : v (accCell 11) = v (accCell 10) + v (hCell 12) :=
+        hmem (.xor (accCell 10) (hCell 12) (accCell 11)) (by simp)
+      have hx11 : x 11 = xs 12 := by simp [hxdef]
+      have hh : v (hCell 12) = ofK (gpow (entryOf 11 (x 11))) := by
+        have h := hL 12 (by omega)
+        rw [hx11]
+        exact h
+      have h512 : x 11 < 512 := by
+        rw [hx11]; have := hV 12 (by omega); rwa [Wf_succ (by omega), VF_11] at this
+      show v (accCell 11) = cellOfBits (accBits x 11)
+      rw [hx, hprev, hh, accBits_11 hlt h512]
+    rw [if_neg h11, Nat.add_sub_cancel] at hmem
     by_cases hx0 : xs (u + 1 + 1) = 0
     · rw [if_pos hx0] at hmem
       have h : v (accCell (u + 1)) = v (accCell u) * v oneCell :=
         hmem (copy (accCell u) (accCell (u + 1))) (by simp)
-      rw [h, v_one hP, mul_oneV, hprev, ofDigitsW_succ _ _ (u + 1)]
-      simp [hx0]
+      rw [h, v_one hP, mul_oneV, hprev, accBits_zero_step hlt hu h11 (by rw [hx1, hx0])]
     · rw [if_neg hx0] at hmem
       have ht : v (tCell (u + 1)) = fpat (u + 1) (xs (u + 1 + 1)) :=
         hmem (.setc (tCell (u + 1)) (fpat (u + 1) (xs (u + 1 + 1)))) (by simp)
       have hx : v (accCell (u + 1)) = v (accCell u) + v (tCell (u + 1)) :=
         hmem (.xor (accCell u) (tCell (u + 1)) (accCell (u + 1))) (by simp)
-      rw [hx, ht, hprev]
-      unfold fpat POS
-      rw [ofDigitsW_succ _ _ (u + 1)] at hl2 ⊢
-      exact natV_add_disjoint hl1 (by omega)
+      rw [hx, ht, hprev, ← hx1, accBits_step hlt hu h11]
 
 end Path
 end

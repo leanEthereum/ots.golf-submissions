@@ -20,6 +20,7 @@ theorem rehint_tie {u x : ℕ} {ci : CInstr} (h : ci ∈ tie u x) : rehint ci = 
   split_ifs at h <;> simp only [List.mem_cons,List.not_mem_nil,or_false] at h
   · subst ci; rfl
   · subst ci; rfl
+  · subst ci; rfl
   · rcases h with rfl | rfl <;> rfl
 
 theorem rehint_seg (T : Tab) {u x i : ℕ} {ci : CInstr} (h : ci ∈ seg T u x i) :
