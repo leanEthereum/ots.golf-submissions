@@ -85,9 +85,9 @@ theorem topPos_sub_add (i : Idx) (k : Fin 33) :
   unfold topPos
   split_ifs <;> omega
 
-theorem card_nonCap : ∑ k : Fin 33, (if isCap k then 0 else 1) = 31 := by decide +kernel
+theorem card_nonCap : ∑ k : Fin 33, (if isCap k then 0 else 1) = 32 := by decide +kernel
 
-theorem fixedPositions_sum (i : Idx) : ∑ k, (32 - (fixedPositions i k).val) = target + 31 := by
+theorem fixedPositions_sum (i : Idx) : ∑ k, (32 - (fixedPositions i k).val) = target + 32 := by
   simp only [topPos_sub_add, Finset.sum_add_distrib, fixedDigits_sum, card_nonCap]
 
 theorem fixedDigits_injective : Function.Injective (fun (i : Idx) => fixedDigits i) := by
@@ -136,11 +136,11 @@ theorem fixedCut_isCut (i : RawIdx) : IsCut (cutOf (fixedChoice i)) := isCut_cut
 
 theorem fixedCut_card (i : RawIdx) : (cutOf (fixedChoice i)).card = 33 := card_cutOf _
 
-/-- Every disclosure set costs `target + 31 + 13 = 190` compressions to reconstruct. -/
+/-- Every disclosure set costs `target + 32 + 13 = 191` compressions to reconstruct. -/
 theorem fixedCut_cost (i : Idx) :
-    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 190 := by
+    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 191 := by
   rw [cost_cutOf]
-  change ∑ k, (32 - (fixedPositions i k).val) + 13 = 190
+  change ∑ k, (32 - (fixedPositions i k).val) + 13 = 191
   rw [fixedPositions_sum]
   rfl
 

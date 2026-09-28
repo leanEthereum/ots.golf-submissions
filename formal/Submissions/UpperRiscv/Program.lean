@@ -54,7 +54,7 @@ store base of the lane area (`x10` through the index phase). -/
 def hashBase : ℕ := 0x400000
 
 /-- The lane area: four words above every hash output buffer. -/
-def laneBase : ℕ := 0x4002E8
+def laneBase : ℕ := 0x400380
 
 /-- The address of lane word `g`. -/
 def laneWordAddr (g : ℕ) : ℕ := laneBase + 8 * g

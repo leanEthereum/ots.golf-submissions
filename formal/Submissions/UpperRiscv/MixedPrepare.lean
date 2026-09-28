@@ -28,7 +28,7 @@ theorem move_refines (k : Fin 33) (s : MachineState) (x : graph.Assignment) (tai
     have := value_bounds k; unfold payloadAddr tailAddr regionAddr at *; omega
   have utail : TailInv index v wire u x k := memBits_of_mem_eq E.mem tailInv
   have inv : HashInv index v wire pk a u x k (valueAddr k) := by
-    refine ⟨uctx, E.input, urange, ?_, E.out, ?_, ?_, fun _ => utail⟩
+    refine ⟨uctx, E.input, urange, ?_, E.out, ?_, ?_, utail⟩
     · rw [E.regs .x11 (by decide) (by decide)]; exact len
     · intro j hj; exact memBits_of_mem_eq E.mem (payload j (by omega))
     · intro j hj; exact memBits_of_mem_eq E.mem (done j hj)

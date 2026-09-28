@@ -68,15 +68,30 @@ theorem afterIndex_sigBits (pk : PublicKey) (m : Message) (bits : List Bool)
   rw [alignToDword_toNat, W_add, W_toNat _ (by omega)]
   refine ⟨Or.inr ?_, Or.inl ?_⟩ <;> simp only [dataAddr, laneBase] <;> omega
 
-/-- The index phase preserves the six signature bytes past the region. -/
+set_option maxRecDepth 100000 in
+/-- The bytes beyond the root are outside the loader and all index stores. -/
 theorem afterIndex_tail (pk : PublicKey) (m : Message) (bits : List Bool)
     (answer : BitVec hashBits) :
-    MemBits (afterIndex pk m bits answer) (W tailAddr) (ofBits 48 ((bits.drop 128).drop 5328)) := by
-  rw [List.drop_drop]
-  have h := afterIndex_sigBits pk m bits answer (5328 + 128) 48 (by norm_num) (by norm_num)
-    (by norm_num)
-  have e : 0x400030 + (5328 + 128) / 8 = tailAddr := by unfold tailAddr regionAddr; norm_num
-  rw [e] at h
-  exact h
+    MemBits (afterIndex pk m bits answer) (W tailAddr) (0 : BitVec 48) := by
+  apply memBits_of_words _ _ _ (by decide +kernel)
+  intro j hj
+  have hj0 : j = 0 := by omega
+  subst j
+  change (afterIndex pk m bits answer).getMem (W tailAddr) = 0
+  rw [afterIndex_frame pk m bits answer _ (by decide +kernel),
+    initialState_getMem image pk m bits]
+  have hb : Riscv.signatureBase.toNat +
+      8 * (((Riscv.bytesOfBits (bits.take 5504)).length + 7) / 8) ≤ 2 ^ 64 := by
+    simp only [bytesOfBits_length, List.length_take, signatureBase_toNat]
+    omega
+  have ho : (W tailAddr).toNat < Riscv.signatureBase.toNat ∨
+      Riscv.signatureBase.toNat +
+        8 * (((Riscv.bytesOfBits (bits.take 5504)).length + 7) / 8) ≤ (W tailAddr).toNat := by
+    right
+    simp only [bytesOfBits_length, List.length_take, signatureBase_toNat]
+    change 4194352 + 8 * (( (min 5504 bits.length + 7) / 8 + 7) / 8) ≤ 4195168
+    omega
+  exact (getMem_load_outside _ _ _ _ hb ho).trans
+    (loaderMessage_zero image pk m image_data_length _ (by decide +kernel))
 
 end OptimalOTS.RiscvMixedProgram

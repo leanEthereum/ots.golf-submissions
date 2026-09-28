@@ -21,7 +21,7 @@ structure Prepared (s : MachineState) (x : graph.Assignment) (k : Fin 33) : Prop
   inv : HashInv index v wire pk a s x k (work k)
   ready : if expands k then HoldsAt s x k (RiscvUpperForest.ForestVerifier.pos index v k+1)
     else MemBits s (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k)))
-  tail1 : k.val = 1 → MemBits s (W tailAddr) (ofBits 48 (wire.drop 5328))
+  tail1 : k.val = 1 → MemBits s (W tailAddr) (0 : BitVec 48)
 
 theorem Prepared.frame {s t : MachineState} {x : graph.Assignment} {k : Fin 33}
     (prep : Prepared index v wire pk a s x k) (inv : HashInv index v wire pk a t x k (work k))
@@ -69,11 +69,7 @@ theorem enter_refines (k : Fin 33) (tail : Code)
       refine ⟨invY, ?_, fun h1 => ?_⟩
       · rw [if_pos hn]
         exact holdsAt_frame memY heldW
-      · exfalso
-        have := cap_not_expands' k
-        have hk : k = 1 := Fin.ext h1
-        subst hk
-        revert hn; decide
+      · exact invY.tail
     have h := continuation y z readyY locatedY (left-1) (by omega)
     simpa only [↓reduceIte, entryCursor, hn, if_true] using h
   · rw [if_neg hn, List.nil_append] at located
@@ -86,8 +82,6 @@ theorem enter_refines (k : Fin 33) (tail : Code)
     rw [he] at invU heldU
     have prep : Prepared index v wire pk a u x k := by
       refine ⟨invU, by rw [if_neg hn]; exact heldU, fun h1 => ?_⟩
-      unfold TailInv at tailU
-      rw [if_pos (by omega)] at tailU
       exact tailU
     have h := continuation u x prep locatedU (fuel-2) (by omega)
     simpa only [Bool.false_eq_true, ↓reduceIte, entryCursor, hn, if_false, Nat.add_zero] using h
@@ -206,31 +200,7 @@ theorem table_refines (k : Fin 33) (tail : Code)
           have e2 : tops x' j = tops x j := by unfold tops; rw [ftp j]
           rw [e1, e2]
           exact inv.done j (by have : j.val ≠ k.val := fun h => he (Fin.ext h); omega)
-      · unfold TailInv
-        have eT : tailAfter index v wire (Function.update x' (tp k).fin w) =
-            tailAfter index v wire x := by
-          unfold tailAfter
-          rw [lastEq 1]
-          by_cases h1 : k.val = 1
-          · have hk : k = 1 := Fin.ext h1
-            subst hk
-            rw [if_pos (by rw [← hp]; exact h32), if_pos (by rw [← hp]; exact h32)]
-          · have e : lastAnswer x' 1 = lastAnswer x 1 := by
-              unfold lastAnswer; rw [frame 1 (fun e => h1 (by rw [← e]; rfl))]
-            rw [e]
-        by_cases h1 : k.val = 1
-        · have hk : k = 1 := Fin.ext h1
-          subst hk
-          rw [if_neg (by omega)]
-          unfold tailAfter
-          rw [if_pos h32]
-          exact prep.tail1 rfl
-        · have h := inv.tail h1
-          unfold TailInv at h
-          rw [eT]
-          by_cases h0 : k.val = 0
-          · rw [if_pos (by omega)]; rw [if_pos (by omega)] at h; exact h
-          · rw [if_neg (by omega)]; rw [if_neg (by omega)] at h; exact h
+      · exact inv.tail
     · -- the value is read in place, then the levels above it
       have he : remaining index v k = (32-(p+1))+1 := by
         simp only [remaining, earlyHash, hn, Bool.false_eq_true, ↓reduceIte]; omega

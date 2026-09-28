@@ -46,10 +46,10 @@ def scheme : OracleAlgorithm.Scheme := WireAdapter.scheme RiscvUpperForest.schem
 
 theorem admissible : scheme.Admissible :=
   WireAdapter.admissible RiscvUpperForest.scheme Forest.decodeSignature Forest.decode_encode canonical
-    RiscvUpperForest.admissible 191 RiscvUpperForest.cost (by decide)
+    RiscvUpperForest.admissible 192 RiscvUpperForest.cost (by decide)
 
-theorem cost : scheme.VerifyCostAtMost 191 :=
-  WireAdapter.verifyCost RiscvUpperForest.scheme Forest.decodeSignature 191 RiscvUpperForest.cost
+theorem cost : scheme.VerifyCostAtMost 192 :=
+  WireAdapter.verifyCost RiscvUpperForest.scheme Forest.decodeSignature 192 RiscvUpperForest.cost
 
 /--
 info: 'OptimalOTS.RiscvUpperForest.Wire.admissible' depends on axioms: [propext, Classical.choice, Quot.sound]

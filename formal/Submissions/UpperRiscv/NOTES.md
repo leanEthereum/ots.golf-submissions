@@ -1,3 +1,149 @@
+# Scaled count tag: 344-cycle candidate
+
+This extends commit `6de891a01f28562351bc1359c6b22a91a70a7e9a` (345 cycles).
+The final signature byte now stores `4*v`. The machine loads this value directly,
+saving the shift formerly used to form the free-chain jump displacement.
+
+The checksum modulus changes from 255 to 1020. Every address-lane contribution
+is divisible by four, so a passing checksum also proves that the tag is aligned.
+For aligned tags the test is exactly `S + v = 146 (mod 255)`. Misaligned tags
+reject before the free-chain hash. Decoded counts 16 through 63 reach the
+existing rejection table. A sentinel count 255 represents a malformed tag in
+the high-level verifier, and its explicit `< 64` guard rejects it.
+
+The digit language, state widths, availability count, nonce and signature size
+are unchanged. The new tag is injective on honest counts. The security proof
+and the exact oracle-trace refinement have been rebuilt for this encoding.
+The removed shift is replaced by padding on the checksum's rejecting branch,
+so subsequent code addresses and the image size remain unchanged.
+
+Accounting: 34 index cycles plus at most 310 continuation cycles. A full-length
+acceptance uses 192 hash compressions and 152 ordinary instructions. The
+signature is 5464 bits; the image is 62,552 bytes.
+
+Validation:
+
+- Full Lean 4.33.1 certificate build passes.
+- The actual Lean-exported image passes 16,480 independent byte-memory
+  executions with exact ordered oracle-transcript and decision agreement.
+  These include all 4096 pair landings, all 256 tags, 256 checksum aliases,
+  5511 raw bit lengths, every signature-bit flip, key/message-bit flips and
+  random inputs. Maximum observed: 344 cycles.
+- Exact challenge-statement and primitive comparison, permitted-axiom check,
+  and fresh kernel replay of all 22,253 declarations pass. The standalone
+  replay check took 188.476 seconds end to end, with sampled peak PSS about
+  8.02 GB. The only proof axioms are `propext`, `Quot.sound`, `Classical.choice`.
+- Source policy passes against contract
+  `8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c`.
+- The official runner fails closed before compilation because this host has no
+  enabled Landlock. The development checks are not a hosted verdict.
+
+Research: a modulo-257 alternating-digit checksum was screened with exact
+counts. At target 145 the best screened ten-pair cap configuration reaches
+only 0.990145 of the existing availability threshold, so it is not used.
+A larger improvement will need fewer machine instructions, a different
+accepted language with a security proof, or a better buffer arrangement.
+
+Historical notes follow, with their original parameters and validation.
+
+---
+
+# Descending chain buffers: 345-cycle candidate
+
+This extends the 346-cycle non-hinted source in the submissions repository
+(`c238c85e4e21e990e9ff1534a611f01e8d7f948e` checkout baseline).
+
+## Construction and savings
+
+The signature still contains a 128-bit nonce, 21 values of 144 bits, 12 values
+of 192 bits, and the free-count byte: 5464 bits total. Chain 0 hashes `v + 1`
+times. Sixteen pairs consume the 32 four-bit index digits. The accepted
+language is unchanged: `S + v = 146`, `v < 16`, with pair-sum caps of 20 for
+pairs 0–4, 21 for 5–9 and 30 for 10–15. The exact accepted-index count remains
+32768630519944966874703949789741158. The availability and security arguments
+use the same width bounds and accepted language.
+
+Execution-order chains 0–20 now have 144-bit states and chains 21–32 have
+192-bit states. Their answer buffers descend from root offset 768 to 24 in
+24-byte steps, with the last buffer at offset -8. Chain 32 is the sole cap;
+its state and root slot start at offset 0. It may take zero hashes. Each of
+the other chains takes its digit plus one hashes. Ten chains expand, as in
+the prior image.
+
+The root begins at the payload address `0x400040`. It contains 33 top slots
+in reverse execution order: 24 bytes each, except chain 31's 32-byte slot.
+The total is 800 bytes / 6400 bits / 13 compressions. The final working
+pointer already equals the root address. The root code is therefore just
+`ADDI x11, x13, 936; ECALL`, followed by the existing decision.
+
+One fewer cap adds a mandatory hash. Grouping widths removes one width-change
+instruction, cancelling that cost. Removing the root pointer update saves
+one further instruction. A full-length accepting run uses 192 compressions
+and 153 ordinary instructions, totalling 345 cycles. The earlier image used
+191 compressions and 155 ordinary instructions.
+
+## Every raw input and memory safety
+
+The root reads `a3 + 936` bits, where `a3 = min(signature length, 5505)`.
+The six bytes after the root region are outside the loader's signature area
+and all chain writes, and remain zero. Dispatch lanes move to `0x400380`,
+above the root and tail. The length decision still requires `a3 < 5465`.
+Thus short, partial-byte and oversized signatures all have an exact staged
+oracle computation, including rejection after a matching root.
+
+`MixedLayout` checks all unread-value and completed-slot disjointness facts,
+cap placement, state slices, and the preserved tail. `MixedPayload` proves
+that the initial tail is zero. `MixedChain*` preserves that invariant through
+all hashes. `MixedRoot` uses `work 32 = regionAddr` to omit the pointer update.
+The graph/wire mapping and the root commitment change with the layout; their
+correctness and security are proved for these new definitions.
+
+Code bodies and rejection stubs are repacked without overlap. Lane 0's bias
+is 232. `MixedIndexArith` checks the wrapped checksum with the new bases.
+`CappedCost.bound` proves that free-chain work plus the pairs and root costs
+at most 310 after the 35-cycle index phase. It includes the first failed pair
+and the alias `S + v = 401`; the free table rejects all count bytes at least
+16, including the larger raw aliases. The certificate covers all executions,
+not only accepting runs.
+
+Key generation costs 1069 compressions; full-length verification costs 192.
+The image contains 15,616 instructions and 88 data bytes: 62,552 bytes, below
+the contract's 1 MiB cap.
+
+## Validation
+
+- The full `Submissions.UpperRiscv.Solution` build passes on the pinned
+  Lean 4.33.1 contract.
+- An independent byte-memory interpreter executes the actual Lean-exported
+  image against a separate forest verifier. All 16,560 cases agree on the
+  decision and exact ordered oracle queries; the maximum observed is 345.
+  Cases cover all 4096 pair landings, all 256 raw count bytes, 336 checksum
+  aliases, every raw bit length from 0 to 5506 and four large lengths, all
+  5464 signature-bit flips, all key/message-bit flips, and 512 unforced
+  random inputs. Programmed root matches exercise oversized rejection.
+  SHA-256 supplies consistent test answers; the Lean proof establishes
+  the universal and random-oracle claims.
+
+- The pinned comparator's exact challenge-statement/primitive comparison and
+  axiom check pass; the only permitted axioms are `propext`, `Quot.sound` and
+  `Classical.choice`. Fresh Lean-kernel replay of all 22,241 exported
+  declarations passes. This standalone check takes 186.385 seconds locally,
+  with sampled peak proportional memory of 8,017,782,784 bytes.
+- Source policy passes: 103 files, below 1 MiB of source. The development
+  build's 18 protected formal files match contract
+  `8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c`.
+- The unchanged official runner, using that contract and the pinned tools,
+  fails closed at Landlock preflight before compilation on this host.
+  The standalone checks above do not certify production isolation or the
+  hosted time/memory envelope. No hosted verdict is claimed.
+
+Implementation and proof adaptation: OpenAI Codex. The construction builds
+on the predecessor work credited in the historical notes below.
+
+Historical notes below refer to their original versions.
+
+---
+
 # Free count digit and two caps: 346-cycle candidate
 
 This extends the 348-cycle candidate (length test folded into the decision).

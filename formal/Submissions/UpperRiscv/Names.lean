@@ -6,15 +6,15 @@ import Submissions.UpperRiscv.Digits
 # The mixed-width chain graph
 
 There are 33 chains of 32 hash steps, indexed in execution order. Chain 0 carries the free
-digit; chains `2q+1` and `2q+2` form digit pair `q`. Chains 15–26 carry 192-bit states, the
+digit; chains `2q+1` and `2q+2` form digit pair `q`. Chains 21–32 carry 192-bit states, the
 others 144-bit states. Every hash returns 256 bits; the next state of chain `k` is the
 `chainBits k`-bit slice at bit `truncOff k` of the answer. A source is already state-width.
 
 The top `tp k` of chain `k` is the slice of its last answer that the machine leaves in the
-chain's root slot: `topBits k` bits at bit `topOff k`. For the two cap chains 1 and 15 the
-top is the state slice itself, so a cap chain may reveal its top. The root input `rc` is the
-826-byte region of the 33 root slots in address order (`rootRegion`, 6608 bits). The key-generation
-input lengths 144, 192 and 6608 differ from the 512-bit index input.
+chain's root slot: `topBits k` bits at bit `topOff k`. For cap chain 32 the
+top is the state slice itself, so its zero digit may reveal its top. The root input `rc` is the
+800-byte region of the 33 root slots in address order (`rootRegion`, 6400 bits). The key-generation
+input lengths 144, 192 and 6400 differ from the 512-bit index input.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -31,7 +31,7 @@ namespace Forest
 
 /-- Width of chain states, indexed in execution order. -/
 def chainBits (k : Fin 33) : ℕ :=
-  if 15 ≤ k.val ∧ k.val < 27 then 192 else 144
+  if 21 ≤ k.val then 192 else 144
 
 theorem chainBits_cases (k : Fin 33) :
     chainBits k = 144 ∨ chainBits k = 192 := by
@@ -45,8 +45,7 @@ theorem chainBits_le (k : Fin 33) : chainBits k ≤ 192 := by
 
 /-- Bit offset of a chain's next state inside a 256-bit answer. -/
 def truncOff (k : Fin 33) : ℕ :=
-  8 * [0, 0, 0, 0, 0, 12, 0, 0, 0, 14, 0, 8, 0, 14, 14, 8, 8, 0, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2,
-    0, 4, 0, 10].getD k.val 0
+  8 * [0, 0, 0, 0, 0, 0, 6, 0, 0, 6, 0, 0, 6, 0, 0, 6, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8].getD k.val 0
 
 theorem truncOff_add_le' : ∀ k : Fin 33, truncOff k + chainBits k ≤ 256 := by
   decide +kernel
@@ -56,20 +55,18 @@ theorem truncOff_add_le (k : Fin 33) : truncOff k + chainBits k ≤ 256 := trunc
 theorem truncOff_mod8 (k : Fin 33) : truncOff k % 8 = 0 := by
   unfold truncOff; omega
 
-/-- The two cap chains: their top is their last state. -/
-def isCap (k : Fin 33) : Prop := k.val = 1 ∨ k.val = 15
+/-- The final cap chain: its top is its last state. -/
+def isCap (k : Fin 33) : Prop := k.val = 32
 
 instance : DecidablePred isCap := fun k => by unfold isCap; infer_instance
 
 /-- Width of the root slot of chain `k`. -/
 def topBits (k : Fin 33) : ℕ :=
-  8 * [24, 18, 24, 24, 24, 24, 24, 24, 32, 24, 32, 24, 24, 24, 24, 24, 24, 32, 24, 24, 24, 24,
-    24, 24, 24, 24, 24, 24, 24, 32, 24, 24, 32].getD k.val 0
+  8 * [24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 32, 24].getD k.val 0
 
 /-- Bit offset of the root slot of chain `k` inside its last answer. -/
 def topOff (k : Fin 33) : ℕ :=
-  8 * [0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8,
-    0, 0, 0, 0].getD k.val 0
+  8 * [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0, 8].getD k.val 0
 
 theorem topOff_add_le' : ∀ k : Fin 33, topOff k + topBits k ≤ 256 := by
   decide +kernel
@@ -124,7 +121,7 @@ theorem idx_lt (n : Name) : n.idx < N := by
 def fin (n : Name) : Fin N := ⟨n.idx, n.idx_lt⟩
 
 /-- The width of the root input. -/
-def rootBits : ℕ := 6608
+def rootBits : ℕ := 6400
 
 /-- Output length. -/
 def len : Name → ℕ
@@ -267,15 +264,13 @@ theorem Name.sum_eq {M : Type} [AddCommMonoid M] (f : Name → M) :
 
 /-- The chain whose root slot is the `j`-th in address order. -/
 def slotChainN (j : ℕ) : ℕ :=
-  [0, 2, 4, 6, 8, 17, 15, 3, 5, 10, 7, 30, 31, 32, 9, 11, 12, 13, 16, 18, 19, 20, 21, 22, 23, 24,
-    25, 26, 27, 29, 28, 14, 1].getD j 0
+  [32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0].getD j 0
 
 def slotChain (j : ℕ) : Fin 33 := ⟨slotChainN j % 33, Nat.mod_lt _ (by norm_num)⟩
 
 /-- The address rank of the root slot of chain `k`. -/
 def slotOf (k : Fin 33) : ℕ :=
-  [0, 32, 1, 7, 2, 8, 3, 10, 4, 14, 9, 15, 16, 17, 31, 6, 18, 5, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, 30, 29, 11, 12, 13].getD k.val 0
+  [32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0].getD k.val 0
 
 theorem slotChain_slotOf' : ∀ k : Fin 33, slotChain (slotOf k) = k := by decide +kernel
 
@@ -305,7 +300,7 @@ theorem slotPos_add_le (k : Fin 33) : slotPos k + topBits k ≤ Name.rootBits :=
 theorem slotW_slotOf (k : Fin 33) : slotW (slotOf k) = topBits k := by
   rw [slotW, if_pos (slotOf_lt k), slotChain_slotOf]
 
-theorem slotPos_zero : slotPos 0 = 0 := by decide +kernel
+theorem slotPos_last : slotPos 32 = 0 := by decide +kernel
 
 /-- The slot values as digits of the region. -/
 def slotDigit (tops : (k : Fin 33) → BitVec (topBits k)) (j : ℕ) : ℕ :=
@@ -318,7 +313,7 @@ theorem slotDigit_lt (tops : (k : Fin 33) → BitVec (topBits k)) (j : ℕ) :
   · exact (tops _).isLt
   · positivity
 
-/-- The 826 bytes of the root slots, chain slots in address order, lowest address lowest. -/
+/-- The 800 bytes of the root slots, chain slots in address order, lowest address lowest. -/
 def rootRegion (tops : (k : Fin 33) → BitVec (topBits k)) : BitVec Name.rootBits :=
   BitVec.ofNat Name.rootBits (ofDigitsW slotW (slotDigit tops) 33)
 

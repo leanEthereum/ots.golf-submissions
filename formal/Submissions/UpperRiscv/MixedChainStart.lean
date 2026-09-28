@@ -40,15 +40,7 @@ theorem read_prefix_refines (k : Fin 33) (hk : RiscvUpperForest.ForestVerifier.p
     rw [← hp, List.range_succ, List.flatMap_append, List.flatMap_singleton, List.cons_append]
     simp [tripleN, hp32]
   rw [nodes, runNodes'_append, run, pure_bind]
-  have hne1 : k.val ≠ 1 → TailInv index v wire s x' k := by
-    intro h1
-    have h := inv.tail h1
-    unfold TailInv tailAfter at h ⊢
-    have e : lastAnswer x' 1 = lastAnswer x 1 := by
-      unfold lastAnswer
-      rw [frame 1 (fun e => h1 (by rw [← e]; rfl))]
-    rw [e]
-    exact h
+  have hne1 : TailInv index v wire s x' k := inv.tail
   have inv' : HashInv index v wire pk a s x' k (valueAddr k) := by
     refine ⟨inv.ctx, inv.input, inv.inputRange, inv.length, inv.out, inv.payload, ?_, hne1⟩
     intro j hj
