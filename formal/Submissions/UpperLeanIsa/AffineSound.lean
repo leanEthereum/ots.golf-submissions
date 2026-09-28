@@ -195,7 +195,7 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
   have heff : idxValue f P m (decodeNonce bits) pk = effective I := by
     exact indexSlice_effective _
   -- the tie
-  have hacc := acc_eq hV hP 12 (by omega)
+  have hacc := acc_eq hV hP hL 12 (by omega)
   rw [show accCell 12 = idxCell from rfl] at hacc
   have hlt : ∀ w, (fun w => if w < 13 then xs (w + 1) else 0) w < 2 ^ gb w := by
     intro w
@@ -203,12 +203,11 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
     · simp only [if_pos hw]; have := hV (w + 1) (by omega); rw [Wf_succ hw] at this
       exact lt_of_lt_of_le this (VF_le w hw)
     · simp only [if_neg hw]; positivity
-  have hofd : ofDigitsW gb (fun w => xs (w + 1)) 13 =
-      ofDigitsW gb (fun w => if w < 13 then xs (w + 1) else 0) 13 := by
-    unfold ofDigitsW
-    exact Finset.sum_congr rfl fun w hw => by simp only [if_pos (Finset.mem_range.mp hw)]
-  have hI : I.toNat = ofDigitsW gb (fun w => if w < 13 then xs (w + 1) else 0) 13 := by
-    rw [hidx, hacc, cellBits_natV, BitVec.toNat_ofNat, hofd, Nat.mod_eq_of_lt]
+  have hI : (unmask I).toNat = ofDigitsW gb (fun w => if w < 13 then xs (w + 1) else 0) 13 := by
+    have hII : I = accBits (fun w => xs (w + 1)) 12 := by rw [hidx, hacc, cellBits_cellOfBits]
+    rw [hII, accBits_congr (y := fun w => if w < 13 then xs (w + 1) else 0)
+      (fun w hw => by simp only [if_pos hw]) (by omega), unmask_accBits hlt, BitVec.toNat_ofNat,
+      Nat.mod_eq_of_lt]
     have := ofDigitsW_lt gb _ hlt 13
     rwa [show posW gb 13 = 128 from POS_13] at this
   have hfield : ∀ u < 13, field u I = xs (u + 1) := by

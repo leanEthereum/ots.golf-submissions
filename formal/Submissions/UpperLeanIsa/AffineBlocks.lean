@@ -69,7 +69,7 @@ theorem raw_body_control (T : Tab) (a : K) (f x : ℕ) :
       if_neg (show x+3 ≠ x+2 by omega),ctlOf,frG0]
   · simp only [bodyCode,if_neg hf,List.length_map,raw,lt_self_iff_false,ite_false,ite_true]
 
-theorem place_group {u x i : ℕ} (hu : u < 13) (hx : x < VF u) (hi : i < L u (band u x)) :
+theorem place_group {u x i : ℕ} (hu : u < 13) (hx : x < VF u) (hi : i < SL u x) :
     place (entryOf u x + i) = .body (u+1) x i := by
   have h1 := entryOf_ge hu hx
   have h2 := block_lt_gEnd hu hx hi
@@ -191,7 +191,7 @@ theorem bodyCode_slot_lt {T : Tab} (hT : T.Hyp) (a : K) {f x i : ℕ}
     rw [Wf_succ hu] at hx
     rw [bodyF_succ T hu] at hi
     have hl := body_len_L (z := false) hT hu hx
-    have hb := block_lt_gEnd hu hx (show i < L u (band u x) by omega)
+    have hb := block_lt_gEnd hu hx (show i < SL u x by omega)
     rw [ent_succ hu]
     unfold gEnd sentinel at *
     omega

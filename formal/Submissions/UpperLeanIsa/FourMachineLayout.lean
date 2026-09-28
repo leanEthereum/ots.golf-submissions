@@ -5,7 +5,9 @@ import Submissions.UpperLeanIsa.LengthGate128
 
 /-! Layout of the fixed-tag fused machine. All live field bands begin at raw field zero;
 the excluded zero-cost binding tuples have no holes or aliases. The 27-slot prologue is
-followed by 13 packed group regions ending at slot 250577. Free-chain blocks remain at 255615 + 68*s. -/
+followed by 13 group regions ending at slot 252171. Unit 11's blocks start at slots whose
+`g ^ e` carries their field value (`HintTie`); the other groups are packed by cost band.
+Free-chain blocks remain at 255615 + 68*s. -/
 
 namespace OptimalOTS.HLFour
 
@@ -106,7 +108,7 @@ instance (u : ℕ) : Decidable (isExp u) := by unfold isExp; infer_instance
 
 /-- The padded group budget plus one. The straight body uses `gcu - 2`
 ordinary instructions and its affine dispatch uses one: total `gcu - 1`. -/
-def gcu (u : ℕ) : ℕ := [7, 8, 8, 8, 8, 6, 7, 8, 8, 8, 8, 7, 7].getD u 6
+def gcu (u : ℕ) : ℕ := [7, 8, 8, 8, 8, 6, 7, 8, 8, 8, 8, 6, 7].getD u 6
 
 /-- The single root call executes in group 5. -/
 def hm (u : ℕ) : ℕ := if u = 5 then 1 else 0
@@ -130,14 +132,31 @@ def L (u c : ℕ) : ℕ := gcu u - 1 + c + hm u
 /-- Slot offset of cost band `c` in group `u`'s region. -/
 def OFF (u c : ℕ) : ℕ := psum (fun c => pn u c * L u c) c
 
+/-- Unit 11 packs its blocks in slot order `j`: block `j` holds field value `ord11 j` and
+spans `gap11 j` slots. Each block starts at a slot `e` whose `g ^ e` has field value in bits
+28..36 (`HintTie.gpow_entry11`); the slots after its control op are trap pads. The tables are
+packed naturals: entry `j` of a `w`-bit table `N` is `N / 2 ^ (w * j) % 2 ^ w`. -/
+def gap11N : ℕ := 0x10ca3344266783442f1c111b501f120d294a0f473f12110e121f1b1e17131227171b1627122411122d11191828141a111b10270f133316111115180d331227121e250e12140e1a0f131e1c18121712160e0d1717131912121113160d0f131514170c211d12101a1511110f11112112110f0c1119181714150d171210130e1312120e131a110e12131311120815160d110e131010100f1716181116261a120f1019141015140c110c24190a12140d11120e100b0c1511171216121014130911150d0f1611100f1011110d131e10120d160e0f21101009100f0e1112150c12140d0d1411100c0d1114080d120d10110e110d110f17120e0f120f1010190f12100f10120f0c110f12110b1309100b13110b0f120b1311120b0f11100c120a130e1014110e0f1013131211181310130a0f0a080f0e101212100b0f0b100c0b110e120e0c10121411100c0e101211121110100f111211100e0c0f0f0c0c0b100f12140f120a110d110e0e120d100e110d121108100f110f12121012100e140c0b1111120d100f0711100c10090d061211110710121212110f0e1213110f0c1112110d0d0d0b0a0d0a0c120c10090e0c0f110c0f0e101008100c0b0f130b100d0e120f11101112100e10110c0d07120f081010120f110f0d09060f1012110c0811090c0b1110110f12110a0a110a080f0e110b0b100d120e11100912120c0c0a0c1211
+def ord11N : ℕ := 0xa404524e045930f5518426021bd7476a0429d5ec1e3176c698e82af62818968ad53f017aaa8c56bd5aea0115839cedb786aa2f2b42eda4aacdd0a6f9254906cf75f6e6279f9a87de6ad090a458c2b234a1fb64ef9d4b632ec408630df5fcfe3433c36f3eae17a75424d2b96a9d1423ddca8367d56075e9ddc6b1d51b2d7b7d895de64ade1b9de52ae53f4d19faa0299c41aba4720acb3b76b9ab67dbc0a60f6cf3b85a0a226304e8f95a869086a71ee2bc061303d2390e124ff84aee56f1d84337fe1a3955eb5b3e0445a61de1a7cc97f34e347d285769793bb1d3d35748e257a8ba25f80cf3b2fca9c864b5e952da68769cc066b9bc9a3306fc9c894b6814aa7292472f810693fea618a37161693e61147f3fbac503d05f0d237953fd955ef025ee9ac5b7e2227d8e176b4130b197b64a406979c85f182614950e93ca46bfe1376595309920934ea8ad8ebfd6b3e66eb16e584df21e032892b338e7620e3c7b0f67647245c18bc23f0edcbb5c7e4250415e4779372e9e61a1587be77df9171a1cbd123790c881fa03b3f1e87a7f45f2a46445849cf1242a87bb71b7bb8c05d121f666d7cae6f5efcf567a9340d9fb87df24ebce202ee678678f86cbe019bb873403a0fe759c7c6be977d2c566e1a58c46cb24721fa642e27468b4cbc4362c81c9f31b52fc5d73ade972e03d309a46537f043573c331ff05d9c9b17825d3226d71299cc09fb8803e3353e2c0312f24a06000dd917c2da59016882c6919eaa59767f7475c2015ec4580c6daa6fa3911cc537c147d92a41cfa780a25c1219bd36b
+def pos11N : ℕ := 0xadb913c461a614dca185ede2a0786229d82656d91e5e7a866402a07770b1125aba5f520643f01239cb97c9c4cae3363b9b4599a03508d66268d4869f496b30366ac5e58a9b001935911ffe9d5bcbf8f570e2f5979411f9882deed6865ec6df78790938cb7aa875f9208ba31ebb71d5d80331c5acb28ce460986db18558ba5dbe0d6901e99c5a6340629d50eec0f231e1aa14423b5c8782814aac871ab3744ad070c2d424c4bb30068221e46ba32040a6d6c6ad986c9f7b7a1c5f8ef6b0225dfbe9518027f19bf14a6564a26cb79fffa264ba68ee0ef8dea3c1be50c7962e7faf65398e679a26637c1ce0a3932581d9ca71ccb9738f9e35cbe89ecf7c3be756ccb82ee463bbf6351b713b6aa1343346ba0cbaa7a732c3f764f2080ebb07c6c42e2086d02fbc79a9a34e57b1d109fe18b3db00c6e57a0a2cbb7277f327c997b5e559f0e5fce5dd4511209a2f35eb973f77e52a4bbf08b19a5ea4e42d93865e3a9f6bd83e5a5a66e7289941f4ab7348eef1a62753fbb6f4295a151180dfad3bae754425828e11e3bc986b3b71e62a4f6d69806b74bdf69b47d9a2b3f7f6349605d48b69bfdf6640fa555a37ba3bfb7a13da81aff4f0f4a7e6e2439fccf49e91b1828b5d53f352457ca75040833c008b38c29f1229233aaa4a0047e5304864b1d630f311bc6c0b9e8b48493fa7fba794c36212378a5533b570f02fda98cc85f64c213ad7209cb060fbcfbd6c4ebdcb4150bfa3e16e2e38f1c0307d348a185234254083b59aaa2a2e88685816956bfdf5191562e1447dd1ebb025b3cf6353808ce829
+
+def gap11 (j : ℕ) : ℕ := gap11N / 2 ^ (8 * j) % 2 ^ 8
+def ord11 (j : ℕ) : ℕ := ord11N / 2 ^ (9 * j) % 2 ^ 9
+def pos11 (v : ℕ) : ℕ := pos11N / 2 ^ (9 * v) % 2 ^ 9
+
+/-- Offset of unit 11's block `j` in its region. -/
+def bd11 : ℕ → ℕ
+  | 0 => 0
+  | j + 1 => bd11 j + gap11 j
+
 /-- Size of group `u`'s region. -/
-def RS (u : ℕ) : ℕ := OFF u (nb u)
+def RS (u : ℕ) : ℕ := if u = 11 then bd11 512 else OFF u (nb u)
 
 /-- First slot of group `u`'s region (the prologue is slots `0 … 26`). -/
 def BASE (u : ℕ) : ℕ := 27 + psum RS u
 
 /-- End of the group regions. -/
-def gEnd : ℕ := 250577
+def gEnd : ℕ := 252171
 
 /-- The number of blocks (live field values) of group `u`: the live values are a contiguous prefix. -/
 def VF (u : ℕ) : ℕ := [1024, 512, 512, 512, 512, 4096, 2048, 996, 1024, 1024, 1024, 512, 1024].getD u 0
@@ -145,9 +164,13 @@ def VF (u : ℕ) : ℕ := [1024, 512, 512, 512, 512, 4096, 2048, 996, 1024, 1024
 /-- The cost band of field value `v` of group `u`. -/
 def band (u v : ℕ) : ℕ := bandIdx (A u) (nb u) v
 
+/-- The slots of the block of field value `v` of group `u`. -/
+def SL (u v : ℕ) : ℕ := if u = 11 then gap11 (pos11 v) else L u (band u v)
+
 /-- The entry slot of field value `v` of group `u`. -/
 def entryOf (u v : ℕ) : ℕ :=
-  BASE u + OFF u (band u v) + (v - A u (band u v)) * L u (band u v)
+  if u = 11 then BASE 11 + bd11 (pos11 v)
+  else BASE u + OFF u (band u v) + (v - A u (band u v)) * L u (band u v)
 
 /-- First free-chain entry, `sentinel − 68 · 96`. -/
 def baseF : ℕ := 255615
@@ -169,7 +192,7 @@ theorem BASE_zero : BASE 0 = 27 := rfl
 theorem BASE_succ (u : ℕ) : BASE (u + 1) = BASE u + RS u := by
   unfold BASE; rw [psum_succ]; ring
 
-theorem BASE_13 : BASE 13 = gEnd := by decide
+theorem BASE_13 : BASE 13 = gEnd := by decide +kernel
 
 theorem BASE_one : BASE 1 = 15869 := by decide
 
@@ -215,21 +238,68 @@ theorem band_spec {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
 theorem band_lt_17 {u v : ℕ} (hu : u < 13) (hv : v < VF u) : band u v < 18 := by
   have := (band_spec hu hv).1; have := nb_le u hu; omega
 
+theorem bd11_succ (j : ℕ) : bd11 (j + 1) = bd11 j + gap11 j := rfl
+
+theorem bd11_mono : Monotone bd11 := monotone_nat_of_le_succ fun j => by rw [bd11_succ]; omega
+
+theorem ord11_spec : ∀ j < 512, ord11 j < 512 ∧ pos11 (ord11 j) = j := by decide +kernel
+
+theorem pos11_spec : ∀ v < 512, pos11 v < 512 ∧ ord11 (pos11 v) = v := by decide +kernel
+
+theorem gap11_pos : ∀ j < 512, 5 ≤ gap11 j := by decide +kernel
+
+theorem VF_11 : VF 11 = 512 := rfl
+
+theorem SL_pos {u v : ℕ} (hu : u < 13) (hv : v < VF u) : 5 ≤ SL u v := by
+  unfold SL
+  split_ifs with h
+  · subst h; exact gap11_pos _ (pos11_spec v hv).1
+  · exact L_pos u _
+
+theorem L_le_gap11 (v : ℕ) (hv : v < 512) : L 11 (band 11 v) ≤ gap11 (pos11 v) := by
+  obtain ⟨hc, h1, h2⟩ := band_spec (u := 11) (by omega) (by rw [VF_11]; exact hv)
+  rw [A_succ] at h2
+  have hA : ∀ c < 18, A 11 c =
+      [0, 0, 2, 7, 16, 30, 50, 77, 112, 156, 210, 275, 355, 445, 512, 512, 512, 512].getD c 0 := by
+    decide +kernel
+  have key : ∀ c < 18, ∀ i < pn 11 c, L 11 c ≤ gap11 (pos11 (A 11 c + i)) := by
+    intro c hc
+    rw [hA c hc]
+    revert c
+    decide +kernel
+  have h := key (band 11 v) (by have := nb_le 11 (by omega); omega) (v - A 11 (band 11 v))
+    (by omega)
+  rwa [Nat.add_sub_cancel' h1] at h
+
+/-- Every block holds its body and control op. -/
+theorem L_le_SL {u v : ℕ} (hv : v < VF u) : L u (band u v) ≤ SL u v := by
+  unfold SL
+  split_ifs with h
+  · subst h; exact L_le_gap11 v hv
+  · exact le_rfl
+
 /-- The block of field value `v` lies inside group `u`'s region. -/
-theorem entry_region {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < L u (band u v)) :
+theorem entry_region {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < SL u v) :
     BASE u ≤ entryOf u v + i ∧ entryOf u v + i < BASE (u + 1) := by
-  obtain ⟨hc, h1, h2⟩ := band_spec hu hv
   rw [BASE_succ]
-  unfold entryOf RS
-  set c := band u v
-  have hq : v - A u c < pn u c := by rw [A_succ] at h2; omega
-  have hoff : OFF u (c + 1) ≤ OFF u (nb u) := OFF_mono u (by omega)
-  rw [OFF_succ] at hoff
-  have hm : (v - A u c) * L u c + i < pn u c * L u c := by
-    have : (v - A u c + 1) * L u c ≤ pn u c * L u c := Nat.mul_le_mul_right _ hq
-    rw [Nat.add_mul, Nat.one_mul] at this
+  by_cases h11 : u = 11
+  · subst h11
+    have hp := (pos11_spec v hv).1
+    have hm := bd11_mono (show pos11 v + 1 ≤ 512 by omega)
+    rw [bd11_succ] at hm
+    simp only [SL, entryOf, RS, if_true] at hi ⊢
     omega
-  omega
+  · obtain ⟨hc, h1, h2⟩ := band_spec hu hv
+    simp only [SL, entryOf, RS, if_neg h11] at hi ⊢
+    set c := band u v
+    have hq : v - A u c < pn u c := by rw [A_succ] at h2; omega
+    have hoff : OFF u (c + 1) ≤ OFF u (nb u) := OFF_mono u (by omega)
+    rw [OFF_succ] at hoff
+    have hm : (v - A u c) * L u c + i < pn u c * L u c := by
+      have : (v - A u c + 1) * L u c ≤ pn u c * L u c := Nat.mul_le_mul_right _ hq
+      rw [Nat.add_mul, Nat.one_mul] at this
+      omega
+    omega
 
 /-! ### The group decode -/
 
@@ -237,16 +307,31 @@ theorem entry_region {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < L u (
 def dec (s : ℕ) : ℕ × ℕ × ℕ :=
   let u := bandIdx BASE 13 s
   let o := s - BASE u
-  let c := bandIdx (OFF u) (nb u) o
-  let q := o - OFF u c
-  (u, A u c + q / L u c, q % L u c)
+  if u = 11 then
+    let j := bandIdx bd11 512 o
+    (11, ord11 j, o - bd11 j)
+  else
+    let c := bandIdx (OFF u) (nb u) o
+    let q := o - OFF u c
+    (u, A u c + q / L u c, q % L u c)
 
 /-- Slots of a block decode to it. -/
-theorem dec_entry {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < L u (band u v)) :
+theorem dec_entry {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < SL u v) :
     dec (entryOf u v + i) = (u, v, i) := by
   obtain ⟨hr1, hr2⟩ := entry_region hu hv hi
-  obtain ⟨hc, h1, h2⟩ := band_spec hu hv
   have hU : bandIdx BASE 13 (entryOf u v + i) = u := bandIdx_eq BASE_mono hu hr1 hr2
+  by_cases h11 : u = 11
+  · subst h11
+    obtain ⟨hp, hop⟩ := pos11_spec v hv
+    simp only [SL, if_true] at hi
+    have ho : entryOf 11 v + i - BASE 11 = bd11 (pos11 v) + i := by
+      simp only [entryOf, if_true]; omega
+    have hJ : bandIdx bd11 512 (bd11 (pos11 v) + i) = pos11 v :=
+      bandIdx_eq bd11_mono hp (by omega) (by rw [bd11_succ]; omega)
+    unfold dec
+    simp only [hU, ↓reduceIte, ho, hJ, hop, Nat.add_sub_cancel_left]
+  obtain ⟨hc, h1, h2⟩ := band_spec hu hv
+  simp only [SL, if_neg h11] at hi
   set c := band u v with hcdef
   have hq : v - A u c < pn u c := by rw [A_succ] at h2; omega
   have hm : (v - A u c) * L u c + i < pn u c * L u c := by
@@ -254,15 +339,15 @@ theorem dec_entry {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < L u (ban
     rw [Nat.add_mul, Nat.one_mul] at this
     omega
   have ho : entryOf u v + i - BASE u = OFF u c + ((v - A u c) * L u c + i) := by
-    unfold entryOf; rw [← hcdef]; omega
+    unfold entryOf; rw [if_neg h11, ← hcdef]; omega
   have hC : bandIdx (OFF u) (nb u) (entryOf u v + i - BASE u) = c := by
     rw [ho]
     refine bandIdx_eq (OFF_mono u) hc (by omega) ?_
     rw [OFF_succ]; omega
   have hLp := L_pos u c
   unfold dec
-  simp only
-  rw [hU, hC, ho, Nat.add_sub_cancel_left]
+  simp only [hU, if_neg h11]
+  rw [hC, ho, Nat.add_sub_cancel_left]
   have hdiv : ((v - A u c) * L u c + i) / L u c = v - A u c := by
     rw [Nat.add_comm, Nat.add_mul_div_right _ _ (by omega), Nat.div_eq_of_lt hi, Nat.zero_add]
   have hmod : ((v - A u c) * L u c + i) % L u c = i := by
@@ -274,13 +359,30 @@ theorem dec_entry {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < L u (ban
 /-- Every group slot is a slot of a block of a field value in range. -/
 theorem dec_spec {s : ℕ} (h1 : 27 ≤ s) (h2 : s < gEnd) :
     (dec s).1 < 13 ∧ (dec s).2.1 < VF (dec s).1 ∧
-      (dec s).2.2 < L (dec s).1 (band (dec s).1 (dec s).2.1) ∧
+      (dec s).2.2 < SL (dec s).1 (dec s).2.1 ∧
       s = entryOf (dec s).1 (dec s).2.1 + (dec s).2.2 := by
   obtain ⟨hu, hb1, hb2⟩ := bandIdx_spec BASE_mono (N := 13) (o := s) (by rw [BASE_zero]; exact h1)
     (by rw [BASE_13]; exact h2)
+  by_cases h11 : bandIdx BASE 13 s = 11
+  · rw [h11] at hb1 hb2
+    have hRS : s - BASE 11 < bd11 512 := by
+      have := BASE_succ 11; simp only [RS, if_true] at this; omega
+    obtain ⟨hj, hj1, hj2⟩ := bandIdx_spec bd11_mono (N := 512) (o := s - BASE 11)
+      (Nat.zero_le _) hRS
+    obtain ⟨ho, hpo⟩ := ord11_spec _ hj
+    rw [bd11_succ] at hj2
+    have hd : dec s = (11, ord11 (bandIdx bd11 512 (s - BASE 11)),
+        s - BASE 11 - bd11 (bandIdx bd11 512 (s - BASE 11))) := by
+      unfold dec; simp only [h11, ↓reduceIte]
+    rw [hd]
+    dsimp only
+    refine ⟨by decide, ?_, ?_, ?_⟩
+    · rw [VF_11]; exact ho
+    · simp only [SL, if_true, hpo]; omega
+    · simp only [entryOf, if_true, hpo]; omega
   set u := bandIdx BASE 13 s with hudef
   have hRS : s - BASE u < OFF u (nb u) := by
-    have := BASE_succ u; unfold RS at this; omega
+    have := BASE_succ u; simp only [RS, if_neg h11] at this; omega
   obtain ⟨hc, hc1, hc2⟩ := bandIdx_spec (OFF_mono u) (N := nb u) (o := s - BASE u)
     (Nat.zero_le _) hRS
   set c := bandIdx (OFF u) (nb u) (s - BASE u) with hcdef
@@ -296,12 +398,12 @@ theorem dec_spec {s : ℕ} (h1 : 27 ≤ s) (h2 : s < gEnd) :
   have hvlt : A u c + q / L u c < VF u := by
     have := A_mono u (show c + 1 ≤ nb u by omega)
     rw [A_full u hu] at this; omega
-  have hd : dec s = (u, A u c + q / L u c, q % L u c) := rfl
+  have hd : dec s = (u, A u c + q / L u c, q % L u c) := by
+    unfold dec; simp only [← hudef, if_neg h11]; rfl
   rw [hd]
   refine ⟨hu, hvlt, ?_, ?_⟩
-  · simp only; rw [hband]; exact Nat.mod_lt _ (by omega)
-  · simp only
-    unfold entryOf
+  · simp only [SL, if_neg h11]; rw [hband]; exact Nat.mod_lt _ (by omega)
+  · simp only [entryOf, if_neg h11]
     rw [hband, Nat.add_sub_cancel_left]
     have := Nat.div_add_mod q (L u c)
     rw [mul_comm] at this
@@ -310,18 +412,18 @@ theorem dec_spec {s : ℕ} (h1 : 27 ≤ s) (h2 : s < gEnd) :
 /-- Distinct field values have distinct entries. -/
 theorem entryOf_inj {u v v' : ℕ} (hu : u < 13) (hv : v < VF u) (hv' : v' < VF u)
     (h : entryOf u v = entryOf u v') : v = v' := by
-  have h1 := dec_entry hu hv (i := 0) (by have := L_pos u (band u v); omega)
-  have h2 := dec_entry hu hv' (i := 0) (by have := L_pos u (band u v'); omega)
+  have h1 := dec_entry hu hv (i := 0) (by have := SL_pos hu hv; omega)
+  have h2 := dec_entry hu hv' (i := 0) (by have := SL_pos hu hv'; omega)
   rw [Nat.add_zero] at h1 h2
   rw [h] at h1
   rw [h1] at h2
   exact (Prod.mk.inj (Prod.mk.inj h2).2).1
 
 theorem entryOf_ge {u v : ℕ} (hu : u < 13) (hv : v < VF u) : 27 ≤ entryOf u v := by
-  have := (entry_region hu hv (i := 0) (by have := L_pos u (band u v); omega)).1
+  have := (entry_region hu hv (i := 0) (by have := SL_pos hu hv; omega)).1
   have := BASE_mono (Nat.zero_le u); rw [BASE_zero] at this; omega
 
-theorem block_lt_gEnd {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < L u (band u v)) :
+theorem block_lt_gEnd {u v i : ℕ} (hu : u < 13) (hv : v < VF u) (hi : i < SL u v) :
     entryOf u v + i < gEnd := by
   have := (entry_region hu hv hi).2
   have := BASE_mono (show u + 1 ≤ 13 by omega); rw [BASE_13] at this; omega
@@ -414,8 +516,9 @@ def frame (f : ℕ) : K := gpow (frameExp f)
 /-- The frame constant of frame `f`; `frameV r` is also the metadata of root call `r`. -/
 def frameV (f : ℕ) : E := ofK (frame f)
 
-/-- The tie pattern of field value `v` of group `u`. -/
-def fpat (u v : ℕ) : E := natV (v * 2 ^ POS u)
+/-- The tie pattern of field value `v` of group `u`: the field layout rotated left by 47 bits,
+so that unit 11's field lands on the bits its landing hint carries (`IndexBits`). -/
+def fpat (u v : ℕ) : E := cellOfBits ((BitVec.ofNat 128 (v * 2 ^ POS u)).rotateLeft 47)
 
 theorem cV_zero : cV 0 = oneV := by unfold cV oneV; rw [Nat.mul_zero, gpow_zero']
 
@@ -454,10 +557,10 @@ def bindingDeduction (u : ℕ) : ℕ := if (1 ≤ u ∧ u ≤ 4) ∨ u = 7 then 
 def copyCount (T : Tab) (u v : ℕ) : ℕ :=
   ((List.range (gk u)).map (fun i => if copied u i ∧ T u v i = 0 then 1 else 0)).sum
 def machineOrdinary (T : Tab) (u v : ℕ) : ℕ :=
-  (if u ≠ 0 ∧ v ≠ 0 then 2 else 1) + copyCount T u v + 3 +
+  (if u ≠ 0 ∧ u ≠ 11 ∧ v ≠ 0 then 2 else 1) + copyCount T u v + 3 +
     (if 14 < cost T u v - bindingDeduction u then 1 else 0)
 
-theorem packed_group_budget : (∑ u ∈ Finset.range 13, (gcu u - 1)) = 85 := by decide
+theorem packed_group_budget : (∑ u ∈ Finset.range 13, (gcu u - 1)) = 84 := by decide
 
 theorem packed_raw_blocks : (∑ u ∈ Finset.range 13, VF u) = 14820 := by decide
 
@@ -477,8 +580,8 @@ structure Tab.Hyp (T : Tab) : Prop where
 /-- The free chain's digit: `85 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
 def freeDigit (c : ℕ) : ℕ := if c ≤ 85 ∧ 85 - c ≤ 63 then 85 - c else 0
 
-/-- Group `u`'s field of the index. -/
-def field (u : ℕ) (I : Word) : ℕ := digitW gb I.toNat u
+/-- Group `u`'s field of the index, read after removing unit 11's hint mask. -/
+def field (u : ℕ) (I : Word) : ℕ := digitW gb (unmask I).toNat u
 
 /-- The total group cost of an index. -/
 def gcost (T : Tab) (I : Word) : ℕ := ((List.range 13).map (fun u => cost T u (field u I))).sum

@@ -4,7 +4,7 @@ import Submissions.UpperLeanIsa.FourMachineDecode
 /-! The fixed affine-frame bytecode. Each block starts with its first
 useful instruction; packed group blocks reserve exactly one control slot.
 `AffineMachine` combines the domain-separated codec and this machine in the
-1095-cycle certificate. -/
+1094-cycle certificate. -/
 
 namespace OptimalOTS.AffineVM
 
@@ -53,7 +53,7 @@ inductive Place
   | body (stage value offset : ℕ)
   | trap
 
-/-- The packed prefix ends at 250577; the free-chain region keeps its stride. -/
+/-- The group regions end at 252171; the free-chain region keeps its stride. -/
 def place (s : ℕ) : Place :=
   if s < 27 then .initial s
   else if s < gEnd then .body ((dec s).1 + 1) (dec s).2.1 (dec s).2.2

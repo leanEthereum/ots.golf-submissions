@@ -1,30 +1,25 @@
-# 1095-cycle leanISA construction
+# 1094-cycle leanISA construction
 
-`Solution.lean` exports the complete `Submission.Certificate 1095` and its
-seeded-row bound. The score is `105 + 87 × 10 + 120 = 1095`, with 192 executed
-instructions and 327680 seeded rows. The full 128-bit nonce remains within the
-5504-bit signature budget.
+This construction combines two independent one-cycle savings from the 1096 machine:
+our centered checksum removes a constant initialization; Luc's unit-11 landing-hint
+tie removes an index-pattern initialization. The proved score is
+`104 + 87 × 10 + 120 = 1094` cycles, with 191 instructions and 327680 seeded rows.
 
-Split alias multiplicities, mixed four- and five-child binding packets, four
-internal child chains, and a linear security potential support layer 85.
-All 440 security tiers are connected to exact counts of the actual codec.
+A bijective index unmasking preserves the exact 440 security tiers. The signature
+remains 5504 bits, including the full 128-bit nonce. The competition's security,
+memory-size and resource requirements are unchanged.
 
-The certificate covers admissibility, 127-bit strong security, bytecode validity,
-honest-prover equivalence, soundness against arbitrary committed images and all
-completing executions. See [NOTES.md](NOTES.md) for the proof map and credits.
-
-The additional cycle is saved by centering the checksum, using a fixed free-stage
-frame, and reusing initialized hash constants. Exactly one SET is removed;
-padding remains counted. Clean build, exact challenge comparison, allowed-axiom
-audit and fresh kernel replay all pass. The measured local build/export/check
-stages total 534.3 seconds (clean build 273.2 s; comparison/replay 241.8 s).
-The official runner fails closed here because Landlock is unavailable; hosted
-timing and acceptance remain unverified. No optimality claim is made.
+`Solution.lean` exports the full `Submission.Certificate 1094` and seeded-row bound.
+It covers admissibility, strong security, bytecode validity, honest-prover
+equivalence, arbitrary committed images and all completing executions.
+Clean build, exact challenge comparison, allowed-axiom checking, six arithmetic
+regressions and fresh Lean kernel replay all pass. The measured build/export/check
+stages total 524.759 seconds locally. The official runner fails closed here
+because Landlock is unavailable; hosted verification remains pending.
+No optimality claim is made. See [NOTES.md](NOTES.md) for details and full credits.
 
 Build with the pinned dependencies:
 
 ```sh
 lake build Submissions.UpperLeanIsa.Solution
 ```
-
-The 1096-cycle fallback remains at commit `055dfe9`; the 1110 ancestor is `0c066e7`.

@@ -1,21 +1,52 @@
-# 1095-cycle split-alias leanISA construction
+# 1094-cycle split-alias leanISA construction
 
-The complete `Submission.Certificate 1095` passes a clean local build, exact
-challenge comparison, allowed-axiom checking and fresh Lean kernel replay.
-The competition model and admission requirements are unchanged. These are
-local checks, not a hosted verdict. Historical 1096 measurements are marked below.
+This construction composes the centered-checksum revision of Nicolas Consigny and Codex
+with Luc's verified PR #66 landing-hint tie (assisted by Claude Opus 5.5).
+The competition model and admission requirements are unchanged.
+The complete combined proof passes clean build, exact challenge comparison,
+allowed-axiom checking and fresh kernel replay. This is not a hosted verdict.
 
 ## Result and construction
 
-The proved bound is `105 + 87 * 10 + 120 = 1095` cycles, compared with the complete
-1110-cycle ancestor. Every completing run has 192 instructions and 975 execution
-cycles before the unchanged 120-cycle public-boundary surcharge. The signature
-still contains 42 disclosed 128-bit words and the full 128-bit nonce: 5504 bits.
+The proved bound is `104 + 87 * 10 + 120 = 1094` cycles: 191 instructions
+and 974 execution cycles before the unchanged 120-cycle public-boundary surcharge.
+The two changes each remove one ordinary instruction from the 1096 ancestor.
+
+### 1095: unit 11 tied by its landing hint
+
+The index tie adds one pattern per group into an accumulator. A group normally writes its
+pattern with `setc` and adds it with `xor`: two instructions. Unit 11 uses one instruction,
+`xor(acc_10, H_12, acc_11)`. `H_12` is the landing hint of its dispatch, the word `g ^ e` of
+the block entry `e`. Its budget drops from 6 to 5 ordinary instructions (`gcu 11 = 6`).
+
+- Placement. Unit 11's 512 blocks are not packed by cost band. Block `v` starts at a slot `e`
+  where bits 28..36 of `g ^ e` equal `v`. A greedy scan from the region start places all
+  512 blocks; the slots between a control op and the next entry are trap pads. The region
+  uses 9587 slots, and the group regions end at 252171, below the free blocks at 255615.
+  The packed tables `gap11N`, `ord11N` and `pos11N` (`FourMachineLayout`) give the block spans
+  and order. `HintTie.hint11_chain` checks `g ^ e` of the first block, then the 511 products
+  `g ^ e_(j+1) = g ^ e_j · g ^ gap11 j` in slot order.
+- Index layout. The other tie patterns are the field layout rotated left by 47 bits, which
+  moves unit 11's field (bits 109..117) onto bits 28..36. The rest of `g ^ e` is the fixed
+  mask `hintMask v`. So the final accumulator is `rotl47 D ^^^ hintMask (field 11 of D)`,
+  where `D` is the field word.
+- Decoding. `IndexBits.unmask` removes the mask selected by bits 28..36 and rotates back.
+  It is a bijection (`remask` is its inverse), so `card_indexSlice`, and with it every class
+  count, tier and probability of the 1096 schedule, is unchanged. The effective index is
+  bit 1..127 of `unmask` of the raw 128-bit slice.
+- Proof map. `HintTie` proves the tie algebra (`accBits_step`, `accBits_11`,
+  `unmask_accBits`, `accBits_digits`). `AffineValues.acc_eq` uses the landing facts for the
+  unit-11 step. `AffineSound` reads the fields through `unmask`. The honest prover writes
+  `accBits` into the accumulator cells.
+
+### Combined construction
+
+The signature still contains 42 disclosed 128-bit words and the full 128-bit nonce: 5504 bits.
 The effective index has 127 bits. Code and memory have respectively 2^18 and
 2^16 rows, totaling 327680.
 
-The fifteen-cycle improvement is one fewer chain hash (ten cycles) and five
-fewer ordinary instructions. It combines four changes:
+The sixteen-cycle improvement over 1110 is one fewer chain hash (ten cycles)
+and six fewer ordinary instructions. It combines five changes:
 
 1. A sharper linear security potential permits layer 85.
 2. Mixed four-/five-child binding packets keep chains 10, 11, 36 and 41 internal
@@ -25,6 +56,8 @@ fewer ordinary instructions. It combines four changes:
    accepted indices while respecting each actual block's ordinary-operation budget.
 4. Centering the checksum and replacing the other uses of the fourteenth power
    remove one initialization, with group lengths and budgets unchanged.
+5. Reusing the unit-11 landing hint removes one index-pattern initialization;
+   a bijective unmasking preserves all exact security counts.
 
 Eight binding groups replace the earlier nine. Their visible parent prefixes
 are positive, so each accepted tuple binds its children. Hidden coordinates are
@@ -105,8 +138,8 @@ targets. The fixed frame at target zero is zero and its first read fails;
 the proof does not assume this frame nonzero. Correct free entries are positive,
 and the halt frame differs from ONE. These guards cover every admitted memory size.
 
-The packed prefix ends at slot 250577; free blocks begin at 255615, leaving
-5038 slots. There are 14820 raw group blocks. Group 7 has 996 live field codes;
+In the 1096 layout the packed prefix ended at slot 250577; with unit 11's hint placement the
+group regions end at 252171, and free blocks begin at 255615. There are 14820 raw group blocks. Group 7 has 996 live field codes;
 the remaining 28 codes trap. The low raw bit of the first field is ignored by
 the 127-bit abstract index but remains pinned by the complete 128-bit index tie.
 
@@ -119,7 +152,36 @@ including zero-step internal reads, reversed checksum MULs and counted padding.
 
 ## Validation and proof engineering
 
-### 1095 proof port (2026-09-28)
+### Combined 1094 proof port (2026-09-28)
+
+A clean build with no UpperLeanIsa artifacts passes all 8963 jobs in 286.330 s.
+The rendered challenge compiles in 2.102 s and exports in 4.980 s. The clean
+solution export takes 10.701 s and is byte-identical to the initial build's
+export. Exact challenge/primitive comparison, exported dependency-axiom checking,
+and fresh kernel replay of 62851 declarations pass in 220.646 s, including
+177.262 s inside kernel replay. The five measured stages total 524.759 s
+(8 minutes 45 seconds). Only `propext`, `Classical.choice` and `Quot.sound`
+occur in the permitted exported axiom closure.
+
+Peak sampled process-tree proportional memory across these stages is 12.054 GiB;
+the clean build emits 33797 bytes. These are standalone local measurements,
+not hosted cgroup measurements or a guaranteed hosted runtime. The flat root
+has 137 files and passes the pinned source policy. All Lean-source hashes stay
+fixed through both builds, both solution exports and kernel replay.
+
+Six independent arithmetic regressions pass: all 512 hint placements and 511
+power transitions, order/position permutations, index round trips for all mask
+selectors and the other-bit basis contexts, honest accumulators and the ignored
+raw bit, all 14820 raw block budgets, the 845 retained padding instructions,
+centered checksum equations, and deliberate corruption checks. The universal
+claims are proved in Lean; these finite regressions are supplementary.
+
+The official driver refuses to start because this kernel lacks Landlock.
+No sandbox requirement is bypassed. Hosted verification remains required.
+The trusted formal code, policy and verifier are identical between the local
+contract pin `ca67ddc3` and PR #66's `8b140a99`; their diff only changes service files.
+
+### Historical centered-checksum 1095 proof port (2026-09-28)
 
 The final 1095 sources pass a build with no prior UpperLeanIsa artifacts
 (8962 jobs, 273.201 s). The rendered challenge compiles in 2.250 s; challenge
@@ -198,7 +260,7 @@ hosted verdict. Submission requests the official hosted check.
 
 ## Failed approaches and next work
 
-Earlier 1094/sub-1095 candidates failed exact security checks; removing padding
+Earlier table-only 1094/sub-1095 candidates failed exact security checks; removing padding
 alone did not suffice. Uniform alias multiplicities by cost restricted the
 search unnecessarily. Rotating packets alone does not separate domains on
 attacker-chosen child values. None of these failures is an impossibility proof.
@@ -207,6 +269,14 @@ Further savings must count every initialization, copy, extra multiplication,
 jump, length check and boundary charge. Useful next targets are a joint search
 over packet arity, internal-child placement and split aliases, followed by exact
 security and code-size screening. A still-lower estimate is not a certificate.
+
+The most direct new research target is another landing-hint tie. The present
+placement consumes 1594 additional code slots and leaves 3444 slots before the
+fixed free region. Two ties cannot simply be superposed: each hint's mask can
+alter the other's selector bits. A second saving requires a joint reversible
+encoding (for example, a triangular mask construction), exact index-fiber
+preservation, and a layout fitting the remaining space. Moving the free region
+would additionally require regenerating its fixed-frame certificates.
 
 ## Credits
 
@@ -252,3 +322,9 @@ security and code-size screening. A still-lower estimate is not a certificate.
 - The mixed-packet split-alias layer-85 construction, linear security argument, exact multiplicative counting, and 1096 proof port were prepared with Codex using parallel agents.
 - The centered-checksum and fixed-free-frame 1095 revision, exact landing certificates,
   and full machine proof port were prepared with Codex using parallel agents.
+
+- Luc (`lucemans`), assisted by Claude Opus 5.5, contributed the unit-11 landing-hint
+  tie, its placement and index unmasking in verified [PR #66](https://github.com/leanEthereum/ots.golf-submissions/pull/66),
+  checked commit `ac71030479e8eced8c762d4d6c0891a00c1a31c8`.
+- The composition of the two independent 1095 improvements into this 1094 construction
+  was prepared with Codex using parallel agents.

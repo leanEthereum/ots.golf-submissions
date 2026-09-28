@@ -53,7 +53,7 @@ theorem hc_t {u : ℕ} (hu : u < 13) :
 
 theorem hc_acc {u : ℕ} (hu : u < 12) :
     hcell T bits y0 A RA (accCell u) =
-      natV (ofDigitsW gb (fun w => hxs T (idxOf y0) (w + 1)) (u + 1)) := by
+      cellOfBits (accBits (fun w => hxs T (idxOf y0) (w + 1)) u) := by
   rw [show accCell u = 120 + u from if_neg (by omega)]; unfold hcell; hsimp; congr 2; omega
 
 theorem hc_h {r : ℕ} (hr : r < 14) :
@@ -141,7 +141,7 @@ theorem canon_topPair (T : Tab) (bits : List Bool) (y0 : BitVec 256)
 theorem canon_gpV (T : Tab) (I : Word) (u : ℕ) : IsCanonical128 (gpV T I u) := canon_ofK _
 theorem canon_gpTmpV (T : Tab) (I : Word) (u : ℕ) : IsCanonical128 (gpTmpV T I u) := canon_ofK _
 theorem canon_cV (T : Tab) (c : ℕ) : IsCanonical128 (cV T c) := canon_ofK _
-theorem canon_fpat (u v : ℕ) : IsCanonical128 (fpat u v) := canon_natV _
+theorem canon_fpat (u v : ℕ) : IsCanonical128 (fpat u v) := canon_cellOfBits _
 theorem canon_oneV : IsCanonical128 oneV := canon_ofK _
 theorem canon_gV (T : Tab) : IsCanonical128 (gV T) := canon_ofK _
 

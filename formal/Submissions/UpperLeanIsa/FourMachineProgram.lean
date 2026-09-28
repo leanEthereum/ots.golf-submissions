@@ -2,7 +2,8 @@ import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.LengthFrame
 import Submissions.UpperLeanIsa.LengthGate128
 
-/-! Packed group bodies and local cell-instruction algebra for the centered-checksum machine.
+/-! Packed group bodies and local cell-instruction algebra for the centered-checksum,
+landing-hint-tie machine.
 The active bytecode/compiler is in `AffineProgram`; legacy entry constructors
 remain only as reusable instruction algebra, not as the certified program. -/
 
@@ -368,9 +369,11 @@ def fbody (s : ℕ) : List CInstr :=
   chainOps topCell 0 s tfCell ++ [copy (if s = 0 then wCell 0 else tfCell) tfCell,
     .mul (hCell 1) gCell (h1Cell 1)]
 
-/-- The tie of field value `v` of group `u`. -/
+/-- The tie of field value `v` of group `u`. Unit 11's field is carried by its landing hint
+`H_12 = g ^ e`, whose bits 28..36 are `v` (`IndexBits`). -/
 def tie (u v : ℕ) : List CInstr :=
   if u = 0 then [.setc (accCell 0) (fpat 0 v)]
+  else if u = 11 then [.xor (accCell 10) (hCell 12) (accCell 11)]
   else if v = 0 then [copy (accCell (u - 1)) (accCell u)]
   else [.setc (tCell u) (fpat u v), .xor (accCell (u - 1)) (tCell u) (accCell u)]
 

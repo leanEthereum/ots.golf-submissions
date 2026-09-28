@@ -225,17 +225,15 @@ theorem honest_copyW {k c : ℕ} (hk : k < 42) (h0 : hd T (y0F P f pk m bits) k 
 /-- The honest accumulator after group `u`. -/
 theorem honest_acc {u : ℕ} (hu : u < 13) :
     hv P T f pk m bits (accCell u) =
-      natV (ofDigitsW gb (fun w => XF P T f pk m bits (w + 1)) (u + 1)) := by
+      cellOfBits (accBits (fun w => XF P T f pk m bits (w + 1)) u) := by
   by_cases h12 : u < 12
   · exact hv_accl h12
   · obtain rfl : u = 12 := by omega
     rw [show accCell 12 = idxCell from rfl, hv_idx]
-    have hfun : (fun w => XF P T f pk m bits (w + 1)) = digitW gb (IF P f pk m bits).toNat := by
+    have hfun : (fun w => XF P T f pk m bits (w + 1)) =
+        fun w => digitW gb (unmask (IF P f pk m bits)).toNat w := by
       funext w; show hxs T _ (w + 1) = _; rw [hxs_succ]; rfl
-    rw [hfun, show 12 + 1 = 13 from rfl,
-      ofDigitsW_digitW gb _ 13 (by rw [show posW gb 13 = 128 from POS_13]; exact BitVec.isLt _)]
-    show cellOfBits _ = cellOfBits _
-    rw [BitVec.ofNat_toNat]
+    rw [hfun, accBits_digits]
     rfl
 
 end
