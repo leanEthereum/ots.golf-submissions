@@ -1,3 +1,4 @@
+import Submissions.UpperLeanIsa.GenOrderFast
 import OptimalOTS.LeanIsa
 
 /-!
@@ -27,7 +28,7 @@ theorem factor_sixteen : costFactor 16 = g := by
   have he : stride * 16 % (2 ^ 64 - 1) = 1 := by norm_num [stride]
   calc
     costFactor 16 = gpow ((stride * 16) % (2 ^ 64 - 1)) := by
-      rw [costFactor, ← orderOf_g]
+      rw [costFactor, ← OptimalOTS.GenFast.orderOf_g]
       exact (pow_mod_orderOf g (stride * 16)).symm
     _ = g := by rw [he]; exact pow_one g
 
@@ -40,7 +41,7 @@ theorem factor_injective {a b : ℕ} (ha : a ≤ 300) (hb : b ≤ 300)
     (h : costFactor a = costFactor b) : a = b := by
   have hh := congrArg (fun x : K => x ^ 16) h
   rw [factor_pow_sixteen, factor_pow_sixteen] at hh
-  exact gpow_injOn (Set.mem_Iio.mpr (by omega)) (Set.mem_Iio.mpr (by omega)) hh
+  exact OptimalOTS.GenFast.gpow_injOn (Set.mem_Iio.mpr (by omega)) (Set.mem_Iio.mpr (by omega)) hh
 
 /-- The free block seeds this value; the final product is pinned to the halt address. -/
 def initialProduct (layer s : ℕ) : K :=

@@ -1,6 +1,7 @@
 import Submissions.UpperLeanIsa.SplitTierBridge
 import Submissions.UpperLeanIsa.SplitDP
 import Submissions.UpperLeanIsa.FourChildNumeric
+import Submissions.UpperLeanIsa.ListCert
 
 set_option maxRecDepth 100000
 set_option linter.constructorNameAsVariable false
@@ -15,10 +16,19 @@ theorem tier_keys : SplitDP.keys13 = SplitNumeric.tierA := by decide +kernel
 
 theorem tier_size : SplitDP.keys13.length = 440 := by decide
 
-theorem tier_distinct : SplitDP.keys13.Nodup := by decide +kernel
+theorem tier_distinct : SplitDP.keys13.Nodup := by
+  rw [tier_keys]; exact ListCert.ascB_nodup SplitNumeric.tierA_asc
+
+/-- One linear list equality: the window counts are the pointwise tier products. -/
+theorem WL_eq : SplitDP.WL = SplitNumeric.tierN.zipWith (· * ·) SplitNumeric.tierA := by
+  decide +kernel
 
 theorem tier_counts : ∀ t < 440,
-    SplitDP.WL.getD t 0 = SplitNumeric.tN t * SplitNumeric.tA t := by decide +kernel
+    SplitDP.WL.getD t 0 = SplitNumeric.tN t * SplitNumeric.tA t := by
+  intro t ht
+  rw [WL_eq, ListCert.getD_zipWith (by rw [SplitNumeric.tierN_length]; exact ht)
+    (by rw [SplitNumeric.tierA_length]; exact ht)]
+  rfl
 
 theorem tier_window_length : SplitDP.WL.length ≤ SplitDP.keys13.length := by decide
 

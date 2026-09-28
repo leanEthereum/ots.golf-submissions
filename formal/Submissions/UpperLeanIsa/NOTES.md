@@ -99,6 +99,25 @@ including zero-step internal reads and both checksum multiplications.
 
 ## Validation and proof engineering
 
+### Check-time engineering pass (2026-09-28)
+
+The exported statements, the program, the tables and the claim are unchanged;
+only proof terms and module structure were reworked so that the hosted sandbox
+(build + lean4export + kernel replay under `RuntimeMaxSec=1200`) has margin.
+GF(2^64) products certified by `decide +kernel` (about 10,500 of them, roughly
+20 ms each in replay) were replaced by structural Bool/Nat-primitive checks
+(`BF64Fast`, `GenOrderFast`); the serial `SplitDPStage*` dynamic-program chain was
+replaced by a packed certificate (`SplitPack`, `SplitContraction`, `SplitDP`); the
+length-power and log-value tables use `rfl`/linear Bool scans instead of
+`decide`; and the `SplitNumeric`/`AffineCodec`/`FourChildTier` checks use
+certified scans (`ListCert`). Measured on an idle host: clean build 203.5 s
+(peak PSS 12.96 GB, was 423.7 s / 18.75 GB), Solution export 10.4 s (288 MB),
+CheckExports replay 117.3 s of which kernel replay 74.6 s (was 743.2 s / 695.6 s).
+An independent structural walk over the old and new lean4export closures of
+`submission`, `certificate` and `seeded_rows` found 3656 constants in each and
+no differences. These are local measurements, not a hosted verdict.
+
+
 The complete certificate and seeded-row bound pass a clean build with no prior
 submission artifacts (8968 jobs, 423.679 seconds). Exact comparison against the
 rendered 1096 challenge and its primitive declarations passes. The exported

@@ -22,7 +22,7 @@ def ordG : ℕ := 18446744073709551615
 theorem ordG_eq : ordG = 2 ^ 64 - 1 := by norm_num [ordG]
 
 theorem gpow_mod (n : ℕ) : gpow (n % ordG) = gpow n := by
-  rw [ordG_eq, ← orderOf_g]; exact pow_mod_orderOf g n
+  rw [ordG_eq, ← OptimalOTS.GenFast.orderOf_g]; exact pow_mod_orderOf g n
 
 theorem mod_ord_of_lt {n : ℕ} (h : n < ordG) : n % ordG = n := Nat.mod_eq_of_lt h
 
@@ -37,7 +37,7 @@ theorem g_mul_gpow (k : ℕ) : g * gpow k = gpow (k + 1) := (gpow_succ k).symm
 
 /-- `gpow` is injective below the group order. -/
 theorem gpow_inj {a b : ℕ} (ha : a < 2 ^ 64 - 1) (hb : b < 2 ^ 64 - 1) (h : gpow a = gpow b) :
-    a = b := gpow_injOn (Set.mem_Iio.mpr ha) (Set.mem_Iio.mpr hb) h
+    a = b := OptimalOTS.GenFast.gpow_injOn (Set.mem_Iio.mpr ha) (Set.mem_Iio.mpr hb) h
 
 /-! ## Partial sums and bands -/
 

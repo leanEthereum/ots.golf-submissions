@@ -14,9 +14,11 @@ honest-prover equivalence, soundness against arbitrary committed images and all
 completing executions. See [NOTES.md](NOTES.md) for the proof map and credits.
 
 The complete proof passes a clean local build, exact challenge comparison,
-permitted-axiom checks and fresh Lean kernel replay. The measured build/export/
-check stages total about 19 minutes 47 seconds, close to the 20-minute limit;
-hosted timing and acceptance remain unverified. No optimality claim is made.
+permitted-axiom checks and fresh Lean kernel replay. After the check-time
+engineering pass of 2026-09-28 (see NOTES.md), the measured build/export/check
+stages total about 339 seconds locally (build 203.5 s, export 10.4 s, replay
+117.3 s), down from about 19 minutes 47 seconds; hosted timing and acceptance
+remain unverified. No optimality claim is made.
 
 Build with the pinned dependencies:
 

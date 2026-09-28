@@ -13513,19 +13513,126 @@ def intervalsOK : ℕ → List Entry → Bool
   | _, [] => true
   | start, e :: es => start == e.2.1 && intervalsOK (start + e.2.2) es
 def tableOK (u : ℕ) : Bool := (entries u).all (entryOK u) && intervalsOK 0 (entries u)
-theorem table0_ok : tableOK 0 = true := by decide +kernel
-theorem table1_ok : tableOK 1 = true := by decide +kernel
-theorem table2_ok : tableOK 2 = true := by decide +kernel
-theorem table3_ok : tableOK 3 = true := by decide +kernel
-theorem table4_ok : tableOK 4 = true := by decide +kernel
-theorem table5_ok : tableOK 5 = true := by decide +kernel
-theorem table6_ok : tableOK 6 = true := by decide +kernel
-theorem table7_ok : tableOK 7 = true := by decide +kernel
-theorem table8_ok : tableOK 8 = true := by decide +kernel
-theorem table9_ok : tableOK 9 = true := by decide +kernel
-theorem table10_ok : tableOK 10 = true := by decide +kernel
-theorem table11_ok : tableOK 11 = true := by decide +kernel
-theorem table12_ok : tableOK 12 = true := by decide +kernel
+
+/-! ### Kernel-cheap table checker
+
+The checks below are direct `List.rec` passes (no `brecOn`) over raw `Nat.ble`/`Nat.beq`
+comparisons, with the per-table constants passed once as arguments. Each is proved equal to
+the original `Bool` check generically, so only the literal tables are evaluated. -/
+
+theorem ble_eq_decide (a b : ℕ) : Nat.ble a b = decide (a ≤ b) :=
+  Bool.eq_iff_iff.2 (by simp [Nat.ble_eq])
+theorem blt_eq_decide (a b : ℕ) : Nat.blt a b = decide (a < b) :=
+  Bool.eq_iff_iff.2 (by simp [Nat.blt_eq])
+theorem beq_eq_beq (a b : ℕ) : Nat.beq a b = (a == b) :=
+  Bool.eq_iff_iff.2 (by simp [Nat.beq_eq])
+theorem beq_eq_decide (a b : ℕ) : Nat.beq a b = decide (a = b) :=
+  Bool.eq_iff_iff.2 (by simp [Nat.beq_eq])
+theorem natBEq_eq_decide (a b : ℕ) : (a == b) = decide (a = b) :=
+  Bool.eq_iff_iff.2 (by simp)
+
+/-- `t.sum` as a direct recursor pass. -/
+noncomputable def sumR (t : List ℕ) : ℕ := List.rec 0 (fun x _ ih => Nat.add x ih) t
+/-- `zeroCount (t.take k)` as a direct recursor pass. -/
+noncomputable def zcR (t : List ℕ) : ℕ → ℕ :=
+  List.rec (fun _ => 0)
+    (fun x _ ih k => Nat.casesOn (motive := fun _ => ℕ) k 0
+      (fun k => Nat.add (bif Nat.beq x 0 then 1 else 0) (ih k))) t
+/-- `(t.take k).any (· != 0)` as a direct recursor pass. -/
+noncomputable def anyR (t : List ℕ) : ℕ → Bool :=
+  List.rec (fun _ => false)
+    (fun x _ ih k => Nat.casesOn (motive := fun _ => Bool) k false
+      (fun k => !Nat.beq x 0 || ih k)) t
+/-- `t.all (· ≤ 15)` as a direct recursor pass. -/
+noncomputable def allR (t : List ℕ) : Bool := List.rec true (fun x _ ih => Nat.ble x 15 && ih) t
+
+theorem sumR_eq (t : List ℕ) : sumR t = t.sum := by
+  induction t with
+  | nil => rfl
+  | cons x t ih => rw [List.sum_cons, ← ih]; rfl
+
+theorem zcR_eq (t : List ℕ) (k : ℕ) : zcR t k = zeroCount (t.take k) := by
+  induction t generalizing k with
+  | nil => cases k <;> rfl
+  | cons x t ih =>
+    cases k with
+    | zero => rfl
+    | succ k =>
+      show Nat.add (bif Nat.beq x 0 then 1 else 0) (zcR t k) = _
+      rw [ih, List.take_succ_cons, beq_eq_decide]
+      unfold zeroCount
+      by_cases h : x = 0 <;> simp [h, Nat.add_comm]
+
+theorem anyR_eq (t : List ℕ) (k : ℕ) : anyR t k = (t.take k).any (· != 0) := by
+  induction t generalizing k with
+  | nil => cases k <;> rfl
+  | cons x t ih =>
+    cases k with
+    | zero => rfl
+    | succ k =>
+      show (!Nat.beq x 0 || anyR t k) = _
+      rw [ih, List.take_succ_cons, List.any_cons, beq_eq_beq]
+      rfl
+
+theorem allR_eq (t : List ℕ) : allR t = t.all (· ≤ 15) := by
+  induction t with
+  | nil => rfl
+  | cons x t ih =>
+    show (Nat.ble x 15 && allR t) = _
+    rw [ih, List.all_cons, ble_eq_decide]
+
+/-- `entryOK` with the table constants supplied as arguments. -/
+noncomputable def entryR (u d pw vis bud : ℕ) (bind : Bool) (e : Entry) : Bool :=
+  Nat.beq e.1.length d && allR e.1 && Nat.blt 0 e.2.2 && Nat.ble (Nat.add e.2.1 e.2.2) pw &&
+  (!bind || anyR e.1 vis) &&
+  Nat.ble (Nat.add (Nat.add (Nat.add 3
+      (bif Nat.beq u 0 || Nat.beq (Nat.add e.2.1 (Nat.sub e.2.2 1)) 0 then 1 else 2))
+      (bif Nat.beq u 5 then 0 else zcR e.1 vis))
+      (bif Nat.blt 14 (Nat.sub (sumR e.1) (bif bind then 1 else 0)) then 1 else 0)) bud
+
+theorem entryR_eq (u : ℕ) (e : Entry) :
+    entryR u (dim u) (2 ^ bits u) (visible u) (budget u) (binding u) e = entryOK u e := by
+  unfold entryR entryOK worstOrdinary ordinary
+  rw [allR_eq, anyR_eq, zcR_eq, sumR_eq]
+  simp only [beq_eq_decide, ble_eq_decide, blt_eq_decide, Nat.add_eq, Nat.sub_eq,
+    Bool.cond_eq_ite, decide_eq_true_eq, ← Bool.decide_or, natBEq_eq_decide]
+
+/-- `tableOK` fused into one pass: entry checks and alias intervals together. -/
+noncomputable def tableR (u d pw vis bud : ℕ) (bind : Bool) (es : List Entry) : ℕ → Bool :=
+  List.rec (fun _ => true)
+    (fun e _ ih start => Nat.beq start e.2.1 && entryR u d pw vis bud bind e &&
+      ih (Nat.add start e.2.2)) es
+
+theorem tableR_eq (u d pw vis bud : ℕ) (bind : Bool) (es : List Entry) (start : ℕ) :
+    tableR u d pw vis bud bind es start =
+      (es.all (entryR u d pw vis bud bind) && intervalsOK start es) := by
+  induction es generalizing start with
+  | nil => rfl
+  | cons e es ih =>
+    show (Nat.beq start e.2.1 && entryR u d pw vis bud bind e &&
+      tableR u d pw vis bud bind es (Nat.add start e.2.2)) = _
+    rw [ih, List.all_cons, intervalsOK, beq_eq_beq]
+    cases (start == e.2.1) <;> cases entryR u d pw vis bud bind e <;> simp
+
+theorem tableOK_eq (u : ℕ) :
+    tableOK u = tableR u (dim u) (2 ^ bits u) (visible u) (budget u) (binding u) (entries u) 0 := by
+  rw [tableR_eq, tableOK]
+  congr 1
+  exact congrArg (List.all (entries u)) (funext fun e => (entryR_eq u e).symm)
+
+theorem table0_ok : tableOK 0 = true := by rw [tableOK_eq]; decide +kernel
+theorem table1_ok : tableOK 1 = true := by rw [tableOK_eq]; decide +kernel
+theorem table2_ok : tableOK 2 = true := by rw [tableOK_eq]; decide +kernel
+theorem table3_ok : tableOK 3 = true := by rw [tableOK_eq]; decide +kernel
+theorem table4_ok : tableOK 4 = true := by rw [tableOK_eq]; decide +kernel
+theorem table5_ok : tableOK 5 = true := by rw [tableOK_eq]; decide +kernel
+theorem table6_ok : tableOK 6 = true := by rw [tableOK_eq]; decide +kernel
+theorem table7_ok : tableOK 7 = true := by rw [tableOK_eq]; decide +kernel
+theorem table8_ok : tableOK 8 = true := by rw [tableOK_eq]; decide +kernel
+theorem table9_ok : tableOK 9 = true := by rw [tableOK_eq]; decide +kernel
+theorem table10_ok : tableOK 10 = true := by rw [tableOK_eq]; decide +kernel
+theorem table11_ok : tableOK 11 = true := by rw [tableOK_eq]; decide +kernel
+theorem table12_ok : tableOK 12 = true := by rw [tableOK_eq]; decide +kernel
 
 theorem tables_ok : ∀ u < 13, tableOK u = true := by
   intro u hu

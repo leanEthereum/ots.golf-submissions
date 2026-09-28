@@ -39,19 +39,105 @@ def codecOK (s : ℕ) : Bool :=
   cutS s ≤ 2 ^ shB s && (entries s).all (fun e =>
     e.1.sum < 18 && AS s e.1.sum ≤ e.2.1 &&
       e.2.1 + e.2.2 ≤ AS s (e.1.sum + 1))
-theorem codec0_ok : codecOK 0 = true := by decide +kernel
-theorem codec1_ok : codecOK 1 = true := by decide +kernel
-theorem codec2_ok : codecOK 2 = true := by decide +kernel
-theorem codec3_ok : codecOK 3 = true := by decide +kernel
-theorem codec4_ok : codecOK 4 = true := by decide +kernel
-theorem codec5_ok : codecOK 5 = true := by decide +kernel
-theorem codec6_ok : codecOK 6 = true := by decide +kernel
-theorem codec7_ok : codecOK 7 = true := by decide +kernel
-theorem codec8_ok : codecOK 8 = true := by decide +kernel
-theorem codec9_ok : codecOK 9 = true := by decide +kernel
-theorem codec10_ok : codecOK 10 = true := by decide +kernel
-theorem codec11_ok : codecOK 11 = true := by decide +kernel
-theorem codec12_ok : codecOK 12 = true := by decide +kernel
+
+/-! ### Kernel-cheap codec checker
+
+`codecOK` recomputes every tuple key twice and walks `shCum` per entry. `codecR` computes each
+key once in a direct `List.rec` pass and takes the per-table cumulative row as an argument. -/
+
+/-- `t.foldl (fun a b => a * 16 + b) a` as a direct recursor pass. -/
+noncomputable def foldR (t : List ℕ) : ℕ → ℕ :=
+  List.rec (fun a => a) (fun x _ ih a => ih (Nat.add (Nat.mul a 16) x)) t
+/-- `tupleKey` with `visible u` supplied. -/
+noncomputable def keyR (vis : ℕ) (t : List ℕ) : ℕ :=
+  foldR t (Nat.add (Nat.mul (sumR t) 5) (zcR t vis))
+/-- Strictly increasing keys after a previous key `p`. -/
+noncomputable def keysR (vis : ℕ) (es : List Entry) : ℕ → Bool :=
+  List.rec (fun _ => true) (fun e _ ih p => Nat.blt p (keyR vis e.1) && ih (keyR vis e.1)) es
+noncomputable def keysStart (vis : ℕ) (es : List Entry) : Bool :=
+  List.rec true (fun e es _ => keysR vis es (keyR vis e.1)) es
+/-- `l.getD k 0` as a direct recursor pass. -/
+noncomputable def getR (l : List ℕ) : ℕ → ℕ :=
+  List.rec (fun _ => 0) (fun x _ ih k => Nat.casesOn (motive := fun _ => ℕ) k x ih) l
+noncomputable def massR (es : List Entry) : ℕ := List.rec 0 (fun e _ ih => Nat.add e.2.2 ih) es
+/-- Per-entry cost-band checks against the cumulative row `row = shCum s`. -/
+noncomputable def boundsR (row : List ℕ) (es : List Entry) : Bool :=
+  List.rec true (fun e _ ih => Nat.blt (sumR e.1) 18 && Nat.ble (getR row (sumR e.1)) e.2.1 &&
+    Nat.ble (Nat.add e.2.1 e.2.2) (getR row (Nat.add (sumR e.1) 1)) && ih) es
+noncomputable def codecR (s : ℕ) (row : List ℕ) (vis : ℕ) (es : List Entry) : Bool :=
+  keysStart vis es && Nat.beq (massR es) (cutS s) && Nat.ble (cutS s) (2 ^ shB s) &&
+    boundsR row es
+
+theorem foldR_eq (t : List ℕ) (a : ℕ) : foldR t a = t.foldl (fun a b => a * 16 + b) a := by
+  induction t generalizing a with
+  | nil => rfl
+  | cons x t ih => exact ih _
+
+theorem keyR_eq (u : ℕ) (t : List ℕ) : keyR (visible u) t = tupleKey u t := by
+  unfold keyR tupleKey
+  rw [foldR_eq, sumR_eq, zcR_eq]; rfl
+
+theorem keysR_eq (u : ℕ) (es : List Entry) (a : Entry) :
+    keysR (visible u) es (tupleKey u a.1) = keysUp u (a :: es) := by
+  induction es generalizing a with
+  | nil => rfl
+  | cons b es ih =>
+    show (Nat.blt (tupleKey u a.1) (keyR (visible u) b.1) && keysR (visible u) es (keyR (visible u) b.1)) = _
+    rw [keyR_eq, ih, blt_eq_decide]; rfl
+
+theorem keysStart_eq (u : ℕ) (es : List Entry) : keysStart (visible u) es = keysUp u es := by
+  cases es with
+  | nil => rfl
+  | cons a es =>
+    show keysR (visible u) es (keyR (visible u) a.1) = _
+    rw [keyR_eq, keysR_eq]
+
+theorem getR_eq (l : List ℕ) (k : ℕ) : getR l k = l.getD k 0 := by
+  induction l generalizing k with
+  | nil => cases k <;> rfl
+  | cons x l ih => cases k with
+    | zero => rfl
+    | succ k => exact ih k
+
+theorem massR_eq (es : List Entry) : massR es = mass es := by
+  induction es with
+  | nil => rfl
+  | cons e es ih =>
+    show Nat.add e.2.2 (massR es) = _
+    rw [ih]; unfold mass; rw [List.map_cons, List.sum_cons]; rfl
+
+theorem boundsR_eq (s : ℕ) (es : List Entry) : boundsR (shCum s) es = es.all (fun e =>
+    e.1.sum < 18 && AS s e.1.sum ≤ e.2.1 && e.2.1 + e.2.2 ≤ AS s (e.1.sum + 1)) := by
+  induction es with
+  | nil => rfl
+  | cons e es ih =>
+    show (Nat.blt (sumR e.1) 18 && Nat.ble (getR (shCum s) (sumR e.1)) e.2.1 &&
+      Nat.ble (Nat.add e.2.1 e.2.2) (getR (shCum s) (Nat.add (sumR e.1) 1)) && boundsR (shCum s) es) = _
+    rw [ih, List.all_cons, getR_eq, getR_eq, sumR_eq]
+    congr 1
+    unfold AS
+    by_cases h : e.1.sum < 18
+    · rw [min_eq_left h.le, min_eq_left (by omega : e.1.sum + 1 ≤ 18)]
+      simp only [blt_eq_decide, ble_eq_decide, Nat.add_eq]
+    · simp only [blt_eq_decide, h, decide_false, Bool.false_and]
+
+theorem codecOK_eq (s : ℕ) : codecOK s = codecR s (shCum s) (visible s) (entries s) := by
+  unfold codecOK codecR
+  rw [keysStart_eq, massR_eq, boundsR_eq, beq_eq_beq, ble_eq_decide]
+
+theorem codec0_ok : codecOK 0 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec1_ok : codecOK 1 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec2_ok : codecOK 2 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec3_ok : codecOK 3 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec4_ok : codecOK 4 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec5_ok : codecOK 5 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec6_ok : codecOK 6 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec7_ok : codecOK 7 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec8_ok : codecOK 8 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec9_ok : codecOK 9 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec10_ok : codecOK 10 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec11_ok : codecOK 11 = true := by rw [codecOK_eq]; decide +kernel
+theorem codec12_ok : codecOK 12 = true := by rw [codecOK_eq]; decide +kernel
 
 theorem codec_ok {s : ℕ} (hs : s < 13) : codecOK s = true := by
   interval_cases s

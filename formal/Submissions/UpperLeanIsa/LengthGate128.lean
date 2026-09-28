@@ -47,7 +47,7 @@ theorem wrong_length_read_ne_one {κ n : Nat} (hκ : κ ≤ 32) (hn : n ≤ 5505
     rw [← he, scale, gpow_mul_gpow, hadd, ← gpow_mod]
     rcases hbad.resolve_left hne with hb | ha
     · rw [MemImage.read,
-        gLog?_gpow_eq_none (le_trans (Nat.pow_le_pow_right (by norm_num) hκ) hb)
+        OptimalOTS.GenFast.gLog?_gpow_eq_none (le_trans (Nat.pow_le_pow_right (by norm_num) hκ) hb)
           (by rw [← ordG_eq]; exact Nat.mod_lt _ (by norm_num [ordG])),
         Option.map_none]
       simp

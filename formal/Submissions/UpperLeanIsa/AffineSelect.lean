@@ -148,10 +148,13 @@ theorem constraints_degree (L : Layout) (i : Constraint) :
   · exact powerPoly_degree i j
   · simp only [constraints, Polynomial.natDegree_X]; omega
 
+-- `Fintype.card_unit` is applied by `rw`: under `simp` its instance unification leaves the
+-- kernel a defeq check that enumerates the product type.
 theorem constraint_card_bound : Fintype.card Constraint * 300 < Fintype.card K := by
   simp only [Constraint, Stage, Slot, MaxCell, Fintype.card_sum, Fintype.card_prod,
-    Fintype.card_fin, Fintype.card_unit, BF64.card_bf64]
-  norm_num
+    Fintype.card_fin, BF64.card_bf64]
+  rw [Fintype.card_unit]
+  decide +kernel
 
 /-- A checksum landing inside the bytecode must be the intended halt. -/
 def exitPoly (n layer : Fin 301) (s : Slot) : K[X] :=
@@ -170,7 +173,7 @@ theorem exitPoly_ne_zero (n layer : Fin 301) (s : Slot) : exitPoly n layer s ≠
       have he : gpow (2 ^ 18 - 1) = gpow s.val := by
         simpa only [Polynomial.coeff_sub,Polynomial.coeff_C_mul,Polynomial.coeff_X_pow,
           Polynomial.coeff_zero,ite_true,mul_one,sub_eq_zero] using hh
-      have hs : s.val = 2 ^ 18 - 1 := (gpow_injOn (by norm_num)
+      have hs : s.val = 2 ^ 18 - 1 := (OptimalOTS.GenFast.gpow_injOn (by norm_num)
         (by have := s.isLt; change s.val < 2 ^ 64 - 1; omega) he).symm
       exact hwrong ⟨rfl,hs⟩
     · have hv : n.val ≠ layer.val := fun h => hn (Fin.ext h)
@@ -216,8 +219,9 @@ theorem allConstraints_degree (L : Layout) (i : AllConstraint) :
 
 theorem allConstraints_card_bound : Fintype.card AllConstraint * 300 < Fintype.card K := by
   simp only [AllConstraint,Constraint,Stage,Slot,MaxCell,Fintype.card_sum,Fintype.card_prod,
-    Fintype.card_fin,Fintype.card_unit,BF64.card_bf64]
-  norm_num
+    Fintype.card_fin,BF64.card_bf64]
+  rw [Fintype.card_unit]
+  decide +kernel
 
 theorem exists_safe_base (L : Layout) : ∃ a : K, ∀ i, (allConstraints L i).eval a ≠ 0 :=
   exists_common_nonroot (allConstraints L) 300 (allConstraints_ne_zero L)

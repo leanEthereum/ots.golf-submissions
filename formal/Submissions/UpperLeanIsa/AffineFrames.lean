@@ -87,7 +87,7 @@ theorem collision_ne_zero {u v s e c j : ℕ}
         Polynomial.coeff_add, Polynomial.coeff_X_pow, Polynomial.coeff_C,
         Polynomial.coeff_zero, if_pos rfl, if_neg (Nat.ne_of_gt hu), add_zero, mul_one,
         sub_eq_zero, ite_true] using hcoeff
-    have hcj : c = j := gpow_injOn (Set.mem_Iio.mpr hc) (Set.mem_Iio.mpr hj) hcg
+    have hcj : c = j := OptimalOTS.GenFast.gpow_injOn (Set.mem_Iio.mpr hc) (Set.mem_Iio.mpr hj) hcg
     subst j
     have hzero := congrArg (fun p : K[X] => p.coeff 0) h
     have hsg : gpow c * gpow s = gpow c * gpow e := by
@@ -96,7 +96,7 @@ theorem collision_ne_zero {u v s e c j : ℕ}
         Polynomial.coeff_zero, if_pos rfl, if_neg (Nat.ne_of_gt hu).symm, zero_add,
         sub_eq_zero, ite_true] using hzero
     have heq : gpow s = gpow e := mul_left_cancel₀ (pow_ne_zero _ g_ne_zero) hsg
-    exact hse (gpow_injOn (Set.mem_Iio.mpr hs) (Set.mem_Iio.mpr he) heq)
+    exact hse (OptimalOTS.GenFast.gpow_injOn (Set.mem_Iio.mpr hs) (Set.mem_Iio.mpr he) heq)
   · have hcoeff := congrArg (fun p : K[X] => p.coeff u) h
     have hz : gpow c = 0 := by
       simpa only [collisionPoly, framePoly, Polynomial.coeff_sub, Polynomial.coeff_C_mul,

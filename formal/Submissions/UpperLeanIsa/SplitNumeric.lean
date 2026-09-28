@@ -1,4 +1,5 @@
 import Submissions.UpperLeanIsa.LinearNumeric
+import Submissions.UpperLeanIsa.ListCert
 
 /-! Exact numeric certificate for the four-internal-child mixed-packet layer-85 schedule.
 The sparse convolution and actual codec linkage are proved in SplitDP and
@@ -104,11 +105,17 @@ def schedule : Sched where
 
 /-! ## The conditions -/
 
+theorem prefixMass_length : prefixMass.length = tierA.length + 1 := by decide +kernel
+
+/-- One linear pass over the cached masses. -/
+theorem prefix_le_all : prefixMass.all (fun c => Nat.ble (c * 2 ^ 129) prec) = true := by
+  decide +kernel
+
 theorem cum_le : ∀ t ≤ 440, cum t * 2 ^ 129 ≤ prec := by
-  have hp : ∀ t ≤ 440, prefixMass.getD t 0 * 2 ^ 129 ≤ prec := by decide +kernel
   intro t ht
   rw [cum_eq_prefix t ht]
-  exact hp t ht
+  exact Nat.le_of_ble_eq_true (ListCert.getD_of_all prefix_le_all t
+    (by rw [prefixMass_length, tierA_length]; omega))
 
 theorem mass_eq (t : ℕ) : schedule.mass t = (cum t : ℚ) / 2 ^ 127 := by
   simp only [Sched.mass, cum, schedule]
@@ -136,14 +143,20 @@ theorem le_ybar {t : ℕ} (ht : t ≤ 440) : (m0l t : ℚ) / prec ≤ schedule.y
 theorem ybar_nonneg {t : ℕ} (ht : t ≤ 440) : 0 ≤ schedule.ybar t :=
   (div_nonneg (Nat.cast_nonneg _) prec_pos.le).trans (le_ybar ht)
 
+/-- Generic form of `1 - P_{<t} = rest t / prec`, kept free of concrete masses. -/
+theorem one_sub_mass_eq (c : ℕ) (h : c * 2 ^ 129 ≤ prec) :
+    1 - (c : ℚ) / 2 ^ 127 = ((prec - c * 2 ^ 129 : ℕ) : ℚ) / prec := by
+  rw [Nat.cast_sub h]
+  push_cast
+  unfold prec
+  ring
+
 /-- `(1 - P_{<T}) ^ (2 ^ 19 - 1) ≤ 2 ^ -128`, from `2 ^ 19` outward squarings and one division. -/
 theorem avail : (1 - schedule.mass 440) ^ (2 ^ 19 - 1) ≤ 1 / 2 ^ 128 := by
   set x := 1 - schedule.mass 440 with hx
   have hxe : x = (rest 440 : ℚ) / prec := by
-    rw [hx, mass_eq, rest_eq, Nat.cast_sub (cum_le 440 le_rfl)]
-    push_cast
-    unfold prec
-    ring
+    rw [hx, mass_eq, rest_eq]
+    exact one_sub_mass_eq _ (cum_le 440 le_rfl)
   have hpos : 0 < x := by
     rw [hxe]
     exact div_pos (by exact_mod_cast (show 0 < rest 440 by decide +kernel)) prec_pos
@@ -168,10 +181,130 @@ theorem bounded_adjacent_lt {N : ℕ} {f : ℕ → ℕ}
       exact h t ht
     · exact lt_trans (ih (by omega) (by omega)) (h t ht)
 
-theorem positive_lower : ∀ t < 440, 0 < m0l t := by decide +kernel
-theorem H_check : schedule.Hprime ≤ schedule.hp := by decide +kernel
-theorem post_check : schedule.kpost ≤ schedule.k1 := by decide +kernel
-theorem SC_check : schedule.SCf ≤ 2 * 2 ^ 19 * schedule.k1 := by decide +kernel
+theorem etaDn_pos : 0 < etaDn := by decide +kernel
+
+theorem positive_lower : ∀ t < 440, 0 < m0l t :=
+  fun _ _ => Nat.lt_of_lt_of_le etaDn_pos (Nat.le_add_left _ _)
+
+/-! ### Linear-pass form of the three sums
+
+Each summand of `Hsum`, `SCsum` and `Pos` at `t < 440` depends only on the tier weights
+`a_{t-1}, a_t` and the cached masses `P_{<t}, P_{<t+1}`. `sweep` walks these lists once, so the
+kernel never re-walks `prefixMass` per index. -/
+
+/-- One pass over tier weights and cumulative masses, carrying the previous weight. -/
+def sweep (g : ℕ → ℕ → ℕ → ℕ → ℚ) : ℕ → List ℕ → List ℕ → ℚ
+  | p, a :: as, c :: c' :: cs => g p a c c' + sweep g a as (c' :: cs)
+  | _, _, _ => 0
+
+theorem sweep_eq (g : ℕ → ℕ → ℕ → ℕ → ℚ) : ∀ (as cs : List ℕ) (p : ℕ),
+    cs.length = as.length + 1 →
+    sweep g p as cs = ∑ t ∈ Finset.range as.length,
+      g ((p :: as).getD t 0) (as.getD t 0) (cs.getD t 0) (cs.getD (t + 1) 0)
+  | [], _, _, _ => by simp [sweep]
+  | _ :: _, [], _, h => by simp at h
+  | _ :: _, [_], _, h => by simp at h
+  | a :: as, c :: c' :: cs, p, h => by
+    rw [List.length_cons, Finset.sum_range_succ']
+    simp only [sweep, List.getD_cons_succ, List.getD_cons_zero]
+    rw [sweep_eq g as (c' :: cs) a (by simpa using h), add_comm]
+    simp only [List.getD_cons_succ]
+
+/-- The certified bounds as functions of the cached cumulative mass `c = P_{<t}`. -/
+def FU (c : ℕ) : ℚ := (iterUp 19 (prec - c * 2 ^ 129 + etaUp) : ℚ) / prec
+def FL (c : ℕ) : ℚ := (iterDn 19 (prec - c * 2 ^ 129 + etaDn) : ℚ) / prec
+def Fl (c : ℕ) : ℚ := ((prec - c * 2 ^ 129 + etaDn : ℕ) : ℚ) / prec
+def fv (a : ℕ) : ℚ := max 0 ((a : ℚ) / 2 ^ 127 - 1 / 2 ^ 127)
+
+theorem rest_of_le {t : ℕ} (ht : t ≤ 440) : rest t = prec - prefixMass.getD t 0 * 2 ^ 129 := by
+  unfold rest; rw [if_pos ht]
+
+theorem Yu_eq {t : ℕ} (ht : t ≤ 440) : schedule.Yu t = FU (prefixMass.getD t 0) := by
+  show (iterUp 19 (rest t + etaUp) : ℚ) / prec = _
+  rw [rest_of_le ht]; rfl
+
+theorem Yl_eq {t : ℕ} (ht : t ≤ 440) : schedule.Yl t = FL (prefixMass.getD t 0) := by
+  show (iterDn 19 (rest t + etaDn) : ℚ) / prec = _
+  rw [rest_of_le ht]; rfl
+
+theorem yl_eq {t : ℕ} (ht : t ≤ 440) : schedule.yl t = Fl (prefixMass.getD t 0) := by
+  show ((rest t + etaDn : ℕ) : ℚ) / prec = _
+  rw [rest_of_le ht]; rfl
+
+theorem p_eq (t : ℕ) : schedule.p t = (tierA.getD t 0 : ℚ) / 2 ^ 127 := rfl
+
+def gH (_ a c c' : ℕ) : ℚ := (a : ℚ) / 2 ^ 127 * (FU c - FL c')
+def gSC (_ a c c' : ℕ) : ℚ := (a : ℚ) / 2 ^ 127 * (FU c - FL c') / Fl c
+def gPos (p a c _ : ℕ) : ℚ := (fv a - fv p) * min 1 (FU c)
+
+theorem Hsum_eq : schedule.Hsum = sweep gH 0 tierA prefixMass := by
+  rw [sweep_eq gH _ _ 0 prefixMass_length, tierA_length]
+  refine Finset.sum_congr rfl fun t ht => ?_
+  have ht := Finset.mem_range.1 ht
+  rw [p_eq, Yu_eq (by omega), Yl_eq (by omega)]; rfl
+
+theorem SCsum_eq : schedule.SCsum = sweep gSC 0 tierA prefixMass := by
+  rw [sweep_eq gSC _ _ 0 prefixMass_length, tierA_length]
+  refine Finset.sum_congr rfl fun t ht => ?_
+  have ht := Finset.mem_range.1 ht
+  rw [p_eq, Yu_eq (by omega), Yl_eq (by omega), yl_eq (by omega)]; rfl
+
+theorem fv_zero : fv 0 = 0 := by unfold fv; norm_num
+
+theorem Pos_eq : schedule.Pos = sweep gPos 0 tierA prefixMass := by
+  rw [sweep_eq gPos _ _ 0 prefixMass_length, tierA_length]
+  refine Finset.sum_congr rfl fun t ht => ?_
+  have ht := Finset.mem_range.1 ht
+  rw [Yu_eq (by omega)]
+  unfold gPos
+  congr 2
+  rcases t with _ | s
+  · rw [if_pos rfl]; exact fv_zero.symm
+  · rw [if_neg (Nat.succ_ne_zero s)]; rfl
+
+theorem SC_check : schedule.SCf ≤ 2 * 2 ^ 19 * schedule.k1 := by
+  unfold Sched.SCf
+  rw [SCsum_eq]
+  decide +kernel
+
+/-- `H'` is checked against the already-certified `SC_f` bound instead of recomputing it. -/
+theorem H_check : schedule.Hprime ≤ schedule.hp := by
+  unfold Sched.Hprime Sched.Hbar
+  rw [Hsum_eq]
+  refine le_trans (add_le_add le_rfl (div_le_div_of_nonneg_right SC_check ?_)) ?_
+  · positivity
+  · decide +kernel
+
+/-- `f_t` and `min 1 Ȳ_t` with the `max`/`min` taken in `ℕ`. -/
+def fvN (a : ℕ) : ℚ := ((a - 1 : ℕ) : ℚ) / 2 ^ 127
+def mU (c : ℕ) : ℚ := ((min prec (iterUp 19 (prec - c * 2 ^ 129 + etaUp)) : ℕ) : ℚ) / prec
+def gPosN (p a c _ : ℕ) : ℚ := (fvN a - fvN p) * mU c
+
+theorem fv_eq (a : ℕ) : fv a = fvN a := by
+  unfold fv fvN
+  rcases a with _ | a
+  · norm_num
+  · rw [Nat.add_sub_cancel, ← sub_div]
+    push_cast
+    rw [add_sub_cancel_right, max_eq_right (by positivity)]
+
+theorem minFU_eq (c : ℕ) : min 1 (FU c) = mU c := by
+  unfold FU mU
+  rw [Nat.cast_min, ← min_div_div_right (Nat.cast_nonneg _), div_self prec_pos.ne']
+
+theorem gPos_eq : gPos = gPosN := by
+  funext p a c c'
+  unfold gPos gPosN
+  rw [fv_eq, fv_eq, minFU_eq]
+
+theorem post_check : schedule.kpost ≤ schedule.k1 := by
+  unfold Sched.kpost
+  rw [Pos_eq, gPos_eq]
+  decide +kernel
+
+/-- Tier weights are positive and strictly increasing: two linear passes. -/
+theorem tierA_pos_all : tierA.all (fun a => Nat.blt 0 a) = true := by decide +kernel
+theorem tierA_asc : ListCert.ascB tierA = true := by decide +kernel
 
 abbrev LinearConditions := LinearNumeric.LinearConditions
 
@@ -179,12 +312,17 @@ abbrev LinearConditions := LinearNumeric.LinearConditions
 theorem schedule_linear_conditions : LinearConditions schedule where
   K_le := by decide
   T_le := by decide
-  a_pos := by decide +kernel
+  a_pos := fun t ht => Nat.le_of_ble_eq_true
+    (ListCert.getD_of_all tierA_pos_all t (by rw [tierA_length]; exact ht))
   a_lt := by
-    have h : ∀ t < 439, tA t < tA (t + 1) := by decide +kernel
+    have h : ∀ t < 439, tA t < tA (t + 1) := fun t ht =>
+      ListCert.ascB_getD tierA_asc t (by rw [tierA_length]; omega)
     intro s t hst ht
     exact bounded_adjacent_lt (N:=440) (fun n hn => h n (by omega)) hst ht
-  mass_lt := by decide +kernel
+  mass_lt := by
+    show cum 440 < 2 ^ 127
+    rw [cum_eq_prefix 440 le_rfl]
+    decide +kernel
   Yu_ge := fun t ht => pow_le_iterUp (ybar_nonneg ht) (ybar_le ht) 19
   Yl_le := fun t ht => iterDn_le_pow (le_ybar ht) 19
   yl_pos := by
@@ -198,6 +336,8 @@ theorem schedule_linear_conditions : LinearConditions schedule where
   fresh_index_charge := by decide +kernel
   linear_budget := by decide +kernel
   avail := avail
-  acc_le := by rw [mass_eq]; decide +kernel
+  acc_le := by
+    rw [mass_eq, show schedule.T = 440 from rfl, cum_eq_prefix 440 le_rfl]
+    decide +kernel
 
 end OptimalOTS.LeanIsaBaseline.Layer.SplitNumeric

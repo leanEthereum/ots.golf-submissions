@@ -1,3 +1,4 @@
+import Submissions.UpperLeanIsa.GenOrderFast
 import Submissions.UpperLeanIsa.LayerAvailability
 import Submissions.UpperLeanIsa.LayerDigits
 import Submissions.UpperLeanIsa.LayerProfile
@@ -73,9 +74,46 @@ theorem chain_facts : ∀ k < 41, unitOf (k + 1) < 13 ∧ coordOf (k + 1) < shK 
 theorem unit_facts : ∀ u < 13, ∀ i < shK (ushape u), 1 ≤ chainAt u i ∧ chainAt u i < 42 ∧
     unitOf (chainAt u i) = u ∧ coordOf (chainAt u i) = i := by decide
 
+/-- The offsets advance by the chain lengths (42 checks instead of 719 `locate` runs). -/
+theorem off_succ : ∀ k < 42, off (k + 1) = off k + (lenN k - 1) := by decide +kernel
+
+theorem off_mono {a b : ℕ} (hab : a ≤ b) (hb : b ≤ 42) : off a ≤ off b := by
+  induction b with
+  | zero => rw [Nat.le_zero.1 hab]
+  | succ b ih =>
+    rcases Nat.eq_or_lt_of_le hab with h | h
+    · rw [h]
+    · rw [off_succ b (by omega)]
+      exact (ih (by omega) (by omega)).trans (Nat.le_add_right _ _)
+
+/-- `locAux` started at any earlier chain with enough fuel finds position `off k + j`. -/
+theorem locAux_find {k j : ℕ} (hk : k < 42) (hj : j < lenN k - 1) :
+    ∀ d k' fuel, k' + d = k → d ≤ fuel → locAux (off k + j) fuel k' = (k, j) := by
+  intro d
+  induction d with
+  | zero =>
+    intro k' fuel hk' _
+    rw [Nat.add_zero] at hk'
+    subst hk'
+    cases fuel with
+    | zero => simp [locAux]
+    | succ fuel =>
+      rw [locAux, if_pos (by rw [off_succ k' hk]; omega)]
+      simp
+  | succ d ih =>
+    intro k' fuel hk' hf
+    obtain ⟨fuel, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
+    have hle : off (k' + 1) ≤ off k := off_mono (by omega) hk.le
+    rw [locAux, if_neg (by omega)]
+    exact ih (k' + 1) fuel (by omega) (by omega)
+
 /-- Step positions are below `9 ^ 3` and determine the chain and step. -/
 theorem pos_facts : ∀ k < 42, ∀ j < lenN k - 1, off k + j < 729 ∧ locate (off k + j) = (k, j) := by
-  decide +kernel
+  intro k hk j hj
+  have h42 : off 42 = 719 := rfl
+  have hs := off_succ k hk
+  have hm : off (k + 1) ≤ off 42 := off_mono (by omega) le_rfl
+  refine ⟨by omega, locAux_find hk hj k 0 42 (by omega) (by omega)⟩
 
 theorem posW_13 : posW ubits 13 = 127 := by decide
 
@@ -232,7 +270,7 @@ theorem gword_inj {a b : ℕ} (ha : a < 18446744073709551615) (hb : b < 18446744
   have h' : (gpow a : K) = gpow b := by
     simpa only [BitVec.extractLsb'_append_eq_right] using
       congrArg (fun z : BitVec (64 + 64) => z.extractLsb' 0 64) h
-  exact gpow_injOn (Set.mem_Iio.mpr (by norm_num; omega)) (Set.mem_Iio.mpr (by norm_num; omega)) h'
+  exact OptimalOTS.GenFast.gpow_injOn (Set.mem_Iio.mpr (by norm_num; omega)) (Set.mem_Iio.mpr (by norm_num; omega)) h'
 
 theorem sym_inj {a b : ℕ} (ha : a < 9) (hb : b < 9) (h : sym a = sym b) : a = b := by
   have := gword_inj (by omega) (by omega) h

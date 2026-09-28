@@ -28,7 +28,7 @@ theorem read_gpow_none {κ : ℕ} (hκ : κ ≤ 32) (L : MemImage κ) {n : ℕ}
 theorem read_gpow_some {κ : ℕ} (hκ : κ ≤ 32) (L : MemImage κ) {n c : ℕ}
     (h : n % ordG = c) (hc : c < 2 ^ κ) : L.read (gpow n) = some (Lx L c) := by
   rw [← gpow_mod, h, Lx, dif_pos hc]
-  exact MemImage.read_gpow (by omega) L ⟨c, hc⟩
+  exact OptimalOTS.GenFast.MemImage.read_gpow (by omega) L ⟨c, hc⟩
 
 /-! ## Frames -/
 

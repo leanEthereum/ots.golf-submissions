@@ -49,10 +49,24 @@ theorem tag_inj (k k' : Fin numChains) (j j' : ℕ)
   obtain ⟨hk, hjj⟩ := Prod.mk.inj hl
   exact ⟨Fin.ext hk.symm, hjj.symm⟩
 
-theorem tierHyp : (codec L).TierHyp FourChildNumeric.schedule where
-  K_eq := FourChildCodec.tierHyp.K_eq
-  weight_mem := FourChildCodec.tierHyp.weight_mem
-  card_weight := FourChildCodec.tierHyp.card_weight
+/-- `TierHyp` reads only `layer` and `digit`. Transporting it along these two field equations
+keeps the kernel from comparing the two concrete parameter records. -/
+theorem tierHyp_transport {P Q : Layer.Params} {S : Tier.Sched} (hl : P.layer = Q.layer)
+    (hd : P.digit = Q.digit) (h : Q.TierHyp S) : P.TierHyp S := by
+  obtain ⟨_, _, _, _, _, _, _, _, _⟩ := P
+  obtain ⟨_, _, _, _, _, _, _, _, _⟩ := Q
+  dsimp only at hl hd
+  subst hl hd
+  exact ⟨h.1, h.2, h.3⟩
+
+theorem codec_layer : (codec L).layer = FourChildCodec.layer := rfl
+theorem codec_digit : (codec L).digit = FourChildCodec.digit := rfl
+theorem base_layer : FourChildCodec.params.layer = FourChildCodec.layer := rfl
+theorem base_digit : FourChildCodec.params.digit = FourChildCodec.digit := rfl
+
+theorem tierHyp : (codec L).TierHyp FourChildNumeric.schedule :=
+  tierHyp_transport ((codec_layer L).trans base_layer.symm)
+    ((codec_digit L).trans base_digit.symm) FourChildCodec.tierHyp
 
 theorem codec_hyp : (codec L).Hyp where
   len_pos := FourChildCodec.hyp.len_pos
@@ -117,21 +131,58 @@ theorem params_hyp : (params L).Hyp where
   root_chain := fun r h => (root_reserved r).1 (word_fin_inj L h)
   root_idx := fun r h => (root_reserved r).2 (word_fin_inj L h)
 
-theorem ordered : (params L).locationOrder.Pairwise FourFusion.Earlier := by
-  have he : (@FourFusion.Earlier FourFusion.params) =
-      (@FourFusion.Earlier (params L)) := by
-    funext a b
-    rcases a with ⟨k,j⟩ | r <;> rcases b with ⟨k',j'⟩ | r' <;> rfl
-  rw [← he]
-  exact FourFusion.concrete_ordered
+/-- The location order and `Earlier` read only the chain lengths. -/
+theorem ordered_transport {P Q : FourFusion.Params} (h : P.codec.len = Q.codec.len)
+    (hQ : Q.locationOrder.Pairwise FourFusion.Earlier) :
+    P.locationOrder.Pairwise FourFusion.Earlier := by
+  obtain ⟨⟨len, a₁, a₂, a₃, a₄, a₅, a₆, a₇, a₈⟩, a₉, a₁₀, a₁₁⟩ := P
+  obtain ⟨⟨_, b₁, b₂, b₃, b₄, b₅, b₆, b₇, b₈⟩, b₉, b₁₀, b₁₁⟩ := Q
+  dsimp only at h
+  subst h
+  exact hQ.imp (S := @FourFusion.Earlier ⟨⟨len, a₁, a₂, a₃, a₄, a₅, a₆, a₇, a₈⟩, a₉, a₁₀, a₁₁⟩)
+    fun {a b} hab => by
+      rcases a with ⟨k, j⟩ | r <;> rcases b with ⟨k', j'⟩ | r' <;> exact hab
+
+theorem length_transport {P Q : FourFusion.Params} (h : P.codec.len = Q.codec.len) :
+    P.locationOrder.length = Q.locationOrder.length := by
+  obtain ⟨⟨_, _, _, _, _, _, _, _, _⟩, _, _, _⟩ := P
+  obtain ⟨⟨_, _, _, _, _, _, _, _, _⟩, _, _, _⟩ := Q
+  dsimp only at h
+  subst h
+  rfl
+
+/-- The parent-binding condition reads only `layer` and `digit`. -/
+theorem binding_transport {P Q : FourFusion.Params} (hl : P.codec.layer = Q.codec.layer)
+    (hd : P.codec.digit = Q.codec.digit)
+    (h : ∀ I, Q.codec.Accepted I → ∀ u : Fin 8,
+      ∃ k : Fin 42, k.val ∈ FourFusion.parents u ∧ 0 < Q.codec.digit I k) :
+    ∀ I, P.codec.Accepted I → ∀ u : Fin 8,
+      ∃ k : Fin 42, k.val ∈ FourFusion.parents u ∧ 0 < P.codec.digit I k := by
+  obtain ⟨⟨_, _, _, _, _, _, _, _, _⟩, _, _, _⟩ := P
+  obtain ⟨⟨_, _, _, _, _, _, _, _, _⟩, _, _, _⟩ := Q
+  dsimp only at hl hd
+  subst hl hd
+  exact h
+
+theorem params_len : (params L).codec.len = FourChildCodec.len := rfl
+theorem base_len : FourFusion.params.codec.len = FourChildCodec.len := rfl
+theorem params_layer : (params L).codec.layer = FourChildCodec.layer := rfl
+theorem params_digit : (params L).codec.digit = FourChildCodec.digit := rfl
+theorem four_layer : FourFusion.params.codec.layer = FourChildCodec.layer := rfl
+theorem four_digit : FourFusion.params.codec.digit = FourChildCodec.digit := rfl
+
+theorem ordered : (params L).locationOrder.Pairwise FourFusion.Earlier :=
+  ordered_transport ((params_len L).trans base_len.symm) FourFusion.concrete_ordered
 
 theorem location_count : (params L).locationOrder.length = 720 :=
-  FourFusion.concrete_location_count
+  (length_transport ((params_len L).trans base_len.symm)).trans
+    FourFusion.concrete_location_count
 
 theorem securityHyp : (params L).SecurityHyp where
   toHyp := params_hyp L
   ordered := ordered L
-  binding := FourFusion.accepted_parent
+  binding := binding_transport ((params_layer L).trans four_layer.symm)
+    ((params_digit L).trans four_digit.symm) FourFusion.accepted_parent
 
 theorem admissible : (params L).scheme.Admissible :=
   (params L).admissible (params_hyp L) (ordered L) FourChildNumeric.schedule_valid (tierHyp L)

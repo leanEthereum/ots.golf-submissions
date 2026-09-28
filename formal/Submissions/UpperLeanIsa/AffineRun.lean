@@ -34,7 +34,7 @@ theorem runCost_slot {κ : ℕ} (T : Tab) (M : MemImage κ) (n : ℕ)
           Option.map (LeanIsa.weight (instrAt T s).opcode + ·) <$>
             LeanIsa.runCost (program T) M n next) :=
   runCost_succ_of (program T) M n ⟨gpow s.val,fp⟩ _ (gpow_ne_finalPc T hs)
-    ((program T).fetch_gpow s)
+    (OptimalOTS.GenFast.Program.fetch_gpow (program T) s)
 
 /-- This failure is an equality of oracle computations, so it also holds in
 the cache-free support semantics used for the universal cycle bound. -/
@@ -60,7 +60,7 @@ theorem runCost_nonentry {κ : ℕ} (hκ : κ ≤ 32) (M : MemImage κ) (T : Tab
     · split
       · rfl
       · rename_i ins hins
-        obtain ⟨s,hs,rfl⟩ := (program T).fetch_eq_some_iff.mp hins
+        obtain ⟨s,hs,rfl⟩ := (OptimalOTS.GenFast.Program.fetch_eq_some_iff (program T)).mp hins
         have he : ¬IsEntry f s.val := fun h => hno s.val h hs
         have hfail := execute_nonentry hκ M T hf s he
         have hfail' : LeanIsa.execute M ⟨target,incomingFrame T f target⟩ ((program T).code s) =
