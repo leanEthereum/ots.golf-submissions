@@ -3,8 +3,8 @@ import Submissions.UpperRiscv.MixedIndexPhase
 /-!
 # The root and the decision
 
-The 832 bytes from `regionAddr` hold the 826-byte root region and six more bytes. The root
-query reads their first `a3 + 1144` bits (6608 for a full signature, at most thirteen blocks), and
+The 806 bytes from `regionAddr` hold the 800-byte root region and six zero bytes. The root
+query reads their first `a3 + 936` bits (6400 for a full signature, at most thirteen blocks), and
 its answer is written into the last chain's answer buffer. The low 128 bits of the answer are
 compared with the public key saved in `x30`/`x31`; each mismatching word branches to a rejection
 after the accepting HALT. On a match the verdict is `a3 < 5465`, the bound held in `x1`, so a
@@ -34,7 +34,7 @@ theorem writeHash_code (w : MachineState) (a : BitVec hashBits) :
 theorem writeHash_pc (w : MachineState) (a : BitVec hashBits) :
     (Riscv.writeHash w a).pc = w.pc + 4 := rfl
 
-def rootLin : Code := [.ADDI .x10 .x10 (imm12 ((regionAddr : ℤ) - work 32)), .ADDI .x11 .x13 1144]
+def rootLin : Code := [.ADDI .x11 .x13 936]
 
 /-- Where the root answer is written: the answer buffer of the last chain. -/
 def rootOut : ℕ := outAddr 32
@@ -288,25 +288,25 @@ theorem memBits_setWidth {n k : ℕ} {s : MachineState} {base : Word} {v : BitVe
   simp [hi]
 
 theorem root_length (a : ℕ) :
-    W a + signExtend12 (1144 : BitVec 12) = W (a + 1144) := by
-  rw [show (1144 : BitVec 12) = BitVec.ofNat 12 1144 from rfl, signExtend12_nat 1144 (by norm_num),
+    W a + signExtend12 (936 : BitVec 12) = W (a + 936) := by
+  rw [show (936 : BitVec 12) = BitVec.ofNat 12 936 from rfl, signExtend12_nat 936 (by norm_num),
     W_add]
 
 variable (a) in
-/-- Machine state at the root after all chains have completed: the 6656 bits from the region
+/-- Machine state at the root after all chains have completed: the 6448 bits from the region
 start are `R`. -/
-structure RootInv (s : MachineState) (R : BitVec 6656) : Prop where
+structure RootInv (s : MachineState) (R : BitVec 6448) : Prop where
   ctx : Ctx s index v pk a
   input : s.getReg .x10 = W (work 32)
   out : s.getReg .x12 = W rootOut
   root : MemBits s (W regionAddr) R
 
-/-- The root hash over the first `a + 1144` region bits and the decision, at most 22 cycles. -/
-theorem rootDecision_refines (s : MachineState) (R : BitVec 6656) (fuel : ℕ)
+/-- The root hash over the first `a + 936` region bits and the decision, at most 21 cycles. -/
+theorem rootDecision_refines (s : MachineState) (R : BitVec 6448) (fuel : ℕ)
     (inv : RootInv index v pk a s R)
     (located : Riscv.CodeAt s s.pc (root ++ decision)) (bound : 12 ≤ fuel) :
-    Riscv.Refines fuel s (hash (R.setWidth (a + 1144)) >>= fun y =>
-        pure (some (decide (y.setWidth 128 = pk) && decide (a < 5465)))) 22 := by
+    Riscv.Refines fuel s (hash (R.setWidth (a + 936)) >>= fun y =>
+        pure (some (decide (y.setWidth 128 = pk) && decide (a < 5465)))) 21 := by
   have hd : 32 ≤ rootOut ∧ rootOut + 32 ≤ 0x78000000 ∧ rootOut % 8 = 0 := by decide
   have ha := inv.ctx.short
   have ready : Riscv.LinearReady s rootLin := by
@@ -321,14 +321,10 @@ theorem rootDecision_refines (s : MachineState) (R : BitVec 6656) (fuel : ℕ)
     simp [Ne.symm h10, Ne.symm h11, h10, h11]
   have s10 : s.getReg .x10 = W (work 32) := inv.input
   have w10 : w.getReg .x10 = W regionAddr := by
-    rw [hw]
-    simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
-      getReg_setReg_ite]
-    simp only [show ¬ (Reg.x10 = Reg.x11) by decide, false_and, if_false, true_and, ne_eq,
-      reduceCtorEq, not_false_eq_true, if_true, s10]
-    rw [W_add_imm _ _ (by decide) (by decide) (by decide) (by decide)]
-    decide
-  have w11 : w.getReg .x11 = W (a + 1144) := by
+    change (s.setReg .x11 (s.getReg .x13 + signExtend12 936)).getReg .x10 = _
+    simpa only [getReg_setReg_ite, reduceCtorEq, false_and, if_false,
+      show work 32 = regionAddr by decide] using inv.input
+  have w11 : w.getReg .x11 = W (a + 936) := by
     rw [hw]
     simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
@@ -337,7 +333,7 @@ theorem rootDecision_refines (s : MachineState) (R : BitVec 6656) (fuel : ℕ)
       show ¬ (Reg.x13 = Reg.x12) by decide, show ¬ (Reg.x13 = Reg.x11) by decide]
     rw [inv.ctx.sigLen]
     exact root_length a
-  have w11n : (w.getReg .x11).toNat = a + 1144 := by
+  have w11n : (w.getReg .x11).toNat = a + 936 := by
     rw [w11]; exact W_toNat _ (by omega)
   have w12 : w.getReg .x12 = W rootOut := by
     rw [wRegs .x12 (by decide) (by decide)]
@@ -352,24 +348,24 @@ theorem rootDecision_refines (s : MachineState) (R : BitVec 6656) (fuel : ℕ)
   have wCall : w.getReg .x5 = Riscv.hashCall := by
     rw [wRegs .x5 (by decide) (by decide)]; exact inv.ctx.call
   have wValid : Riscv.hashArgumentsValid w = true := by
-    have r1 : isValidOutputRange (W regionAddr) ((a + 1144 + 7) / 8) = true :=
+    have r1 : isValidOutputRange (W regionAddr) ((a + 936 + 7) / 8) = true :=
       range_ok _ _ (by norm_num [regionAddr]) (by norm_num [regionAddr]; omega) (by omega)
         (by omega)
     have r2 := hashOutput_ok rootOut hd.1 hd.2.1 hd.2.2
     unfold Riscv.hashArgumentsValid
     rw [w10, w11n, w12, r1, Bool.true_and]
     exact r2
-  have wValue : MemBits w (W regionAddr) (R.setWidth (a + 1144)) :=
+  have wValue : MemBits w (W regionAddr) (R.setWidth (a + 936)) :=
     memBits_setWidth (memBits_of_mem_eq (show w.mem = s.mem from funext fun a => wMem a)
       inv.root) (by omega)
-  have wInput : Riscv.hashInput w = ⟨a + 1144, R.setWidth (a + 1144)⟩ :=
+  have wInput : Riscv.hashInput w = ⟨a + 936, R.setWidth (a + 936)⟩ :=
     hashInput_of_memBits w10 w11n wValue
-  have blocks : blockCost (a + 1144) ≤ 13 := by
+  have blocks : blockCost (a + 936) ≤ 13 := by
     unfold blockCost blockBits
     omega
   rw [show fuel = rootLin.length + ((fuel - rootLin.length - 1) + 1) by simp [rootLin]; omega]
   refine (Riscv.Refines.linear _ located.append_left ready ?_).mono
-    (show rootLin.length + (blockCost (a + 1144) + 7) ≤ 22 by simp only [rootLin]; simp; omega)
+    (show rootLin.length + (blockCost (a + 936) + 7) ≤ 21 by simp only [rootLin]; simp; omega)
   rw [← hw]
   have step := Riscv.Refines.hash (fuel := fuel - rootLin.length - 1) wFetch wCall wValid
     (k := fun y => pure (some (decide (y.setWidth 128 = pk) && decide (a < 5465))))
@@ -395,7 +391,7 @@ theorem rootDecision_refines (s : MachineState) (R : BitVec 6656) (fuel : ℕ)
     (by rw [vRegs, wRegs .x13 (by decide) (by decide)]; exact inv.ctx.sigLen)
     (by rw [vRegs, wRegs .x1 (by decide) (by decide)]; exact inv.ctx.bound) ha
   show 7 ≤ fuel - rootLin.length - 1
-  have h3 : rootLin.length = 2 := rfl
+  have h3 : rootLin.length = 1 := rfl
   rw [h3]
   omega
 

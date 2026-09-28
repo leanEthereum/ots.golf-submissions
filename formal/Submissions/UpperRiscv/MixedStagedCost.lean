@@ -38,10 +38,10 @@ theorem stagedCost_eq (index : RawIdx) (v : ℕ) (hv : v < 16) (n q : ℕ) (hq :
     · rw [pairCost_overhead index v hv, ih (q+1) (by omega)]
     · exact badPairCost_eq _
 
-/-- The free chain, every pair path and the root fit in 311 cycles. -/
+/-- The free chain, every pair path and the root fit in 310 cycles. -/
 theorem stagedCost_le (index : RawIdx) (v : ℕ) (hv : v < 16)
     (check : (digitSum index.val + v) % 255 = 146) :
-    6 + v + stagedCost index v 16 0 ≤ 311 := by
+    6 + v + stagedCost index v 16 0 ≤ 310 := by
   rw [stagedCost_eq index v hv 16 0 (by decide)]
   refine CappedCost.bound _ ?_ v hv ?_
   · intro q _

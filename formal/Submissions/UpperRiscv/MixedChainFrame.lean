@@ -44,8 +44,7 @@ theorem Completed.addTop {s : MachineState} {x : graph.Assignment} {k : Fin 33}
 
 theorem tailAfter_setTop (x : graph.Assignment) (k : Fin 33) (u : BitVec (topBits k)) :
     tailAfter index v wire (setTop x k u) = tailAfter index v wire x := by
-  unfold tailAfter setTop
-  rw [lastAnswer_update_tp]
+  rfl
 
 /-- A chain that hashed completes with the root slot of its last answer. -/
 theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Fin 33}
@@ -61,24 +60,7 @@ theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Fin 33}
     rw [Nat.add_sub_cancel]; exact inv.out
   · rw [inv.length, prevBits_succ']
   · exact inv.done.addTop _ (topSlice_of_answer s k _ answer)
-  · unfold TailInv
-    by_cases h1 : k.val = 1
-    · have hk : k = 1 := Fin.ext h1
-      subst hk
-      rw [if_neg (by omega), tailAfter_setTop]
-      unfold tailAfter
-      rw [if_neg hashed]
-      exact tail_of_answer answer
-    · have h := inv.tail h1
-      unfold TailInv at h
-      rw [tailAfter_setTop]
-      by_cases h0 : k.val = 0
-      · rw [if_pos (by omega)]
-        rw [if_pos (by omega)] at h
-        exact h
-      · rw [if_neg (by omega)]
-        rw [if_neg (by omega)] at h
-        exact h
+  · exact inv.tail
 
 /-- After the last chain `x10` is its working address; the region and the six bytes past it
 are the root input. -/
@@ -90,7 +72,6 @@ theorem final_root {s : MachineState} {x : graph.Assignment}
   · have region := memBits_region s (tops x) (fun k => inv.done k k.isLt)
     have tail := inv.tail
     unfold TailInv at tail
-    rw [if_neg (by decide)] at tail
     apply memBits_append (by decide) region
     have e : W regionAddr + BitVec.ofNat 64 (Name.rootBits / 8) = W tailAddr := by decide
     rw [e]

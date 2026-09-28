@@ -207,7 +207,7 @@ theorem pair_bad_refines (q : Fin 16)
 
 /-- Exact charge of the staged pair/root program, including rejecting paths. -/
 def stagedCost (index : RawIdx) (v : ℕ) : (n q : ℕ) → ℕ
-  | 0, _ => 22
+  | 0, _ => 21
   | n+1, q => if hq : q < 16 then
       if PairAllowed index.val q then pairCost index v ⟨q,hq⟩ + stagedCost index v n (q+1)
       else badPairCost ⟨q,hq⟩

@@ -18,6 +18,23 @@ namespace OptimalOTS
 
 open OptimalOTS.Dag
 
+/-- Decode an aligned byte into a chain count; malformed tags use a rejecting sentinel. -/
+def decodeCount (tag : ℕ) : ℕ := if tag % 4 = 0 then tag / 4 else 255
+
+theorem decodeCount_lt256 {tag : ℕ} (h : tag < 256) : decodeCount tag < 256 := by
+  unfold decodeCount
+  split_ifs <;> omega
+
+theorem decodeCount_lt64_iff {tag : ℕ} (h : tag < 256) :
+    decodeCount tag < 64 ↔ tag % 4 = 0 := by
+  unfold decodeCount
+  split_ifs <;> omega
+
+theorem decodeCount_eq_iff {tag v : ℕ} (ht : tag < 256) (hv : v < 64) :
+    decodeCount tag = v ↔ tag = 4 * v := by
+  unfold decodeCount
+  split_ifs <;> omega
+
 /-- The sum of the 32 index digits and the free digit of every accepted index. -/
 def target : ℕ := 146
 

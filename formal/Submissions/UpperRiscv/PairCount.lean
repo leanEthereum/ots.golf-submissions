@@ -1,6 +1,6 @@
 import Submissions.UpperRiscv.Count
 
-/-! Exact counting for the restricted pair alphabet of the 346-cycle scheme. -/
+/-! Exact counting for the restricted pair alphabet. -/
 namespace OptimalOTS.PairCode
 
 def cap (q : ℕ) : ℕ := if q < 5 then 20 else if q < 10 then 21 else 30

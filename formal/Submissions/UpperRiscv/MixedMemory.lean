@@ -75,23 +75,15 @@ theorem Completed.writeHash {s : MachineState} {x : graph.Assignment} (k : Fin 3
   · unfold laneBase at bo; omega
   · exact completed_disjoint j k hj
 
-/-- The six bytes past the region survive every hash but the high cap's. -/
+/-- The six bytes past the region survive every chain hash. -/
 theorem tail_writeHash {s : MachineState} (v : BitVec 48) (hm : MemBits s (W tailAddr) v)
-    (k : Fin 33) (hk : k.val ≠ 1) (y : BitVec 256) (ho : s.getReg .x12 = W (outAddr k)) :
+    (k : Fin 33) (y : BitVec 256) (ho : s.getReg .x12 = W (outAddr k)) :
     MemBits (Riscv.writeHash s y) (W tailAddr) v := by
   have bo := output_bounds k
   apply writeHash_preserves s y tailAddr (outAddr k) 48 v hm ho bo.2.2 (by norm_num)
   · decide
   · unfold laneBase at bo; omega
-  · have := tail_disjoint k hk; omega
-
-/-- The high cap's answer covers the six bytes past the region with its bytes 18 to 23. -/
-theorem tail_of_answer {s : MachineState} {y : BitVec 256}
-    (answer : MemBits s (W (outAddr 1)) y) : MemBits s (W tailAddr) (y.extractLsb' 144 48) := by
-  have h := memBits_extract (start := 144) (len := 48) answer (by norm_num) (by norm_num)
-  rw [W_add, show outAddr 1 + 144 / 8 = tailAddr by decide] at h
-  exact h
-
+  · have := tail_disjoint k; omega
 
 theorem posW_slotW_aligned' : ∀ j : Fin 33, posW slotW j.val % 8 = 0 := by decide +kernel
 

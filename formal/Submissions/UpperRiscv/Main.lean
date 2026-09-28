@@ -5,7 +5,7 @@ import Submissions.UpperRiscv.Assembly
 
 `wireScheme_secure`: the scheme on signature bits built on the bare-chain forest satisfies
 `OracleAlgorithm.Scheme.Secure`, the 127-bit strong unforgeability requirement, for every
-verifier covered by `WireVerifier`; every forest signature verifies in `191` compressions
+verifier covered by `WireVerifier`; every forest signature verifies in `192` compressions
 (`forestScheme_verifyCost`).
 
 For a budget `B ≤ 2 ^ 127` the bound `probTrue ≤ 2 ε (B - 1069) + 2 δ` of `Forest.main_bound`
