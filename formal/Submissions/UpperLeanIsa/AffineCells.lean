@@ -40,7 +40,7 @@ theorem hc_g : hcell T bits y0 A RA gCell = gV T := by unfold hcell gCell; hsimp
 theorem hc_c {c : ℕ} (h1 : 1 ≤ c) (h2 : c ≤ 13) : hcell T bits y0 A RA (cCell c) = cV T c := by
   by_cases h4 : c ≤ 4
   · interval_cases c <;> simp [cCell,hcell]
-  · have hc : cCell c = 50+c := by simp [cCell,show c ≠ 16 by omega,show c ≠ 0 by omega,
+  · have hc : cCell c = 50+c := by simp [cCell,show c ≠ 14 by omega,show c ≠ 0 by omega,
       show c ≠ 1 by omega,show c ≠ 2 by omega,show c ≠ 3 by omega,show c ≠ 4 by omega]
     rw [hc]; unfold hcell; hsimp; congr 1; omega
 
@@ -68,11 +68,15 @@ theorem hc_gp {u : ℕ} (hu : u ≤ 13) :
     hcell T bits y0 A RA (gpCell u) = gpV T (idxOf y0) u := by
   unfold gpCell hcell; hsimp; congr 1; omega
 
+theorem hc_gpTmp {u : ℕ} (hu : u < 13) :
+    hcell T bits y0 A RA (gpTmp u) = gpTmpV T (idxOf y0) u := by
+  unfold gpTmp hcell; hsimp; congr 1; omega
+
 theorem hc_tf : hcell T bits y0 A RA tfCell = cellOfBits (topOf T bits y0 A 0) := by
-  simp [hcell,tfCell,pairK,topPair,topOff]
+  simp [hcell,tfCell,pairK,topPair,topOff,topCell]
 
 theorem hc_tf1 : hcell T bits y0 A RA (tfCell+1) = hiOf T y0 A 0 := by
-  simp [hcell,tfCell,pairK,topPair,topOff]
+  simp [hcell,tfCell,pairK,topPair,topOff,topCell]
 
 theorem hc_top {k : ℕ} (hk : k<42) (_he : cvTop k) :
     hcell T bits y0 A RA (topCell k) = cellOfBits (topOf T bits y0 A k) ∧
@@ -135,6 +139,7 @@ theorem canon_topPair (T : Tab) (bits : List Bool) (y0 : BitVec 256)
   · exact canon_hiOf _ _ _ _
 
 theorem canon_gpV (T : Tab) (I : Word) (u : ℕ) : IsCanonical128 (gpV T I u) := canon_ofK _
+theorem canon_gpTmpV (T : Tab) (I : Word) (u : ℕ) : IsCanonical128 (gpTmpV T I u) := canon_ofK _
 theorem canon_cV (T : Tab) (c : ℕ) : IsCanonical128 (cV T c) := canon_ofK _
 theorem canon_fpat (u v : ℕ) : IsCanonical128 (fpat u v) := canon_natV _
 theorem canon_oneV : IsCanonical128 oneV := canon_ofK _
@@ -145,7 +150,7 @@ theorem canon_hcell (T : Tab) (bits : List Bool) (y0 : BitVec 256)
     (A : ℕ → ℕ → BitVec 256) (RA : ℕ → BitVec 256) (c : ℕ) :
     IsCanonical128 (hcell T bits y0 A RA c) := by
   simp only [hcell, apply_ite IsCanonical128, canon_zero, canon_cellOfBits, canon_ofK, canon_natV,
-    canon_loC, canon_hiC, canon_hiOf, canon_topPair, canon_gpV, canon_cV, canon_fpat,
+    canon_loC, canon_hiC, canon_hiOf, canon_topPair, canon_gpV, canon_gpTmpV, canon_cV, canon_fpat,
     canon_oneV, canon_gV, ite_self]
 
 theorem blake_rel {f : HashTable} {v : ℕ → E} {m0 m1 m2 m3 cv out md : ℕ} {a : BitVec 256}

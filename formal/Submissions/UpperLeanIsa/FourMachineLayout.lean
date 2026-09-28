@@ -1,11 +1,11 @@
 import Submissions.UpperLeanIsa.ConstraintMath
 import Submissions.UpperLeanIsa.FieldRescale
-import Submissions.UpperLeanIsa.FourConcrete
+import Submissions.UpperLeanIsa.SplitDomains
 import Submissions.UpperLeanIsa.LengthGate128
 
 /-! Layout of the fixed-tag fused machine. All live field bands begin at raw field zero;
 the excluded zero-cost binding tuples have no holes or aliases. The 27-slot prologue is
-followed by 13 group regions. Free-chain blocks remain at 255615 + 68*s. -/
+followed by 13 packed group regions ending at slot 250577. Free-chain blocks remain at 255615 + 68*s. -/
 
 namespace OptimalOTS.HLFour
 
@@ -94,7 +94,7 @@ theorem bandIdx_spec {F : ℕ → ℕ} (hF : Monotone F) {N o : ℕ} (h0 : F 0 �
 def gk (u : ℕ) : ℕ := if u = 5 ∨ u = 6 then 4 else 3
 
 /-- The index field width of group `u`. -/
-def gb (u : ℕ) : ℕ := [10, 9, 9, 9, 9, 12, 12, 9, 9, 10, 10, 10, 10].getD u 0
+def gb (u : ℕ) : ℕ := [10, 9, 9, 9, 9, 12, 11, 10, 10, 10, 10, 9, 10].getD u 0
 
 /-- The bit position of group `u`'s field. -/
 def POS (u : ℕ) : ℕ := posW gb u
@@ -104,15 +104,16 @@ def isExp (u : ℕ) : Prop := u ≠ 5
 
 instance (u : ℕ) : Decidable (isExp u) := by unfold isExp; infer_instance
 
-/-- The uniform non-hash instruction count of a block of group `u` (entry and exit included). -/
-def gcu (u : ℕ) : ℕ := if u = 0 then 7 else if u = 5 then 6 else if u = 6 then 9 else 8
+/-- The padded group budget plus one. The straight body uses `gcu - 2`
+ordinary instructions and its affine dispatch uses one: total `gcu - 1`. -/
+def gcu (u : ℕ) : ℕ := [7, 8, 8, 8, 8, 6, 7, 8, 8, 8, 8, 7, 7].getD u 6
 
 /-- The single root call executes in group 5. -/
 def hm (u : ℕ) : ℕ := if u = 5 then 1 else 0
 
 /-- Raw field-value counts in each live cost band. -/
 def prof (u : ℕ) : List ℕ :=
-  ([[0, 6, 12, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 116, 0], [1, 6, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 54, 0], [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 58, 0], [1, 48, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 12, 0], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0], [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 560, 680], [0, 8, 10, 20, 35, 56, 84, 120, 165, 220, 286, 360, 455, 560, 680], [0, 6, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 55, 0], [0, 6, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 55, 0], [0, 3, 6, 10, 15, 21, 112, 36, 45, 55, 66, 78, 91, 105, 120], [0, 3, 6, 10, 30, 21, 56, 36, 45, 55, 66, 78, 91, 105, 120], [0, 384, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 84], [0, 3, 6, 10, 15, 21, 112, 36, 45, 55, 66, 78, 91, 105, 120]]).getD u []
+  ([[0, 6, 12, 20, 30, 42, 56, 72, 90, 110, 132, 156, 182, 116, 0, 0, 0, 0], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0], [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0], [0, 499, 10, 20, 37, 56, 88, 120, 165, 220, 286, 376, 457, 560, 680, 522, 0, 0], [0, 10, 7, 17, 30, 50, 77, 118, 156, 210, 275, 352, 442, 304, 0, 0, 0, 0], [1, 6, 14, 10, 30, 21, 30, 38, 48, 55, 66, 78, 91, 105, 120, 133, 150, 0], [0, 9, 18, 33, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 146, 150, 8], [0, 12, 12, 12, 30, 26, 28, 38, 45, 56, 66, 78, 91, 105, 120, 136, 150, 19], [0, 27, 12, 10, 15, 35, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 15], [0, 2, 5, 9, 14, 20, 27, 35, 44, 54, 65, 80, 90, 67, 0, 0, 0, 0], [0, 145, 8, 9, 14, 20, 27, 35, 44, 54, 73, 77, 90, 104, 119, 135, 70, 0]]).getD u []
 
 /-- Number of cost bands of group `u` (maximal cost plus one). -/
 def nb (u : ℕ) : ℕ := (prof u).length
@@ -124,7 +125,7 @@ def pn (u c : ℕ) : ℕ := (prof u).getD c 0
 def A (u c : ℕ) : ℕ := psum (pn u) c
 
 /-- Block length of cost `c` in group `u`. -/
-def L (u c : ℕ) : ℕ := gcu u + c + hm u
+def L (u c : ℕ) : ℕ := gcu u - 1 + c + hm u
 
 /-- Slot offset of cost band `c` in group `u`'s region. -/
 def OFF (u c : ℕ) : ℕ := psum (fun c => pn u c * L u c) c
@@ -136,10 +137,10 @@ def RS (u : ℕ) : ℕ := OFF u (nb u)
 def BASE (u : ℕ) : ℕ := 27 + psum RS u
 
 /-- End of the group regions. -/
-def gEnd : ℕ := 243173
+def gEnd : ℕ := 250577
 
 /-- The number of blocks (live field values) of group `u`: the live values are a contiguous prefix. -/
-def VF (u : ℕ) : ℕ := [1024, 512, 512, 512, 512, 3059, 3059, 512, 512, 763, 722, 1024, 763].getD u 0
+def VF (u : ℕ) : ℕ := [1024, 512, 512, 512, 512, 4096, 2048, 996, 1024, 1024, 1024, 512, 1024].getD u 0
 
 /-- The cost band of field value `v` of group `u`. -/
 def band (u v : ℕ) : ℕ := bandIdx (A u) (nb u) v
@@ -170,18 +171,23 @@ theorem BASE_succ (u : ℕ) : BASE (u + 1) = BASE u + RS u := by
 
 theorem BASE_13 : BASE 13 = gEnd := by decide
 
-theorem BASE_one : BASE 1 = 16893 := by decide
+theorem BASE_one : BASE 1 = 15869 := by decide
 
 theorem A_full : ∀ u < 13, A u (nb u) = VF u := by decide
 
 theorem VF_le : ∀ u < 13, VF u ≤ 2 ^ gb u := by decide
 
-theorem nb_le : ∀ u < 13, nb u ≤ 15 := by decide
+theorem nb_le : ∀ u < 13, nb u ≤ 18 := by decide
 
 theorem nb_pos : ∀ u < 13, 1 ≤ nb u := by decide
 
-theorem L_pos (u c : ℕ) : 6 ≤ L u c := by
-  have hg : 6 ≤ gcu u := by unfold gcu; split_ifs <;> omega
+theorem gcu_ge (u : ℕ) : 6 ≤ gcu u := by
+  by_cases hu : u < 13
+  · exact (show ∀ u < 13, 6 ≤ gcu u by decide) u hu
+  · simp [gcu, List.getD_eq_default, show 13 ≤ u by omega]
+
+theorem L_pos (u c : ℕ) : 5 ≤ L u c := by
+  have hg := gcu_ge u
   unfold L
   omega
 
@@ -206,7 +212,7 @@ theorem band_spec {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
     (by rw [A_full u hu]; exact hv)
   exact h
 
-theorem band_lt_17 {u v : ℕ} (hu : u < 13) (hv : v < VF u) : band u v < 15 := by
+theorem band_lt_17 {u v : ℕ} (hu : u < 13) (hv : v < VF u) : band u v < 18 := by
   have := (band_spec hu hv).1; have := nb_le u hu; omega
 
 /-- The block of field value `v` lies inside group `u`'s region. -/
@@ -361,7 +367,11 @@ def coordOf (k : ℕ) : ℕ := [0, 0, 1, 0, 1, 2, 3, 2, 0, 1, 2, 3, 0, 1, 0, 1, 
 
 /-- Tops always materialized at `topCell`. The others are root-call messages, which read the
 revealed word when their digit is zero. -/
-def exported (k : ℕ) : Prop := k ∉ [3,4,5,6]
+def visible (u : ℕ) : ℕ := gk u - (if u = 6 then 2 else if u = 11 ∨ u = 12 then 1 else 0)
+def copied (u i : ℕ) : Prop := isExp u ∧ i < visible u
+instance (u i : ℕ) : Decidable (copied u i) := by unfold copied; infer_instance
+
+def exported (k : ℕ) : Prop := k ∉ [3,4,5,6,10,11,36,41]
 
 instance (k : ℕ) : Decidable (exported k) := by unfold exported; infer_instance
 
@@ -376,7 +386,7 @@ theorem coordOf_chainOf : ∀ u < 13, ∀ i < gk u, coordOf (chainOf u i) = i :=
 theorem chainOf_unitOf : ∀ k < 42, 1 ≤ k →
     unitOf k < 13 ∧ coordOf k < gk (unitOf k) ∧ chainOf (unitOf k) (coordOf k) = k := by decide
 
-theorem exported_iff : ∀ u < 13, ∀ i < gk u, (exported (chainOf u i) ↔ isExp u) := by decide
+theorem exported_iff : ∀ u < 13, ∀ i < gk u, (exported (chainOf u i) ↔ copied u i) := by decide
 
 /-! ## Values -/
 
@@ -439,41 +449,38 @@ abbrev Tab := ℕ → ℕ → ℕ → ℕ
 /-- The cost (coordinate sum) of the tuple of field value `v` of group `u`. -/
 def cost (T : Tab) (u v : ℕ) : ℕ := ((List.range (gk u)).map (T u v)).sum
 
+/-- Visible coordinates are materialized; internal message children are read in place. -/
+def bindingDeduction (u : ℕ) : ℕ := if (1 ≤ u ∧ u ≤ 4) ∨ u = 7 then 0 else 1
+def copyCount (T : Tab) (u v : ℕ) : ℕ :=
+  ((List.range (gk u)).map (fun i => if copied u i ∧ T u v i = 0 then 1 else 0)).sum
+def machineOrdinary (T : Tab) (u v : ℕ) : ℕ :=
+  (if u ≠ 0 ∧ v ≠ 0 then 2 else 1) + copyCount T u v + 3 +
+    (if 14 < cost T u v - bindingDeduction u then 1 else 0)
+
+theorem packed_group_budget : (∑ u ∈ Finset.range 13, (gcu u - 1)) = 85 := by decide
+
+theorem packed_raw_blocks : (∑ u ∈ Finset.range 13, VF u) = 14820 := by decide
+
+theorem packed_double_mul_blocks :
+    (∑ u ∈ Finset.range 13, ∑ c ∈ Finset.range 18,
+      if 14 < c - bindingDeduction u then pn u c else 0) = 845 := by decide
+
+theorem table7_live : VF 7 = 996 := rfl
+
 /-- What the machine needs of the tables: the cost of a live tuple is its cost band, and every
 coordinate is below its chain's length. -/
 structure Tab.Hyp (T : Tab) : Prop where
   cost_eq : ∀ u < 13, ∀ v < VF u, cost T u v = band u v
   coord_lt : ∀ u < 13, ∀ v < 2 ^ gb u, ∀ i < gk u, T u v i < LEN (chainOf u i)
+  ordinary_le : ∀ u < 13, ∀ v < VF u, machineOrdinary T u v ≤ gcu u - 1
 
-/-- The free chain's digit: `86 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
-def freeDigit (c : ℕ) : ℕ := if c ≤ 86 ∧ 86 - c ≤ 63 then 86 - c else 0
+/-- The free chain's digit: `85 − c` for group cost `c` when that is in `[0, 63]`, else `0`. -/
+def freeDigit (c : ℕ) : ℕ := if c ≤ 85 ∧ 85 - c ≤ 63 then 85 - c else 0
 
 /-- Group `u`'s field of the index. -/
 def field (u : ℕ) (I : Word) : ℕ := digitW gb I.toNat u
 
 /-- The total group cost of an index. -/
 def gcost (T : Tab) (I : Word) : ℕ := ((List.range 13).map (fun u => cost T u (field u I))).sum
-
-/-- The facts about the scheme parameters the machine relies on. -/
-structure Compat (P : FourFusion.Params) (T : Tab) : Prop where
-  len : ∀ k : Fin numChains, P.codec.len k = LEN k.val
-  layer : P.codec.layer = 86
-  digit_grp : ∀ (I : Word) (u i : ℕ) (hu : u < 13) (hi : i < gk u),
-    P.codec.digit (effective I) ⟨chainOf u i, chainOf_lt u hu i hi⟩ = T u (field u I) i
-  digit_free : ∀ I : Word, (∀ u < 13, field u I < VF u) →
-    P.codec.digit (effective I) 0 = freeDigit (gcost T I)
-  /-- Accepted indices have no dummy field. -/
-  live : ∀ I : Word, P.codec.Accepted (effective I) → ∀ u < 13, field u I < VF u
-  tag : ∀ (k : Fin numChains) (j : ℕ), j + 1 < LEN k.val →
-    P.codec.tag k j 0 = cellBits (cV ((OFFT k.val + j) % 9)) ∧
-      P.codec.tag k j 1 = cellBits (cV ((OFFT k.val + j) / 9 % 9)) ∧
-      P.codec.tag k j 2 = cellBits (cV ((OFFT k.val + j) / 81))
-  hiTop : ∀ k : Fin numChains, P.codec.hiTop k = decide (k.val ∈ [7,8,10,13,19,23,25,31,33,39])
-  cv : P.codec.cv = cellBits gV ++ cellBits oneV
-  chainMd : P.codec.chainMd = cellBits oneV
-  idxMd : P.codec.idxMd = cellBits gV
-  fusedMd : ∀ k : Fin 42, P.fusedMd k = FourFusion.tagWord (FourFusion.mdIndex k)
-  fusedTag : ∀ k : Fin 42, P.fusedTag k = FourFusion.tagWord (FourFusion.tagIndex k)
-  rootMd : ∀ r : Fin 1, P.rootMd r = cellBits (cV (FourFusion.rootIndex r).val)
 
 end OptimalOTS.HLFour

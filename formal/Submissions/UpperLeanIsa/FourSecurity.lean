@@ -203,7 +203,7 @@ theorem sum_sumW_fiber₀ : ∑ v ∈ P.dataSet₀, sumW P (P.fiber₀ v) = 1 :=
 attribute [local irreducible] CostAtMost OracleAlgorithm.experiment Params.rest Params.rest₂
   Params.stB Params.keygen Params.verify
 
-theorem main_bound_rest (hP : P.SecurityHyp) {S : Tier.Sched} (hS : S.Valid) (hT : P.codec.TierHyp S) {B : ℕ}
+theorem main_bound_rest (hP : P.SecurityHyp) {S : Tier.Sched} (hS : S.LinearValid) (hT : P.codec.TierHyp S) {B : ℕ}
     (hB' : B ≤ 2 ^ 127)
     (hrest : ∀ ξ : Record P, CostAtMost (A.choose ξ.pk >>= P.rest₂ A ξ.pk ξ.sk) B) :
     probTrue (OracleAlgorithm.experiment P.scheme A) ≤ (2 ^ 500 : ℝ≥0∞)⁻¹ + κ * B := by
@@ -235,7 +235,7 @@ theorem main_bound_rest (hP : P.SecurityHyp) {S : Tier.Sched} (hS : S.Valid) (hT
         have hd : publicData (beforeSigning P) ξ = publicData (beforeSigning P) (P.rep v) :=
           ((mem_publicFiber _ _ _).1 hξ).trans ((mem_publicFiber _ _ _).1 (P.rep_mem hv)).symm
         rw [data_pk_eq _ ξ (P.rep v) hd]
-    _ ≤ ∑ v ∈ P.dataSet₀, sumW P (P.fiber₀ v) * ((2 ^ 500 : ℝ≥0∞)⁻¹ + S.Kb B) :=
+    _ ≤ ∑ v ∈ P.dataSet₀, sumW P (P.fiber₀ v) * ((2 ^ 500 : ℝ≥0∞)⁻¹ + S.LinearKb B) :=
         Finset.sum_le_sum fun v hv =>
           P.stageA_master A hP hS hT v (P.rep v) (P.rep_mem hv) B hB' fun ξ hξ => by
             have hd : publicData (beforeSigning P) ξ = publicData (beforeSigning P) (P.rep v) :=
@@ -244,11 +244,11 @@ theorem main_bound_rest (hP : P.SecurityHyp) {S : Tier.Sched} (hS : S.Valid) (hT
             have h := hrest ξ
             rw [data_pk_eq _ ξ (P.rep v) hd] at h
             exact h
-    _ = (2 ^ 500 : ℝ≥0∞)⁻¹ + S.Kb B := by
+    _ = (2 ^ 500 : ℝ≥0∞)⁻¹ + S.LinearKb B := by
         rw [← Finset.sum_mul, P.sum_sumW_fiber₀, one_mul]
     _ ≤ (2 ^ 500 : ℝ≥0∞)⁻¹ + κ * B := by
         rw [κ_eq]
-        exact add_le_add le_rfl (S.Kb_le hS hB')
+        exact add_le_add le_rfl (S.LinearKb_le hS B)
 
 theorem main_bound (hP : P.SecurityHyp) {B : ℕ}
     (hB : CostAtMost (OracleAlgorithm.experiment P.scheme A) B) (hB' : B ≤ 2 ^ 127) :
@@ -295,6 +295,5 @@ theorem secure (hP : P.SecurityHyp) : P.scheme.Secure := by
 
 end Params
 
-theorem concrete_secure : params.scheme.Secure := params.secure params_securityHyp
 
 end OptimalOTS.LeanIsaBaseline.Layer.FourFusion

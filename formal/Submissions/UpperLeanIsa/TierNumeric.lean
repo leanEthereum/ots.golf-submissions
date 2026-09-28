@@ -82,8 +82,8 @@ def Pos : ℚ :=
 /-- The post-sign rate `κ_post = ρ_N + Pos / 2`. -/
 def kpost : ℚ := 1 / 2 ^ 128 + S.Pos / 2
 
-/-- The exact conditions (tier-proof.md §10 with `I = 2 ^ 128`, `CR = 1/2`). -/
-structure Valid : Prop where
+/-- Analytic conditions independent of the choice of budget potential. -/
+structure Analytic : Prop where
   K_le : S.K ≤ 256
   T_le : S.T ≤ 2 ^ 64
   a_pos : ∀ t < S.T, 0 < S.a t
@@ -96,12 +96,23 @@ structure Valid : Prop where
   hp_ge : S.Hprime ≤ S.hp
   k1_post : S.kpost ≤ S.k1
   k1_sc : S.SCf ≤ 2 * 2 ^ 19 * S.k1
+  avail : (1 - S.mass S.T) ^ (2 ^ 19 - 1) ≤ 1 / 2 ^ 128
+  acc_le : S.mass S.T ≤ 1 / 2 ^ 10
+
+/-- Legacy quadratic-budget certificate. -/
+structure Valid : Prop extends Analytic S where
   b0_pos : 1 ≤ S.b0
   b0_le : S.hp * ((S.b0 : ℚ) - 1) ≤ 2 ^ 128 * (2 * S.k1 - S.hp)
   kmax_le : S.k1 + S.hp / (4 * 2 ^ 128) * ((2 ^ 127 - S.b0 : ℕ) : ℚ) ^ 2 / 2 ^ 127 ≤
     1 / 2 ^ 127
-  avail : (1 - S.mass S.T) ^ (2 ^ 19 - 1) ≤ 1 / 2 ^ 128
-  acc_le : S.mass S.T ≤ 1 / 2 ^ 10
+
+/-- The joint class/collision potential needs only a linear budget. -/
+structure LinearValid : Prop extends Analytic S where
+  fresh_index_charge : S.hp ≤ 2 * S.k1
+  linear_budget : S.k1 ≤ 1 / 2 ^ 127
+
+instance : Coe S.Valid S.Analytic := ⟨Valid.toAnalytic⟩
+instance : Coe S.LinearValid S.Analytic := ⟨LinearValid.toAnalytic⟩
 
 end Sched
 

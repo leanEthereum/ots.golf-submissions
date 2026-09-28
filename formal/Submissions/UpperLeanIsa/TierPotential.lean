@@ -400,7 +400,7 @@ theorem one_le_cIE : 1 ≤ Tier.cIE := by
   exact tsub_le_self
 
 /-- The average new `G` term: `Σ_v p(v) ḡ(v) = c Σ_t N_t p_t² w̄_t`. -/
-theorem avg_Gp (hS : S.Valid) (hT : P.TierHyp S) :
+theorem avg_Gp (hS : S.Analytic) (hT : P.TierHyp S) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         (P.cls w).elim 0 (P.gbar S) =
       Tier.cIE * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t := by
@@ -417,7 +417,7 @@ theorem avg_Gp (hS : S.Valid) (hT : P.TierHyp S) :
         ring
 
 /-- The average new `Y` term: `Σ_v p(v) s(v) = Σ_t N_t p_t² SCK_t / (I - L)`. -/
-theorem avg_Yp (hS : S.Valid) (hT : P.TierHyp S) :
+theorem avg_Yp (hS : S.Analytic) (hT : P.TierHyp S) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
         (P.cls w).elim 0 (P.sC S) =
       ILinv * ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t := by
@@ -463,7 +463,7 @@ variable (P S)
 
 /-- **P2.** A fresh index query spends two compressions of budget and charges `Pre` at most
 `(1 + (b - 2) / I) H'` on average. -/
-theorem pre_charge_enc (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {u₀ : EncInput}
+theorem pre_charge_enc (hS : S.Analytic) (hT : P.TierHyp S) {c : Cache} {u₀ : EncInput}
     (hq : c (P.encQuery u₀) = none) {b : ℕ} (hb : 2 ≤ b) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
       P.Pre S (c.cacheQuery (P.encQuery u₀) w) (b - 2) ≤

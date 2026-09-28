@@ -24,12 +24,12 @@ abbrev rootValue (f : HashTable) (P : FourFusion.Params) := P.rootValue f
 /-- The affine checksum pins the same layer as the secure abstract codec. -/
 theorem layer_of_facts {B : BlakeRel} {v : ℕ → E} {xs : ℕ → ℕ}
     (hT : T.Hyp) (hV : Valid xs) (hP : PathFacts T B v xs) (_hL : Landing v xs) :
-    xs 0+gsum T xs = 86 := by
+    xs 0+gsum T xs = 85 := by
   have hgp := prod_eq hT hV hP.pro hP.blk 13 le_rfl
   rw [hP.gp13] at hgp
-  have hsum : (∑ w ∈ Finset.range 13, chargedCost T w (xs (w+1))) ≤ 13*13 := by
+  have hsum : (∑ w ∈ Finset.range 13, chargedCost T w (xs (w+1))) ≤ 13*16 := by
     calc
-      _ ≤ ∑ _w ∈ Finset.range 13, 13 := by
+      _ ≤ ∑ _w ∈ Finset.range 13, 16 := by
         apply Finset.sum_le_sum
         intro w hw
         have hw' := Finset.mem_range.mp hw
@@ -133,7 +133,7 @@ theorem reconFromValue_of_tops (f : HashTable) (I : Index) (bits : List Bool) (c
   | nil => exact funext fun d => ht d (by simp)
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
-    have hdep : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = ctx d := by
+    have hdep : ∀ u : Fin 8, owner k = some u → ∀ d ∈ children u, t d = ctx d := by
       intro u hu d hd
       apply ht d
       intro hmem
@@ -219,7 +219,14 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
   have hx0 : xs 0 < 64 := by have := hV 0 (by omega); rwa [Wf_zero] at this
   have hgc : gcost T I = gsum T xs := by
     unfold gcost gsum
-    rw [list_sum_range]
+    have hlist (F : ℕ → ℕ) (n : ℕ) :
+        ((List.range n).map F).sum = ∑ i ∈ Finset.range n, F i := by
+      induction n with
+      | zero => rfl
+      | succ n ih =>
+        rw [List.range_succ,List.map_append,List.sum_append,ih,Finset.sum_range_succ]
+        simp
+    rw [hlist]
     exact Finset.sum_congr rfl fun u hu => by rw [hfield u (Finset.mem_range.mp hu)]
   have hdig : ∀ k : Fin numChains, P.codec.digit (effective I) k = dg T xs k.val := by
     intro k

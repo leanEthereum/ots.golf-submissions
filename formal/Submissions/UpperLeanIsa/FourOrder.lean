@@ -19,19 +19,22 @@ instance (a b : Loc P) : Decidable (Earlier a b) := by
 theorem earlier_irrefl (a : Loc P) : ¬ Earlier a a := by
   cases a <;> simp [Earlier]
 
-theorem children_getD_mem : ∀ u : Fin 9, ∀ i : Fin 4,
+theorem children_getD_mem : ∀ u : Fin 8, ∀ i : Fin 4,
     (children u).getD i.val 0 ∈ children u := by decide
 
-theorem children_bounded : ∀ u : Fin 9, ∀ d ∈ children u, d < 42 := by decide
+theorem children_fifth_mem : ∀ u : Fin 8, five u = true →
+    (children u).getD 4 0 ∈ children u := by decide
 
-theorem Params.active_owner {k : Fin 42} {j : ℕ} {u : Fin 9} (h : P.active k j = some u) :
+theorem children_bounded : ∀ u : Fin 8, ∀ d ∈ children u, d < 42 := by decide
+
+theorem Params.active_owner {k : Fin 42} {j : ℕ} {u : Fin 8} (h : P.active k j = some u) :
     owner k = some u := by
   unfold Params.active at h
   split_ifs at h
   exact h
 
 theorem Params.chainInput_congr (t t' : Tops) (k : Fin 42) (j : ℕ) (x : Word)
-    (ht : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d) :
+    (ht : ∀ u : Fin 8, owner k = some u → ∀ d ∈ children u, t d = t' d) :
     P.chainInput t k j x = P.chainInput t' k j x := by
   unfold Params.chainInput
   cases ha : P.active k j with
@@ -42,7 +45,11 @@ theorem Params.chainInput_congr (t t' : Tops) (k : Fin 42) (j : ℕ) (x : Word)
     have h1 : t ((children u).getD 1 0) = t' ((children u).getD 1 0) := hh 1
     have h2 : t ((children u).getD 2 0) = t' ((children u).getD 2 0) := hh 2
     have h3 : t ((children u).getD 3 0) = t' ((children u).getD 3 0) := hh 3
-    simp only [Params.groupInput, fusionWords, h0, h1, h2, h3]
+    by_cases hf : five u = true
+    · have h4 := ht u (Params.active_owner ha) _ (children_fifth_mem u hf)
+      simp only [Params.groupInput, fusionWords, hf, if_true, h0, h1, h2, h3, h4]
+    · simp only [Params.groupInput, fusionWords, hf, Bool.false_eq_true, if_false,
+        h0, h1, h2, h3]
 
 theorem Record.word_agree (ξ ζ : Record P) (k : Fin 42) (j : ℕ)
     (hs : ξ.1 k = ζ.1 k)

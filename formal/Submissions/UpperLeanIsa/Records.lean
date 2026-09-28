@@ -1,6 +1,7 @@
 import Submissions.UpperLeanIsa.LayerWire
 import Submissions.UpperLeanIsa.Cache
 import Submissions.UpperLeanIsa.TierCodec
+import Submissions.UpperLeanIsa.TierKernel
 
 /-!
 # Records of a layer scheme and their oracle points
@@ -39,7 +40,7 @@ structure Hyp : Prop where
   chain_root : ∀ r < 9, P.chainMd ≠ P.rootMd r
   root_idx : ∀ r < 9, P.rootMd r ≠ P.idxMd
   root_inj : ∀ r s, r < 9 → s < 9 → P.rootMd r = P.rootMd s → r = s
-  tier : ∃ S : Tier.Sched, S.Valid ∧ P.TierHyp S
+  tier : ∃ S : Tier.Sched, S.LinearValid ∧ P.TierHyp S
   keygen_le : 2 * (∑ k, (P.len k - 1)) + 18 ≤ 2 ^ 20
   verify_le : 20 + 2 * P.layer ≤ 2 ^ 20
   len_zero : 2 ≤ P.len 0

@@ -1,10 +1,10 @@
-import Submissions.UpperLeanIsa.AffineCodec
+import Submissions.UpperLeanIsa.AffineDomains
 import Submissions.UpperLeanIsa.FourMachineDecode
 
 /-! The fixed affine-frame bytecode. Each block starts with its first
-useful instruction; the old entry jump becomes trailing padding. The security
-certificate is inherited from `AffineCodec`; `AffineMachine` assembles the full
-1110-cycle certificate. -/
+useful instruction; packed group blocks reserve exactly one control slot.
+`AffineMachine` combines the domain-separated codec and this machine in the
+1096-cycle certificate. -/
 
 namespace OptimalOTS.AffineVM
 
@@ -27,9 +27,10 @@ theorem stageIndex_lt {f : ℕ} (hf : f < 14) : stageIndex f < 14 := by
   unfold stageIndex
   split_ifs <;> omega
 
-/-- Replace a hint multiplication by the sum of its destination and stage bias. -/
+/-- Replace only hint multiplications. Checksum operands begin at cell 200,
+so reusing cell 49 for the fourteenth cost power cannot rewrite a cost MUL. -/
 def rehint : CInstr → CInstr
-  | .mul a b c => if b = gCell then .xor a (biasCell (c - h1Cell 0)) c else .mul a b c
+  | .mul a b c => if b = gCell ∧ a < 180 then .xor a (biasCell (c - h1Cell 0)) c else .mul a b c
   | ci => ci
 
 theorem rehint_cell0 (ci : CInstr) : (rehint ci).cell0 = ci.cell0 := by
@@ -49,7 +50,7 @@ inductive Place
   | body (stage value offset : ℕ)
   | trap
 
-/-- Slot geometry stays identical to the complete 1124-cycle construction. -/
+/-- The packed prefix ends at 250577; the free-chain region keeps its stride. -/
 def place (s : ℕ) : Place :=
   if s < 27 then .initial s
   else if s < gEnd then .body ((dec s).1 + 1) (dec s).2.1 (dec s).2.2
@@ -72,7 +73,7 @@ def raw (T : Tab) (a : K) : Place → CInstr
   | .body f x i =>
       if f = 0 then
         if i = 0 then .setc (gpCell 0) (ofK (gpow sentinel / a ^ 77 * a ^ x))
-        else if i ≤ x then chainOp 0 x (i-1) tfCell
+        else if i ≤ x then chainOp topCell 0 x (i-1) tfCell
         else if i = x+1 then copy (if x = 0 then wCell 0 else tfCell) tfCell
         else if i = x+2 then .xor (hCell 1) (cCell 1) (h1Cell 1)
         else if i = x+3 then .dispatch 1
@@ -158,12 +159,6 @@ def program (T : Tab) : Program where
   logSize := 18
   logSize_le := by decide
   code := instrAt T
-
-def scheme (T : Tab) : OracleAlgorithm.Scheme := (AffineCodec.params (layout T)).scheme
-
-theorem admissible (T : Tab) : (scheme T).Admissible := AffineCodec.admissible (layout T)
-
-theorem secure (T : Tab) : (scheme T).Secure := AffineCodec.secure (layout T)
 
 theorem halt_is_trap (T : Tab) : instrAt T ⟨262143,by decide⟩ = .xor 0 0 0 := by
   have hp : place 262143 = .trap := by norm_num [place,gEnd,baseF]

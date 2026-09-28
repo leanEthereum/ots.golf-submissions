@@ -192,22 +192,27 @@ theorem exitPoly_degree (n layer : Fin 301) (s : Slot) : (exitPoly n layer s).na
       have := layer.isLt
       omega
 
-abbrev AllConstraint := Constraint ⊕ (Fin 301 × Fin 301 × Slot)
+/-- In addition to control-flow separation, reserve the existing length word as
+a distinct domain label. This needs no extra machine constant. -/
+abbrev AllConstraint := Constraint ⊕ (Fin 301 × Fin 301 × Slot) ⊕ Fin 14
 
 def allConstraints (L : Layout) : AllConstraint → K[X]
   | .inl i => constraints L i
-  | .inr (n,layer,s) => exitPoly n layer s
+  | .inr (.inl (n,layer,s)) => exitPoly n layer s
+  | .inr (.inr n) => X ^ (n.val + 1) - C lengthK
 
 theorem allConstraints_ne_zero (L : Layout) (i : AllConstraint) : allConstraints L i ≠ 0 := by
-  rcases i with i | ⟨n,layer,s⟩
+  rcases i with i | ⟨n,layer,s⟩ | n
   · exact constraints_ne_zero L i
   · exact exitPoly_ne_zero n layer s
+  · exact power_sub_constant_ne_zero lengthK (Nat.succ_pos _)
 
 theorem allConstraints_degree (L : Layout) (i : AllConstraint) :
     (allConstraints L i).natDegree ≤ 300 := by
-  rcases i with i | ⟨n,layer,s⟩
+  rcases i with i | ⟨n,layer,s⟩ | n
   · exact constraints_degree L i
   · exact exitPoly_degree n layer s
+  · exact (power_sub_constant_degree lengthK _).trans (by have := n.isLt; omega)
 
 theorem allConstraints_card_bound : Fintype.card AllConstraint * 300 < Fintype.card K := by
   simp only [AllConstraint,Constraint,Stage,Slot,MaxCell,Fintype.card_sum,Fintype.card_prod,
@@ -225,7 +230,14 @@ theorem safeBase_avoids (L : Layout) (i : Constraint) :
 
 theorem safeBase_exit_avoids (L : Layout) (n layer : Fin 301) (s : Slot) :
     (exitPoly n layer s).eval (safeBase L) ≠ 0 :=
-  Classical.choose_spec (exists_safe_base L) (.inr (n,layer,s))
+  Classical.choose_spec (exists_safe_base L) (.inr (.inl (n,layer,s)))
+
+theorem safeBase_length_ne (L : Layout) {n : ℕ} (hn : 1 ≤ n) (hn' : n ≤ 14) :
+    safeBase L ^ n ≠ lengthK := by
+  have h := Classical.choose_spec (exists_safe_base L) (.inr (.inr ⟨n - 1, by omega⟩))
+  have he : n - 1 + 1 = n := by omega
+  simpa only [safeBase, allConstraints, he, Polynomial.eval_sub, Polynomial.eval_X_pow,
+    Polynomial.eval_C, sub_ne_zero] using h
 
 theorem safeBase_ne_zero (L : Layout) : safeBase L ≠ 0 := by
   have h := safeBase_avoids L (.inr (.inr (.inr (.inr ()))))

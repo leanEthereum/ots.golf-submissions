@@ -1,5 +1,4 @@
 import Submissions.UpperLeanIsa.FourScheme
-import Submissions.UpperLeanIsa.FourConcrete
 
 namespace OptimalOTS.LeanIsaBaseline.Layer.FourFusion
 open scoped Classical
@@ -94,21 +93,6 @@ theorem earlier_trans {a b c : Loc P} (hab : Earlier a b) (hbc : Earlier b c) :
     · exact Or.inr ⟨rfl,Nat.lt_trans hab hbc⟩
   all_goals first | trivial | contradiction | exact Nat.lt_trans hab hbc
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem concrete_ordered : params.locationOrder.Pairwise Earlier := by
-  haveI : IsTrans (Loc params) Earlier := ⟨fun _ _ _ => earlier_trans⟩
-  apply List.isChain_iff_pairwise.mp
-  decide +kernel
-
-theorem concrete_location_count : params.locationOrder.length = 720 := by decide +kernel
-
-/-- Coherence of every key-generation output for any fixed oracle, with no good-event assumption. -/
-theorem concrete_coherent (f : HashTable) (seeds : Fin 42 → Word) :
-    let y := params.evalLocationsValue f seeds params.locationOrder (fun _ => 0)
-    ∀ a : Loc params, y a = f ⟨896,Record.input (seeds,y) a⟩ := by
-  intro y a
-  exact params.evalLocationsValue_coherent f seeds _ concrete_ordered _ a (params.locationOrder_mem a)
 
 end
 end OptimalOTS.LeanIsaBaseline.Layer.FourFusion

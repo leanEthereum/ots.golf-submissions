@@ -115,7 +115,7 @@ theorem keygenRecord_coherent (hl : P.locationOrder.Pairwise Earlier)
 
 theorem chainValue_coherent (f : HashTable) (ξ : Record P) (hc : P.Coherent f ξ)
     (t : Tops) (k : Fin 42)
-    (ht : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = ξ.tops d)
+    (ht : ∀ u : Fin 8, owner k = some u → ∀ d ∈ children u, t d = ξ.tops d)
     (j n : ℕ) (hn : j+n < P.codec.len k) :
     P.chainValue f t k j n (ξ.word k j) = ξ.word k (j+n) := by
   induction n generalizing j with
@@ -142,7 +142,7 @@ theorem reconFromValue_honest (hP : P.codec.Hyp) (f : HashTable) (ξ : Record P)
   | nil => exact funext fun d => ht d (by simp)
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
-    have hdep : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = ξ.tops d := by
+    have hdep : ∀ u : Fin 8, owner k = some u → ∀ d ∈ children u, t d = ξ.tops d := by
       intro u hu d hd
       apply ht d
       intro hmem
@@ -242,8 +242,6 @@ theorem correct (hP : P.codec.Hyp) (hl : P.locationOrder.Pairwise Earlier) : P.s
 
 end Params
 
-theorem concrete_correct : params.scheme.Correct :=
-  params.correct params_hyp.codec concrete_ordered
 
 end
 end OptimalOTS.LeanIsaBaseline.Layer.FourFusion

@@ -200,7 +200,7 @@ theorem reconFrom_support (I : Index) (bits : List Bool) (l : List (Fin 42)) (t 
       exact hpath₂
 
 theorem chainValue_context (f : HashTable) (t t' : Tops) (k : Fin 42) (j n : ℕ) (x : Word)
-    (ht : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d) :
+    (ht : ∀ u : Fin 8, owner k = some u → ∀ d ∈ children u, t d = t' d) :
     P.chainValue f t k j n x = P.chainValue f t' k j n x := by
   induction n generalizing j x with
   | zero => rfl
@@ -212,7 +212,7 @@ theorem chainValue_context (f : HashTable) (t t' : Tops) (k : Fin 42) (j n : ℕ
     exact ih (j+1) _
 
 theorem ChainPath.context (c : Cache) (t t' : Tops) (k : Fin 42) (j n : ℕ) (x : Word)
-    (ht : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d)
+    (ht : ∀ u : Fin 8, owner k = some u → ∀ d ∈ children u, t d = t' d)
     (hp : P.ChainPath c t k j n x) : P.ChainPath c t' k j n x := by
   intro i hi
   rw [← P.chainValue_context (table c) t t' k j i x ht,
@@ -242,7 +242,7 @@ theorem reconFrom_normalized (c : Cache) (I : Index) (bits : List Bool) (l : Lis
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
     let t' := P.reconFromValue (table c) I bits (k::l) t
-    have hdep : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d := by
+    have hdep : ∀ u : Fin 8, owner k = some u → ∀ d ∈ children u, t d = t' d := by
       intro u hu d hd
       apply (P.reconFromValue_preserves (table c) I bits (k::l) t d ?_).symm
       intro hmem

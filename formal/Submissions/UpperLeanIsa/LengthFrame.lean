@@ -2,7 +2,8 @@ import Submissions.UpperLeanIsa.FourMachineLayout
 import Submissions.UpperLeanIsa.LengthGate128
 
 /-! Lemmas for reusing the validated signature length as a landing frame.
-The 1124-cycle machine uses this schedule and the nine-unit checksum shift. -/
+The packed machine uses the eight-unit checksum shift; the frame constants
+below are retained as auxiliary cell algebra. -/
 
 namespace OptimalOTS.HLFour.LengthFrame
 
@@ -32,20 +33,20 @@ theorem length_frame : ofK (gpow (exponent 1)) = OptimalOTS.HLG3.natV 5504 := by
   rw [length_value]
   rfl
 
-/-- The nine binding groups each contribute at least one hash. -/
-def deduction (u : ℕ) : ℕ := if 1 ≤ u ∧ u ≤ 4 then 0 else 1
+/-- The eight binding groups each contribute at least one hash. -/
+abbrev deduction := bindingDeduction
 
-theorem deduction_sum : (∑ u ∈ Finset.range 13, deduction u) = 9 := by decide
+theorem deduction_sum : (∑ u ∈ Finset.range 13, deduction u) = 8 := by decide
 
 theorem zero_band : ∀ u < 13, deduction u = 1 → pn u 0 = 0 := by decide
 
-theorem last_band : ∀ u < 13, deduction u = 0 → pn u 14 = 0 := by decide
+theorem last_band : ∀ u < 13, deduction u = 0 → pn u 17 = 0 := by decide
 
 theorem band_lower {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
     deduction u ≤ band u v := by
   by_cases hd : deduction u = 0
   · rw [hd]; omega
-  have hd1 : deduction u = 1 := by unfold deduction at hd ⊢; split_ifs at hd ⊢ <;> omega
+  have hd1 : deduction u = 1 := by unfold deduction bindingDeduction at hd ⊢; split_ifs at hd ⊢ <;> omega
   rw [hd1]
   have h := (band_spec hu hv).2.2
   by_contra hn
@@ -54,17 +55,17 @@ theorem band_lower {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
   simp [A, psum] at h
 
 theorem band_shift_le {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
-    band u v - deduction u ≤ 13 := by
+    band u v - deduction u ≤ 16 := by
   have hb := band_lt_17 hu hv
   by_cases hd : deduction u = 0
   · rw [hd, Nat.sub_zero]
     by_contra hn
-    have he : band u v = 14 := by omega
+    have he : band u v = 17 := by omega
     obtain ⟨_, hlo, hhi⟩ := band_spec hu hv
     rw [he] at hlo hhi
     rw [A_succ, last_band u hu hd, Nat.add_zero] at hhi
     omega
-  · have hd1 : deduction u = 1 := by unfold deduction at hd ⊢; split_ifs at hd ⊢ <;> omega
+  · have hd1 : deduction u = 1 := by unfold deduction bindingDeduction at hd ⊢; split_ifs at hd ⊢ <;> omega
     omega
 
 theorem cost_lower {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
@@ -73,35 +74,35 @@ theorem cost_lower {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF
   exact band_lower hu hv
 
 theorem cost_shift_le {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
-    cost T u v - deduction u ≤ 13 := by
+    cost T u v - deduction u ≤ 16 := by
   rw [hT.cost_eq u hu v hv]
   exact band_shift_le hu hv
 
 theorem shifted_sum (C : ℕ → ℕ) (hC : ∀ u < 13, deduction u ≤ C u) :
-    (∑ u ∈ Finset.range 13, (C u - deduction u)) + 9 = ∑ u ∈ Finset.range 13, C u := by
+    (∑ u ∈ Finset.range 13, (C u - deduction u)) + 8 = ∑ u ∈ Finset.range 13, C u := by
   rw [← deduction_sum, ← Finset.sum_add_distrib]
   apply Finset.sum_congr rfl
   intro u hu
   exact Nat.sub_add_cancel (hC u (Finset.mem_range.mp hu))
 
-/-- Subtracting one from each of nine positive binding-group costs changes the
-target from 86 to 77 and preserves exact checking by the existing product gate. -/
-theorem shifted_checksum {s c : ℕ} (hc : 9 ≤ c) (hbound : s + c ≤ 300) :
+/-- Subtracting one from each of eight positive binding-group costs changes the
+target from 85 to 77 and preserves exact checking by the existing product gate. -/
+theorem shifted_checksum {s c : ℕ} (hc : 8 ≤ c) (hbound : s + c ≤ 300) :
     LeanIsaFieldRescale.initialProduct 77 s *
-      LeanIsaFieldRescale.costFactor (c - 9) = gpow LeanIsaFieldRescale.sentinel ↔
-      s + c = 86 := by
+      LeanIsaFieldRescale.costFactor (c - 8) = gpow LeanIsaFieldRescale.sentinel ↔
+      s + c = 85 := by
   rw [LeanIsaFieldRescale.checksum_exact (by decide) (by omega)]
   omega
 
 theorem shifted_product (s c : ℕ) :
     LeanIsaFieldRescale.initialProduct 77 s * LeanIsaFieldRescale.costFactor c =
-    LeanIsaFieldRescale.initialProduct 86 s * LeanIsaFieldRescale.costFactor (c + 9) := by
-  have he : LeanIsaFieldRescale.costFactor 86 =
-      LeanIsaFieldRescale.costFactor 77 * LeanIsaFieldRescale.costFactor 9 :=
-    (LeanIsaFieldRescale.factor_add 77 9).symm
+    LeanIsaFieldRescale.initialProduct 85 s * LeanIsaFieldRescale.costFactor (c + 8) := by
+  have he : LeanIsaFieldRescale.costFactor 85 =
+      LeanIsaFieldRescale.costFactor 77 * LeanIsaFieldRescale.costFactor 8 :=
+    (LeanIsaFieldRescale.factor_add 77 8).symm
   have h77 : LeanIsaFieldRescale.costFactor 77 ≠ 0 := pow_ne_zero _ g_ne_zero
-  have h9 : LeanIsaFieldRescale.costFactor 9 ≠ 0 := pow_ne_zero _ g_ne_zero
-  simp only [LeanIsaFieldRescale.initialProduct, he, ← LeanIsaFieldRescale.factor_add c 9]
+  have h8 : LeanIsaFieldRescale.costFactor 8 ≠ 0 := pow_ne_zero _ g_ne_zero
+  simp only [LeanIsaFieldRescale.initialProduct, he, ← LeanIsaFieldRescale.factor_add c 8]
   field_simp
 
 

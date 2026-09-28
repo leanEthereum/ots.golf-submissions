@@ -1,5 +1,5 @@
 import Submissions.UpperLeanIsa.FourMachineProgram
-import Submissions.UpperLeanIsa.FourConcrete
+import Submissions.UpperLeanIsa.FourChildCodec
 
 /-! Concrete raw tables and their relation to the 127-bit effective index. -/
 
@@ -32,7 +32,7 @@ theorem rawCode_lt {u v : ℕ} (hu : u < 13) (hv : v < 2 ^ gb u) :
   · subst u; norm_num [gb] at hv ⊢; omega
   · rw [if_neg h0, if_neg h0]; exact hv
 
-theorem AS_eq : ∀ u < 13, ∀ c ≤ 17,
+theorem AS_eq : ∀ u < 13, ∀ c ≤ 18,
     A u c = (if u = 0 then 2 else 1) * FourChildCodec.AS (FourChildCodec.ushape u) c := by decide
 
 theorem A_top : ∀ u < 13, ∀ c ≤ 18, nb u ≤ c → A u c = VF u := by decide
@@ -89,9 +89,9 @@ theorem fusion_band_eq {u v : ℕ} (hu : u < 13) (hvl : v < VF u) :
   have hv : v < 2 ^ gb u := lt_of_lt_of_le hvl (VF_le u hu)
   have hcut : rawCode u v < FourChildCodec.cut u := (live_iff hu v hv).mpr hvl
   obtain ⟨h1, h2⟩ := FourChildCodec.cost_spec hcut
-  have hc : FourChildCodec.cost u (rawCode u v) < 17 := FourChildCodec.cost_lt hcut
-  have ha := AS_eq u hu _ (show FourChildCodec.cost u (rawCode u v) ≤ 17 by omega)
-  have hb := AS_eq u hu _ (show FourChildCodec.cost u (rawCode u v) + 1 ≤ 17 by omega)
+  have hc : FourChildCodec.cost u (rawCode u v) < 18 := FourChildCodec.cost_lt hcut
+  have ha := AS_eq u hu _ (show FourChildCodec.cost u (rawCode u v) ≤ 18 by omega)
+  have hb := AS_eq u hu _ (show FourChildCodec.cost u (rawCode u v) + 1 ≤ 18 by omega)
   have h1' : A u (FourChildCodec.cost u (rawCode u v)) ≤ v := by
     rw [ha]; by_cases h0 : u = 0 <;> simp only [rawCode, h0, if_true, if_false] at h1 ⊢ <;> omega
   have h2' : v < A u (FourChildCodec.cost u (rawCode u v) + 1) := by
@@ -100,6 +100,71 @@ theorem fusion_band_eq {u v : ℕ} (hu : u < 13) (hvl : v < VF u) :
     by_contra h
     rw [A_top u hu _ (by omega) (by omega)] at h1'; omega
   exact (bandIdx_eq (A_mono u) hnb h1' h2').symm
+
+theorem zeroCount_take (xs : List ℕ) (n : ℕ) (hn : n ≤ xs.length) :
+    ((List.range n).map (fun i => if xs.getD i 0 = 0 then 1 else 0)).sum =
+      SplitTables.zeroCount (xs.take n) := by
+  induction n generalizing xs with
+  | zero => rfl
+  | succ n ih =>
+    cases xs with
+    | nil => simp at hn
+    | cons a xs =>
+      simp only [List.length_cons] at hn
+      simp only [List.range_succ_eq_map, List.map_cons, List.map_map, Function.comp_def,
+        List.getD_cons_zero, List.getD_cons_succ, List.sum_cons, List.take_succ_cons]
+      rw [ih xs (by omega)]
+      by_cases ha : a = 0 <;> simp [SplitTables.zeroCount, ha, Nat.add_comm]
+
+theorem copyCount_tuple {u : ℕ} (hu : u < 13) (xs : List ℕ) (hl : xs.length = gk u) :
+    copyCount (fun _ _ i => xs.getD i 0) u 0 =
+      if u = 5 then 0 else SplitTables.zeroCount (xs.take (SplitTables.visible u)) := by
+  have hv : visible u ≤ xs.length := by unfold visible; omega
+  have he : visible u = SplitTables.visible u := by
+    unfold visible gk SplitTables.visible SplitTables.dim SplitTables.hidden
+    rfl
+  have hcount := zeroCount_take xs (visible u) hv
+  rw [← he]
+  unfold copyCount copied
+  interval_cases u <;>
+    norm_num [isExp, visible, gk, List.range_succ, List.map_append, List.map_cons,
+      List.map_nil, List.sum_append, List.sum_cons, List.sum_nil] at hcount ⊢ <;>
+    exact hcount
+
+theorem fusion_ordinary {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
+    machineOrdinary fusionTab u v ≤ gcu u - 1 := by
+  have hvb := lt_of_lt_of_le hv (VF_le u hu)
+  have hv' := (live_iff hu v hvb).mpr hv
+  have hs : FourChildCodec.ushape u = u := Nat.mod_eq_of_lt hu
+  have ho := FourChildCodec.ordinary_bound (FourChildCodec.ushape_lt u) hv'
+  rw [FourChildCodec.ordinary_eq (FourChildCodec.ushape_lt u) hv'] at ho
+  have hlen := FourChildCodec.tup_length (rawCode_lt hu hvb)
+  rw [(shape_eq u hu).1] at hlen
+  have hcopies := copyCount_tuple hu (FourChildCodec.tup u (rawCode u v)) hlen
+  have hsame : copyCount fusionTab u v =
+      copyCount (fun _ _ i => (FourChildCodec.tup u (rawCode u v)).getD i 0) u 0 := rfl
+  rw [← hsame] at hcopies
+  unfold machineOrdinary
+  rw [hcopies, fusion_cost_eq hu hvb]
+  change 3 + (if FourChildCodec.ushape u = 0 ∨ rawCode u v = 0 then 1 else 2) +
+    (if FourChildCodec.ushape u = 5 then 0 else
+      SplitTables.zeroCount ((FourChildCodec.tup u (rawCode u v)).take
+        (SplitTables.visible (FourChildCodec.ushape u)))) +
+    (if 14 < FourChildCodec.cost u (rawCode u v) -
+      (if SplitTables.binding (FourChildCodec.ushape u) then 1 else 0) then 1 else 0)
+      ≤ SplitTables.budget (FourChildCodec.ushape u) at ho
+  rw [hs] at ho
+  have hb : SplitTables.budget u = gcu u - 1 :=
+    (show ∀ u < 13, SplitTables.budget u = gcu u - 1 by decide) u hu
+  have hd : (if SplitTables.binding u then 1 else 0) = bindingDeduction u :=
+    (show ∀ u < 13, (if SplitTables.binding u then 1 else 0) = bindingDeduction u by decide) u hu
+  rw [hb, hd] at ho
+  by_cases h0 : u = 0
+  · subst u
+    simpa only [rawCode, if_true, true_or, ite_false, ne_eq, not_true_eq_false, false_and,
+      Nat.add_comm, Nat.add_left_comm, Nat.add_assoc] using ho
+  · simp only [rawCode, if_neg h0, h0, false_or] at ho
+    by_cases hv0 : v = 0 <;> simp [rawCode, h0, hv0] at ho ⊢ <;> omega
 
 theorem fusionTab_hyp : fusionTab.Hyp where
   cost_eq u hu v hv := by
@@ -110,6 +175,8 @@ theorem fusionTab_hyp : fusionTab.Hyp where
     have h := FourChildCodec.tupS_lt (FourChildCodec.ushape_lt u) hv' (i := i) (by rw [hk]; exact hi)
     rw [shLen_eq u hu i hi] at h
     exact h
+
+  ordinary_le u hu v hv := fusion_ordinary hu hv
 
 theorem fusion_freeDigit (c : ℕ) : FourChildCodec.freeDigit c = freeDigit c := by
   unfold FourChildCodec.freeDigit freeDigit
@@ -127,47 +194,6 @@ theorem cellBits_gpow_one : cellBits (ofK (gpow 1)) = cellBits gV := by
 
 theorem cellBits_gpow_zero : cellBits (ofK (gpow 0)) = cellBits oneV := by
   unfold oneV; rw [gpow_zero']
-
-theorem params_digit (I : Index) (k : Fin numChains) : FourFusion.params.codec.digit I k = FourChildCodec.digit I k := rfl
-
-theorem tagWord_eq_cell (c : Fin 47) (hc : c.val < 45) :
-    Fusion.tagWord c = cellBits (cV c.val) := by
-  rw [Fusion.tagWord_small c hc]
-  rfl
-
-theorem fusion_compat : Compat FourFusion.params fusionTab where
-  len k := lenN_eq k.val k.isLt
-  layer := rfl
-  digit_grp I u i hu hi := by
-    have hk := chainOf_lt u hu i hi
-    have hk1 := chainOf_pos u hu i hi
-    obtain ⟨e1, e2⟩ := unitOf_eq _ hk hk1
-    rw [params_digit, FourChildCodec.digit_group (effective I) ⟨chainOf u i, hk⟩ (show chainOf u i ≠ 0 by omega)]
-    simp only [e1, e2, unitOf_chainOf u hu i hi, coordOf_chainOf u hu i hi, field_eq hu]
-    rfl
-  digit_free I hl := by
-    rw [params_digit, FourChildCodec.digit_free_live (fun u hu => by
-        rw [field_eq hu]; exact (live_iff hu _ (digitW_lt _ _ _)).mpr (hl u hu)),
-      fusion_freeDigit, fusion_gsum]
-  live I hacc u hu := by
-    have h := ((FourChildCodec.not_dummy_iff _).mp ((FourChildCodec.accepted_iff _).mp hacc).1) u hu
-    rw [field_eq hu] at h
-    exact (live_iff hu _ (digitW_lt _ _ _)).mp h
-  tag k j _ := by
-    refine ⟨?_, ?_, ?_⟩ <;>
-    · show FourChildCodec.gword _ = _
-      rw [off_eq k.val k.isLt]
-      rfl
-  hiTop _ := rfl
-  cv := by
-    change FourChildCodec.gword 1 ++ FourChildCodec.gword 0 = cellBits gV ++ cellBits oneV
-    unfold FourChildCodec.gword
-    rw [cellBits_gpow_one, cellBits_gpow_zero]
-  chainMd := cellBits_gpow_zero
-  idxMd := cellBits_gpow_one
-  fusedMd _ := rfl
-  fusedTag _ := rfl
-  rootMd r := tagWord_eq_cell (FourFusion.rootIndex r) (by change 4 < 45; decide)
 
 end
 end OptimalOTS.HLFour

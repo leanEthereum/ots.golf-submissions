@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.AffineMachine
 
-/-! The 1110-cycle leanISA submission. Affine destination-dependent frames remove
-fourteen entry jumps while preserving the layer-86 four-child binding scheme.
+/-! The 1096-cycle leanISA submission. Split alias multiplicities and mixed
+four- and five-child packets implement a layer-85 scheme with four internal children.
 The certificate covers security, the honest prover, all committed images, and
 the complete execution cost including the public-boundary charge. -/
 
@@ -15,8 +15,8 @@ noncomputable def submission : LeanIsa.Submission := AffineVM.affineMachine
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1110` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1110 := AffineVM.affine_certificate
+`1096` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1096 := AffineVM.affine_certificate
 
 /-- The bytecode slots and memory cells the prover must seed and finalize, together fewer than
 `LeanIsa.maxSeededRows`. -/

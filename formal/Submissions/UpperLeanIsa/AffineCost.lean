@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.AffineLength
-import Submissions.UpperLeanIsa.FourMachineCycles
+import Submissions.UpperLeanIsa.PackedSupport
 
-/-! Exact cost of the straight blocks and a well-formed layer-86 path.
+/-! Exact cost of the straight blocks and a well-formed layer-85 path.
 `AffinePath.run_full` connects actual completing executions to these lists;
 `AffineCycles.cycles` derives the universal `Submission.CyclesAtMost` clause. -/
 
@@ -13,7 +13,7 @@ noncomputable section
 def bodyCode (T : Tab) (a : K) (f x : ℕ) : List CInstr :=
   if f = 0 then
     [.setc (gpCell 0) (ofK (gpow sentinel / a ^ 77 * a ^ x))] ++
-      chainOps 0 x tfCell ++ [copy (if x = 0 then wCell 0 else tfCell) tfCell,
+      chainOps topCell 0 x tfCell ++ [copy (if x = 0 then wCell 0 else tfCell) tfCell,
         .xor (hCell 1) (cCell 1) (h1Cell 1)]
   else (body T (f-1) x false).map rehint
 
@@ -41,7 +41,7 @@ theorem bodyCode_straight (T : Tab) (a : K) (f x : ℕ) :
     rcases hi with (rfl | hi) | rfl | rfl
     · rfl
     · obtain ⟨t,ht,rfl⟩ := mem_chainOps.mp hi
-      exact chainOp_straight _ _ _ _
+      exact chainOp_straight _ _ _ _ _
     · rfl
     · rfl
   · rw [if_neg hf] at hi
@@ -70,27 +70,49 @@ def pathCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
 def pathSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
   18 + ∑ f ∈ Finset.range 14, (1 + (bodyCode T (base T) f (xs f)).length)
 
+theorem ordinary_body_sum :
+    ∑ f ∈ Finset.range 14, (gcuF f - 2) = 75 := by decide
+
+theorem root_body_sum : ∑ f ∈ Finset.range 14, hmF f = 1 := by decide
+
+theorem hash_body_sum (T : Tab) (xs : ℕ → ℕ) :
+    ∑ f ∈ Finset.range 14, cF T f (xs f) = xs 0 + gsum T xs := by
+  rw [Finset.sum_range_succ', cF_zero, Nat.add_comm]
+  unfold gsum
+  congr 1
+
 theorem pathCost_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 86) : pathCost T xs = 990 := by
-  have h := totalCost_eq hT hV hLayer
-  simp only [totalCost,frU,Finset.sum_add_distrib,Finset.sum_const,Finset.card_range,
-    nsmul_eq_mul] at h
-  simp only [pathCost,bodyCode_lcost,Finset.sum_add_distrib,Finset.sum_const,
-    Finset.card_range,nsmul_eq_mul]
-  omega
+    (hLayer : xs 0 + gsum T xs = 85) : pathCost T xs = 976 := by
+  unfold pathCost
+  simp only [bodyCode_lcost]
+  have he : ∀ f ∈ Finset.range 14, lcost (bodyF T f (xs f)) =
+      gcuF f - 2 + 10 * (cF T f (xs f) + hmF f) :=
+    fun f hf => bodyF_lcost hT (Finset.mem_range.mp hf) (hV f (Finset.mem_range.mp hf))
+  simp_rw [Finset.sum_add_distrib]
+  rw [Finset.sum_congr rfl he]
+  simp_rw [Finset.sum_add_distrib, ← Finset.mul_sum]
+  rw [ordinary_body_sum, Finset.sum_add_distrib, hash_body_sum, root_body_sum, hLayer]
+  norm_num
 
 theorem pathSteps_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 86) : pathSteps T xs = 198 := by
-  have h := totalSteps_eq hT hV hLayer
-  simp only [totalSteps,frU,Finset.sum_add_distrib,Finset.sum_const,Finset.card_range,
-    nsmul_eq_mul] at h
-  simp only [pathSteps,bodyCode_length,Finset.sum_add_distrib,Finset.sum_const,
-    Finset.card_range,nsmul_eq_mul]
-  omega
+    (hLayer : xs 0 + gsum T xs = 85) : pathSteps T xs = 193 := by
+  unfold pathSteps
+  simp only [bodyCode_length]
+  have he : ∀ f ∈ Finset.range 14, (bodyF T f (xs f)).length =
+      gcuF f - 2 + cF T f (xs f) + hmF f :=
+    fun f hf => bodyF_len hT (Finset.mem_range.mp hf) (hV f (Finset.mem_range.mp hf))
+  simp_rw [Finset.sum_add_distrib]
+  rw [Finset.sum_congr rfl he]
+  simp_rw [Finset.sum_add_distrib]
+  rw [ordinary_body_sum, hash_body_sum, root_body_sum, hLayer]
+  norm_num
+
+theorem boundary_eq : LeanIsa.boundaryCycles = 120 := by decide
 
 theorem path_with_boundary {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 86) : LeanIsa.boundaryCycles + pathCost T xs = 1110 := by
-  rw [pathCost_eq hT hV hLayer,boundary_eq]
+    (hLayer : xs 0 + gsum T xs = 85) : LeanIsa.boundaryCycles + pathCost T xs = 1096 := by
+  rw [pathCost_eq hT hV hLayer]
+  rw [boundary_eq]
 
 end
 end OptimalOTS.AffineVM

@@ -153,7 +153,12 @@ def gpV (I : Word) (u : ℕ) : E :=
   ofK (AffineFrames.initialProduct (layout T) 77 (hxs T I 0) *
     base T ^ (∑ w ∈ Finset.range u, chargedCost T w (hxs T I (w + 1))))
 
-def pairK (i : ℕ) : ℕ := [10, 11, 7, 14, 19, 20, 25, 26, 31, 34, 39, 40, 13, 17, 23, 27, 33, 37, 8, 9, 0, 1, 2, 3, 4, 5, 6, 12, 15, 16, 18, 21, 22, 24, 28, 29, 30, 32, 35, 36, 38, 41].getD i 0
+/-- Intermediate product for blocks whose shifted cost needs two multiplications. -/
+def gpTmpV (I : Word) (u : ℕ) : E :=
+  ofK (AffineFrames.initialProduct (layout T) 77 (hxs T I 0) *
+    base T ^ ((∑ w ∈ Finset.range u, chargedCost T w (hxs T I (w + 1))) + 14))
+
+def pairK (i : ℕ) : ℕ := [1,2,19,20,25,26,34,35,12,13,16,17,23,27,33,37,8,9,3,4,0,5,6,7,10,11,14,15,18,21,22,24,28,29,30,31,32,36,38,39,40,41].getD i 0
 
 /-- The physical answer pair, placing the top at offset topOff k and the unused half beside it. -/
 def topPair (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) (k b : ℕ) : E :=
@@ -179,6 +184,7 @@ def hcell (bits : List Bool) (y0 : BitVec 256) (A : ℕ → ℕ → BitVec 256) 
   else if 160 ≤ c ∧ c < 174 then ofK (gpow (ent (c-160) (hxs T (idxOf y0) (c-160))))
   else if 180 ≤ c ∧ c < 194 then ofK (blockFrame T (c-180) (hxs T (idxOf y0) (c-180)))
   else if 200 ≤ c ∧ c < 214 then gpV T (idxOf y0) (c-200)
+  else if 220 ≤ c ∧ c < 233 then gpTmpV T (idxOf y0) (c-220)
   else if c < 256 then 0
   else if c=344 then loC (RA 0)
   else if c=345 then hiC (RA 0)

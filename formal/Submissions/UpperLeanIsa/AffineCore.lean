@@ -10,7 +10,8 @@ noncomputable section
 
 theorem rehint_copy (a b : ℕ) : rehint (copy a b) = copy a b := rfl
 
-theorem rehint_chainOp (k d t dst : ℕ) : rehint (chainOp k d t dst) = chainOp k d t dst := by
+theorem rehint_chainOp (readTop : ℕ → ℕ) (k d t dst : ℕ) :
+    rehint (chainOp readTop k d t dst) = chainOp readTop k d t dst := by
   unfold chainOp
   split_ifs <;> rfl
 
@@ -57,7 +58,7 @@ theorem PathFacts.seg_rel (hp : PathFacts T B v xs) {u i : ℕ} (hu : u < 13) (h
   exact Or.inl (Or.inl (Or.inl (Or.inr (mem_segs.mpr ⟨i,hi,hm⟩))))
 
 theorem PathFacts.free_chain (hp : PathFacts T B v xs) {t : ℕ} (ht : t < xs 0) :
-    (chainOp 0 (xs 0) t tfCell).RelB B v := by
+    (chainOp topCell 0 (xs 0) t tfCell).RelB B v := by
   apply hp.blk 0 (by decide)
   rw [free_bodyCode]
   exact List.mem_cons_of_mem _ (List.mem_append_left _ (mem_chainOps.mpr ⟨t,ht,rfl⟩))

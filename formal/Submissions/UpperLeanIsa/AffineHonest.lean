@@ -22,7 +22,7 @@ theorem reconstruction_spec (P : FourFusion.Params) (f : HashTable) (I : Index) 
   | cons k l ih =>
     obtain ⟨hbefore,hl⟩ := List.pairwise_cons.mp hl
     let t' := P.reconFromValue f I bits (k::l) t
-    have hdep : ∀ u : Fin 9, owner k = some u → ∀ d ∈ children u, t d = t' d := by
+    have hdep : ∀ u : Fin 8, owner k = some u → ∀ d ∈ children u, t d = t' d := by
       intro u hu d hd
       apply (P.reconFromValue_preserves f I bits (k::l) t d ?_).symm
       intro hmem
@@ -158,6 +158,12 @@ theorem hv_cc {c : ℕ} (hc : c ≤ 13) : hv P T f pk m bits (cCell c) = cV T c 
   · simpa only [cV,pow_zero,oneV,cCell,ite_true,oneCell] using (hv_one (P:=P) (T:=T) (f:=f) (pk:=pk) (m:=m) (bits:=bits))
   · exact hv_c (by unfold cCell; split_ifs <;> omega)
       (by unfold cCell; split_ifs <;> omega) (hc_c _ _ _ _ _ h0 hc)
+
+theorem hv_cost_c {c : ℕ} (hc : c ≤ 14) : hv P T f pk m bits (cCell c) = cV T c := by
+  by_cases h14 : c = 14
+  · subst c
+    exact hv_g
+  · exact hv_cc (by omega)
 theorem hv_idx : hv P T f pk m bits idxCell = loC (y0F P f pk m bits) :=
   hv_c (by decide) (by decide) (hc_idx ..)
 theorem hv_idx1 : hv P T f pk m bits (idxCell + 1) = hiC (y0F P f pk m bits) :=
@@ -184,6 +190,10 @@ theorem hv_gpl {u : ℕ} (hu : u ≤ 13) :
     hv P T f pk m bits (gpCell u) = gpV T (IF P f pk m bits) u :=
   hv_c (by unfold gpCell; omega)
     (by unfold gpCell; omega) (hc_gp _ _ _ _ _ hu)
+
+theorem hv_gpTmp {u : ℕ} (hu : u < 13) :
+    hv P T f pk m bits (gpTmp u) = gpTmpV T (IF P f pk m bits) u :=
+  hv_c (by unfold gpTmp; omega) (by unfold gpTmp; omega) (hc_gpTmp _ _ _ _ _ hu)
 
 theorem hv_tf : hv P T f pk m bits tfCell =
     cellOfBits (topOf T bits (y0F P f pk m bits) (AF P T f pk m bits) 0) :=
@@ -253,7 +263,7 @@ include hC hacc in
 theorem hlive : ∀ u < 13, field u (IF P f pk m bits) < VF u := hC.live _ hacc
 
 include hC hacc in
-theorem hsum : XF P T f pk m bits 0 + gsum T (XF P T f pk m bits) = 86 := by
+theorem hsum : XF P T f pk m bits 0 + gsum T (XF P T f pk m bits) = 85 := by
   have h : ∑ k : Fin numChains, P.codec.digit (effective (IF P f pk m bits)) k = P.codec.layer := hacc
   rw [hC.layer, Finset.sum_congr rfl (fun k _ => (hd_eq P T hC _ (hlive hC hacc) k).symm),
     Fin.sum_univ_eq_sum_range (fun k => hd T (y0F P f pk m bits) k) 42] at h
@@ -340,7 +350,7 @@ theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   apply congrArg ofK
   have hs := hsum hC hacc
   change hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,
-    cost T w (hxs T (IF P f pk m bits) (w+1)) = 86 at hs
+    cost T w (hxs T (IF P f pk m bits) (w+1)) = 85 at hs
   have hshift := charged_sum hT (hxs_valid T _ (hlive hC hacc))
   have hc : hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,
       chargedCost T w (hxs T (IF P f pk m bits) (w+1)) = 77 := by omega

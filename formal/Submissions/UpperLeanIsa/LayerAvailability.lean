@@ -511,7 +511,7 @@ theorem loop_failure_one (sk : SecretKey) (m : Message) (η₀ : Nonce) :
 
 variable {P} in
 /-- The accepted indices number `∑ t, N t * a t`. -/
-theorem numValid_eq {S : Tier.Sched} (hS : S.Valid) (hT : P.TierHyp S) :
+theorem numValid_eq {S : Tier.Sched} (hS : S.Analytic) (hT : P.TierHyp S) :
     P.numValid = ∑ t ∈ Finset.range S.T, S.N t * S.a t := by
   rw [← card_tierI_lt hS hT le_rfl]
   unfold numValid
@@ -519,7 +519,7 @@ theorem numValid_eq {S : Tier.Sched} (hS : S.Valid) (hT : P.TierHyp S) :
 
 variable {P} in
 /-- `2 ^ 19 - 1` trials fail with probability at most `2 ^ -128` (condition `avail`). -/
-theorem miss_trials_pred_le {S : Tier.Sched} (hS : S.Valid) (hT : P.TierHyp S) :
+theorem miss_trials_pred_le {S : Tier.Sched} (hS : S.Analytic) (hT : P.TierHyp S) :
     P.miss ^ (trials - 1) ≤ 1 / 2 ^ 128 := by
   have hN := numValid_eq hS hT
   have hX : P.numValid ≤ 2 ^ 127 := P.numValid_le
@@ -594,7 +594,7 @@ theorem sign_failure_le (sk : SecretKey) (m : Message) (c : Cache) (hc : P.NoIdx
   rw [P.sign_eq sk m]
   exact P.loop_failure_one sk m η₀ trials ∅ c (by norm_num [trials]) hfresh
 
-theorem sign_isNone_le' {S : Tier.Sched} (hS : S.Valid) (hT : P.TierHyp S) (sk : SecretKey)
+theorem sign_isNone_le' {S : Tier.Sched} (hS : S.Analytic) (hT : P.TierHyp S) (sk : SecretKey)
     (m : Message) (c : Cache) (hc : P.NoIdxBut c) :
     E (run (P.sign sk m >>= fun σ => pure σ.isNone) c) (fun p => if p.1 = true then 1 else 0) ≤
       1 / 2 ^ signingFailureBits := by
@@ -606,7 +606,7 @@ theorem sign_isNone_le' {S : Tier.Sched} (hS : S.Valid) (hT : P.TierHyp S) (sk :
 probability at most `2 ^ -128`, given the metadata separation and the availability condition of a
 tier schedule of the scheme. -/
 theorem signingFailure (hc : P.chainMd ≠ P.idxMd) (hr : ∀ r < 9, P.rootMd r ≠ P.idxMd)
-    {S : Tier.Sched} (hS : S.Valid) (hT : P.TierHyp S) :
+    {S : Tier.Sched} (hS : S.Analytic) (hT : P.TierHyp S) :
     P.scheme.SigningFailureAtMost (1 / 2 ^ signingFailureBits) := by
   intro message
   rw [probTrue_eq_E_run, run_bind, E_bind]

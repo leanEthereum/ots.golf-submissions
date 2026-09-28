@@ -30,7 +30,10 @@ theorem pro_length : v lenCell = natV 5504 := by
 theorem pro_g : v gCell = ofK (base T ^ 14) :=
   hp _ (prefixCode_mem T (i:=14) (by decide : 14 < 17))
 
-theorem pro_c {c : ℕ} (hc : c ≤ 13) : v (cCell c) = ofK (base T ^ c) := by
+theorem pro_c {c : ℕ} (hc : c ≤ 14) : v (cCell c) = ofK (base T ^ c) := by
+  by_cases hc14 : c = 14
+  · subst c; exact pro_g hp
+  have hc : c ≤ 13 := by omega
   rcases Nat.eq_zero_or_pos c with rfl | hc0
   · simpa only [cCell,ite_true,pow_zero,oneV,oneCell] using pro_one hp
   · have h := hp _ (prefixCode_mem T (i:=c-1) (by omega : c-1 < 17))
@@ -65,6 +68,7 @@ theorem nextHint_mem (T : Tab) (a : K) {f x : ℕ} (hf : f < 13) :
     refine List.mem_map.mpr ⟨_,hm,?_⟩
     simp only [rehint,ite_true,h1Cell]
     rw [show 180+(f+1)-180 = f+1 by omega]
+    rw [if_pos ⟨trivial, by unfold hCell; omega⟩]
 
 theorem next_hint {T : Tab} {B : BlakeRel} {v : ℕ → E}
     (hp : ∀ ci ∈ prefixCode T 17, ci.RelB B v) {f x : ℕ} (hf : f < 13)
@@ -80,16 +84,52 @@ theorem seed_mem (T : Tab) (x : ℕ) :
   rw [free_bodyCode]
   exact List.mem_cons_self
 
-theorem prod_mem {T : Tab} (hT : T.Hyp) {u x : ℕ} (hu : u < 13) (hx : x < VF u) :
-    prodOp T u x ∈ bodyCode T (base T) (u+1) x := by
-  rw [bodyCode,if_neg (by omega),Nat.add_sub_cancel]
-  have hm : prodOp T u x ∈ body T u x false := by unfold body; simp
+theorem rehint_prodOp (T : Tab) (u x : ℕ) :
+    rehint (prodOp T u x) = prodOp T u x := by
+  simp only [prodOp, rehint]
+  rw [if_neg (by unfold gpCell; omega)]
+
+theorem rehint_prodOps {T : Tab} {u x : ℕ} {ci : CInstr}
+    (hi : ci ∈ prodOps T u x) : rehint ci = ci := by
+  unfold prodOps at hi
+  split_ifs at hi <;> simp only [List.mem_append, List.mem_singleton, List.not_mem_nil, or_false] at hi
+  · rcases hi with rfl | rfl
+    · exact rehint_prodOp T u x
+    · simp only [rehint]; rw [if_neg (by unfold gpTmp; omega)]
+  · subst ci; exact rehint_prodOp T u x
+
+theorem prodOps_mem {T : Tab} {u x : ℕ} {ci : CInstr}
+    (hi : ci ∈ prodOps T u x) :
+    ci ∈ bodyCode T (base T) (u+1) x := by
+  rw [bodyCode, if_neg (by omega), Nat.add_sub_cancel]
+  refine List.mem_map.mpr ⟨ci, ?_, rehint_prodOps hi⟩
+  unfold body
+  simp only [List.mem_append]
+  exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inr hi))))
+
+/-- Both checksum multipliers are extracted from the actual instruction list. -/
+theorem prod_relation {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E}
+    (hp : ∀ ci ∈ prefixCode T 17, ci.RelB B v) {u x : ℕ}
+    (hu : u < 13) (hx : x < VF u)
+    (hb : ∀ ci ∈ bodyCode T (base T) (u+1) x, ci.RelB B v) :
+    v (gpCell (u+1)) = v (gpCell u) * ofK (base T ^ chargedCost T u x) := by
   have hc := LengthFrame.cost_shift_le hT hu hx
-  change chargedCost T u x ≤ 13 at hc
-  have hn : cCell (chargedCost T u x) ≠ gCell := by
-    unfold cCell gCell
-    split_ifs <;> omega
-  exact List.mem_map.mpr ⟨_,hm,by simp only [prodOp,rehint,if_neg hn]⟩
+  change chargedCost T u x ≤ 16 at hc
+  have hfirst := hb _ (prodOps_mem (show prodOp T u x ∈ prodOps T u x by
+    unfold prodOps; simp))
+  by_cases he : 14 < chargedCost T u x
+  · have hsecond := hb _ (prodOps_mem (show
+        CInstr.mul (gpTmp u) (cCell (chargedCost T u x - 14)) (gpCell (u+1)) ∈ prodOps T u x by
+      unfold prodOps; rw [if_pos he]; simp))
+    change v (gpCell (u+1)) = v (gpTmp u) * v (cCell (chargedCost T u x - 14)) at hsecond
+    have hmin : min 14 (chargedCost T u x) = 14 := min_eq_left (by omega)
+    simp only [prodOp, hmin, if_pos he, CInstr.RelB] at hfirst
+    rw [hsecond, hfirst, pro_c hp (by omega : 14 ≤ 14),
+      pro_c hp (by omega : chargedCost T u x - 14 ≤ 14),
+      mul_assoc, ← ofK_mul, ← pow_add, Nat.add_sub_of_le (by omega : 14 ≤ chargedCost T u x)]
+  · have hmin : min 14 (chargedCost T u x) = chargedCost T u x := min_eq_right (by omega)
+    simp only [prodOp, hmin, if_neg he, CInstr.RelB] at hfirst
+    rw [hfirst, pro_c hp (by omega)]
 
 /-- The free seed multiplied by exactly the preceding charged group costs. -/
 theorem prod_eq {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E} {xs : ℕ → ℕ}
@@ -108,10 +148,8 @@ theorem prod_eq {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E} {xs : ℕ 
     have hx : xs (u+1) < VF u := by
       have h := hV (u+1) (by omega)
       rwa [Wf_succ (by omega)] at h
-    have hr := hb (u+1) (by omega) _ (prod_mem hT (by omega) hx)
-    change v (gpCell (u+1)) = v (gpCell u)*v (cCell (chargedCost T u (xs (u+1)))) at hr
-    rw [hr,ih (by omega),pro_c hp (c:=chargedCost T u (xs (u+1))) (LengthFrame.cost_shift_le hT (by omega) hx),
-      ← ofK_mul,Finset.sum_range_succ,pow_add,mul_assoc]
+    have hr := prod_relation hT hp (by omega) hx (hb (u+1) (by omega))
+    rw [hr, ih (by omega), ← ofK_mul, Finset.sum_range_succ, pow_add, mul_assoc]
 
 def ctlSlot (T : Tab) (xs : ℕ → ℕ) (f : ℕ) : ℕ :=
   if f = 0 then 17 else ent (f-1) (xs (f-1))+(bodyCode T (base T) (f-1) (xs (f-1))).length

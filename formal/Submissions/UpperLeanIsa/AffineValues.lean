@@ -28,7 +28,7 @@ include hP in
 theorem v_g : v gCell = gV T := pro_g hP.pro
 
 include hP in
-theorem v_c {c : ℕ} (hc : c ≤ 13) : v (cCell c) = cV T c := pro_c hP.pro hc
+theorem v_c {c : ℕ} (hc : c ≤ 13) : v (cCell c) = cV T c := pro_c hP.pro (by omega)
 
 include hP in
 theorem cb_cv (hC : Compat P T) : cellBits (v (oneCell+1)) ++ cellBits (v oneCell) = P.codec.cv := by
@@ -41,10 +41,18 @@ include hP in
 theorem fusedMd_cell (hC : Compat P T) (k : Fin 42) (_hk : binds k.val) :
     cellBits (v (fusedMdCell k.val)) = P.fusedMd k := by
   rw [hC.fusedMd]
-  have hsmall : ∀ k : Fin 42,
-      fusedMdCell k.val = cCell (FourFusion.mdIndex k).val ∧ (FourFusion.mdIndex k).val ≤ 13 := by decide
-  obtain ⟨he,hi⟩ := hsmall k
-  rw [he,v_c hP hi,factor_bits T _]
+  have he : ∀ k : Fin 42, fusedMdCell k.val =
+      if (FourFusion.mdIndex k).val = 17 then lenCell else cCell (FourFusion.mdIndex k).val := by decide
+  rw [he]
+  unfold AffineCodec.domainWord
+  by_cases h17 : (FourFusion.mdIndex k).val = 17
+  · rw [if_pos h17, if_pos h17, v_len hP]
+    rfl
+  · have hi : (FourFusion.mdIndex k).val ≤ 13 := by
+      have hb : ∀ k : Fin 42, (FourFusion.mdIndex k).val ≤ 13 ∨
+          (FourFusion.mdIndex k).val = 17 := by decide
+      exact (hb k).resolve_right h17
+    rw [if_neg h17, if_neg h17, v_c hP hi, factor_bits T _]
 
 include hP in
 theorem fusedTag_cell (hC : Compat P T) (k : Fin 42) :
@@ -55,23 +63,46 @@ theorem fusedTag_cell (hC : Compat P T) (k : Fin 42) :
   obtain ⟨he,hi⟩ := hsmall k
   rw [he,v_c hP hi,factor_bits T _]
 
+/-- The selector used by a chain reads every child from its abstract top. -/
+def ReadContext (readTop : ℕ → ℕ) (k : Fin 42) : Prop :=
+  ∀ u : Fin 8, FourFusion.owner k = some u →
+    ∀ i < (FourFusion.children u).length,
+      cellBits (v (readTop ((FourFusion.children u).getD i 0))) =
+        topsV T v xs ((FourFusion.children u).getD i 0)
+
 include hP in
-theorem fusion_query (hC : Compat P T) (k : Fin 42) (hk : binds k.val) (u : Fin 9)
-    (hu : FourFusion.owner k = some u) (x : E) :
-    blake2sQuery ![x,v (topCell (depTop k.val 2)),v (topCell (depTop k.val 3)),v (fusedTagCell k.val)]
+theorem fusion_query (hC : Compat P T) (readTop : ℕ → ℕ)
+    (k : Fin 42) (hk : binds k.val) (u : Fin 8) (hu : FourFusion.owner k = some u)
+    (hread : ReadContext (T:=T) (v:=v) (xs:=xs) readTop k) (x : E) :
+    blake2sQuery ![x,v (readTop (depTop k.val 2)),v (readTop (depTop k.val 3)),
+      v (if fiveChildren k.val then readTop (depTop k.val 4) else fusedTagCell k.val)]
       (v (depCv k.val)) (v (depCv k.val+1)) (v (fusedMdCell k.val)) =
-      FourFusion.packet (FourFusion.fusionWords (topsV T v xs) u (cellBits x) (P.fusedTag k) (P.fusedMd k)) := by
+      FourFusion.packet (FourFusion.fusionWords (topsV T v xs) u (cellBits x)
+        (P.fusedTag k) (P.fusedMd k)) := by
   obtain ⟨hc0,hc1,hd⟩ := fusion_cells k hk u hu
-  rw [blake2sQuery_eq,hc1,hc0,fusedMd_cell hP hC k hk,fusedTag_cell hP hC k]
+  obtain ⟨he0,he1⟩ := fusion_cv_exported k hk u hu
+  have hl : 4 ≤ (FourFusion.children u).length := by
+    have hh : ∀ u : Fin 8, 4 ≤ (FourFusion.children u).length := by decide
+    exact hh u
+  have h2 := hread u hu 2 (by omega)
+  have h3 := hread u hu 3 (by omega)
+  rw [blake2sQuery_eq,hc1,hc0,fusedMd_cell hP hC k hk]
   unfold FourFusion.packet Fusion.packet FourFusion.fusionWords
   simp only [Matrix.cons_val_zero,Matrix.cons_val_one,Matrix.cons_val_two,
     Matrix.cons_val_three,Matrix.cons_val,Fin.isValue]
-  rw [(hd 2 (by omega)).1,(hd 3 (by omega)).1]
-  rw [topsV_top T v xs (hd 0 (by omega)).2.2 (hd 0 (by omega)).2.1,
-    topsV_top T v xs (hd 1 (by omega)).2.2 (hd 1 (by omega)).2.1,
-    topsV_top T v xs (hd 2 (by omega)).2.2 (hd 2 (by omega)).2.1,
-    topsV_top T v xs (hd 3 (by omega)).2.2 (hd 3 (by omega)).2.1]
-  rfl
+  rw [(hd 2 (by omega)).1,(hd 3 (by omega)).1,h2,h3,
+    ← topsV_top T v xs (hd 0 (by omega)).2.2 he0,
+    ← topsV_top T v xs (hd 1 (by omega)).2.2 he1]
+  by_cases hf : FourFusion.five u = true
+  · have hf' := (fiveChildren_owner k u hu).mpr hf
+    have hl5 : 4 < (FourFusion.children u).length := by
+      rw [Fusion.SplitRoot.packet_lengths u u.isLt, if_pos hf]
+      decide
+    rw [if_pos hf', if_pos hf, (hd 4 hl5).1, hread u hu 4 hl5]
+    rfl
+  · have hf' : ¬ fiveChildren k.val := fun hh => hf ((fiveChildren_owner k u hu).mp hh)
+    rw [if_neg hf', if_neg hf, fusedTag_cell hP hC k]
+    rfl
 
 theorem chainOp_plain_query (hP : PathFacts T (oracleRel f) v xs) (hC : Compat P T) {k : ℕ}
     (hk : k < 42) {d t : ℕ} (hd : d < LEN k) (ht : t < d) (x : E) :
@@ -89,8 +120,9 @@ theorem chainOp_plain_query (hP : PathFacts T (oracleRel f) v xs) (hC : Compat P
   rfl
 
 include hP in
-theorem chainOp_pair (hC : Compat P T) {k d t dst : ℕ} (hk : k < 42)
-    (hd : d < LEN k) (ht : t < d) (h : (chainOp k d t dst).Rel f v) :
+theorem chainOp_pair (hC : Compat P T) (readTop : ℕ → ℕ) {k d t dst : ℕ} (hk : k < 42)
+    (hread : ReadContext (T:=T) (v:=v) (xs:=xs) readTop ⟨k,hk⟩)
+    (hd : d < LEN k) (ht : t < d) (h : (chainOp readTop k d t dst).Rel f v) :
     let out := if t+1=d then dst-topOff k else xcCell k t
     cellBits (v (out+1)) ++ cellBits (v out) = f ⟨896,
       P.chainInput (topsV T v xs) ⟨k,hk⟩ (LEN k-1-d+t)
@@ -108,7 +140,7 @@ theorem chainOp_pair (hC : Compat P T) {k d t dst : ℕ} (hk : k < 42)
     obtain ⟨u,hu⟩ : ∃ u, FourFusion.owner ⟨k,hk⟩ = some u :=
       Option.ne_none_iff_exists'.mp ((binds_owner ⟨k,hk⟩).mp hb.2)
     have hp := oracle_pair h
-    rw [fusion_query hP hC ⟨k,hk⟩ hb.2 u hu] at hp
+    rw [fusion_query hP hC readTop ⟨k,hk⟩ hb.2 u hu hread] at hp
     have hs : P.active ⟨k,hk⟩ (LEN k-1-d+t) = some u := by
       rw [ha,if_pos hb.1,hu]
     rw [chainInput_fused hs]
@@ -135,7 +167,8 @@ theorem stepOff_eq (hC : Compat P T) {k d t : ℕ} (hk : k < 42) (hd : d < LEN k
   rw [hC.hiTop, hC.len]
   have he : LEN k - 1 - d + t + 2 = LEN k ↔ t + 1 = d := by omega
   simp only [Fin.val_mk, decide_eq_true_eq, he]
-  unfold topOff
+  have hoff : ∀ k < 42, topOff k = if k ∈ [1,19,25,34,12,16,23,33,8] then 1 else 0 := by decide
+  rw [hoff k hk]
   split_ifs <;> simp_all
 
 theorem topCell_pos {k : ℕ} (hk : k < 42) : 1 ≤ topCell k := by
@@ -149,15 +182,16 @@ theorem xhCell_pos {k : ℕ} (hk : k < 42) (hk0 : k ≠ 0) (he : ¬ exported k) 
 include hP in
 /-- **Chain value.** The `d` steps of chain `k` compute the verifier's chain from the revealed
 word into `dst`. -/
-theorem chain_val (hC : Compat P T) {k d dst : ℕ} (hk : k < 42) (hd : d < LEN k) (hd0 : d ≠ 0) (hdst : 1 ≤ dst)
-    (hs : ∀ t < d, (chainOp k d t dst).Rel f v) :
+theorem chain_val (hC : Compat P T) (readTop : ℕ → ℕ) {k d dst : ℕ} (hk : k < 42)
+    (hread : ReadContext (T:=T) (v:=v) (xs:=xs) readTop ⟨k,hk⟩) (hd : d < LEN k) (hd0 : d ≠ 0) (hdst : 1 ≤ dst)
+    (hs : ∀ t < d, (chainOp readTop k d t dst).Rel f v) :
     cellBits (v dst) = P.chainValue f (topsV T v xs) ⟨k, hk⟩ (LEN k - 1 - d) d (cellBits (v (wCell k))) := by
   have hstep : ∀ t < d, chainSeq v k d dst (t + 1) =
       P.codec.slice ⟨k, hk⟩ (LEN k - 1 - d + t)
         (f ⟨896, P.chainInput (topsV T v xs) ⟨k, hk⟩ (LEN k - 1 - d + t) (chainSeq v k d dst t)⟩) := by
     intro t ht
     have h := hs t ht
-    have hp := chainOp_pair hP hC hk hd ht h
+    have hp := chainOp_pair hP hC readTop hk hread hd ht h
     have hlo := congrArg (fun a : BitVec 256 => a.extractLsb' 0 128) hp
     have hhi := congrArg (fun a : BitVec 256 => a.extractLsb' 128 128) hp
     simp only [BitVec.extractLsb'_append_eq_right] at hlo
@@ -207,11 +241,19 @@ theorem top_eq (hT : T.Hyp) (hC : Compat P T) {k : ℕ} (hk : k < 42) :
         have hh := hP.free_copy
         simpa only [if_pos hs0,copy,CInstr.RelB] using hh
       rw [h,v_one hP,mul_oneV,hs0]; rfl
-    · exact chain_val hP hC (by omega) hd hs0 (by decide) (fun _ ht => hP.free_chain ht)
+    · exact chain_val hP hC topCell (by omega) (by
+        intro u hu
+        change none = some u at hu
+        contradiction) hd hs0 (by decide) (fun _ ht => hP.free_chain ht)
   · obtain ⟨hu, hi, hc⟩ := chainOf_unitOf k hk (by omega)
     set u := unitOf k with hudef
     set i := coordOf k with hidef
     have hdk : dg T xs k = T u (xs (u + 1)) i := by rw [← hc, dg_chainOf T xs hu hi]
+    have hread : ReadContext (T:=T) (v:=v) (xs:=xs)
+        (groupRead T u (xs (u+1))) ⟨k,hk⟩ := by
+      intro z hz j hj
+      exact groupRead_fusion T xs v ⟨k,hk⟩
+        ((binds_owner ⟨k,hk⟩).mpr (by rw [hz]; simp)) z hz hj
     have hb : ∀ y ∈ seg T u (xs (u+1)) i, y.Rel f v := fun _ hy => hP.seg_rel hu hi hy
     unfold seg at hb
     rw [hc] at hb
@@ -225,14 +267,14 @@ theorem top_eq (hT : T.Hyp) (hC : Compat P T) {k : ℕ} (hk : k < 42) :
         have h : v (topCell k) = v (wCell k) * v oneCell := hb (copy (wCell k) (topCell k)) (by simp)
         rw [h, v_one hP, mul_oneV, hd0]; rfl
       · rw [if_neg hd0] at hb
-        exact chain_val hP hC hk hd hd0 (topCell_pos hk) (fun t ht => hb _ (mem_chainOps.mpr ⟨t, ht, rfl⟩))
+        exact chain_val hP hC (groupRead T u (xs (u+1))) hk hread hd hd0 (topCell_pos hk) (fun t ht => hb _ (mem_chainOps.mpr ⟨t, ht, rfl⟩))
     · rw [if_neg hx] at hb
       have he : ¬ exported k := by rw [← hc]; exact fun h => hx ((exported_iff u hu i hi).mp h)
       unfold rtopCell
       by_cases hd0 : T u (xs (u + 1)) i = 0
       · rw [if_pos ⟨hd0,he⟩,hd0]; rfl
       · rw [if_neg (by tauto : ¬ (T u (xs (u+1)) i = 0 ∧ ¬ exported k))]
-        exact chain_val hP hC hk hd hd0 (xhCell_pos hk hk0 he) (fun t ht => hb _ (mem_chainOps.mpr ⟨t, ht, rfl⟩))
+        exact chain_val hP hC (groupRead T u (xs (u+1))) hk hread hd hd0 (xhCell_pos hk hk0 he) (fun t ht => hb _ (mem_chainOps.mpr ⟨t, ht, rfl⟩))
 
 include hV hP in
 /-- **The tie.** The accumulator after group `u` holds the field values `xs 1, …, xs (u + 1)`. -/

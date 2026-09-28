@@ -1,6 +1,8 @@
 import Submissions.UpperLeanIsa.FourChildTier
-import Submissions.UpperLeanIsa.FourInputs
+import Submissions.UpperLeanIsa.SplitDomains
 import Submissions.UpperLeanIsa.FusionDomains
+import Submissions.UpperLeanIsa.FusionConcrete
+import Submissions.UpperLeanIsa.FourAdmissible
 
 set_option Elab.async false
 
@@ -35,7 +37,7 @@ theorem hyp : params.Hyp where
   keygen_le := by
     change 2 * (∑ k : Fin 42, (lenN k - 1)) + 18 ≤ 2 ^ 20
     rw [steps_eq]; norm_num
-  verify_le := by change 20 + 2 * 86 ≤ 2 ^ 20; norm_num
+  verify_le := by change 20 + 2 * 85 ≤ 2 ^ 20; norm_num
   len_zero := by change 2 ≤ lenN 0; decide
 
 
@@ -45,18 +47,6 @@ open LeanerVM.Parameters
 abbrev tagWord := Fusion.tagWord
 abbrev tagWord_injective := Fusion.tagWord_injective
 abbrev tagWord_small := Fusion.tagWord_small
-
-def mdIndex (k : Fin 42) : Fin 47 := ![6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 6, 1, 2, 2, 6, 6, 2, 2, 2, 6, 6, 2, 2, 2, 6, 6, 2, 2, 3, 6, 6, 3, 3, 3, 6, 6, 3, 3, 3] k
-
-def tagIndex (k : Fin 42) : Fin 47 := ![1, 9, 10, 1, 2, 3, 4, 11, 5, 6, 7, 8, 2, 3, 13, 1, 2, 4, 5, 4, 5, 6, 6, 7, 8, 9, 10, 8, 9, 12, 13, 1, 10, 11, 3, 4, 5, 12, 13, 7, 8, 9] k
-
-def rootIndex (_r : Fin 1) : Fin 47 := 4
-
-theorem indices_injective : Function.Injective fun k => (mdIndex k,tagIndex k) := by decide +kernel
-
-theorem mdIndex_reserved : ∀ k, mdIndex k ≠ 0 ∧ mdIndex k ≠ 16 ∧ ∀ r, mdIndex k ≠ rootIndex r := by decide
-
-theorem rootIndex_reserved : ∀ r, rootIndex r ≠ 0 ∧ rootIndex r ≠ 16 := by decide
 
 noncomputable def params : Params where
   codec := FourChildCodec.params
@@ -78,10 +68,8 @@ theorem codec_index_tag : params.codec.idxMd = tagWord 16 := by
 
 theorem params_hyp : params.Hyp where
   codec := FourChildCodec.hyp
-  fused_inj := by
-    intro a b h
-    have he := Prod.mk.inj h
-    exact indices_injective (Prod.ext (tagWord_injective he.1) (tagWord_injective he.2))
+  fused_inj := packet_location params
+    (fun _ _ h => tagWord_injective h) (fun _ _ h => tagWord_injective h)
   fused_chain := by
     intro k h
     rw [codec_chain_tag] at h
@@ -102,6 +90,43 @@ theorem params_hyp : params.Hyp where
     intro r h
     rw [codec_index_tag] at h
     exact (rootIndex_reserved r).2 (tagWord_injective h)
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem concrete_ordered : params.locationOrder.Pairwise Earlier := by
+  haveI : IsTrans (Loc params) Earlier := ⟨fun _ _ _ => earlier_trans⟩
+  apply List.isChain_iff_pairwise.mp
+  decide +kernel
+
+theorem concrete_location_count : params.locationOrder.length = 720 := by decide +kernel
+
+/-- Coherence of every key-generation output for any fixed oracle, with no good-event assumption. -/
+theorem concrete_coherent (f : HashTable) (seeds : Fin 42 → Word) :
+    let y := params.evalLocationsValue f seeds params.locationOrder (fun _ => 0)
+    ∀ a : Loc params, y a = f ⟨896,Record.input (seeds,y) a⟩ := by
+  intro y a
+  exact params.evalLocationsValue_coherent f seeds _ concrete_ordered _ a (params.locationOrder_mem a)
+
+
+theorem concrete_correct : params.scheme.Correct :=
+  params.correct params_hyp.codec concrete_ordered
+
+
+theorem concrete_signingFailure :
+    params.scheme.SigningFailureAtMost (1 / 2 ^ signingFailureBits) :=
+  params.signingFailure params_hyp concrete_ordered FourChildNumeric.schedule_valid FourChildCodec.tierHyp
+
+
+theorem concrete_keygenCost : CostAtMost params.keygen 1440 := by
+  have h := params.cost_keygen
+  rwa [concrete_location_count] at h
+
+theorem concrete_verifyCost (pk : PublicKey) (m : Message) (bits : List Bool) :
+    CostAtMost (params.verify pk m bits) 174 := params.cost_verify pk m bits
+
+theorem concrete_admissible : params.scheme.Admissible :=
+  params.admissible params_hyp concrete_ordered FourChildNumeric.schedule_valid FourChildCodec.tierHyp
+    (by rw [concrete_location_count]; decide) (by decide)
 
 end FourFusion
 end OptimalOTS.LeanIsaBaseline.Layer

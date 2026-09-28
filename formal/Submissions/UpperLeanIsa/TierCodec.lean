@@ -99,14 +99,14 @@ theorem tierI_le (I : Index) : P.tierI S I ≤ S.T := by
   · exact ctier_le _
   · exact le_rfl
 
-theorem a_inj (hS : S.Valid) {s t : ℕ} (hs : s < S.T) (ht : t < S.T) (h : S.a s = S.a t) :
+theorem a_inj (hS : S.Analytic) {s t : ℕ} (hs : s < S.T) (ht : t < S.T) (h : S.a s = S.a t) :
     s = t := by
   rcases lt_trichotomy s t with hst | rfl | hst
   · exact absurd h (hS.a_lt s t hst ht).ne
   · rfl
   · exact absurd h.symm (hS.a_lt t s hst hs).ne
 
-theorem ctier_eq (hS : S.Valid) {v : Cls} {t : ℕ} (ht : t < S.T) (h : P.cweight v = S.a t) :
+theorem ctier_eq (hS : S.Analytic) {v : Cls} {t : ℕ} (ht : t < S.T) (h : P.cweight v = S.a t) :
     P.ctier S v = t := by
   have hex : ∃ t, t < S.T ∧ P.cweight v = S.a t := ⟨t, ht, h⟩
   unfold ctier
@@ -140,7 +140,7 @@ theorem tierI_lt_T (hT : P.TierHyp S) {I : Index} : P.tierI S I < S.T ↔ P.Acce
   exact lt_irrefl _ h
 
 /-- Weights and tiers order accepted indices alike. -/
-theorem weight_lt_iff (hS : S.Valid) (hT : P.TierHyp S) {I J : Index} (hI : P.Accepted I)
+theorem weight_lt_iff (hS : S.Analytic) (hT : P.TierHyp S) {I J : Index} (hI : P.Accepted I)
     (hJ : P.Accepted J) : P.weight I < P.weight J ↔ P.tierI S I < P.tierI S J := by
   obtain ⟨hI1, hI2⟩ := tierI_spec hT hI
   obtain ⟨hJ1, hJ2⟩ := tierI_spec hT hJ
@@ -154,7 +154,7 @@ theorem weight_lt_iff (hS : S.Valid) (hT : P.TierHyp S) {I J : Index} (hI : P.Ac
   · intro h
     exact hS.a_lt _ _ h hJ1
 
-theorem tierI_eq_iff (hS : S.Valid) (hT : P.TierHyp S) {I : Index} {t : ℕ} (ht : t < S.T) :
+theorem tierI_eq_iff (hS : S.Analytic) (hT : P.TierHyp S) {I : Index} {t : ℕ} (ht : t < S.T) :
     P.tierI S I = t ↔ P.Accepted I ∧ P.weight I = S.a t := by
   constructor
   · intro h
@@ -165,12 +165,12 @@ theorem tierI_eq_iff (hS : S.Valid) (hT : P.TierHyp S) {I : Index} {t : ℕ} (ht
     rw [if_pos hI]
     exact ctier_eq hS ht hw
 
-theorem card_tierI_eq (hS : S.Valid) (hT : P.TierHyp S) {t : ℕ} (ht : t < S.T) :
+theorem card_tierI_eq (hS : S.Analytic) (hT : P.TierHyp S) {t : ℕ} (ht : t < S.T) :
     (Finset.univ.filter fun I : Index => P.tierI S I = t).card = S.N t * S.a t := by
   simp only [tierI_eq_iff hS hT ht]
   exact hT.card_weight t ht
 
-theorem card_tierI_lt (hS : S.Valid) (hT : P.TierHyp S) {t : ℕ} (ht : t ≤ S.T) :
+theorem card_tierI_lt (hS : S.Analytic) (hT : P.TierHyp S) {t : ℕ} (ht : t ≤ S.T) :
     (Finset.univ.filter fun I : Index => P.tierI S I < t).card =
       ∑ s ∈ Finset.range t, S.N s * S.a s := by
   induction t with
@@ -188,7 +188,7 @@ theorem card_tierI_lt (hS : S.Valid) (hT : P.TierHyp S) {t : ℕ} (ht : t ≤ S.
     intro I _ h1 h2
     omega
 
-theorem card_tierW_lt (hS : S.Valid) (hT : P.TierHyp S) {t : ℕ} (ht : t ≤ S.T) :
+theorem card_tierW_lt (hS : S.Analytic) (hT : P.TierHyp S) {t : ℕ} (ht : t ≤ S.T) :
     (Finset.univ.filter fun w : BitVec hashBits => P.tierW S w < t).card =
       (∑ s ∈ Finset.range t, S.N s * S.a s) * 2 ^ 129 := by
   rw [← card_tierI_lt hS hT ht]
@@ -201,7 +201,7 @@ theorem tierI_eq_ctier {I : Index} (hI : P.Accepted I) :
     P.tierI S I = P.ctier S (P.digit I) := by
   unfold tierI; rw [if_pos hI]
 
-theorem card_classes_tier (hS : S.Valid) (hT : P.TierHyp S) {t : ℕ} (ht : t < S.T) :
+theorem card_classes_tier (hS : S.Analytic) (hT : P.TierHyp S) {t : ℕ} (ht : t < S.T) :
     (P.classes.filter fun v => P.ctier S v = t).card = S.N t := by
   have hpos := hS.a_pos t ht
   have hsum : (Finset.univ.filter fun I : Index => P.tierI S I = t).card =
@@ -234,7 +234,7 @@ theorem card_classes_tier (hS : S.Valid) (hT : P.TierHyp S) {t : ℕ} (ht : t < 
   exact Nat.eq_of_mul_eq_mul_right hpos this
 
 /-- Sums over the classes regroup by tier (D3). -/
-theorem sum_classes {M : Type*} [AddCommMonoid M] (hS : S.Valid) (hT : P.TierHyp S)
+theorem sum_classes {M : Type*} [AddCommMonoid M] (hS : S.Analytic) (hT : P.TierHyp S)
     (F : ℕ → M) :
     ∑ v ∈ P.classes, F (P.ctier S v) = ∑ t ∈ Finset.range S.T, S.N t • F t := by
   rw [← Finset.sum_fiberwise_of_maps_to (g := fun v => P.ctier S v) (t := Finset.range S.T)
@@ -255,7 +255,7 @@ theorem tierB_le (β : Option (Nonce × Index)) : P.tierB S β ≤ S.T := by
   | some b => exact tierI_le _
 
 /-- The signer's rule in tiers. -/
-theorem better_iff (hS : S.Valid) (hT : P.TierHyp S) (I : Index) {β : Option (Nonce × Index)}
+theorem better_iff (hS : S.Analytic) (hT : P.TierHyp S) (I : Index) {β : Option (Nonce × Index)}
     (hβ : ∀ b, β = some b → P.Accepted b.2) :
     P.better I β = true ↔ P.tierI S I < P.tierB S β := by
   cases β with

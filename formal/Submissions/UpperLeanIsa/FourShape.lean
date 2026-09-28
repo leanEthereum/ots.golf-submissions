@@ -1,4 +1,4 @@
-import Submissions.UpperLeanIsa.FourChildShape
+import Submissions.UpperLeanIsa.SplitShape
 
 /-! The concrete one-root graph, with packet lemmas parameterized by domain words. -/
 namespace OptimalOTS.LeanIsaBaseline.Layer.FourFusion
@@ -7,44 +7,39 @@ set_option maxRecDepth 100000
 
 abbrev packet := Fusion.packet
 abbrev packet_injective := Fusion.packet_injective
-abbrev parentList := Fusion.FourChildRoot.parentList
-abbrev parents := Fusion.FourChildRoot.parents
-abbrev children := Fusion.FourChildRoot.children
-abbrev rootSet := Fusion.FourChildRoot.rootSet
-abbrev evaluationOrder := Fusion.FourChildRoot.evaluationOrder
-abbrev evaluationRank := Fusion.FourChildRoot.evaluationRank
-abbrev evaluationOrder_permutation := Fusion.FourChildRoot.evaluationOrder_permutation
-abbrev dependency_precedes := Fusion.FourChildRoot.dependency_precedes
+abbrev parentList := Fusion.SplitRoot.parentList
+abbrev parents := Fusion.SplitRoot.parents
+abbrev children := Fusion.SplitRoot.children
+abbrev rootSet := Fusion.SplitRoot.rootSet
+abbrev evaluationOrder := Fusion.SplitRoot.evaluationOrder
+abbrev evaluationRank := Fusion.SplitRoot.evaluationRank
+abbrev evaluationOrder_permutation := Fusion.SplitRoot.evaluationOrder_permutation
+abbrev dependency_precedes := Fusion.SplitRoot.dependency_precedes
 
-def bindOrder : List ℕ := [0,1,2,3,4,5,6,7,8]
+def bindOrder : List ℕ := [0,1,2,3,4,5,6,7]
 def closure : ℕ → Finset ℕ
   | 0 => rootSet
   | n+1 => closure n ∪ (children (bindOrder.getD n 0)).toFinset
 
-theorem bindOrder_lt : ∀ n < 9, bindOrder.getD n 0 < 9 := by decide
-theorem schedule : ∀ n < 9, parents (bindOrder.getD n 0) ⊆ closure n := by decide
-theorem full_coverage : Finset.range 42 ⊆ closure 9 := by decide
+theorem bindOrder_lt : ∀ n < 8, bindOrder.getD n 0 < 8 := by decide
+theorem schedule : ∀ n < 8, parents (bindOrder.getD n 0) ⊆ closure n := by decide
+theorem full_coverage : Finset.range 42 ⊆ closure 8 := by decide
 
 def rootWords (t : ℕ → Word) (md : Word) : Fin 7 → Word :=
   ![t 8,t 9,t 3,t 4,t 5,t 6,md]
 
+abbrev five := Fusion.SplitRoot.five
+
 def fusionWords (t : ℕ → Word) (u : ℕ) (x tag md : Word) : Fin 7 → Word :=
   ![t ((children u).getD 0 0),t ((children u).getD 1 0),x,
-    t ((children u).getD 2 0),t ((children u).getD 3 0),tag,md]
+    t ((children u).getD 2 0),t ((children u).getD 3 0),
+    if five u then t ((children u).getD 4 0) else tag,md]
 
-theorem fusion_binds_children (t t' : ℕ → Word) {u : ℕ} (hu : u < 9)
+theorem fusion_binds_children (t t' : ℕ → Word) {u : ℕ} (hu : u < 8)
     (x x' a a' md md' : Word)
     (h : packet (fusionWords t u x a md) = packet (fusionWords t' u x' a' md')) :
     ∀ k ∈ children u, t k = t' k := by
-  have he := packet_injective h
-  have h0 : t ((children u).getD 0 0) = t' ((children u).getD 0 0) := congrFun he 0
-  have h1 : t ((children u).getD 1 0) = t' ((children u).getD 1 0) := congrFun he 1
-  have h2 : t ((children u).getD 2 0) = t' ((children u).getD 2 0) := congrFun he 3
-  have h3 : t ((children u).getD 3 0) = t' ((children u).getD 3 0) := congrFun he 4
-  intro k hk
-  interval_cases u <;> simp [children, Fusion.FourChildRoot.children] at hk h0 h1 h2 h3
-  all_goals rcases hk with rfl | rfl | rfl | rfl
-  all_goals assumption
+  exact Fusion.SplitRoot.packet_binds (u := ⟨u,hu⟩) h
 
 theorem fusion_current_injective (t t' : ℕ → Word) (u : ℕ) (x x' a a' md md' : Word)
     (h : packet (fusionWords t u x a md) = packet (fusionWords t' u x' a' md')) : x = x' :=
@@ -61,7 +56,7 @@ theorem root_binds (t t' : ℕ → Word) (md md' : Word)
   have h4 : t 5 = t' 5 := congrFun he 4
   have h5 : t 6 = t' 6 := congrFun he 5
   intro k hk
-  simp [rootSet, Fusion.FourChildRoot.rootSet] at hk
+  simp [rootSet, Fusion.SplitRoot.rootSet] at hk
   rcases hk with rfl | rfl | rfl | rfl | rfl | rfl <;> assumption
 
 def GroupBinds (t t' : ℕ → Word) (u : ℕ) : Prop := ∀ k ∈ children u, t k = t' k

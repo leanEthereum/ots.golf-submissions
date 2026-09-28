@@ -732,7 +732,7 @@ theorem t1a_arith {A a F n rU rN r₁ r₂ r Pm eta : ℝ}
 variable {S : Tier.Sched}
 
 /-- One trial misses the tiers below `t` with probability at most `ȳ_t` (T1a). -/
-theorem trialAvg_tier_ge (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem trialAvg_tier_ge (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) {tried : Finset Nonce} (htr : tried.card < trials) {t : ℕ}
     (ht : t ≤ S.T) :
     P.trialAvg d M tried (fun _ w _ => if t ≤ P.tierW S w then 1 else 0) ≤ S.yb t := by
@@ -856,7 +856,7 @@ theorem trialAvg_tier_ge (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMes
 
 /-! ## The winner law (K1-K5) -/
 
-theorem upd_cases (hS : S.Valid) (hT : P.TierHyp S) {β : Option (Nonce × Index)}
+theorem upd_cases (hS : S.Analytic) (hT : P.TierHyp S) {β : Option (Nonce × Index)}
     (hβ : ∀ b, β = some b → P.Accepted b.2) (η : Nonce) (I : Index) :
     (P.tierI S I < P.tierB S β ∧ P.upd β η I = some (η, I)) ∨
       (P.tierB S β ≤ P.tierI S I ∧ P.upd β η I = β) := by
@@ -885,7 +885,7 @@ theorem winU_some (θ : Nonce → Index → Prop) (t : ℕ) (x y q : ℝ≥0∞)
 
 /-- **K1, K2.** The best trial is a target trial (a set `θ` of trials of tier `t`) with
 probability at most `q w̄_t` when one trial hits `θ` with probability at most `q`. -/
-theorem win_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem win_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) (θ : Nonce → Index → Prop) {t : ℕ} (ht : t < S.T)
     (hθ : ∀ η I, θ η I → P.tierI S I = t) {q : ℝ≥0∞}
     (hq : ∀ tried : Finset Nonce, tried.card < trials →
@@ -1025,7 +1025,7 @@ theorem sc_alg (y r : ℝ≥0∞) (k : ℕ) :
 
 /-- **K3.** The best trial is a target trial of tier `t` and class `v₀` and a fresh non-winning
 trial holds `v₀`, with probability at most `q r SCK_t`. -/
-theorem win_sc_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem win_sc_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) (θ : Nonce → Index → Prop) {t : ℕ} (ht : t < S.T)
     (hθ : ∀ η I, θ η I → P.tierI S I = t) {v₀ : Cls} (hθv : ∀ η I, θ η I → P.digit I = v₀)
     {q r : ℝ≥0∞}
@@ -1220,7 +1220,7 @@ def tailU (t : ℕ) (y : ℝ≥0∞) (k : ℕ) (β : Option (Nonce × Index)) : 
   if t ≤ P.tierB S β then y ^ k else 0
 
 /-- **K4.** No trial has tier `< t` with probability at most `ȳ_t ^ L`. -/
-theorem tail_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem tail_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) {t : ℕ} (ht : t ≤ S.T) :
     E (run (P.signTier M) d) (fun p => if t ≤ P.tierB S p.1 then 1 else 0) ≤
       S.yb t ^ trials := by
@@ -1287,7 +1287,7 @@ def kappaB : Option (Nonce × Index) → ℝ≥0∞
   | some b => (2 ^ 128 : ℝ≥0∞)⁻¹ + S.fE (P.tierI S b.2) / 2
 
 /-- **K5.** The average post-sign rate. -/
-theorem kappaB_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem kappaB_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) :
     E (run (P.signTier M) d) (fun p => P.kappaB S p.1) ≤
       (2 ^ 128 : ℝ≥0∞)⁻¹ + ENNReal.ofReal S.Pos / 2 := by

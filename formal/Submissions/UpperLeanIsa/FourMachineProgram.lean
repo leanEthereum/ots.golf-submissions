@@ -2,8 +2,9 @@ import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.LengthFrame
 import Submissions.UpperLeanIsa.LengthGate128
 
-/-! The 1124-cycle model bytecode and its local instruction algebra. The complete machine
-certificate is assembled in `FourMachine.lean`. -/
+/-! Packed group bodies and local cell-instruction algebra for the 1096 machine.
+The active bytecode/compiler is in `AffineProgram`; legacy entry constructors
+remain only as reusable instruction algebra, not as the certified program. -/
 
 namespace OptimalOTS.HLFour
 
@@ -57,7 +58,7 @@ def oneCell : ℕ := 48
 def gCell : ℕ := 49
 /-- The cost constant / tag symbol `C_c` (`C_0 = ONE`). -/
 def cCell (c : ℕ) : ℕ :=
-  if c = 0 then 48 else if c = 16 then 49
+  if c = 0 then 48 else if c = 14 then 49
   else if c = 1 then 105 else if c = 2 then 106 else if c = 3 then 47
   else if c = 4 then 107 else 50 + c
 
@@ -83,13 +84,13 @@ def h1Cell (f : ℕ) : ℕ := 180 + f
 def gpCell (u : ℕ) : ℕ := 200 + u
 
 /-- The first root CV word (the top of chain 8). -/
-def cvCell : ℕ := 293
+def cvCell : ℕ := 289
 
 /-- The free chain's last output pair. -/
 def tfCell : ℕ := 296
 
 /-- The selected chain tops, arranged into adjacent cv pairs for fused and root hashes. -/
-def topCell (k : ℕ) : ℕ := [296, 298, 300, 302, 304, 306, 308, 261, 293, 294, 257, 258, 310, 281, 262, 312, 314, 282, 316, 265, 266, 318, 320, 285, 322, 269, 270, 286, 324, 326, 328, 273, 330, 289, 274, 332, 334, 290, 336, 277, 278, 338].getD k 0
+def topCell (k : ℕ) : ℕ := [296,257,258,292,294,298,300,302,289,290,304,306,273,274,308,310,277,278,312,261,262,314,316,281,318,265,266,282,320,322,324,326,328,285,269,270,330,286,332,334,336,338].getD k 0
 
 /-- The selected last output of a home chain; `topOff` determines its half of the pair. -/
 def xhCell (k : ℕ) : ℕ := topCell k
@@ -102,16 +103,13 @@ def xcCell (k t : ℕ) : ℕ := xcBase k + 2 * t
 /-- The cell the root reads chain `k`'s top from, when its digit is `d`. -/
 def rtopCell (k d : ℕ) : ℕ := if d = 0 ∧ ¬ exported k then wCell k else topCell k
 /-- The root CV pair consists of tops 8 and 9. -/
-def rootCv (_r : ℕ) : ℕ := 293
+def rootCv (_r : ℕ) : ℕ := 289
 
 /-- Offset selecting the high half at the final step. -/
-def topOff (k : ℕ) : ℕ := if k ∈ [7, 8, 10, 13, 19, 23, 25, 31, 33, 39] then 1 else 0
+def topOff (k : ℕ) : ℕ := topCell k % 2
 
-theorem topOff_le (k : ℕ) : topOff k ≤ 1 := by unfold topOff; split_ifs <;> omega
+theorem topOff_le (k : ℕ) : topOff k ≤ 1 := by unfold topOff; omega
 
-/-- Coordinates whose top is materialized even for a zero digit. -/
-def copied (u _i : ℕ) : Prop := isExp u
-instance (u i : ℕ) : Decidable (copied u i) := by unfold copied; infer_instance
 
 /-! ## Cell-level instructions -/
 
@@ -304,35 +302,48 @@ def copy (a b : ℕ) : CInstr := .mul a oneCell b
 /-- The tag position of step `t` of the `d` steps of chain `k`. -/
 def tpos (k d t : ℕ) : ℕ := OFFT k + (LEN k - 1 - d + t)
 
-/-- Chains whose final step fuses four dependency tops. -/
-def binds (k : ℕ) : Prop := k ∈ [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16, 19, 20, 21, 24, 25, 26, 29, 30, 31, 34, 35, 36, 39, 40, 41]
+/-- Visible parents whose final step binds a four- or five-child packet. -/
+def binds (k : ℕ) : Prop := k ∈ [1,2,3,4,5,6,7,8,9,19,20,21,24,25,26,29,30,31,34,35,39,40]
 instance (k : ℕ) : Decidable (binds k) := by unfold binds; infer_instance
 
 def depTop (k i : ℕ) : ℕ :=
-  ([[19, 20, 21, 24], [], [], [], [], [10, 11, 1, 2], [7, 14, 15, 16], [25, 26, 29, 30], [31, 34, 35, 36], [39, 40, 41, 12], [13, 17, 18, 22], [23, 27, 28, 32], [33, 37, 38, 0]].getD (unitOf k) []).getD i 0
+  ([[25,26,29,30,31], [], [], [], [], [1,2,7,24], [19,20,10,11,21], [], [34,35,39,40], [12,13,14,15], [16,17,18,22], [23,27,36,28,32], [33,37,41,38,0]].getD (unitOf k) []).getD i 0
 
-def depCv (k : ℕ) : ℕ := [265, 0, 0, 0, 0, 257, 261, 269, 273, 277, 281, 285, 289].getD (unitOf k) 0
+def depCv (k : ℕ) : ℕ := [265,0,0,0,0,257,261,0,269,273,277,281,285].getD (unitOf k) 0
 
-def fusedMdCell (k : ℕ) : ℕ := cCell ([6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 6, 1, 2, 2, 6, 6, 2, 2, 2, 6, 6, 2, 2, 2, 6, 6, 2, 2, 3, 6, 6, 3, 3, 3, 6, 6, 3, 3, 3].getD k 0)
+def fusedMdCell (k : ℕ) : ℕ :=
+  let m := [13,3,5,17,17,17,17,6,1,2,13,13,13,13,13,13,13,13,13,17,17,17,13,13,17,17,17,13,13,17,17,17,13,13,7,8,13,13,13,9,10,13].getD k 0
+  if m = 17 then lenCell else cCell m
 
-def fusedTagCell (k : ℕ) : ℕ := cCell ([1, 9, 10, 1, 2, 3, 4, 11, 5, 6, 7, 8, 2, 3, 13, 1, 2, 4, 5, 4, 5, 6, 6, 7, 8, 9, 10, 8, 9, 12, 13, 1, 10, 11, 3, 4, 5, 12, 13, 7, 8, 9].getD k 0)
+def fusedTagCell (k : ℕ) : ℕ := cCell ([1,1,1,1,2,3,4,1,1,1,1,1,1,1,1,1,1,1,1,5,6,7,1,1,8,9,10,1,1,11,12,13,1,1,1,1,1,1,1,1,1,1].getD k 0)
+
+def fiveChildren (k : ℕ) : Prop := unitOf k ∈ [0,6,11,12]
+instance (k : ℕ) : Decidable (fiveChildren k) := by unfold fiveChildren; infer_instance
+
+def internal (k : ℕ) : Prop := k ∈ [10,11,36,41]
+instance (k : ℕ) : Decidable (internal k) := by unfold internal; infer_instance
+
+def groupRead (T : Tab) (u v k : ℕ) : ℕ :=
+  if unitOf k = u ∧ internal k ∧ T u v (coordOf k) = 0 then wCell k else topCell k
 
 def rootMdCell (_r : ℕ) : ℕ := cCell 4
 
 /-- Step `t` of the `d` steps of chain `k` (the last writes `dst`): position `LEN k − 1 − d + t`,
 tag cells `C` of the base-9 digits of its tag position, cv pair `(ONE, g)`, metadata `ONE`.
-A binding final step consumes four child tops and its two domain words. -/
-def chainOp (k d t dst : ℕ) : CInstr :=
+A binding final step consumes four or five child tops with a separated packet tag. -/
+def chainOp (readTop : ℕ → ℕ) (k d t dst : ℕ) : CInstr :=
   let x := if t = 0 then wCell k else xcCell k (t-1)
   let out := if t+1 = d then dst - topOff k else xcCell k t
   if t+1 = d ∧ binds k then
-    .blake x (topCell (depTop k 2)) (topCell (depTop k 3)) (fusedTagCell k)
+    .blake x (readTop (depTop k 2)) (readTop (depTop k 3))
+      (if fiveChildren k then readTop (depTop k 4) else fusedTagCell k)
       (depCv k) out (fusedMdCell k)
   else .blake x (cCell (tpos k d t % 9)) (cCell (tpos k d t / 9 % 9))
     (cCell (tpos k d t / 81)) oneCell out oneCell
 
 /-- The `d` steps of chain `k`. -/
-def chainOps (k d dst : ℕ) : List CInstr := (List.range d).map (fun t => chainOp k d t dst)
+def chainOps (readTop : ℕ → ℕ) (k d dst : ℕ) : List CInstr :=
+  (List.range d).map (fun t => chainOp readTop k d t dst)
 
 /-- The straight part of the prologue (slots `0 … 16`). -/
 def proList : List CInstr :=
@@ -354,7 +365,7 @@ def frG0 (_s : ℕ) : ℕ := 1
 /-- The free block: seed, `s` chain steps, top materialization, and the next hint product. -/
 def fbody (s : ℕ) : List CInstr :=
   [.setc (gpCell 0) (ofK (LeanIsaFieldRescale.initialProduct 77 s))] ++
-  chainOps 0 s tfCell ++ [copy (if s = 0 then wCell 0 else tfCell) tfCell,
+  chainOps topCell 0 s tfCell ++ [copy (if s = 0 then wCell 0 else tfCell) tfCell,
     .mul (hCell 1) gCell (h1Cell 1)]
 
 /-- The tie of field value `v` of group `u`. -/
@@ -367,15 +378,14 @@ def tie (u v : ℕ) : List CInstr :=
 def seg (T : Tab) (u v i : ℕ) : List CInstr :=
   if copied u i then
     (if T u v i = 0 then [copy (wCell (chainOf u i)) (topCell (chainOf u i))]
-      else chainOps (chainOf u i) (T u v i) (topCell (chainOf u i)))
-  else chainOps (chainOf u i) (T u v i) (xhCell (chainOf u i))
+      else chainOps (groupRead T u v) (chainOf u i) (T u v i) (topCell (chainOf u i)))
+  else chainOps (groupRead T u v) (chainOf u i) (T u v i) (xhCell (chainOf u i))
 
 /-- The chain ops of the block of `v` in group `u`. -/
 def segs (T : Tab) (u v : ℕ) : List CInstr := (List.range (gk u)).flatMap (seg T u v)
 
 /-- Zero digits of an exporter block (each costs one copy). -/
-def zexp (T : Tab) (u v : ℕ) : ℕ :=
-  ((List.range (gk u)).map (fun i => if copied u i ∧ T u v i = 0 then 1 else 0)).sum
+abbrev zexp := copyCount
 
 /-- The single root call executes in group 5. -/
 def hcall (_u : ℕ) : ℕ := 0
@@ -392,7 +402,11 @@ def rootIns (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=
   else []
 
 /-- Padding to the unit's constant non-hash count. -/
-def npad (T : Tab) (u v : ℕ) : ℕ := gcu u - 4 - (tie u v).length - zexp T u v
+def extraMul (T : Tab) (u v : ℕ) : ℕ :=
+  if 14 < cost T u v - LengthFrame.deduction u then 1 else 0
+
+def npad (T : Tab) (u v : ℕ) : ℕ :=
+  gcu u - 4 - (tie u v).length - zexp T u v - extraMul T u v
 
 /-- The last straight op: the next group's `MUL(H, g, H')`, or the public-key copy. -/
 def nextOp (u : ℕ) : CInstr :=
@@ -401,12 +415,20 @@ def nextOp (u : ℕ) : CInstr :=
 /-- The cost multiplier omits one guaranteed hash in every binding group. -/
 def chargedCost (T : Tab) (u v : ℕ) : ℕ := cost T u v - LengthFrame.deduction u
 
-/-- The product op of the block of `v` in group `u`. -/
-def prodOp (T : Tab) (u v : ℕ) : CInstr := .mul (gpCell u) (cCell (chargedCost T u v)) (gpCell (u + 1))
+/-- A private intermediate word for the 845 two-multiplier blocks. -/
+def gpTmp (u : ℕ) : ℕ := 220 + u
+
+def prodOp (T : Tab) (u v : ℕ) : CInstr :=
+  .mul (gpCell u) (cCell (min 14 (chargedCost T u v)))
+    (if 14 < chargedCost T u v then gpTmp u else gpCell (u + 1))
+
+def prodOps (T : Tab) (u v : ℕ) : List CInstr :=
+  [prodOp T u v] ++ if 14 < chargedCost T u v then
+    [.mul (gpTmp u) (cCell (chargedCost T u v - 14)) (gpCell (u + 1))] else []
 
 /-- The straight part of the block of `v` in group `u`, variant `z`. -/
 def body (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=
-  tie u v ++ [prodOp T u v] ++ segs T u v ++ rootIns T u v z ++ List.replicate (npad T u v) NOP ++
+  tie u v ++ prodOps T u v ++ segs T u v ++ rootIns T u v z ++ List.replicate (npad T u v) NOP ++
     [nextOp u]
 
 /-- Op `i` of the block of `v` in group `u`, entered in frame `u+1`. -/

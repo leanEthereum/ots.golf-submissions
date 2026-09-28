@@ -12,14 +12,14 @@ open scoped Classical
 set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
-theorem chainOp_ne_init (k d t dst : ℕ) : chainOp k d t dst ≠ .init := by
+theorem chainOp_ne_init (readTop : ℕ → ℕ) (k d t dst : ℕ) : chainOp readTop k d t dst ≠ .init := by
   unfold chainOp
   split_ifs <;> intro h <;> cases h
 
-theorem init_not_chainOps (k d dst : ℕ) : CInstr.init ∉ chainOps k d dst := by
+theorem init_not_chainOps (readTop : ℕ → ℕ) (k d dst : ℕ) : CInstr.init ∉ chainOps readTop k d dst := by
   intro h
   obtain ⟨t,ht,he⟩ := mem_chainOps.mp h
-  exact chainOp_ne_init k d t dst he.symm
+  exact chainOp_ne_init readTop k d t dst he.symm
 
 theorem rehint_eq_init (ci : CInstr) : rehint ci = .init ↔ ci = .init := by
   cases ci <;> simp only [rehint]
@@ -32,13 +32,14 @@ theorem init_not_body (T : Tab) (u x : ℕ) (z : Bool) : CInstr.init ∉ body T 
   rcases hi with ((((hi | hi) | hi) | hi) | hi) | hi
   · unfold tie at hi
     split_ifs at hi <;> simp [copy] at hi
-  · cases hi
+  · unfold prodOps prodOp at hi
+    split_ifs at hi <;> simp at hi
   · obtain ⟨i,hi,hseg⟩ := mem_segs.mp hi
     unfold seg at hseg
     split_ifs at hseg
     · simp [copy] at hseg
-    · exact init_not_chainOps _ _ _ hseg
-    · exact init_not_chainOps _ _ _ hseg
+    · exact init_not_chainOps _ _ _ _ hseg
+    · exact init_not_chainOps _ _ _ _ hseg
   · unfold rootIns at hi
     split_ifs at hi <;> simp at hi
   · cases hi.2
@@ -55,7 +56,7 @@ theorem bodyCode_ne_init (T : Tab) (a : K) (f x : ℕ) :
     simp only [List.mem_cons,List.mem_append,List.not_mem_nil,or_false] at hi
     rcases hi with hi | hi | hi | hi
     · cases hi
-    · exact init_not_chainOps _ _ _ hi
+    · exact init_not_chainOps _ _ _ _ hi
     · cases hi
     · cases hi
   · simp only [bodyCode,if_neg hf,List.mem_map] at hi

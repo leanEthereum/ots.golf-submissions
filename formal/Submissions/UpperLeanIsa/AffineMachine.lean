@@ -1,7 +1,8 @@
 import Submissions.UpperLeanIsa.AffineFaithful
+import Submissions.UpperLeanIsa.AffineConcrete
 
-/-! The complete affine-frame submission: 110 ordinary instructions,
-88 BLAKE2S instructions, and the fixed 120-cycle boundary charge. -/
+/-! The complete affine-frame submission: 106 ordinary instructions,
+87 BLAKE2S instructions, and the fixed 120-cycle boundary charge. -/
 
 namespace OptimalOTS.AffineVM
 
@@ -11,7 +12,7 @@ noncomputable section
 abbrev affineMachine : LeanIsa.Submission :=
   machineSubmission (AffineCodec.params (layout fusionTab)) fusionTab
 
-theorem affine_certificate : affineMachine.Certificate 1110 where
+theorem affine_certificate : affineMachine.Certificate 1096 where
   admissible := AffineCodec.admissible (layout fusionTab)
   secure := AffineCodec.secure (layout fusionTab)
   valid := machine_valid

@@ -159,13 +159,13 @@ theorem mass_mono {s t : ℕ} (h : s ≤ t) : S.mass s ≤ S.mass t := by
 
 theorem mass_nonneg (t : ℕ) : 0 ≤ S.mass t := by unfold mass; positivity
 
-theorem mass_lt_one (hS : S.Valid) {t : ℕ} (ht : t ≤ S.T) : S.mass t < 1 := by
+theorem mass_lt_one (hS : S.Analytic) {t : ℕ} (ht : t ≤ S.T) : S.mass t < 1 := by
   refine (S.mass_mono ht).trans_lt ?_
   unfold mass
   rw [div_lt_one (by positivity)]
   exact_mod_cast hS.mass_lt
 
-theorem ybar_pos (hS : S.Valid) {t : ℕ} (ht : t ≤ S.T) : 0 < S.ybar t := by
+theorem ybar_pos (hS : S.Analytic) {t : ℕ} (ht : t ≤ S.T) : 0 < S.ybar t := by
   have := S.mass_lt_one hS ht
   have : (0 : ℚ) < eta0 := by norm_num [eta0]
   unfold ybar; linarith
@@ -184,7 +184,7 @@ theorem pE_eq (t : ℕ) : S.pE t = ENNReal.ofReal (S.p t) := by
 
 theorem yb_ne_top (t : ℕ) : S.yb t ≠ ⊤ := ENNReal.ofReal_ne_top
 
-theorem yb_eq (hS : S.Valid) {t : ℕ} (ht : t < S.T) :
+theorem yb_eq (hS : S.Analytic) {t : ℕ} (ht : t < S.T) :
     S.yb t = S.yb (t + 1) + (S.N t : ℝ≥0∞) * S.pE t := by
   rw [yb, yb, S.ybar_succ t, Rat.cast_add,
     ENNReal.ofReal_add (Rat.cast_nonneg.mpr (S.ybar_pos hS (Nat.succ_le_of_lt ht)).le)
@@ -192,10 +192,10 @@ theorem yb_eq (hS : S.Valid) {t : ℕ} (ht : t < S.T) :
     pE_eq, Rat.cast_mul, Rat.cast_natCast, ENNReal.ofReal_mul (Nat.cast_nonneg _),
     ENNReal.ofReal_natCast]
 
-theorem yb_succ_le (hS : S.Valid) {t : ℕ} (ht : t < S.T) : S.yb (t + 1) ≤ S.yb t := by
+theorem yb_succ_le (hS : S.Analytic) {t : ℕ} (ht : t < S.T) : S.yb (t + 1) ≤ S.yb t := by
   rw [S.yb_eq hS ht]; exact le_self_add
 
-theorem Hterm_nonneg (hS : S.Valid) {t : ℕ} (ht : t < S.T) : 0 ≤ S.Yu t - S.Yl (t + 1) := by
+theorem Hterm_nonneg (hS : S.Analytic) {t : ℕ} (ht : t < S.T) : 0 ≤ S.Yu t - S.Yl (t + 1) := by
   have h1 := hS.Yu_ge t ht.le
   have h2 := hS.Yl_le (t + 1) ht
   have h3 : S.ybar (t + 1) ^ 2 ^ 19 ≤ S.ybar t ^ 2 ^ 19 :=
@@ -203,7 +203,7 @@ theorem Hterm_nonneg (hS : S.Valid) {t : ℕ} (ht : t < S.T) : 0 ≤ S.Yu t - S.
   linarith
 
 /-- `N_t p_t wbar_t = Ȳ_t - Ȳ_{t+1}` for the exact powers. -/
-theorem Np_mul_wbar (hS : S.Valid) {t : ℕ} (ht : t < S.T) :
+theorem Np_mul_wbar (hS : S.Analytic) {t : ℕ} (ht : t < S.T) :
     (S.N t : ℝ≥0∞) * S.pE t * S.wbar t = S.yb t ^ 2 ^ 19 - S.yb (t + 1) ^ 2 ^ 19 := by
   have h := pow_eq_add_mul_gsum (S.yb_succ_le hS ht) (S.yb_ne_top t) (2 ^ 19)
   have hd : S.yb t - S.yb (t + 1) = (S.N t : ℝ≥0∞) * S.pE t := by
@@ -212,22 +212,22 @@ theorem Np_mul_wbar (hS : S.Valid) {t : ℕ} (ht : t < S.T) :
   exact ENNReal.eq_sub_of_add_eq (ENNReal.pow_ne_top (S.yb_ne_top _))
     (by rw [add_comm]; exact h.symm)
 
-theorem yb_pow_le_Yu (hS : S.Valid) {t : ℕ} (ht : t ≤ S.T) :
+theorem yb_pow_le_Yu (hS : S.Analytic) {t : ℕ} (ht : t ≤ S.T) :
     S.yb t ^ 2 ^ 19 ≤ ENNReal.ofReal (S.Yu t) := by
   rw [yb, ← ENNReal.ofReal_pow (Rat.cast_nonneg.mpr (S.ybar_pos hS ht).le)]
   exact ENNReal.ofReal_le_ofReal (by exact_mod_cast hS.Yu_ge t ht)
 
-theorem Yl_le_yb_pow (hS : S.Valid) {t : ℕ} (ht : t ≤ S.T) :
+theorem Yl_le_yb_pow (hS : S.Analytic) {t : ℕ} (ht : t ≤ S.T) :
     ENNReal.ofReal (S.Yl t) ≤ S.yb t ^ 2 ^ 19 := by
   rw [yb, ← ENNReal.ofReal_pow (Rat.cast_nonneg.mpr (S.ybar_pos hS ht).le)]
   exact ENNReal.ofReal_le_ofReal (by exact_mod_cast hS.Yl_le t ht)
 
-theorem yb_pow_sub_le (hS : S.Valid) {t : ℕ} (ht : t < S.T) :
+theorem yb_pow_sub_le (hS : S.Analytic) {t : ℕ} (ht : t < S.T) :
     S.yb t ^ 2 ^ 19 - S.yb (t + 1) ^ 2 ^ 19 ≤ ENNReal.ofReal ((S.Yu t - S.Yl (t + 1) : ℚ) : ℝ) :=
   (tsub_le_tsub (S.yb_pow_le_Yu hS ht.le) (S.Yl_le_yb_pow hS ht)).trans
     (by rw [Rat.cast_sub]; exact ofReal_sub_le _ _)
 
-theorem sum_wbar_le (hS : S.Valid) :
+theorem sum_wbar_le (hS : S.Analytic) :
     ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.wbar t ≤ ENNReal.ofReal S.Hsum := by
   rw [Hsum, ofReal_ratSum fun t ht =>
     mul_nonneg (S.p_nonneg t) (S.Hterm_nonneg hS (Finset.mem_range.mp ht))]
@@ -238,7 +238,7 @@ theorem sum_wbar_le (hS : S.Valid) :
       = S.pE t * ((S.N t : ℝ≥0∞) * S.pE t * S.wbar t) := by ring
     _ ≤ _ := by rw [S.Np_mul_wbar hS ht]; gcongr; exact S.yb_pow_sub_le hS ht
 
-theorem sum_sck_le (hS : S.Valid) :
+theorem sum_sck_le (hS : S.Analytic) :
     ∑ t ∈ Finset.range S.T, (S.N t : ℝ≥0∞) * S.pE t ^ 2 * S.sckT t ≤
       (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum := by
   rw [SCsum, ofReal_ratSum fun t ht =>
@@ -269,7 +269,7 @@ theorem sum_sck_le (hS : S.Valid) :
 
 theorem f_nonneg (t : ℕ) : 0 ≤ S.f t := le_max_left _ _
 
-theorem f_pred_le (hS : S.Valid) {t : ℕ} (ht : t < S.T) (h0 : t ≠ 0) : S.f (t - 1) ≤ S.f t := by
+theorem f_pred_le (hS : S.Analytic) {t : ℕ} (ht : t < S.T) (h0 : t ≠ 0) : S.f (t - 1) ≤ S.f t := by
   unfold f p
   gcongr
   exact_mod_cast (hS.a_lt (t - 1) t (by omega) ht).le
@@ -286,7 +286,7 @@ theorem fE_eq (t : ℕ) : S.fE t = ENNReal.ofReal (S.f t) := by
       ENNReal.ofReal_inv_of_pos (by positivity), ofReal_two_pow]
   rw [h, fE, pE_eq, Rat.cast_sub, ENNReal.ofReal_sub _ (by positivity), ← hc]
 
-theorem Pos_term_nonneg (hS : S.Valid) {t : ℕ} (ht : t < S.T) :
+theorem Pos_term_nonneg (hS : S.Analytic) {t : ℕ} (ht : t < S.T) :
     0 ≤ (S.f t - if t = 0 then 0 else S.f (t - 1)) * min 1 (S.Yu t) := by
   apply mul_nonneg
   · split_ifs with h
@@ -296,7 +296,7 @@ theorem Pos_term_nonneg (hS : S.Valid) {t : ℕ} (ht : t < S.T) :
     have := pow_nonneg (S.ybar_pos hS ht.le).le (2 ^ 19)
     exact le_min zero_le_one (by linarith)
 
-theorem sum_pos_le (hS : S.Valid) :
+theorem sum_pos_le (hS : S.Analytic) :
     ∑ t ∈ Finset.range S.T, (S.fE t - (if t = 0 then 0 else S.fE (t - 1))) *
       min 1 (S.yb t ^ 2 ^ 19) ≤ ENNReal.ofReal S.Pos := by
   rw [Pos, ofReal_ratSum fun t ht => S.Pos_term_nonneg hS (Finset.mem_range.mp ht)]
@@ -315,12 +315,12 @@ theorem sum_pos_le (hS : S.Valid) :
     · rw [min_eq_left h, Rat.cast_one, ENNReal.ofReal_one]; exact min_le_left _ _
     · rw [min_eq_right h]; exact (min_le_right _ _).trans (S.yb_pow_le_Yu hS ht.le)
 
-theorem fE_mono (hS : S.Valid) {t : ℕ} (ht : t + 1 < S.T) : S.fE t ≤ S.fE (t + 1) := by
+theorem fE_mono (hS : S.Analytic) {t : ℕ} (ht : t + 1 < S.T) : S.fE t ≤ S.fE (t + 1) := by
   unfold fE pE
   gcongr
   exact_mod_cast (hS.a_lt t (t + 1) (by omega) ht).le
 
-theorem fE_telescope (hS : S.Valid) {τ : ℕ} (hτ : τ < S.T) :
+theorem fE_telescope (hS : S.Analytic) {τ : ℕ} (hτ : τ < S.T) :
     S.fE τ = ∑ t ∈ Finset.range (τ + 1), (S.fE t - if t = 0 then 0 else S.fE (t - 1)) := by
   induction τ with
   | zero => simp
@@ -328,19 +328,19 @@ theorem fE_telescope (hS : S.Valid) {τ : ℕ} (hτ : τ < S.T) :
     rw [Finset.sum_range_succ, ← ih (by omega), if_neg (by omega), Nat.add_sub_cancel,
       add_tsub_cancel_of_le (S.fE_mono hS hτ)]
 
-theorem Hsum_nonneg (hS : S.Valid) : 0 ≤ S.Hsum :=
+theorem Hsum_nonneg (hS : S.Analytic) : 0 ≤ S.Hsum :=
   Finset.sum_nonneg fun t ht =>
     mul_nonneg (S.p_nonneg t) (S.Hterm_nonneg hS (Finset.mem_range.mp ht))
 
-theorem SCsum_nonneg (hS : S.Valid) : 0 ≤ S.SCsum :=
+theorem SCsum_nonneg (hS : S.Analytic) : 0 ≤ S.SCsum :=
   Finset.sum_nonneg fun t ht =>
     div_nonneg (mul_nonneg (S.p_nonneg t) (S.Hterm_nonneg hS (Finset.mem_range.mp ht)))
       (hS.yl_pos t (Finset.mem_range.mp ht)).le
 
-theorem Pos_nonneg (hS : S.Valid) : 0 ≤ S.Pos :=
+theorem Pos_nonneg (hS : S.Analytic) : 0 ≤ S.Pos :=
   Finset.sum_nonneg fun _ ht => S.Pos_term_nonneg hS (Finset.mem_range.mp ht)
 
-theorem hp_nonneg (hS : S.Valid) : 0 ≤ S.hp := by
+theorem hp_nonneg (hS : S.Analytic) : 0 ≤ S.hp := by
   refine le_trans ?_ hS.hp_ge
   have := S.Hsum_nonneg hS
   have := S.SCsum_nonneg hS
@@ -348,7 +348,7 @@ theorem hp_nonneg (hS : S.Valid) : 0 ≤ S.hp := by
   unfold Hprime Hbar SCf
   positivity
 
-theorem k1_nonneg (hS : S.Valid) : 0 ≤ S.k1 := by
+theorem k1_nonneg (hS : S.Analytic) : 0 ≤ S.k1 := by
   refine le_trans ?_ hS.k1_post
   have := S.Pos_nonneg hS
   unfold kpost
@@ -362,7 +362,7 @@ theorem ofReal_SCf :
   rw [ENNReal.ofReal_mul (by positivity), ENNReal.ofReal_mul (by positivity),
     ENNReal.ofReal_pow hc, cIE_eq, ofReal_Lm1]
 
-theorem Hprime_le (hS : S.Valid) :
+theorem Hprime_le (hS : S.Analytic) :
     cIE * ENNReal.ofReal S.Hsum + cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum / 2 ^ 128 ≤
       S.hpE := by
   have hc : (0 : ℝ) ≤ cI := Rat.cast_nonneg.mpr cI_pos.le
@@ -375,7 +375,7 @@ theorem Hprime_le (hS : S.Valid) :
   unfold Hprime Hbar SCf at this
   exact_mod_cast this
 
-theorem SCf_le (hS : S.Valid) :
+theorem SCf_le (hS : S.Analytic) :
     cIE ^ 2 * (2 ^ 19 - 1) * ENNReal.ofReal S.SCsum ≤ 2 * 2 ^ 19 * S.k1E := by
   rw [← S.ofReal_SCf, k1E, ← ofReal_two_pow, ← ENNReal.ofReal_ofNat 2,
     ← ENNReal.ofReal_mul (by norm_num), ← ENNReal.ofReal_mul (by positivity)]
@@ -385,7 +385,7 @@ theorem SCf_le (hS : S.Valid) :
   push_cast at h
   linarith
 
-theorem kpost_le (hS : S.Valid) : (2 ^ 128 : ℝ≥0∞)⁻¹ + ENNReal.ofReal S.Pos / 2 ≤ S.k1E := by
+theorem kpost_le (hS : S.Analytic) : (2 ^ 128 : ℝ≥0∞)⁻¹ + ENNReal.ofReal S.Pos / 2 ≤ S.k1E := by
   have hP : (0 : ℝ) ≤ S.Pos := Rat.cast_nonneg.mpr (S.Pos_nonneg hS)
   rw [← ofReal_two_pow, ← ENNReal.ofReal_inv_of_pos (by positivity), ← ENNReal.ofReal_ofNat 2,
     ← ENNReal.ofReal_div_of_pos (by norm_num), ← ENNReal.ofReal_add (by positivity)
@@ -397,7 +397,7 @@ theorem kpost_le (hS : S.Valid) : (2 ^ 128 : ℝ≥0∞)⁻¹ + ENNReal.ofReal S
   rw [← one_div]
   linarith
 
-theorem rate_le_k1 (hS : S.Valid) : (2 ^ 128 : ℝ≥0∞)⁻¹ ≤ S.k1E :=
+theorem rate_le_k1 (hS : S.Analytic) : (2 ^ 128 : ℝ≥0∞)⁻¹ ≤ S.k1E :=
   le_self_add.trans (S.kpost_le hS)
 
 theorem k1E_ne_top : S.k1E ≠ ⊤ := ENNReal.ofReal_ne_top
@@ -502,6 +502,64 @@ theorem Kb_le (hS : S.Valid) {b : ℕ} (hb : b ≤ 2 ^ 127) :
       S.hp / (4 * 2 ^ 128) * ((2 ^ 127 - S.b0 : ℕ) : ℝ) ^ 2 / 2 ^ 127 * b := by ring
   have e2 : (1 : ℝ) / 2 ^ 127 * b = b / 2 ^ 127 := by ring
   nlinarith
+
+/-- Every old quadratic certificate also pays the stronger linear accounting. -/
+theorem Valid.toLinearValid (hS : S.Valid) : S.LinearValid where
+  toAnalytic := hS.toAnalytic
+  fresh_index_charge := by
+    have hhp := S.hp_nonneg hS
+    have hb : (0 : ℚ) ≤ (S.b0 : ℚ) - 1 := by
+      have : (1 : ℚ) ≤ S.b0 := by exact_mod_cast hS.b0_pos
+      linarith
+    have hleft : 0 ≤ S.hp * ((S.b0 : ℚ) - 1) := mul_nonneg hhp hb
+    have h := hS.b0_le
+    nlinarith
+  linear_budget := by
+    have hhp := S.hp_nonneg hS
+    have hquad : 0 ≤ S.hp / (4 * 2 ^ 128) *
+        ((2 ^ 127 - S.b0 : ℕ) : ℚ) ^ 2 / 2 ^ 127 := by positivity
+    exact (le_add_of_nonneg_right hquad).trans hS.kmax_le
+
+instance : Coe S.Valid S.LinearValid := ⟨Valid.toLinearValid S⟩
+
+/-- The two-compression charge in the probability semiring. -/
+theorem LinearValid.hpE_le (hS : S.LinearValid) : S.hpE ≤ 2 * S.k1E := by
+  rw [hpE, k1E, ← ENNReal.ofReal_ofNat 2, ← ENNReal.ofReal_mul (by norm_num)]
+  apply ENNReal.ofReal_le_ofReal
+  have h := (Rat.cast_le (K := ℝ)).mpr hS.fresh_index_charge
+  push_cast at h
+  exact h
+
+/-- The per-compression rate is below the 127-bit target. -/
+theorem LinearValid.k1E_le (hS : S.LinearValid) : S.k1E ≤ (2 ^ 127 : ℝ≥0∞)⁻¹ := by
+  rw [k1E, ← ofReal_two_pow, ← ENNReal.ofReal_inv_of_pos (by positivity)]
+  apply ENNReal.ofReal_le_ofReal
+  have h := (Rat.cast_le (K := ℝ)).mpr hS.linear_budget
+  push_cast at h
+  simpa only [one_div] using h
+
+/-- The budget used by joint class/collision accounting. -/
+def LinearKb (b : ℕ) : ℝ≥0∞ := S.k1E * b
+
+theorem LinearKb_mono {b b' : ℕ} (h : b ≤ b') : S.LinearKb b ≤ S.LinearKb b' := by
+  unfold LinearKb
+  gcongr
+
+theorem LinearKb_step {n b : ℕ} (h : n ≤ b) :
+    S.LinearKb (b - n) + S.k1E * n ≤ S.LinearKb b := by
+  unfold LinearKb
+  rw [← mul_add, ← Nat.cast_add, Nat.sub_add_cancel h]
+
+theorem LinearKb_step_enc (hS : S.LinearValid) {b : ℕ} (hb : 2 ≤ b) :
+    S.LinearKb (b - 2) + S.hpE ≤ S.LinearKb b := by
+  calc S.LinearKb (b - 2) + S.hpE ≤ S.LinearKb (b - 2) + S.k1E * 2 := by
+        rw [mul_comm S.k1E]
+        exact add_le_add le_rfl (hS.hpE_le S)
+    _ ≤ S.LinearKb b := S.LinearKb_step hb
+
+theorem LinearKb_le (hS : S.LinearValid) (b : ℕ) :
+    S.LinearKb b ≤ (2 ^ 127 : ℝ≥0∞)⁻¹ * b :=
+  mul_le_mul' (hS.k1E_le S) le_rfl
 
 end Sched
 

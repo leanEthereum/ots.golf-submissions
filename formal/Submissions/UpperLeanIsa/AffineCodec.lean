@@ -1,9 +1,11 @@
-import Submissions.UpperLeanIsa.AffineGuard
+import Submissions.UpperLeanIsa.AffineDomains
 import Submissions.UpperLeanIsa.FourAdmissible
 import Submissions.UpperLeanIsa.FourSecurity
+import Submissions.UpperLeanIsa.FourActive
 
-/-! The existing layer-86 construction with domain words and cost symbols drawn
-from the affine frame base. Its digit tables and signing schedule are unchanged. -/
+/-! The split layer-85 construction with domain words and cost symbols drawn
+from the affine frame base. Its exact digit classes and signing schedule are
+transported without changing their probabilities. -/
 
 namespace OptimalOTS.LeanIsaBaseline.Layer.AffineCodec
 
@@ -16,20 +18,6 @@ set_option backward.isDefEq.respectTransparency.types false
 
 variable (L : Layout)
 
-def word (i : ℕ) : Word := LeanIsa.cellBits (ofK (safeBase L ^ i))
-
-theorem word_eq (i : ℕ) : word L i = (0 : BitVec 64) ++ (safeBase L ^ i : K) := by
-  unfold word LeanIsa.cellBits
-  rw [limb_ofK, limb_ofK]
-  simp
-
-theorem word_inj {i j : ℕ} (hi : i ≤ 300) (hj : j ≤ 300)
-    (h : word L i = word L j) : i = j := by
-  rw [word_eq, word_eq] at h
-  have h' : safeBase L ^ i = safeBase L ^ j := by
-    simpa only [BitVec.extractLsb'_append_eq_right] using
-      congrArg (fun z : BitVec (64 + 64) => z.extractLsb' 0 64) h
-  exact safeBase_powers_injective L hi hj h'
 
 def tag (k : Fin numChains) (j : ℕ) : Fin 3 → Word :=
   ![word L ((FourChildCodec.off k + j) % 9),
@@ -94,7 +82,7 @@ theorem codec_hyp : (codec L).Hyp where
 
 def params : FourFusion.Params where
   codec := codec L
-  fusedMd k := word L (FourFusion.mdIndex k).val
+  fusedMd k := domainWord L (FourFusion.mdIndex k).val
   fusedTag k := word L (FourFusion.tagIndex k).val
   rootMd r := word L (FourFusion.rootIndex r).val
 
@@ -109,14 +97,22 @@ theorem word_fin_inj {i j : Fin 47} (h : word L i = word L j) : i = j :=
 
 theorem params_hyp : (params L).Hyp where
   codec := codec_hyp L
-  fused_inj := by
-    intro a b h
-    have he := Prod.mk.inj h
-    exact FourFusion.indices_injective
-      (Prod.ext (word_fin_inj L he.1) (word_fin_inj L he.2))
-  fused_chain := fun k h => (md_reserved k).1 (word_fin_inj L h)
-  fused_idx := fun k h => (md_reserved k).2.1 (word_fin_inj L h)
-  fused_root := fun k r h => (md_reserved k).2.2 r (word_fin_inj L h)
+  fused_inj := FourFusion.packet_location (params L)
+    (fun a b h => Fin.ext (domainWord_inj L (FourFusion.mdIndex_bounds a)
+      (FourFusion.mdIndex_bounds b) h))
+    (fun a b h => word_fin_inj L h)
+  fused_chain := by
+    intro k h
+    have hi := domainWord_inj L (FourFusion.mdIndex_bounds k) (Or.inl (by decide)) (j:=0) h
+    exact (md_reserved k).1 (Fin.ext hi)
+  fused_idx := by
+    intro k h
+    have hi := domainWord_inj L (FourFusion.mdIndex_bounds k) (Or.inl (by decide)) (j:=14) h
+    exact (md_reserved k).2.1 (Fin.ext hi)
+  fused_root := by
+    intro k r h
+    have hi := domainWord_inj L (FourFusion.mdIndex_bounds k) (Or.inl (by decide)) (j:=4) h
+    exact (md_reserved k).2.2 r (Fin.ext hi)
   root_inj := fun _ _ _ => Subsingleton.elim _ _
   root_chain := fun r h => (root_reserved r).1 (word_fin_inj L h)
   root_idx := fun r h => (root_reserved r).2 (word_fin_inj L h)
@@ -139,7 +135,7 @@ theorem securityHyp : (params L).SecurityHyp where
 
 theorem admissible : (params L).scheme.Admissible :=
   (params L).admissible (params_hyp L) (ordered L) FourChildNumeric.schedule_valid (tierHyp L)
-    (by rw [location_count]; decide) (by change 4 + 2 * 86 ≤ verifyBudget; decide)
+    (by rw [location_count]; decide) (by change 4 + 2 * 85 ≤ verifyBudget; decide)
 
 theorem secure : (params L).scheme.Secure := (params L).secure (securityHyp L)
 

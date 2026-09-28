@@ -1,0 +1,49 @@
+import Submissions.UpperLeanIsa.FourInputs
+
+/-! Concrete finite domain labels for the split four/five-child graph. -/
+namespace OptimalOTS.LeanIsaBaseline.Layer.FourFusion
+open OptimalOTS
+set_option maxHeartbeats 0
+set_option maxRecDepth 100000
+
+def mdIndex (k : Fin 42) : Fin 47 := ![13,3,5,17,17,17,17,6,1,2,13,13,13,13,13,13,13,13,13,17,17,17,13,13,17,17,17,13,13,17,17,17,13,13,7,8,13,13,13,9,10,13] k
+def tagIndex (k : Fin 42) : Fin 47 := ![1,1,1,1,2,3,4,1,1,1,1,1,1,1,1,1,1,1,1,5,6,7,1,1,8,9,10,1,1,11,12,13,1,1,1,1,1,1,1,1,1,1] k
+def rootIndex (_r : Fin 1) : Fin 47 := 4
+
+theorem mdIndex_reserved : ∀ k, mdIndex k ≠ 0 ∧ mdIndex k ≠ 16 ∧
+    ∀ r, mdIndex k ≠ rootIndex r := by decide
+theorem rootIndex_reserved : ∀ r, rootIndex r ≠ 0 ∧ rootIndex r ≠ 16 := by decide
+theorem mdIndex_bounds : ∀ k, (mdIndex k).val ≤ 14 ∨ (mdIndex k).val = 17 := by decide
+theorem tagIndex_bounds : ∀ k, (tagIndex k).val ≤ 13 := by decide
+
+theorem indices_kind : ∀ (k k' : Fin 42) (u v : Fin 8),
+    owner k = some u → owner k' = some v → mdIndex k = mdIndex k' →
+    five u = five v := by decide +kernel
+
+theorem indices_location : ∀ (k k' : Fin 42) (u v : Fin 8),
+    owner k = some u → owner k' = some v → mdIndex k = mdIndex k' →
+    (five u = true ∨ tagIndex k = tagIndex k') → k = k' := by decide +kernel
+
+/-- Five-child packets identify their parent by metadata alone. Four-child packets
+also use word five as a tag; the metadata separates these two packet formats. -/
+theorem packet_location (P : Params)
+    (hmd : ∀ a b, P.fusedMd a = P.fusedMd b → mdIndex a = mdIndex b)
+    (htag : ∀ a b, P.fusedTag a = P.fusedTag b → tagIndex a = tagIndex b)
+    (k k' : Fin 42) (u v : Fin 8) (t t' : Tops) (x y : Word)
+    (ho : owner k = some u) (ho' : owner k' = some v)
+    (h : P.groupInput t u k 0 x = P.groupInput t' v k' 0 y) : k = k' := by
+  have he := packet_injective h
+  have hm : P.fusedMd k = P.fusedMd k' := congrFun he 6
+  have hmi := hmd k k' hm
+  have hf := indices_kind k k' u v ho ho' hmi
+  apply indices_location k k' u v ho ho' hmi
+  by_cases hfu : five u = true
+  · exact Or.inl hfu
+  · right
+    have hfv : ¬ five v = true := by rwa [← hf]
+    have h5 := congrFun he 5
+    have ht : P.fusedTag k = P.fusedTag k' := by
+      simpa [Params.groupInput, fusionWords, hfu, hfv] using h5
+    exact htag k k' ht
+
+end OptimalOTS.LeanIsaBaseline.Layer.FourFusion

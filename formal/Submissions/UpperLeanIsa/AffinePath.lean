@@ -50,7 +50,7 @@ theorem run_full {κ : ℕ} {T : Tab} (hT : T.Hyp) (h16 : 16 ≤ κ) (hκ : κ �
     (hd : LengthDomain (Lx M)) {n c : ℕ}
     (h : some c ∈ Sm.S (LeanIsa.runCost (program T) M n ⟨gpow 0,1⟩)) :
     Valid (xsOf (Lx M)) ∧ PathFacts T B (Lx M) (xsOf (Lx M)) ∧
-      Landing (Lx M) (xsOf (Lx M)) ∧ xsOf (Lx M) 0 + gsum T (xsOf (Lx M)) = 86 ∧
+      Landing (Lx M) (xsOf (Lx M)) ∧ xsOf (Lx M) 0 + gsum T (xsOf (Lx M)) = 85 ∧
       n = pathSteps T (xsOf (Lx M)) ∧ c = pathCost T (xsOf (Lx M)) := by
   obtain ⟨hp,n0,c0,hn0,hc0,hw0⟩ := run_prologue T h16 hκ M Sm B hHash hd h
   have hOne := pro_one hp
@@ -111,9 +111,9 @@ theorem run_full {κ : ℕ} {T : Tab} (hT : T.Hyp) (h16 : 16 ≤ κ) (hκ : κ �
   obtain ⟨target,htarget⟩ := runCost_pc_valid T M Sm hw2
   change (Lx M (gpCell 13)).limb 0 = gpow target.val at htarget
   rw [hgp,limb_ofK_zero] at htarget
-  have hsum : (∑ w ∈ Finset.range 13, chargedCost T w (xs (w+1))) ≤ 13*13 := by
+  have hsum : (∑ w ∈ Finset.range 13, chargedCost T w (xs (w+1))) ≤ 13*16 := by
     calc
-      _ ≤ ∑ _w ∈ Finset.range 13, 13 := by
+      _ ≤ ∑ _w ∈ Finset.range 13, 16 := by
         apply Finset.sum_le_sum
         intro w hw
         have hw' := Finset.mem_range.mp hw
@@ -130,7 +130,7 @@ theorem run_full {κ : ℕ} {T : Tab} (hT : T.Hyp) (h16 : 16 ≤ κ) (hκ : κ �
     rfl
   rw [hgp_final,limb_ofK_zero] at hw2
   obtain ⟨hnzero,hczero⟩ := completion_at_sentinel T M Sm hw2
-  have hLayer : xs 0+gsum T xs = 86 := by
+  have hLayer : xs 0+gsum T xs = 85 := by
     have hshift := charged_sum hT hV
     unfold gsum
     omega

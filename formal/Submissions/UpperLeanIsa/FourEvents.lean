@@ -1,5 +1,5 @@
 import Submissions.UpperLeanIsa.FourTranscript
-import Submissions.UpperLeanIsa.FourActive
+import Submissions.UpperLeanIsa.FourBinding
 
 /-! Deterministic extraction of the forgery events for dependency-aware chains. -/
 namespace OptimalOTS.LeanIsaBaseline.Layer.FourFusion

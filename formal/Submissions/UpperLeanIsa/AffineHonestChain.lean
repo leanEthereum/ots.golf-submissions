@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.AffineHonest
 
 /-! Honest chain assertions, including the fused dependency packet at each binding endpoint
-using four children and two domain words. -/
+using four or five children and separated domain words. -/
 set_option maxRecDepth 4000
 set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
@@ -28,10 +28,22 @@ include hC hlen hacc in
 theorem honest_fusedMd (k : Fin 42) (_hk : binds k.val) :
     cellBits (hv P T f pk m bits (fusedMdCell k.val)) = P.fusedMd k := by
   rw [hC.fusedMd]
-  have hsmall : ∀ k : Fin 42,
-      fusedMdCell k.val = cCell (FourFusion.mdIndex k).val ∧ (FourFusion.mdIndex k).val≤13 := by decide
-  obtain ⟨he,hi⟩ := hsmall k
-  rw [he,hv_cc hi,factor_bits T _]
+  have he : ∀ k : Fin 42, fusedMdCell k.val =
+      if (FourFusion.mdIndex k).val = 17 then lenCell else cCell (FourFusion.mdIndex k).val := by decide
+  rw [he]
+  unfold AffineCodec.domainWord
+  by_cases h17 : (FourFusion.mdIndex k).val = 17
+  · rw [if_pos h17, if_pos h17]
+    have hl : hv P T f pk m bits lenCell = natV 5504 := by
+      rw [hv_lt P T f pk m bits (by decide)]
+      exact inputWord_len_of pk m bits hlen
+    rw [hl]
+    rfl
+  · have hi : (FourFusion.mdIndex k).val ≤ 13 := by
+      have hb : ∀ k : Fin 42, (FourFusion.mdIndex k).val ≤ 13 ∨
+          (FourFusion.mdIndex k).val = 17 := by decide
+      exact (hb k).resolve_right h17
+    rw [if_neg h17, if_neg h17, hv_cc hi, factor_bits T _]
 
 include hC in
 theorem honest_fusedTag (k : Fin 42) :
@@ -42,33 +54,67 @@ theorem honest_fusedTag (k : Fin 42) :
   obtain ⟨he,hi⟩ := hsmall k
   rw [he,hv_cc hi,factor_bits T _]
 
+def HonestReadContext (readTop : ℕ → ℕ) (k : Fin 42) : Prop :=
+  ∀ u : Fin 8, FourFusion.owner k = some u →
+    ∀ i < (FourFusion.children u).length,
+      cellBits (hv P T f pk m bits (readTop ((FourFusion.children u).getD i 0))) =
+        ctxF P f pk m bits ((FourFusion.children u).getD i 0)
+
 include hT hC hlen hacc in
-theorem honest_fusion_query (k : Fin 42) (hk : binds k.val) (u : Fin 9)
-    (hu : FourFusion.owner k = some u) (x : E) :
-    blake2sQuery ![x,hv P T f pk m bits (topCell (depTop k.val 2)),
-      hv P T f pk m bits (topCell (depTop k.val 3)),hv P T f pk m bits (fusedTagCell k.val)]
+theorem honest_groupRead_context (k : Fin 42) :
+    HonestReadContext (P:=P) (T:=T) (f:=f) (pk:=pk) (m:=m) (bits:=bits)
+      (groupRead T (unitOf k.val) (XF P T f pk m bits (unitOf k.val+1))) k := by
+  intro u ho i hi
+  have hk : binds k.val := (binds_owner k).mpr (by rw [ho]; simp)
+  have hdep := (fusion_cells k hk u ho).2.2 i hi
+  rw [groupRead_rtop T (XF P T f pk m bits) hdep.2.2 hdep.2.1]
+  change cellBits (hv P T f pk m bits (rtopCell _ (hd T (y0F P f pk m bits) _))) = _
+  rw [hv_rtop hlen hdep.2.2,cellBits_cellOfBits]
+  have hh := congrFun (topsOfV_eq hacc hT hC) ((FourFusion.children u).getD i 0)
+  simpa only [topsOfV,if_pos hdep.2.2,ctxF,IF] using hh
+
+include hT hC hlen hacc in
+theorem honest_fusion_query (readTop : ℕ → ℕ) (k : Fin 42) (hk : binds k.val)
+    (u : Fin 8) (hu : FourFusion.owner k = some u)
+    (hread : HonestReadContext (P:=P) (T:=T) (f:=f) (pk:=pk) (m:=m) (bits:=bits) readTop k)
+    (x : E) :
+    blake2sQuery ![x,hv P T f pk m bits (readTop (depTop k.val 2)),
+      hv P T f pk m bits (readTop (depTop k.val 3)),
+      hv P T f pk m bits (if fiveChildren k.val then readTop (depTop k.val 4) else fusedTagCell k.val)]
       (hv P T f pk m bits (depCv k.val)) (hv P T f pk m bits (depCv k.val+1))
       (hv P T f pk m bits (fusedMdCell k.val)) =
-      FourFusion.packet (FourFusion.fusionWords (ctxF P f pk m bits) u (cellBits x) (P.fusedTag k) (P.fusedMd k)) := by
+      FourFusion.packet (FourFusion.fusionWords (ctxF P f pk m bits) u (cellBits x)
+        (P.fusedTag k) (P.fusedMd k)) := by
   obtain ⟨hc0,hc1,hd⟩ := fusion_cells k hk u hu
-  rw [blake2sQuery_eq,hc1,hc0,honest_fusedMd hC hlen hacc k hk,honest_fusedTag hC k]
+  have hl : 4 ≤ (FourFusion.children u).length := by
+    have hh : ∀ u : Fin 8, 4 ≤ (FourFusion.children u).length := by decide
+    exact hh u
+  rw [blake2sQuery_eq,hc1,hc0,honest_fusedMd hC hlen hacc k hk]
   unfold FourFusion.packet Fusion.packet FourFusion.fusionWords
   simp only [Matrix.cons_val,Fin.isValue]
-  rw [(hd 2 (by omega)).1,(hd 3 (by omega)).1]
-  rw [honest_topBits hT hC hacc (hd 0 (by omega)).2.2,
-    honest_topBits hT hC hacc (hd 1 (by omega)).2.2,
-    honest_topBits hT hC hacc (hd 2 (by omega)).2.2,
-    honest_topBits hT hC hacc (hd 3 (by omega)).2.2]
+  rw [(hd 2 (by omega)).1,(hd 3 (by omega)).1,hread u hu 2 (by omega),hread u hu 3 (by omega),
+    honest_topBits hT hC hacc (hd 0 (by omega)).2.2,
+    honest_topBits hT hC hacc (hd 1 (by omega)).2.2]
+  by_cases hf : FourFusion.five u = true
+  · have hf' := (fiveChildren_owner k u hu).mpr hf
+    have hl5 : 4 < (FourFusion.children u).length := by
+      rw [Fusion.SplitRoot.packet_lengths u u.isLt, if_pos hf]
+      decide
+    rw [if_pos hf', if_pos hf, (hd 4 hl5).1, hread u hu 4 hl5]
+  · have hf' : ¬ fiveChildren k.val := fun hh => hf ((fiveChildren_owner k u hu).mp hh)
+    rw [if_neg hf', if_neg hf, honest_fusedTag hC k]
 
 include hT hC hlen hacc in
 /-- The honest chain step `t` of chain `k` (the last writes `dst`). -/
-theorem honest_chainOp {k : ℕ} (hk : k < 42) {t dst : ℕ}
+theorem honest_chainOp (readTop : ℕ → ℕ) {k : ℕ} (hk : k < 42)
+    (hread : HonestReadContext (P:=P) (T:=T) (f:=f) (pk:=pk) (m:=m) (bits:=bits) readTop ⟨k,hk⟩)
+    {t dst : ℕ}
     (ht : t < hd T (y0F P f pk m bits) k)
     (hdstpos : 1 ≤ dst)
     (hdst : hv P T f pk m bits dst =
         cellOfBits (topOf T bits (y0F P f pk m bits) (AF P T f pk m bits) k) ∧
       hv P T f pk m bits (junkCell k dst) = hiOf T (y0F P f pk m bits) (AF P T f pk m bits) k) :
-    (chainOp k (hd T (y0F P f pk m bits) k) t dst).Rel f (hv P T f pk m bits) := by
+    (chainOp readTop k (hd T (y0F P f pk m bits) k) t dst).Rel f (hv P T f pk m bits) := by
   set d := hd T (y0F P f pk m bits) k with hddef
   have hdl := hd_lt T hT (y0F P f pk m bits) hk
   rw [← hddef] at hdl
@@ -135,7 +181,7 @@ theorem honest_chainOp {k : ℕ} (hk : k < 42) {t dst : ℕ}
       (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)
       (hv_canonical P T f pk m bits _) (hv_canonical P T f pk m bits _)
       (hv_canonical P T f pk m bits _) ?_ hout.1 hout.2
-    rw [honest_fusion_query hT hC hlen hacc ⟨k,hk⟩ hb.2 u hu,hsrc.2,
+    rw [honest_fusion_query hT hC hlen hacc readTop ⟨k,hk⟩ hb.2 u hu hread,hsrc.2,
       AF_spec P T f pk m bits hk ht,chainInput_fused ha]
   · rw [if_neg hb]
     have ha : P.active ⟨k,hk⟩ (LEN k-1-d+t) = none := by
@@ -155,15 +201,16 @@ theorem honest_chainOp {k : ℕ} (hk : k < 42) {t dst : ℕ}
 
 include hT hC hlen hacc in
 /-- The honest chain steps of chain `k` into `dst`. -/
-theorem honest_chainOps {k dst : ℕ} (hk : k < 42)
+theorem honest_chainOps (readTop : ℕ → ℕ) {k dst : ℕ} (hk : k < 42)
+    (hread : HonestReadContext (P:=P) (T:=T) (f:=f) (pk:=pk) (m:=m) (bits:=bits) readTop ⟨k,hk⟩)
     (hdstpos : 1 ≤ dst)
     (hdst : hv P T f pk m bits dst =
         cellOfBits (topOf T bits (y0F P f pk m bits) (AF P T f pk m bits) k) ∧
       hv P T f pk m bits (junkCell k dst) = hiOf T (y0F P f pk m bits) (AF P T f pk m bits) k) :
-    ∀ y ∈ chainOps k (hd T (y0F P f pk m bits) k) dst, y.Rel f (hv P T f pk m bits) := by
+    ∀ y ∈ chainOps readTop k (hd T (y0F P f pk m bits) k) dst, y.Rel f (hv P T f pk m bits) := by
   intro y hy
   obtain ⟨t, ht, rfl⟩ := mem_chainOps.mp hy
-  exact honest_chainOp hT hC hlen hacc hk ht hdstpos hdst
+  exact honest_chainOp hT hC hlen hacc readTop hk hread ht hdstpos hdst
 
 include hlen in
 /-- An honest copy of a top from the revealed word (digit `0`). -/

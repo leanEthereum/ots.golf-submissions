@@ -32,7 +32,7 @@ theorem sum_recW : ∑ _ξ : Record P, recW P = 1 := by
   exact ENNReal.mul_inv_cancel h (ENNReal.natCast_ne_top _)
 
 theorem signingFailure (hP : P.Hyp) (hl : P.locationOrder.Pairwise Earlier)
-    {S : Tier.Sched} (hS : S.Valid) (hT : P.codec.TierHyp S) :
+    {S : Tier.Sched} (hS : S.Analytic) (hT : P.codec.TierHyp S) :
     P.scheme.SigningFailureAtMost (1 / 2 ^ signingFailureBits) := by
   intro message
   rw [Layer.Params.probTrue_eq_E_run,run_bind,E_bind]
@@ -50,9 +50,6 @@ theorem signingFailure (hP : P.Hyp) (hl : P.locationOrder.Pairwise Earlier)
 
 end Params
 
-theorem concrete_signingFailure :
-    params.scheme.SigningFailureAtMost (1 / 2 ^ signingFailureBits) :=
-  params.signingFailure params_hyp concrete_ordered FourChildNumeric.schedule_valid FourChildCodec.tierHyp
 
 end
 end OptimalOTS.LeanIsaBaseline.Layer.FourFusion

@@ -14,11 +14,11 @@ set_option backward.isDefEq.respectTransparency.types false
 theorem free_bodyCode (T : Tab) (a : K) (x : ℕ) :
     bodyCode T a 0 x =
       .setc (gpCell 0) (ofK (gpow sentinel / a ^ 77 * a ^ x)) ::
-        (chainOps 0 x tfCell ++ [copy (if x = 0 then wCell 0 else tfCell) tfCell,
+        (chainOps topCell 0 x tfCell ++ [copy (if x = 0 then wCell 0 else tfCell) tfCell,
           .xor (hCell 1) (cCell 1) (h1Cell 1)]) := rfl
 
-theorem chainOps_getD {k x i dst : ℕ} (hi : i < x) :
-    (chainOps k x dst).getD i .pad = chainOp k x i dst := by
+theorem chainOps_getD {readTop : ℕ → ℕ} {k x i dst : ℕ} (hi : i < x) :
+    (chainOps readTop k x dst).getD i .pad = chainOp readTop k x i dst := by
   simp [chainOps,List.getD_eq_getElem?_getD,hi]
 
 /-- The actual raw instruction is the instruction used by the costed body list. -/
@@ -147,7 +147,7 @@ theorem bodyCode_bounded {T : Tab} (hT : T.Hyp) (a : K) {f x : ℕ}
     rcases hi with rfl | hi | rfl | rfl
     · change 200 < 2 ^ 16; decide
     · obtain ⟨t,ht,rfl⟩ := mem_chainOps.mp hi
-      exact chainOp_bounded (by decide) ht (by omega) (by unfold tfCell; omega)
+      exact chainOp_bounded topCell_read_bound (by decide) ht (by omega) (by unfold tfCell; omega)
     · simp only [copy,CInstr.Bounded,wCell,tfCell,oneCell]
       split_ifs <;> omega
     · change 161 < 2 ^ 16 ∧ 105 < 2 ^ 16 ∧ 181 < 2 ^ 16
@@ -179,8 +179,22 @@ theorem bodyCode_slot_lt {T : Tab} (hT : T.Hyp) (a : K) {f x i : ℕ}
     (hf : f < 14) (hx : x < Wf f) (hi : i ≤ (bodyCode T a f x).length) :
     ent f x+i < sentinel := by
   rw [bodyCode_length] at hi
-  have hb := (cinstrAt_blk hT hf hx).2.2.2
-  omega
+  by_cases hf0 : f = 0
+  · subst f
+    rw [Wf_zero] at hx
+    rw [bodyF_zero, fbody_len] at hi
+    rw [ent_zero]
+    unfold entF baseF sentinel
+    omega
+  · obtain ⟨u, rfl⟩ : ∃ u, f = u+1 := ⟨f-1, by omega⟩
+    have hu : u < 13 := by omega
+    rw [Wf_succ hu] at hx
+    rw [bodyF_succ T hu] at hi
+    have hl := body_len_L (z := false) hT hu hx
+    have hb := block_lt_gEnd hu hx (show i < L u (band u x) by omega)
+    rw [ent_succ hu]
+    unfold gEnd sentinel at *
+    omega
 
 def blockFrame (T : Tab) (f x : ℕ) : K := base T ^ (stageIndex f+1) + gpow (ent f x)
 

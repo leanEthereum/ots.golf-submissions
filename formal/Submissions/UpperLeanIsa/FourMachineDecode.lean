@@ -53,9 +53,10 @@ def cF (T : Tab) (f x : ℕ) : ℕ := if f = 0 then x else cost T (gOf f) x
 def hmF (f : ℕ) : ℕ := if f = 0 then 0 else hm (gOf f)
 
 theorem body_len_L {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (hv : v < VF u) :
-    (body T u v z).length + 2 = L u (band u v) := by
+    (body T u v z).length + 1 = L u (band u v) := by
   rw [body_len hT hu hv, hT.cost_eq u hu v hv]
-  unfold L gcu; split_ifs <;> omega
+  have := gcu_ge u
+  unfold L; omega
 
 theorem gcuF_zero : gcuF 0 = 5 := rfl
 theorem cF_zero (T : Tab) (x : ℕ) : cF T 0 x = x := rfl
@@ -93,19 +94,21 @@ theorem topCell_lt {k : ℕ} (hk : k < 42) : topCell k + 1 < 346 := by
 theorem xhCell_lt {k : ℕ} (hk : k < 42) : xhCell k + 1 < 346 := topCell_lt hk
 
 theorem dep_bounds : ∀ k < 42, depCv k + 1 < 346 ∧ fusedMdCell k < 214 ∧
-    ∀ i < 4, depTop k i < 42 := by decide
+    ∀ i < 5, depTop k i < 42 := by decide
 
 theorem cCell_bound {c : ℕ} (hc : c < 64) : cCell c + 1 < 128 := by
   unfold cCell
   split_ifs <;> omega
 
-theorem chainOp_bounded {k d t dst : ℕ} (hk : k < 42) (ht : t < d) (hd : d ≤ 64)
-    (hdst : dst + 1 < 2^16) : (chainOp k d t dst).Bounded := by
+theorem chainOp_bounded {readTop : ℕ → ℕ}
+    (hr : ∀ k < 42, readTop k < 346) {k d t dst : ℕ} (hk : k < 42) (ht : t < d) (hd : d ≤ 64)
+    (hdst : dst + 1 < 2^16) : (chainOp readTop k d t dst).Bounded := by
   have hx := xcBase_bound k hk
   have hL := LEN_le k hk
   have hdps := dep_bounds k hk
-  have b2 := topCell_lt (hdps.2.2 2 (by decide))
-  have b3 := topCell_lt (hdps.2.2 3 (by decide))
+  have b2 := hr _ (hdps.2.2 2 (by decide))
+  have b3 := hr _ (hdps.2.2 3 (by decide))
+  have b4 := hr _ (hdps.2.2 4 (by decide))
   have htag : fusedTagCell k < 128 := by
     have hh : ∀ k < 42, fusedTagCell k < 128 := by decide
     exact hh k hk
@@ -118,6 +121,14 @@ theorem chainOp_bounded {k d t dst : ℕ} (hk : k < 42) (ht : t < d) (hd : d ≤
   unfold chainOp
   split_ifs <;> simp only [CInstr.Bounded,oneCell] <;>
     (try split_ifs) <;> (simp only [wCell,xcCell]; omega)
+
+theorem topCell_read_bound : ∀ k < 42, topCell k < 346 := by decide
+
+theorem groupRead_bound (T : Tab) (u v : ℕ) : ∀ k < 42, groupRead T u v k < 346 := by
+  intro k hk
+  have := topCell_lt hk
+  unfold groupRead wCell
+  split_ifs <;> omega
 
 theorem rtopCell_lt {k d : ℕ} (hk : k < 42) : rtopCell k d < 346 := by
   have := topCell_lt hk
@@ -153,12 +164,22 @@ theorem body_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13)
   · unfold tie at h
     split_ifs at h <;> simp at h <;> (try rcases h with rfl | rfl) <;>
       simp only [CInstr.Bounded, accCell, tCell, copy, oneCell, idxCell] <;> (try split_ifs) <;> omega
-  · subst h
-    have hc := LengthFrame.cost_shift_le hT hu hv
-    change gpCell u < 2 ^ 16 ∧ cCell (chargedCost T u v) < 2 ^ 16 ∧ gpCell (u + 1) < 2 ^ 16
-    exact ⟨by unfold gpCell; omega,
-      (show ∀ c ≤ 13, cCell c < 2 ^ 16 by decide) _ hc,
-      by unfold gpCell; omega⟩
+  · have hc := LengthFrame.cost_shift_le hT hu hv
+    change chargedCost T u v ≤ 16 at hc
+    unfold prodOps at h
+    split_ifs at h <;> simp only [List.mem_append, List.mem_singleton, List.not_mem_nil, or_false] at h
+    · rcases h with rfl | rfl
+      · unfold prodOp
+        have hcc := cCell_bound (c := min 14 (chargedCost T u v)) (by omega)
+        simp only [CInstr.Bounded, gpCell, gpTmp]
+        split_ifs <;> omega
+      · have hcc := cCell_bound (c := chargedCost T u v - 14) (by omega)
+        simp only [CInstr.Bounded, gpCell, gpTmp]; omega
+    · subst x
+      unfold prodOp
+      have hcc := cCell_bound (c := min 14 (chargedCost T u v)) (by omega)
+      simp only [CInstr.Bounded, gpCell, gpTmp]
+      split_ifs <;> omega
   · obtain ⟨i, hi, hx⟩ := mem_segs.mp h
     have hk := chainOf_lt u hu i hi
     have hd := hT.coord_lt u hu v (lt_of_lt_of_le hv (VF_le u hu)) i hi
@@ -169,9 +190,9 @@ theorem body_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13)
       have := topCell_lt hk
       simp only [copy, CInstr.Bounded, wCell, oneCell]; omega
     · obtain ⟨t, ht, rfl⟩ := mem_chainOps.mp hx
-      exact chainOp_bounded hk ht (by omega) (by have := topCell_lt hk; omega)
+      exact chainOp_bounded (groupRead_bound T u v) hk ht (by omega) (by have := topCell_lt hk; omega)
     · obtain ⟨t, ht, rfl⟩ := mem_chainOps.mp hx
-      exact chainOp_bounded hk ht (by omega) (by have := xhCell_lt hk; omega)
+      exact chainOp_bounded (groupRead_bound T u v) hk ht (by omega) (by have := xhCell_lt hk; omega)
   · exact rootIns_bounded T hu x h
   · rw [h.2]; simp only [NOP, CInstr.Bounded, oneCell]; omega
   · subst h; unfold nextOp; split_ifs <;> simp only [CInstr.Bounded, copy, hCell, gCell, h1Cell,
@@ -184,7 +205,7 @@ theorem fbody_bounded (s : ℕ) (hs : s < 64) : ∀ x ∈ fbody s, x.Bounded := 
   rcases hx with (rfl | h) | rfl | rfl
   · change 200 < 2^16; decide
   · obtain ⟨t,ht,rfl⟩ := mem_chainOps.mp h
-    exact chainOp_bounded (by omega) ht (by omega) (by unfold tfCell; omega)
+    exact chainOp_bounded topCell_read_bound (by omega) ht (by omega) (by unfold tfCell; omega)
   · simp only [copy,CInstr.Bounded,wCell,tfCell,oneCell]; split_ifs <;> omega
   · simp only [CInstr.Bounded,hCell,gCell,h1Cell]; omega
 
@@ -303,55 +324,6 @@ theorem ent_lt {f x : ℕ} (hf : f < 14) (hx : x < Wf f) : ent f x+68 ≤ sentin
 
 def ctlOf (f x : ℕ) : CInstr := if f = 0 then .dispatch (frG0 x) else ctlF (gOf f + 1)
 
-/-- **Block decode.** The block of index `x` of frame `f`: its entry, its straight part, its
-control op, all below the sentinel. -/
-theorem cinstrAt_blk {T : Tab} (hT : T.Hyp) {f x : ℕ} (hf : f < 14) (hx : x < Wf f) :
-    cinstrAt T (ent f x) = .entry f ∧
-      (∀ i (hi : i < (bodyF T f x).length), cinstrAt T (ent f x + 1 + i) = (bodyF T f x)[i]) ∧
-      cinstrAt T (ent f x + 1 + (bodyF T f x).length) = ctlOf f x ∧
-      ent f x + 1 + (bodyF T f x).length < sentinel := by
-  rcases Nat.eq_zero_or_pos f with rfl | hf0
-  · rw [Wf_zero] at hx
-    have hl := fbody_len x
-    rw [bodyF_zero]
-    rw [ent_zero]
-    refine ⟨?_, fun i hi => ?_, ?_, ?_⟩
-    · have := cinstrAt_free T hx (i := 0) (by omega)
-      rw [Nat.add_zero] at this
-      rw [this]; unfold fblockInstr; rw [if_pos rfl]
-    · rw [Nat.add_assoc, cinstrAt_free T hx (by omega)]
-      unfold fblockInstr
-      rw [if_neg (by omega), if_pos (by omega), show 1 + i - 1 = i by omega,
-        List.getD_eq_getElem _ _ hi]
-    · rw [Nat.add_assoc, cinstrAt_free T hx (by omega)]
-      unfold fblockInstr ctlOf
-      rw [if_neg (by omega), if_neg (by omega), if_pos (by omega), if_pos rfl]
-    · unfold entF baseF sentinel; omega
-  · obtain ⟨u, rfl⟩ : ∃ u, f = u + 1 := ⟨f - 1, by omega⟩
-    have hu : u < 13 := by omega
-    rw [Wf_succ hu] at hx
-    have hl := body_len_L (z := false) hT hu hx
-    rw [bodyF_succ T hu, ent_succ hu]
-    refine ⟨?_, fun i hi => ?_, ?_, ?_⟩
-    · have := cinstrAt_grp T (i := 0) hu hx (by omega)
-      rw [Nat.add_zero] at this
-      rw [this]; unfold blockInstr; rw [if_pos rfl]
-    · rw [Nat.add_assoc, cinstrAt_grp T hu hx (by omega)]
-      unfold blockInstr
-      rw [if_neg (by omega), if_pos (by omega), show 1 + i - 1 = i by omega,
-        List.getD_eq_getElem _ _ hi]
-    · rw [Nat.add_assoc, cinstrAt_grp T hu hx (by omega)]
-      unfold blockInstr ctlOf gOf
-      rw [if_neg (by omega), if_neg (by omega), if_pos (by omega), if_neg (by omega),
-        Nat.add_sub_cancel]
-    · have := block_lt_gEnd (i := (body T u x false).length + 1) hu hx (by omega)
-      unfold gEnd sentinel at *; omega
-
-theorem cinstrAt_of_entry {T : Tab} (hT : T.Hyp) {f e : ℕ} (h : IsEntry f e) :
-    cinstrAt T e = .entry f := by
-  obtain ⟨hf, x, hx, rfl⟩ := h
-  exact (cinstrAt_blk hT hf hx).1
-
 theorem isEntry_lt {f e : ℕ} (h : IsEntry f e) : e + 68 ≤ sentinel := by
   obtain ⟨hf, x, hx, rfl⟩ := h
   exact ent_lt hf hx
@@ -407,14 +379,6 @@ theorem frame_fail {T : Tab} (hT : T.Hyp) {κ : ℕ} (hκ : κ ≤ 32) (L : MemI
     {f s : ℕ} (hf : f < 14) (hs : ¬ IsEntry f s) :
     LeanIsa.execute L ⟨pc, frame f⟩ (instrAt T s) = pure none :=
   exec_frame_fail hκ L pc hf (cinstrAt_bounded hT s) fun h => hs (cinstrAt_eq_entry h)
-
-/-- In frame `1`, every entry slot fails: `I0` is reachable only through a frame jump. -/
-theorem entry_fail_frame_one {T : Tab} (hT : T.Hyp) {κ : ℕ} (hκ : κ ≤ 32) (L : MemImage κ)
-    (pc : K) {f s : ℕ} (hs : IsEntry f s) :
-    LeanIsa.execute L ⟨pc, 1⟩ (instrAt T s) = pure none := by
-  show LeanIsa.execute L ⟨pc, 1⟩ (cinstrAt T s).toInstr = pure none
-  rw [cinstrAt_of_entry hT hs]
-  exact exec_entry_frame_one hκ L pc (by have := hs.1; omega)
 
 /-! ## Program facts -/
 

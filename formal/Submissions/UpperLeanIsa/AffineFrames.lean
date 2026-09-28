@@ -108,5 +108,25 @@ theorem collision_ne_zero {u v s e c j : ℕ}
 /-- The main family is small enough even with all admitted memory sizes. -/
 theorem main_root_count : 14 * 2 ^ 18 * 2 ^ 32 * 14 < (2 : ℕ) ^ 64 := by norm_num
 
+/-- The pinned signature length, as a field bit pattern (not a natural-number cast). -/
+def lengthK : K := BitVec.ofNat 64 5504
+
+theorem lengthK_ne_one : lengthK ≠ 1 := by decide
+
+theorem lengthK_ne_zero : lengthK ≠ 0 := by decide
+
+/-- A positive power can be separated from an already initialized constant. -/
+theorem power_sub_constant_ne_zero (c : K) {n : ℕ} (hn : 0 < n) :
+    (X ^ n - C c : K[X]) ≠ 0 := by
+  intro h
+  have hc := congrArg (fun p : K[X] => p.coeff n) h
+  simp only [Polynomial.coeff_sub, Polynomial.coeff_X_pow, Polynomial.coeff_C,
+    Polynomial.coeff_zero, if_pos rfl, if_neg (Nat.ne_of_gt hn), sub_zero] at hc
+  exact one_ne_zero hc
+
+theorem power_sub_constant_degree (c : K) (n : ℕ) :
+    (X ^ n - C c : K[X]).natDegree ≤ n := by
+  exact (Polynomial.natDegree_sub_le _ _).trans (by simp)
+
 end
 end OptimalOTS.AffineFrames

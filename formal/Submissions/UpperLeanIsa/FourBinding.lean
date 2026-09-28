@@ -1,4 +1,5 @@
 import Submissions.UpperLeanIsa.FourTargets
+import Submissions.UpperLeanIsa.FourScheme
 
 /-! Binding from actual cached queries. Final chain steps at a hidden boundary
 are handled by the same charged target event as exposed steps. -/
@@ -36,7 +37,7 @@ theorem final_query_binding (d : Cut) (hd : ValidCut P d) (ζ : Record P) (c : C
 /-- An executed final binding hash binds all children of its group. -/
 theorem final_binds_dependencies (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
     (ζ : Record P) (c : Cache) (k : Fin 42) (hlen : 2 ≤ P.codec.len k)
-    (u : Fin 9) (hu : owner k = some u) (t : Tops) (x : Word) (v : BitVec hashBits)
+    (u : Fin 8) (hu : owner k = some u) (t : Tops) (x : Word) (v : BitVec hashBits)
     (hv : c ⟨896,P.chainInput t k (P.codec.len k - 2) x⟩ = some v)
     (hout : P.codec.slice k (P.codec.len k - 2) v = ζ.top k)
     (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ a ∈ children u, t a = ζ.tops a := by
@@ -82,20 +83,20 @@ theorem root_path_anchors (hP : P.Hyp) (d : Cut) (ζ : Record P) (c : Cache)
   have he := root_path_inputs hP d ζ c t S hc hpk hno
   exact root_binds t ζ.tops (P.rootMd 0) (P.rootMd 0) (he 0)
 
-theorem parents_bounded : ∀ u : Fin 9, ∀ k ∈ parents u, k < 42 := by decide
+theorem parents_bounded : ∀ u : Fin 8, ∀ k ∈ parents u, k < 42 := by decide
 
 /-- Actual cached final queries propagate the root binding through both dependency levels. -/
 theorem all_tops_bound (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
     (ζ : Record P) (c : Cache) (I : Index) (t : Tops) (S : ℕ → BitVec 256)
     (hc : ∀ r : Fin 1, c ⟨896,P.rootInput t r (S r.val)⟩ = some (S (r.val+1)))
     (hpk : (S 1).extractLsb' 0 128 = ζ.pk)
-    (hactive : ∀ u : Fin 9, ∃ k : Fin 42, k.val ∈ parents u ∧ 0 < P.codec.digit I k)
+    (hactive : ∀ u : Fin 8, ∃ k : Fin 42, k.val ∈ parents u ∧ 0 < P.codec.digit I k)
     (hfinal : ∀ k : Fin 42, 0 < P.codec.digit I k → ∃ x v,
       c ⟨896,P.chainInput t k (P.codec.len k - 2) x⟩ = some v ∧
         P.codec.slice k (P.codec.len k - 2) v = t k.val)
     (hno : ¬ TargetHit (cutTargets P d ζ) c) : ∀ k < 42, t k = ζ.tops k := by
   have hroot := root_path_anchors hP d ζ c t S hc hpk hno
-  have hclosed : ∀ n ≤ 9, ∀ k ∈ closure n, t k = ζ.tops k := by
+  have hclosed : ∀ n ≤ 8, ∀ k ∈ closure n, t k = ζ.tops k := by
     intro n
     induction n with
     | zero => intro _; exact hroot
@@ -115,7 +116,15 @@ theorem all_tops_bound (hP : P.Hyp) (d : Cut) (hd : ValidCut P d)
           ((owner_mem b ⟨_,hg⟩).mpr hb) t x v hv (hout.trans (hbnd.trans hbtop)) hno
         exact he k (List.mem_toFinset.mp hnew)
   intro k hk
-  exact hclosed 9 le_rfl k (full_coverage (Finset.mem_range.mpr hk))
+  exact hclosed 8 le_rfl k (full_coverage (Finset.mem_range.mpr hk))
+
+/-- Structural hypotheses required by the fused reconstruction security proof. -/
+structure Params.SecurityHyp (P : Params) extends P.Hyp where
+  ordered : P.locationOrder.Pairwise Earlier
+  binding : ∀ I, P.codec.Accepted I → ∀ u : Fin 8,
+    ∃ k : Fin 42, k.val ∈ parents u ∧ 0 < P.codec.digit I k
+
+instance {P : Params} : Coe P.SecurityHyp P.Hyp := ⟨fun h => h.toHyp⟩
 
 end
 end OptimalOTS.LeanIsaBaseline.Layer.FourFusion

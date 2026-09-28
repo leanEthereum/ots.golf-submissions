@@ -123,7 +123,7 @@ theorem rejectsOversized : P.scheme.RejectsOversized maxSignatureBits := by
 
 set_option maxHeartbeats 800000 in
 theorem admissible (hP : P.Hyp) (hl : P.locationOrder.Pairwise Earlier)
-    {S : Tier.Sched} (hS : S.Valid) (hT : P.codec.TierHyp S)
+    {S : Tier.Sched} (hS : S.Analytic) (hT : P.codec.TierHyp S)
     (hk : 2 * P.locationOrder.length ≤ keygenBudget)
     (hv : 4 + 2 * P.codec.layer ≤ verifyBudget) : P.scheme.Admissible where
   correct := P.correct hP.codec hl
@@ -139,16 +139,6 @@ theorem admissible (hP : P.Hyp) (hl : P.locationOrder.Pairwise Earlier)
 
 end Params
 
-theorem concrete_keygenCost : CostAtMost params.keygen 1440 := by
-  have h := params.cost_keygen
-  rwa [concrete_location_count] at h
-
-theorem concrete_verifyCost (pk : PublicKey) (m : Message) (bits : List Bool) :
-    CostAtMost (params.verify pk m bits) 176 := params.cost_verify pk m bits
-
-theorem concrete_admissible : params.scheme.Admissible :=
-  params.admissible params_hyp concrete_ordered FourChildNumeric.schedule_valid FourChildCodec.tierHyp
-    (by rw [concrete_location_count]; decide) (by decide)
 
 end
 end OptimalOTS.LeanIsaBaseline.Layer.FourFusion

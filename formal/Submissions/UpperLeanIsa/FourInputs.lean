@@ -8,14 +8,14 @@ noncomputable section
 
 abbrev Tops := ℕ → Word
 
-def owner (k : Fin 42) : Option (Fin 9) :=
+def owner (k : Fin 42) : Option (Fin 8) :=
   if k.val ∈ parents 0 then some 0 else if k.val ∈ parents 1 then some 1
   else if k.val ∈ parents 2 then some 2 else if k.val ∈ parents 3 then some 3
   else if k.val ∈ parents 4 then some 4 else if k.val ∈ parents 5 then some 5
   else if k.val ∈ parents 6 then some 6 else if k.val ∈ parents 7 then some 7
-  else if k.val ∈ parents 8 then some 8 else none
+  else none
 
-theorem owner_mem : ∀ k : Fin 42, ∀ u : Fin 9, owner k = some u ↔ k.val ∈ parents u := by decide
+theorem owner_mem : ∀ k : Fin 42, ∀ u : Fin 8, owner k = some u ↔ k.val ∈ parents u := by decide
 
 structure Params where
   codec : Layer.Params
@@ -26,16 +26,16 @@ structure Params where
 namespace Params
 variable (P : Params)
 
-def active (k : Fin 42) (j : ℕ) : Option (Fin 9) :=
+def active (k : Fin 42) (j : ℕ) : Option (Fin 8) :=
   if j + 2 = P.codec.len k then owner k else none
 
-theorem active_final {k : Fin 42} {j : ℕ} {u : Fin 9} (h : P.active k j = some u) :
+theorem active_final {k : Fin 42} {j : ℕ} {u : Fin 8} (h : P.active k j = some u) :
     j + 2 = P.codec.len k := by
   unfold active at h
   split_ifs at h with he
   exact he
 
-def groupInput (t : Tops) (u : Fin 9) (k : Fin 42) (_j : ℕ) (x : Word) : BitVec 896 :=
+def groupInput (t : Tops) (u : Fin 8) (k : Fin 42) (_j : ℕ) (x : Word) : BitVec 896 :=
   packet (fusionWords t u x (P.fusedTag k) (P.fusedMd k))
 
 def chainInput (t : Tops) (k : Fin 42) (j : ℕ) (x : Word) : BitVec 896 :=
@@ -48,7 +48,9 @@ def rootInput (t : Tops) (r : Fin 1) (_st : BitVec 256) : BitVec 896 :=
 
 structure Hyp : Prop where
   codec : P.codec.Hyp
-  fused_inj : Function.Injective fun k => (P.fusedMd k, P.fusedTag k)
+  fused_inj : ∀ (k k' : Fin 42) (u v : Fin 8) (t t' : Tops) (x y : Word),
+    owner k = some u → owner k' = some v →
+    P.groupInput t u k 0 x = P.groupInput t' v k' 0 y → k = k'
   fused_chain : ∀ k, P.fusedMd k ≠ P.codec.chainMd
   fused_idx : ∀ k, P.fusedMd k ≠ P.codec.idxMd
   fused_root : ∀ k r, P.fusedMd k ≠ P.rootMd r
@@ -58,11 +60,11 @@ structure Hyp : Prop where
 
 variable {P}
 
-theorem groupInput_binds {u : Fin 9} {k : Fin 42} {j : ℕ} (t t' : Tops) (x y : Word)
+theorem groupInput_binds {u : Fin 8} {k : Fin 42} {j : ℕ} (t t' : Tops) (x y : Word)
     (h : P.groupInput t u k j x = P.groupInput t' u k j y) : GroupBinds t t' u :=
   fusion_binds_children t t' u.isLt x y _ _ _ _ h
 
-theorem groupInput_current {u : Fin 9} {k : Fin 42} {j : ℕ} (t t' : Tops) (x y : Word)
+theorem groupInput_current {u : Fin 8} {k : Fin 42} {j : ℕ} (t t' : Tops) (x y : Word)
     (h : P.groupInput t u k j x = P.groupInput t' u k j y) : x = y :=
   congrFun (packet_injective h) 2
 
@@ -88,9 +90,15 @@ theorem chainInput_location (hP : P.Hyp) {k k' : Fin 42} {j j' : ℕ}
     | some v =>
       simp only [ha,hb] at h
       have he := packet_injective h
-      have hm : P.fusedMd k = P.fusedMd k' := congrFun he 6
-      have ht : P.fusedTag k = P.fusedTag k' := congrFun he 5
-      have hk := hP.fused_inj (Prod.ext hm ht)
+      have ho : owner k = some u := by
+        unfold active at ha
+        split_ifs at ha
+        exact ha
+      have ho' : owner k' = some v := by
+        unfold active at hb
+        split_ifs at hb
+        exact hb
+      have hk := hP.fused_inj k k' u v t t' x y ho ho' h
       have hjk := P.active_final ha
       have hjk' := P.active_final hb
       subst k'
