@@ -380,11 +380,12 @@ theorem loadWords_effect :
 /-- After the loads. -/
 def S44 : MachineState := loadWords.foldl execInstrBr (S4 pk m view answer)
 
-/-- The view's free count: bits `2 … 7` of view byte 64. -/
-def viewDigit (view : List Bool) : ℕ := (ofBits 8 (view.drop 512)).toNat / 4
+/-- The complemented five-bit count encoded in the capped view length. -/
+def viewLength (view : List Bool) : ℕ := min view.length (RiscvHint.maxViewBits + 1)
 
-theorem viewDigit_lt (view : List Bool) : viewDigit view < 64 := by
-  have := (ofBits 8 (view.drop 512)).isLt
+def viewDigit (view : List Bool) : ℕ := 31 - viewLength view % 128 / 4
+
+theorem viewDigit_lt (view : List Bool) : viewDigit view < 32 := by
   unfold viewDigit; omega
 
 theorem S44_regs (r : Reg) (h : LoadFree r) :
@@ -409,40 +410,31 @@ theorem freeByte_addr (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
     a.getReg .x10 + signExtend12 (imm12 ((freeByte : ℤ) - hashBase)) = W freeByte := by
   rw [h10]; decide
 
-theorem freeCount_ready (a : MachineState) (h10 : a.getReg .x10 = W hashBase) :
+theorem freeCount_ready (a : MachineState) (_h10 : a.getReg .x10 = W hashBase) :
     Riscv.LinearReady a freeCount := by
-  simp only [freeCount, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady, true_and,
-    and_true, freeByte_addr a h10]
-  decide
+  simp [freeCount, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
-/-- A byte of a word below 256, with its two low bits cleared. -/
-theorem and_252 (n : ℕ) (h : n < 256) : n &&& 252 = 4 * (n / 4) := by
-  have e := Riscv2Program.and_field n 6
+theorem and_124 (n : ℕ) : n &&& 124 = 4 * (n % 128 / 4) := by
+  have e := Riscv2Program.and_field n 5
   norm_num at e
-  rw [e]; omega
+  rw [e]
+  omega
 
-theorem freeCount_x6 (a : MachineState) (h10 : a.getReg .x10 = W hashBase) (bits : List Bool)
-    (hw : a.getMem (W freeByte) = ofBits 64 bits) :
-    (freeCount.foldl execInstrBr a).getReg .x6 = W (4 * ((ofBits 8 bits).toNat / 4)) := by
+theorem freeCount_x6 (a : MachineState) (view : List Bool)
+    (hw : a.getReg .x13 = W (viewLength view)) :
+    (freeCount.foldl execInstrBr a).getReg .x6 = W (4 * (31 - viewDigit view)) := by
   simp only [freeCount, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
-    getReg_setReg_ite, freeByte_addr a h10]
-  simp only [ne_eq, reduceCtorEq, not_false_eq_true, and_self, if_true]
-  have ha : alignToDword (W freeByte) = W freeByte := aligned_W _ (by decide) (by decide)
-  have ho : byteOffset (W freeByte) = 0 := by decide
-  simp only [MachineState.getReg_setPC, MachineState.getByte, MachineState.getMem_setPC,
-    MachineState.getMem_setReg, ha, ho, hw, extractByte]
+    getReg_setReg_ite]
+  simp only [ne_eq, reduceCtorEq, not_false_eq_true, and_self, if_true, hw]
   apply BitVec.eq_of_toNat_eq
-  have e8 : (ofBits 64 bits).toNat % 256 = (ofBits 8 bits).toNat := by
-    simp only [ofBits, BitVec.toNat_ofNat]
-    exact Nat.mod_mod_of_dvd _ (by norm_num)
-  have hlt := (ofBits 8 bits).isLt
-  rw [W_toNat _ (by omega)]
-  simp only [BitVec.toNat_and, BitVec.toNat_setWidth, BitVec.truncate_eq_setWidth,
-    BitVec.toNat_ushiftRight, Nat.zero_mul, Nat.shiftRight_zero]
-  rw [show (signExtend12 (imm12 252)).toNat = 252 by decide]
-  rw [Nat.mod_eq_of_lt (a := (ofBits 64 bits).toNat % 2 ^ 8) (by omega)]
-  rw [show (2 : ℕ) ^ 8 = 256 by norm_num, e8]
-  exact and_252 _ hlt
+  have hl : viewLength view ≤ 1048577 := by
+    unfold viewLength RiscvHint.maxViewBits; omega
+  have hd := Nat.mod_lt (viewLength view) (show 0 < 128 by omega)
+  rw [BitVec.toNat_and, W_toNat _ (by omega),
+    show (signExtend12 (imm12 124)).toNat = 124 by decide, and_124,
+    W_toNat _ (by unfold viewDigit; omega)]
+  unfold viewDigit
+  omega
 
 theorem freeCount_regs (a : MachineState) (r : Reg) (h6 : r ≠ .x6) :
     (freeCount.foldl execInstrBr a).getReg r = a.getReg r := by
@@ -455,10 +447,12 @@ theorem freeCount_mem (a : MachineState) (addr : Word) :
 /-- After the loads and the free count. -/
 def S45 : MachineState := freeCount.foldl execInstrBr (S44 pk m view answer)
 
-theorem S45_x6 : (S45 pk m view answer).getReg .x6 = W (4 * viewDigit view) := by
-  rw [S45, freeCount_x6 _ (S44_x10 pk m view answer) _ (S44_freeWord pk m view answer),
-    ofBits_drop_take _ (by unfold RiscvHint.maxViewBits; omega)]
+theorem S44_x13 : (S44 pk m view answer).getReg .x13 = W (viewLength view) := by
+  rw [S44_regs _ _ _ _ .x13 (by decide), S4_regs]
   rfl
+
+theorem S45_x6 : (S45 pk m view answer).getReg .x6 = W (4 * (31 - viewDigit view)) := by
+  exact freeCount_x6 _ view (S44_x13 pk m view answer)
 
 theorem S45_regs (r : Reg) (h6 : r ≠ .x6) :
     (S45 pk m view answer).getReg r = (S44 pk m view answer).getReg r :=
@@ -515,12 +509,12 @@ theorem mainBlock_ready : Riscv.LinearReady (S4 pk m view answer) mainBlock := b
   simp [freeSum, sumCheck, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
 theorem S5_x5 : (S5 pk m view answer).getReg .x5 =
-    rv64_remu (addressSum (S45 pk m view answer) 4 - W (4 * viewDigit view)) (W 255) := by
+    rv64_remu (addressSum (S45 pk m view answer) 4 + W (4 * (31 - viewDigit view))) (W 255) := by
   have L := (lanes_effect pk m view answer).2
   have x2 : (S46 pk m view answer).getReg .x2 = W 255 := by
     rw [L.regs .x2 (by decide) (by decide), S45_regs _ _ _ _ _ (by decide), S44]
     exact (loadWords_effect pk m view answer).x2
-  have x6 : (S46 pk m view answer).getReg .x6 = W (4 * viewDigit view) := by
+  have x6 : (S46 pk m view answer).getReg .x6 = W (4 * (31 - viewDigit view)) := by
     rw [L.regs .x6 (by decide) (by decide)]
     exact S45_x6 pk m view answer
   rw [S5_eq]
@@ -595,7 +589,7 @@ theorem afterIndex_prefixReg (r : Reg) (h11 : r ≠ .x11) (hl : LoadFree r)
     S44_regs _ _ _ _ r hl, S4_regs]
 
 /-- Four times the view's free count. -/
-theorem afterIndex_x6 : (afterIndex pk m view answer).getReg .x6 = W (4 * viewDigit view) := by
+theorem afterIndex_x6 : (afterIndex pk m view answer).getReg .x6 = W (4 * (31 - viewDigit view)) := by
   rw [afterIndex_regs _ _ _ _ .x6 (by decide), S5_regs _ _ _ _ .x6 (by decide) (by decide)
     (by decide)]
   exact S45_x6 pk m view answer
@@ -741,16 +735,16 @@ theorem reject_refines (s : MachineState) (fuel : ℕ)
 theorem indexPhase_parts : indexPhase = indexPrefix ++ ([.ECALL] ++ (mainBlock ++ chainSetup)) := by
   simp only [indexPhase, mainBlock, lanes, lanesUpTo, chainSetup, List.append_assoc]
 
-theorem indexPhase_length : indexPhase.length = 34 := by decide
+theorem indexPhase_length : indexPhase.length = 33 := by decide
 
-theorem mainBlock_length : mainBlock.length = 27 := by decide
+theorem mainBlock_length : mainBlock.length = 26 := by decide
 
 section Refine
 
 variable (pk : PublicKey) (m : Message) (view : List Bool)
 
 /-- The index phase: the specified first query, then the continuation from `afterIndex` on every
-answer, at 34 cycles plus the continuation. The checksum only sets `x5`. -/
+answer, at 33 cycles plus the continuation. The checksum only sets `x5`. -/
 theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (q : BitVec hashBits → OracleComp Spec (Option Bool)) (c : ℕ)
     (located : Riscv.CodeAt (S0 pk m view) (S0 pk m view).pc (indexPhase ++ tail))
@@ -758,7 +752,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (continuation : ∀ answer,
       ∀ left, rest ≤ left → Riscv.Refines left (afterIndex pk m view answer) (q answer) c) :
     Riscv.Refines fuel (S0 pk m view)
-      (hash (swapHalves (emsg m pk ++ ofBits nonceBits view)) >>= q) (c + 34) := by
+      (hash (swapHalves (emsg m pk ++ ofBits nonceBits view)) >>= q) (c + 33) := by
   rw [indexPhase_length] at bound
   rw [indexPhase_parts] at located
   simp only [List.append_assoc] at located
@@ -766,7 +760,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
   -- the prefix
   have ready := indexPrefix_ready pk m view
   rw [show fuel = indexPrefix.length + ((fuel - 6) + 1) by rw [indexPrefix_length]; omega,
-    show c + 34 = indexPrefix.length + (1 + (c + 28)) by rw [indexPrefix_length]; omega]
+    show c + 33 = indexPrefix.length + (1 + (c + 27)) by rw [indexPrefix_length]; omega]
   apply Riscv.Refines.linear _ located.append_left ready
   have callLocated : Riscv.CodeAt (afterPrefix pk m view) (afterPrefix pk m view).pc
       ([.ECALL] ++ (mainBlock ++ (chainSetup ++ tail))) := by
@@ -776,7 +770,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [e]
     simpa only [List.append_assoc] using h.code_eq P.code
   have hashed := Riscv.Refines.hash (fuel := fuel - 6) callLocated.head P.x5
-    (prefix_hashValid pk m view) (c := c + 28) (k := q) ?_
+    (prefix_hashValid pk m view) (c := c + 27) (k := q) ?_
   · rw [prefix_hashInput pk m view] at hashed
     dsimp only at hashed
     rw [show blockCost 512 = 1 by decide] at hashed
@@ -787,8 +781,8 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
       (mainBlock ++ (chainSetup ++ tail)) :=
     callLocated.tail.code_eq (by simp [Riscv.writeHash])
   have mReady := mainBlock_ready pk m view answer
-  rw [show fuel - 6 = mainBlock.length + (fuel - 33) by rw [mainBlock_length]; omega,
-    show c + 28 = mainBlock.length + (1 + c) by rw [mainBlock_length]; omega]
+  rw [show fuel - 6 = mainBlock.length + (fuel - 32) by rw [mainBlock_length]; omega,
+    show c + 27 = mainBlock.length + (1 + c) by rw [mainBlock_length]; omega]
   apply Riscv.Refines.linear _ (S4code.append_left) mReady
   -- the chainSetup
   have S5code : Riscv.CodeAt (S5 pk m view answer) (S5 pk m view answer).pc (chainSetup ++ tail) := by
@@ -796,7 +790,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [show (S5 pk m view answer).pc = (S4 pk m view answer).pc +
       BitVec.ofNat 64 (4 * mainBlock.length) from Riscv.linear_fold_pc _ _ mReady]
     exact h.code_eq (Riscv.fold_code _ _)
-  rw [show fuel - 33 = chainSetup.length + (fuel - 34) by simp [chainSetup]; omega,
+  rw [show fuel - 32 = chainSetup.length + (fuel - 33) by simp [chainSetup]; omega,
     show 1 + c = chainSetup.length + c by simp only [chainSetup, List.length_cons, List.length_nil]]
   apply Riscv.Refines.linear _ S5code.append_left (setup_ready _)
   exact continuation answer _ (by omega)

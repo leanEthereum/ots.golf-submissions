@@ -101,7 +101,7 @@ theorem walk_zero (index : RawIdx) (q : Fin 16) (hq : q.val < 6)
     unfold coarseDigit pairCap; omega
   have land := landing_located index t tglobal q good
   rw [← tpc] at land
-  have hl1 : lead q = 1 := by unfold lead; rw [if_pos hq]
+  have hl1 : lead q = 1 := by unfold lead; rw [if_pos (Or.inl hq)]
   have rA : remaining index (leftChain q) = 0 := by rw [remaining_left, hl1]; omega
   have rB : remaining index (rightChain q) = 0 := by rw [remaining_right, hl1]; omega
   rw [rA, rB] at land
@@ -176,8 +176,8 @@ theorem walk_busy (index : RawIdx) (q : Fin 16) (hq : q.val ≤ 6)
     · -- a cap pair whose first digit is zero: its second chain hashes first
       have hq6 : q.val < 6 := by
         by_contra h
-        rw [remaining_left] at hA; unfold lead at hA; rw [if_neg h] at hA; omega
-      have hl1 : lead q = 1 := by unfold lead; rw [if_pos hq6]
+        rw [remaining_left] at hA; unfold lead at hA; rw [if_neg (by omega)] at hA; omega
+      have hl1 : lead q = 1 := by unfold lead; rw [if_pos (Or.inl hq6)]
       have hB : remaining index (rightChain q) ≠ 0 := by
         have hb := busy hq6
         unfold pairWeight at hb
@@ -250,10 +250,10 @@ theorem free_sum (index : RawIdx) (c : ℕ) (hc : c < 16) (rank : freeDigit inde
 
 set_option maxRecDepth 100000 in
 /-- Every execution on every view refines `trapVerify`, and every accepting path costs at most
-320 cycles. -/
+317 cycles. -/
 theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n : ℕ)
     (hn : 1337 ≤ n) :
-    Riscv.Refines n (RiscvHint.loadView image pk m view) (trapVerify pk m view) 320 := by
+    Riscv.Refines n (RiscvHint.loadView image pk m view) (trapVerify pk m view) 317 := by
   have initial := Riscv.CodeAt.initial image pk m view image_valid
   rw [image_code] at initial
   have global : Riscv.CodeAt (S0 pk m view) (W 4096) verifier :=
@@ -264,8 +264,8 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
     rw [pc0]
     simpa only [verifier, List.append_assoc] using global
   unfold trapVerify
-  rw [show (320 : ℕ) = 286 + 34 from rfl]
-  apply indexPhase_refines pk m view _ (n - 34) n _ _ located (by rw [indexPhase_length]; omega)
+  rw [show (317 : ℕ) = 284 + 33 from rfl]
+  apply indexPhase_refines pk m view _ (n - 33) n _ _ located (by rw [indexPhase_length]; omega)
   intro answer left hleft
   set index := rawIdx answer
   set s := afterIndex pk m view answer
@@ -279,10 +279,11 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
   have x10 : s.getReg .x10 = W hashBase := (afterIndex_setupRegs pk m view answer).2
   have x11 : s.getReg .x11 = W 192 := (afterIndex_setupRegs pk m view answer).1
   have x1 : s.getReg .x1 = W freeBase := afterIndex_x1 pk m view answer
-  have x6 : s.getReg .x6 = W (4 * c) := afterIndex_x6 pk m view answer
-  have c64 : c < 64 := viewDigit_lt view
+  have x6 : s.getReg .x6 = W (4 * (31 - c)) := afterIndex_x6 pk m view answer
+  have c32 : c < 32 := viewDigit_lt view
+  have c64 : c < 64 := by omega
   dsimp only
-  apply freeDispatch_refines s _ c c64 x10 x1 x6 sloc _ 282 left (by omega)
+  apply freeDispatch_refines s _ c c32 x10 x1 x6 sloc _ 280 left (by omega)
   intro t tpc t10 t12 tregs tmem tcode
   have tglobal : Riscv.CodeAt t (W 4096) verifier := sglobal.code_eq tcode
   by_cases big : 16 ≤ c

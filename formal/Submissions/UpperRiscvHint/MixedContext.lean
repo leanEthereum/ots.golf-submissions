@@ -7,7 +7,7 @@ open Riscv2Program (W Code laneBase hashBase)
 open OptimalOTS.Dag
 
 /-- The free dispatch, after the index phase. -/
-def freeStart : ℕ := 4096 + 4*34
+def freeStart : ℕ := 4096 + 4*33
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q

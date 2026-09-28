@@ -4,7 +4,7 @@ import Submissions.UpperRiscvHint.MixedIndexPhase
 /-!
 # The root and the decision
 
-The 888 bytes from the last chain's state are the 7104-bit root input (`rootCat`), so `x10`
+The 884 bytes from the last chain's state are the 7072-bit root input (`rootCat`), so `x10`
 already points at it. Its hash, charged fourteen cycles, is written into the last chain's answer
 buffer, and the low 128 bits of the answer are compared with the public key saved in `x30`/`x31`,
 whose high word has bit 0 flipped. The root length is the free base in `x1` plus 960. The decision
@@ -24,7 +24,7 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 variable (index : RawIdx) (payload : List Bool) (view : List Bool) (pk : PublicKey)
 
-def rootLin : Code := [.ADDI .x11 .x1 (imm12 (7104 - (freeBase : â„¤)))]
+def rootLin : Code := [.ADDI .x11 .x1 (imm12 (7072 - (freeBase : â„¤)))]
 
 /-- Where the root answer is written: the answer buffer of the last chain. -/
 def rootOut : â„• := outAddr 32
@@ -178,7 +178,7 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : â
   have w10 : w.getReg .x10 = W regionAddr := by
     rw [wRegs .x10 (by decide), inv.input]
     rfl
-  have w11 : w.getReg .x11 = 7104 := by
+  have w11 : w.getReg .x11 = 7072 := by
     rw [hw]
     simp only [rootLin, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
@@ -199,11 +199,11 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : â
   have wCall : w.getReg .x5 = Riscv.hashCall := by
     rw [wRegs .x5 (by decide)]; exact inv.ctx.call
   have wValid : Riscv.hashArgumentsValid w = true := by
-    have r1 : isValidOutputRange (W regionAddr) 888 = true :=
+    have r1 : isValidOutputRange (W regionAddr) 884 = true :=
       range_ok _ _ (by norm_num [regionAddr]) (by norm_num [regionAddr]) (by norm_num)
         (by norm_num)
     have r2 := hashOutput_ok rootOut hd.1 hd.2.1 hd.2.2
-    have e : ((7104 : Word).toNat + 7) / 8 = 888 := rfl
+    have e : ((7072 : Word).toNat + 7) / 8 = 884 := rfl
     unfold Riscv.hashArgumentsValid
     rw [w10, w11, w12, e, r1, Bool.true_and]
     exact r2
@@ -216,7 +216,7 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : â
     apply (memBits_cast _ _ _ _).mpr
     exact wValue
   have blocks : blockCost (graph.len rc.fin) = 14 := by
-    rw [graph_len_fin]; show blockCost 7104 = 14; decide
+    rw [graph_len_fin]; show blockCost 7072 = 14; decide
   rw [show (20 : â„•) = rootLin.length + (14 + 5) by rfl,
     show fuel = rootLin.length + ((fuel - rootLin.length - 1) + 1) by simp [rootLin]; omega]
   apply Riscv.Refines.linear _ located.append_left ready

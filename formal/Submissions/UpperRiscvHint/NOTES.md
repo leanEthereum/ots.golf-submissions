@@ -1,3 +1,115 @@
+# Hinted RISC-V: 317 cycles with a count encoded in the view length
+
+This extends the locally checked 318-cycle boundary-cap construction below.
+The two new caps save two hashes relative to lucemans's published 320-cycle
+submission. Encoding the free count in the view length saves another ordinary
+instruction. The signature scheme, accepted index set and 5504-bit signature
+format are the same as in the 318-cycle construction.
+
+## Count encoding and checks
+
+For free count `c < 16`, the honest view has `7296 + 4*(31-c)` bits, between
+7360 and 7420. The loader supplies `L = min(view.length, 1048577)` in `x13`.
+The single instruction `ANDI x6 x13 124` gives `4*d`, with `d = (L % 128)/4`.
+The projected count is `c = 31-d`, so every view has a count between 0 and 31.
+The checksum uses ADD with a revised lane bias (18 rather than 49); it equals
+the HASH call number exactly when the index digit sum plus `c` is 145 modulo
+255. The free dispatch uses ADD and an adjusted jump immediate. It still lands
+exactly `c` instructions before pair 0's prologue. Counts 16 through 31 reject.
+One unreachable padding instruction preserves every subsequent table address.
+
+Raw forms encode `signature ++ [true] ++ zero padding` to a multiple of 128
+bits. The pure projection removes trailing zeros and the true marker, recovering
+any signature exactly. A raw view below the loader cap has count 31. Above the
+cap, `L = 1048577` also has count 31. Thus both cases halt rejecting, as required
+by faithfulness; the length register cannot send a raw form to a faulting path.
+The machine no longer depends on view byte 64.
+
+`HintView` proves projection/expansion, raw rejection, accepted-view soundness
+and honest acceptance. `MixedIndexPhase` proves the loader-length arithmetic;
+`MixedFree` proves every dispatch target; `MixedVerifier` bounds accepting
+executions over arbitrary views and fuel. The proof uses layout lemmas without
+reducing the variable-length bit list during elaboration.
+
+Exact accepting cost: **317 = 33 index + 4 free dispatch + 145 digit units +
+135 pair/root/decision overhead**, comprising 178 compression cycles and 139
+ordinary cycles. The root remains 884 bytes (14 compression blocks). The image
+has 15,750 instructions and 64 data bytes: **63,064 bytes**.
+
+## Validation
+
+The full certificate and image-size theorem build with Lean 4.33.1 and trusted
+contract `8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c`. Exact exported statement,
+definition and primitive comparison passes against the rendered 317 challenge.
+The three exported declarations use only `propext`, `Classical.choice` and
+`Quot.sound`. A fresh Lean kernel replay passes all 22,423 exported declarations; comparison
+and replay take 98.03 seconds wall clock, with sampled peak PSS of 5.05 GiB.
+
+Independent byte-memory execution of the Lean-exported image matches all hash
+queries of the abstract forest for 768 accepting fixtures. Additional checks
+cover 256 variations of the ignored former count byte, 395 length cases
+(including half-byte views and loader-cap boundaries), and 13 raw forms,
+including oversized signatures. Every accepting fixture costs 317 cycles.
+These deterministic oracle fixtures supplement the universal Lean certificate.
+
+The official local verifier fails closed because Landlock is unavailable on
+this host. Standalone export/comparison/kernel checks are not a hosted verdict;
+hosted verification is pending.
+
+This derives from lucemans's [320-cycle submission](https://ots.golf/submissions/0380117cf0362ee8535e725c194cf03a),
+source `3bfb3022de749d253c8faa5b5068c72b91e5bb06` (PR 53). The 318 and 320 notes
+below describe their historical versions; this section specifies the current
+input encoding, cost and validation.
+
+---
+
+# Hinted RISC-V: 318 cycles with caps at both root boundaries
+
+This extends lucemans's verified 320-cycle submission, source
+`3bfb3022de749d253c8faa5b5068c72b91e5bb06` (PR 53), by turning chains 31 and 32 into
+144-bit caps. Each can now have zero hashes. Together they save two hashes on
+every accepting execution; the accepted digit set and 5504-bit signatures stay
+unchanged.
+
+Chain 32 occupies the bottom of the root. Its state and top use answer bits
+`[112,256)`, so the final chain's input pointer is already the root pointer.
+Chain 31 occupies the top of the root, uses answer bits `[0,144)`, and has its
+answer buffer moved up eight bytes. Chain 30's top grows from 192 to 256 bits
+to fill the intervening gap. These two boundary caps need no additional spacer
+chains. The root is 884 bytes (7072 bits), still 14 compression blocks. The lane
+scratch area moves to `0x4003D0` to avoid the final answer write.
+
+Caps are chains 0 through 12, 31 and 32; chain widths remain 192 bits for 0
+through 12 and 144 bits for 13 through 32. The final dispatch pair is now a
+cap pair. The free count still comes from view byte 64, and honest views remain
+7248 bits. Root resampling now allows a fiber of size `2^112` instead of `2^64`;
+the existing security bound already accommodates this and is proved in Lean.
+
+Exact accepting cost: **318 = 34 index + 4 free dispatch + 145 digit units +
+135 pair/root/decision overhead**. This is 178 hash-compression cycles and 140
+ordinary cycles. The image contains 15,750 instructions and 64 data bytes,
+**63,064 bytes** total.
+
+Local validation (2026-09-27, trusted contract
+`8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c`, Lean 4.33.1):
+
+- The full `submission.Certificate 318` and `image_size` build successfully.
+- Exact exported statements, definitions and primitives match the rendered
+  318 challenge; only `propext`, `Quot.sound` and `Classical.choice` occur as axioms.
+- An unchanged fresh Lean kernel replays all 22,416 exported declarations.
+  Export took 6.51 seconds; comparison and replay took 97.88 seconds wall clock.
+- An independent emulator executes the exported image and matches the complete
+  abstract hash transcript for 768 accepting fixtures, including both new
+  zero-count caps. It also checks all 256 free-byte values and six raw views.
+- The official local verifier refuses to run because this host lacks Landlock.
+  These are standalone local proof checks, not a hosted competition verdict.
+
+The previous 320-cycle notes follow as historical context. Their numerical
+costs, cap classification and boundary layout describe that predecessor; the
+current construction is specified above and by the Lean definitions.
+
+---
+
 # Hinted RISC-V: a free chain, 320 cycles
 
 This entry changes one thing in the 321-cycle free-chain entry: the chain that hashes last,

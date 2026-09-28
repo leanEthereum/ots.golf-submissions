@@ -75,6 +75,6 @@ theorem secure : scheme.Secure :=
 
 theorem admissible : scheme.Admissible :=
   WireAdapter.admissible RiscvUpperForest.scheme decode decode_encode canonical
-    RiscvUpperForest.admissible 180 RiscvUpperForest.cost (by decide)
+    RiscvUpperForest.admissible 178 RiscvUpperForest.cost (by decide)
 
 end OptimalOTS.RiscvUpperForest.Wire
