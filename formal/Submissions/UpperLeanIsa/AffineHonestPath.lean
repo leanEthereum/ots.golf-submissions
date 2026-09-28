@@ -6,7 +6,7 @@ import Submissions.UpperLeanIsa.AffineReplay
 
 Every op of every block on the honest path holds on the loaded honest image (`honest_blk`), so
 the relations along the path of `hxs T I` hold (`honest_path`), and the machine completes in
-`193` instructions at cost `976` (`honest_run`).
+`192` instructions at cost `975` (`honest_run`).
 -/
 
 set_option maxRecDepth 4000
@@ -85,37 +85,39 @@ theorem honest_tie {u : ℕ} (hu : u < 13) :
     simp only [List.mem_singleton] at hy
     subst hy
     show hv P T f pk m bits (accCell 0) = fpat 0 (XF P T f pk m bits (0 + 1))
-    rw [honest_acc (by omega), ofDigitsW_succ, ofDigitsW_zero]
-    unfold fpat POS; simp only [Nat.zero_add]
-  · rw [if_neg hu0] at hy
-    obtain ⟨w, rfl⟩ : ∃ w, u = w + 1 := ⟨u - 1, by omega⟩
-    rw [Nat.add_sub_cancel] at hy
-    have hprev := honest_acc (P := P) (T := T) (f := f) (pk := pk) (m := m) (bits := bits)
-      (u := w) (by omega)
-    have hcur := honest_acc (P := P) (T := T) (f := f) (pk := pk) (m := m) (bits := bits)
-      (u := w + 1) hu
-    have hl1 := ofDigitsW_lt gb _ hlt (w + 1)
-    have hl2 := ofDigitsW_lt gb _ hlt (w + 1 + 1)
-    have hpos : 2 ^ posW gb (w + 1 + 1) ≤ 2 ^ 128 := by
-      rw [← POS_13]; exact Nat.pow_le_pow_right (by norm_num) (posW_mono gb (by omega))
-    by_cases hx0 : XF P T f pk m bits (w + 1 + 1) = 0
-    · rw [if_pos hx0] at hy
-      simp only [List.mem_singleton] at hy
-      subst hy
-      show hv P T f pk m bits (accCell (w + 1)) =
-        hv P T f pk m bits (accCell w) * hv P T f pk m bits oneCell
-      rw [hv_one, mul_oneV, hcur, hprev, ofDigitsW_succ _ _ (w + 1)]
-      simp only [hx0, Nat.zero_mul, Nat.add_zero]
-    · rw [if_neg hx0] at hy
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at hy
-      rcases hy with rfl | rfl
-      · exact hv_t hu
-      · show hv P T f pk m bits (accCell (w + 1)) =
-          hv P T f pk m bits (accCell w) + hv P T f pk m bits (tCell (w + 1))
-        rw [hv_t hu, hcur, hprev]
-        unfold fpat POS
-        rw [ofDigitsW_succ _ _ (w + 1)] at hl2 ⊢
-        exact (natV_add_disjoint hl1 (by omega)).symm
+    rw [honest_acc (by omega), accBits_zero hlt]
+  rw [if_neg hu0] at hy
+  by_cases h11 : u = 11
+  · subst h11
+    rw [if_pos rfl] at hy
+    simp only [List.mem_singleton] at hy
+    subst hy
+    show hv P T f pk m bits (accCell 11) =
+      hv P T f pk m bits (accCell 10) + hv P T f pk m bits (hCell 12)
+    rw [honest_acc (by omega), honest_acc (by omega), hv_h (by omega), ent_succ (by omega),
+      accBits_11 hlt (hlt 11)]
+  rw [if_neg h11] at hy
+  obtain ⟨w, rfl⟩ : ∃ w, u = w + 1 := ⟨u - 1, by omega⟩
+  rw [Nat.add_sub_cancel] at hy
+  have hprev := honest_acc (P := P) (T := T) (f := f) (pk := pk) (m := m) (bits := bits)
+    (u := w) (by omega)
+  have hcur := honest_acc (P := P) (T := T) (f := f) (pk := pk) (m := m) (bits := bits)
+    (u := w + 1) hu
+  by_cases hx0 : XF P T f pk m bits (w + 1 + 1) = 0
+  · rw [if_pos hx0] at hy
+    simp only [List.mem_singleton] at hy
+    subst hy
+    show hv P T f pk m bits (accCell (w + 1)) =
+      hv P T f pk m bits (accCell w) * hv P T f pk m bits oneCell
+    rw [hv_one, mul_oneV, hcur, hprev, accBits_zero_step hlt hu h11 hx0]
+  · rw [if_neg hx0] at hy
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hy
+    rcases hy with rfl | rfl
+    · exact hv_t hu
+    · show hv P T f pk m bits (accCell (w + 1)) =
+        hv P T f pk m bits (accCell w) + hv P T f pk m bits (tCell (w + 1))
+      rw [hv_t hu, hcur, hprev]
+      exact (accBits_step hlt hu h11).symm
 
 include hT hC hacc in
 /-- **The honest landing product.** -/
@@ -330,11 +332,11 @@ theorem honest_path : PathFacts T (oracleRel f) (hv P T f pk m bits) (XF P T f p
 
 include hT hC hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`193` instructions. -/
+`192` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 193
-        Regs.initial) = pure (some 976) := by
+      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 192
+        Regs.initial) = pure (some 975) := by
   have hV := hxs_valid T _ (hlive hC hacc)
   have hP := honest_path hT hC hlen hacc hroot
   have hL : Landing (hv P T f pk m bits) (XF P T f pk m bits) := fun r hr => hv_h hr

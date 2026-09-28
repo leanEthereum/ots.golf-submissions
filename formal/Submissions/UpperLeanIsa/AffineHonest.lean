@@ -173,7 +173,7 @@ theorem hv_t {u : ℕ} (hu : u < 13) :
   hv_c (by unfold tCell; split_ifs <;> omega) (by unfold tCell; split_ifs <;> omega) (hc_t _ _ _ _ _ hu)
 theorem hv_accl {u : ℕ} (hu : u < 12) :
     hv P T f pk m bits (accCell u) =
-      natV (ofDigitsW gb (fun w => XF P T f pk m bits (w + 1)) (u + 1)) :=
+      cellOfBits (accBits (fun w => XF P T f pk m bits (w + 1)) u) :=
   hv_c (by unfold accCell; split_ifs <;> omega)
     (by unfold accCell; split_ifs <;> omega) (hc_acc _ _ _ _ _ hu)
 abbrev XFr (r : ℕ) : ℕ := XF P T f pk m bits r

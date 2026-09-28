@@ -72,7 +72,7 @@ theorem rootIns_straight (T : Tab) {u v : ℕ} {z : Bool} : ∀ x ∈ rootIns T 
 theorem nextOp_straight (u : ℕ) : (nextOp u).straight = true := by
   unfold nextOp; split_ifs <;> rfl
 
-theorem tie_len (u v : ℕ) : (tie u v).length = if u ≠ 0 ∧ v ≠ 0 then 2 else 1 := by
+theorem tie_len (u v : ℕ) : (tie u v).length = if u ≠ 0 ∧ u ≠ 11 ∧ v ≠ 0 then 2 else 1 := by
   unfold tie; split_ifs <;> simp_all
 
 theorem tie_lcost (u v : ℕ) : lcost (tie u v) = (tie u v).length := by
@@ -174,7 +174,7 @@ theorem pad_fit {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u)
     (tie u v).length + zexp T u v + 4 + extraMul T u v ≤ gcu u := by
   have h := hT.ordinary_le u hu v hv
   rw [tie_len]
-  change (if u ≠ 0 ∧ v ≠ 0 then 2 else 1) + copyCount T u v + 4 +
+  change (if u ≠ 0 ∧ u ≠ 11 ∧ v ≠ 0 then 2 else 1) + copyCount T u v + 4 +
     (if 14 < cost T u v - bindingDeduction u then 1 else 0) ≤ gcu u
   unfold machineOrdinary at h
   have := gcu_ge u

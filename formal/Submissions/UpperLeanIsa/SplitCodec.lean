@@ -273,7 +273,7 @@ theorem ordinary_bound {s v : ℕ} (hs : s < 13) (hv : v < cutS s) :
 
 theorem ordinary_eq {s v : ℕ} (hs : s < 13) (hv : v < cutS s) :
     SplitTables.ordinary s (selected s v) (v - lead s v) =
-      3 + (if s = 0 ∨ v = 0 then 1 else 2) +
+      3 + (if s = 0 ∨ s = 11 ∨ v = 0 then 1 else 2) +
       (if s = 5 then 0 else SplitTables.zeroCount ((tupS s v).take (SplitTables.visible s))) +
       (if 14 < costS s v - (if SplitTables.binding s then 1 else 0) then 1 else 0) := by
   have h := selected_spec hs hv
