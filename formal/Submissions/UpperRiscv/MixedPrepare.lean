@@ -7,7 +7,7 @@ open Riscv2Program
 
 variable (index : RawIdx) (v : ℕ) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
-/-- The pointer setup preserves all values, committed slots and the six bytes past the region. -/
+/-- The pointer setup preserves all values, committed slots and the seven bytes past the region. -/
 theorem move_refines (k : Fin 33) (s : MachineState) (x : graph.Assignment) (tail : Code)
     (ctx : Ctx s index v pk a) (input : s.getReg .x10 = W (prevInput k))
     (len : s.getReg .x11 = W (chainBits k)) (payload : PayloadFrom s wire k)

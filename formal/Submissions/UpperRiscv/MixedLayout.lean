@@ -1,7 +1,7 @@
 import Submissions.UpperRiscv.MixedContext
 import Submissions.UpperRiscv.Names
 
-/-! Byte geometry of the chains: values, answer buffers, root slots, the six bytes past the
+/-! Byte geometry of the chains: values, answer buffers, root slots, the seven bytes past the
 region, and the order constraints that make every hash leave unread values and committed slots
 intact. Chains are numbered by execution position. -/
 
@@ -18,7 +18,7 @@ def wireOffset (k : ℕ) : ℕ := 8 * valueOffs.getD k 0
 /-- Address of chain `k`'s root slot. -/
 def slotAddr (k : Fin 33) : ℕ := regionAddr + slotPos k / 8
 
-/-- The six bytes past the region, read by the root query of an oversized signature. -/
+/-- The seven bytes past the region, read by the root query of an oversized signature. -/
 def tailAddr : ℕ := regionAddr + 800
 
 theorem valueAddr_eq' : ∀ k : Fin 33, valueAddr k = payloadAddr + wireOffset k / 8 := by
@@ -71,9 +71,9 @@ theorem completed_disjoint' : ∀ j k : Fin 33, j.val < k.val →
     slotAddr j + topBits j / 8 ≤ outAddr k ∨ outAddr k + 32 ≤ slotAddr j := by
   decide +kernel
 
-/-- Every chain answer buffer is disjoint from the six bytes past the region. -/
+/-- Every chain answer buffer is disjoint from the seven bytes past the region. -/
 theorem tail_disjoint' : ∀ k : Fin 33,
-    tailAddr + 6 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := by
+    tailAddr + 7 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := by
   decide +kernel
 
 
@@ -96,6 +96,6 @@ theorem completed_disjoint (j k : Fin 33) (h : j.val < k.val) :
     slotAddr j + topBits j / 8 ≤ outAddr k ∨ outAddr k + 32 ≤ slotAddr j :=
   completed_disjoint' j k h
 theorem tail_disjoint (k : Fin 33) :
-    tailAddr + 6 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := tail_disjoint' k
+    tailAddr + 7 ≤ outAddr k ∨ outAddr k + 32 ≤ tailAddr := tail_disjoint' k
 
 end OptimalOTS.RiscvMixedProgram

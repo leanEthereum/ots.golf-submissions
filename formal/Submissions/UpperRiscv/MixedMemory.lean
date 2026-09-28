@@ -1,7 +1,7 @@
 import Submissions.UpperRiscv.MixedLayout
 import Submissions.UpperRiscv.MixedRoot
 
-/-! Memory invariants between chains: unread values, committed root slots, and the six bytes
+/-! Memory invariants between chains: unread values, committed root slots, and the seven bytes
 past the region. -/
 
 namespace OptimalOTS.RiscvMixedProgram
@@ -75,12 +75,12 @@ theorem Completed.writeHash {s : MachineState} {x : graph.Assignment} (k : Fin 3
   · unfold laneBase at bo; omega
   · exact completed_disjoint j k hj
 
-/-- The six bytes past the region survive every chain hash. -/
-theorem tail_writeHash {s : MachineState} (v : BitVec 48) (hm : MemBits s (W tailAddr) v)
+/-- The seven bytes past the region survive every chain hash. -/
+theorem tail_writeHash {s : MachineState} (v : BitVec 56) (hm : MemBits s (W tailAddr) v)
     (k : Fin 33) (y : BitVec 256) (ho : s.getReg .x12 = W (outAddr k)) :
     MemBits (Riscv.writeHash s y) (W tailAddr) v := by
   have bo := output_bounds k
-  apply writeHash_preserves s y tailAddr (outAddr k) 48 v hm ho bo.2.2 (by norm_num)
+  apply writeHash_preserves s y tailAddr (outAddr k) 56 v hm ho bo.2.2 (by norm_num)
   · decide
   · unfold laneBase at bo; omega
   · have := tail_disjoint k; omega

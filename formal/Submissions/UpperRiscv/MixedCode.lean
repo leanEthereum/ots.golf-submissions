@@ -74,7 +74,8 @@ theorem CodeAt.drop {s : MachineState} {pc : Word} {code : List Instr}
 
 theorem tables_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
     Riscv.CodeAt s (W (4096+4*copiesAt)) tables := by
-  have ht := global.append_right (first := indexPhase ++ freePrologue ++ freeTable ++ prologue 0)
+  have ht := global.append_right
+    (first := indexPhase ++ freePrologue ++ freePad ++ freeTable ++ prologue 0)
     (last := tables)
   rw [head_length, W_add] at ht
   exact ht
@@ -94,28 +95,30 @@ theorem rejectStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) 
 
 theorem indexStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
     Riscv.CodeAt s (W (4096+4*indexStub)) reject := by
-  have h := global.append_left (first := indexPhase)
-    (last := freePrologue ++ freeTable ++ prologue 0 ++ tables)
-  have h2 := (CodeAt.drop (by simpa only [List.append_assoc] using h) indexStub)
-  have e : indexPhase.drop indexStub = reject ++ [.ADDI .x11 .x0 144] := by decide +kernel
-  rw [e] at h2
-  have h3 := h2.append_left
-  rw [W_add] at h3
-  exact h3
+  have e : verifier = (indexPhase ++ freePrologue) ++
+      (reject ++ (List.replicate 4 nop ++ freeTable ++ prologue 0 ++ tables)) := by
+    simp only [verifier, freePad, List.append_assoc]
+  rw [e] at global
+  have h := global.append_right.append_left
+  have e2 : (indexPhase ++ freePrologue).length = indexStub := by decide +kernel
+  rw [e2, W_add] at h
+  exact h
 
 theorem freeTable_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
     Riscv.CodeAt s (W (4096+4*freeTableAt)) (freeTable ++ prologue 0) := by
-  have e : verifier = (indexPhase ++ freePrologue) ++ ((freeTable ++ prologue 0) ++ tables) := by
+  have e : verifier =
+      (indexPhase ++ freePrologue ++ freePad) ++ ((freeTable ++ prologue 0) ++ tables) := by
     simp only [verifier, List.append_assoc]
   rw [e] at global
   have h := global.append_right.append_left
-  have e2 : (indexPhase ++ freePrologue).length = freeTableAt := by decide +kernel
+  have e2 : (indexPhase ++ freePrologue ++ freePad).length = freeTableAt := by decide +kernel
   rw [e2, W_add] at h
   exact h
 
 theorem freePrologue_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
-    Riscv.CodeAt s (W (4096+4*38)) (freePrologue ++ freeTable ++ prologue 0) := by
-  have e : verifier = indexPhase ++ ((freePrologue ++ freeTable ++ prologue 0) ++ tables) := by
+    Riscv.CodeAt s (W (4096+4*31)) (freePrologue ++ freePad) := by
+  have e : verifier = indexPhase ++ ((freePrologue ++ freePad) ++
+      (freeTable ++ prologue 0 ++ tables)) := by
     simp only [verifier, List.append_assoc]
   rw [e] at global
   have h := global.append_right.append_left

@@ -1,24 +1,24 @@
 import Submissions.UpperRiscv.MixedJump
 import Submissions.UpperRiscv.MixedCode
 
-/-! The count-byte dispatch of the free chain: `x28 = 5465 - 4 v`, and the jump lands `v`
-entries before prologue 0. Entries for `v < 16` are hash steps; the others branch to the index
-phase's rejection. -/
+/-! The dispatch of the free chain: `x28 = 5457 - 4 v`, and the jump lands `v` entries before
+prologue 0. Entries for `v < 16` are hash steps; the others branch to the rejection after the free
+jump. -/
 
 namespace OptimalOTS.RiscvMixedProgram
 open RiscvZkvm.Rv64
 open Riscv2Program
 
 theorem free_target (v : ℕ) (hv : v < 256) :
-    ((W 5465 - W (4*v)) + signExtend12 (imm12 freeImm)) &&& ~~~(1#64) =
+    ((W 5457 - W (4*v)) + signExtend12 (imm12 freeImm)) &&& ~~~(1#64) =
       W (4096 + 4*(prologue0At - v)) := by
-  have e : W 5465 - W (4*v) = W (5465 - 4*v) := by
+  have e : W 5457 - W (4*v) = W (5457 - 4*v) := by
     apply BitVec.eq_of_toNat_eq
     rw [BitVec.toNat_sub_of_le (by rw [BitVec.le_def, W_toNat _ (by omega), W_toNat _ (by omega)]; omega),
       W_toNat _ (by omega), W_toNat _ (by omega), W_toNat _ (by omega)]
   rw [e, W_add_imm _ _ (by decide) (by decide) (by unfold freeImm prologue0At boundWord; omega)
     (by omega)]
-  have e2 : (((5465 - 4*v : ℕ) : ℤ) + freeImm).toNat = 4096 + 4*(prologue0At - v) := by
+  have e2 : (((5457 - 4*v : ℕ) : ℤ) + freeImm).toNat = 4096 + 4*(prologue0At - v) := by
     unfold freeImm prologue0At boundWord; omega
   rw [e2]
   apply and_not_one_of_even
@@ -54,7 +54,7 @@ theorem freeBranch_admitted' : ∀ v : Fin 256, 16 ≤ v.val →
       true := by
   decide +kernel
 
-/-- The branch of a high entry reaches the index phase's rejection. -/
+/-- The branch of a high entry reaches the rejection after the free jump. -/
 theorem freeBranch_target (v : ℕ) (hv : 16 ≤ v) (hv' : v < 256) :
     W (4096 + 4*(prologue0At - v)) +
       signExtend13 (BitVec.ofInt 13 (4*((indexStub : ℤ) - (freeTableAt + ((255 - v : ℕ) : ℤ))))) =

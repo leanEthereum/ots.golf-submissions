@@ -4,9 +4,8 @@ import Submissions.UpperRiscv.MixedLanes
 /-!
 # The arithmetic of the index check
 
-The four dispatch words sum with exactly three 64-bit wraps. Reduction modulo 1020 checks the aligned tag and the
-digit-sum ranks 158 and 413. The pair restrictions in the chain phase subsequently exclude
-413. Each stored lane holds `base − (4 · dA + 1024 · dB)` (`lane_halfword`).
+The four dispatch words sum with exactly three 64-bit wraps. Reduced modulo 1020, the sum is
+`4 * ((146 - S) mod 255)` for the digit sum `S`: four times the free digit. Each stored lane holds `base − (4 · dA + 1024 · dB)` (`lane_halfword`).
 -/
 
 namespace OptimalOTS.RiscvMixedProgram
@@ -246,11 +245,6 @@ theorem remainder_fold_answer (a : MachineState) (hm : MasksLoaded a) (answer : 
   simp only [Finset.sum_range_succ, Finset.sum_range_zero, hf, hc]
   ring
 
-/-- A decoded count below 64, with digit sum and count equal to `146` modulo `255`. -/
-def CountCheck (i v : ℕ) : Prop := v < 64 ∧ (digitSum i + v) % 255 = 146
-
-instance (i v : ℕ) : Decidable (CountCheck i v) := by unfold CountCheck; infer_instance
-
 theorem digit_sum_pairs (i : ℕ) :
     (∑ k ∈ Finset.range 32, digit i k) =
       ∑ q ∈ Finset.range 16, (digit i (2*q) + digit i (2*q+1)) := by
@@ -310,11 +304,11 @@ theorem raw_sum_mod (a : MachineState) (hm : MasksLoaded a) (answer : BitVec has
   simp only [preFold, Finset.sum_range_succ, Finset.sum_range_zero]
   omega
 
-/-- Subtracting the encoded tag modulo 1020 checks alignment and the decoded count together. -/
-theorem count_remainder_iff (a : MachineState) (hm : MasksLoaded a)
+/-- Reduced modulo 1020, the address sum is four times the free count. -/
+theorem free_remainder (a : MachineState) (hm : MasksLoaded a)
     (answer : BitVec hashBits) (hw : WordsLoaded a answer)
-    (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) (v : ℕ) (hv : v < 256) :
-    (addressSum a 4 - W v).toNat % 1020 = 0 ↔ CountCheck (pack answer) (decodeCount v) := by
+    (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) :
+    (addressSum a 4).toNat % 1020 = 4 * freeCount (pack answer) := by
   have congruence := raw_sum_mod a hm answer hw
   have bound := laneSum_bound a hm
   have total : (∑ k ∈ Finset.range 32, fieldDigit answer k) ≤ 480 := by
@@ -327,11 +321,9 @@ theorem count_remainder_iff (a : MachineState) (hm : MasksLoaded a)
         simp only [wid, if_pos hk', Nat.reducePow] at h
         omega
       _ = 480 := by norm_num
-  have hs := addressSum_toNat a hm hb
-  have h4 : (W v).toNat = v := W_toNat _ (by omega)
-  rw [BitVec.toNat_sub_of_le (by rw [BitVec.le_def, h4, hs]; omega), h4, hs]
-  unfold CountCheck decodeCount
+  rw [addressSum_toNat a hm hb]
+  unfold freeCount
   rw [digitSum_pack]
-  split_ifs <;> omega
+  omega
 
 end OptimalOTS.RiscvMixedProgram

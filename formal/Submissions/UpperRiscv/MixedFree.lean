@@ -1,8 +1,8 @@
 import Submissions.UpperRiscv.MixedPair
 import Submissions.UpperRiscv.MixedFreeArith
 
-/-! The free chain: its first hash, the count-byte dispatch, and `v` more hashes before prologue
-0; a count byte of 16 or more branches to the index phase's rejection. -/
+/-! The free chain: its first hash, the dispatch on the free digit `v`, and `v` more hashes before
+prologue 0; a free digit of 16 or more branches to the rejection after the free jump. -/
 
 namespace OptimalOTS.RiscvMixedProgram
 open OptimalOTS.Dag
@@ -40,7 +40,7 @@ theorem free_refines (hv : v < 256)
       ∀ left, rest ≤ left → Riscv.Refines left u (K (z, Payload.graphOff 1)) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (inv : ChainsInv index v wire pk a s x 0)
-    (pc : s.pc = W (4096+4*38))
+    (pc : s.pc = W (4096+4*31))
     (bound : 26 + rest ≤ fuel) :
     Riscv.Refines fuel s
       (runNodes' index v (Payload.permute wire) (entryNodes index v 0) x (Payload.graphOff 0) >>=
@@ -49,13 +49,13 @@ theorem free_refines (hv : v < 256)
       (freeCost v c) := by
   have global := inv.ctx.code
   have located := freePrologue_located s global
-  rw [← pc, freePrologue_parts, List.append_assoc, List.append_assoc] at located
+  rw [← pc, freePrologue_parts, List.append_assoc] at located
   have e4 : freeCost v c = 2+2*earlyHash (0 : Fin 33) + (if v < 16 then 2 + v + c else 6) := by
     unfold freeCost
     rw [earlyHash_free]
     split_ifs <;> omega
   rw [e4]
-  apply enter_refines index v wire pk 0 (dispatchFree ++ (freeTable ++ prologue 0))
+  apply enter_refines index v wire pk 0 (dispatchFree ++ freePad)
     (fun r => if v < 16 then runNodes' index v (Payload.permute wire) (tableNodes index v 0)
       r.1 r.2 >>= K else pure (some false))
     (if v < 16 then 2 + v + c else 6) (20 + rest) hlen ?_ s x fuel inv.ctx inv.input
@@ -67,19 +67,18 @@ theorem free_refines (hv : v < 256)
   let front : Code := [.SUB .x28 .x1 .x29]
   have ready : Riscv.LinearReady u front := by
     simp [front, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
-  have code : Riscv.CodeAt u u.pc (front ++ ([.JALR .x0 .x28 (imm12 freeImm)] ++
-      (freeTable ++ prologue 0))) := by
+  have code : Riscv.CodeAt u u.pc (front ++ ([.JALR .x0 .x28 (imm12 freeImm)] ++ freePad)) := by
     exact locU
   set w := front.foldl execInstrBr u with hw
   have wpc : w.pc = u.pc+4 := rfl
   have wcode : w.code = u.code := rfl
   have wregs : ∀ r, r ≠ .x28 → w.getReg r = u.getReg r := by
     intro r hr; simp [hw, front, execInstrBr, getReg_setReg_ite, hr]
-  have w28 : w.getReg .x28 = W 5465 - W (4*v) := by
+  have w28 : w.getReg .x28 = W 5457 - W (4*v) := by
     simp only [hw, front, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
     simp only [ne_eq, reduceCtorEq, not_false_eq_true, and_true, if_true, ctx.bound, ctx.count]
-  have wloc : Riscv.CodeAt w w.pc ([.JALR .x0 .x28 (imm12 freeImm)] ++ (freeTable ++ prologue 0)) := by
+  have wloc : Riscv.CodeAt w w.pc ([.JALR .x0 .x28 (imm12 freeImm)] ++ freePad) := by
     rw [wpc]; exact code.append_right.code_eq wcode
   have transition := jalr_transition w (imm12 freeImm) wloc.head
   rw [w28, free_target v hv] at transition

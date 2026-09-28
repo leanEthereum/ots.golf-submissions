@@ -58,7 +58,7 @@ theorem E_add {α : Type} (p : ProbComp α) (g h : α → ℝ≥0∞) :
 theorem sigOf_none (ξ : Rec) : sigOf ξ none = none := rfl
 
 theorem sigOf_some (ξ : Rec) (η : Nonce) (i : Idx) :
-    sigOf ξ (some (η, i)) = some (η, revealed (setsName i) ξ ++ freeTag i) := rfl
+    sigOf ξ (some (η, i)) = some (η, revealed (setsName i) ξ ++ ([] : List Bool)) := rfl
 
 theorem cutOf?_none : cutOf? none = none := rfl
 
@@ -189,7 +189,7 @@ theorem stB_support (pk : PublicKey) (m₁ : Message) (st : A.State) (σ : Optio
   refine ⟨hsub₁.trans hsub₂, fun hok => ?_⟩
   simp only [Bool.and_eq_true, decide_eq_true_iff] at hok
   obtain ⟨hok, hne⟩ := hok
-  by_cases hlen : bits.length = 5464
+  by_cases hlen : bits.length = 5456
   · left
     rw [A.verify_spec.full pk m₂ bits hlen] at h₂
     obtain ⟨-, hver⟩ := verify_support forestScheme pk m₂ (decodeSignature bits) c₁ ⟨ok, c₂⟩ h₂
@@ -243,9 +243,9 @@ theorem events_stB (ξ : Rec) (pk : PublicKey) (hpk : pkOf ξ = pk) (r : Option 
         intro heq
         apply hne
         have e2 : σ₂.2 = σ₂.2.take (graph.revealBits (fins (setsName ⟨pack w, hi⟩))) ++
-            freeTag ⟨pack w, hi⟩ := by
+            ([] : List Bool) := by
           have hd : σ₂.2.drop (graph.revealBits (fins (setsName ⟨pack w, hi⟩))) =
-              freeTag ⟨pack w, hi⟩ := hdrop
+              ([] : List Bool) := hdrop
           rw [← hd, List.take_append_drop]
         rw [sigOf_some, Option.map_some, hm']
         unfold revealed
@@ -388,7 +388,7 @@ theorem stageB_some (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache
     have hrun : ∀ ξ ∈ T.filter (fun ξ => dataOf (setsName i) ξ = (pk', rev', fe')),
         run (stB A pk m₁ st (sigOf ξ (some (η, i))))
             (Cache.extend d' (fExp (some (setsName i)) ξ)) =
-          run (stB A pk m₁ st (some (η, rev' ++ freeTag i))) (Cache.extend d' fe') := by
+          run (stB A pk m₁ st (some (η, rev' ++ ([] : List Bool)))) (Cache.extend d' fe') := by
       intro ξ hξ
       obtain ⟨-, -, hrev, hfexp⟩ := hdata ξ hξ
       rw [sigOf_some, hrev, hfexp]
@@ -397,7 +397,7 @@ theorem stageB_some (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache
             (Cache.extend d' (fExp (some (setsName i)) ξ)))
             (fun p => ind (Cache.Hits p.2 (fHid (some (setsName i)) ξ)) + ind (Spr p.2 ξ) +
               ind (IdxPost d' p.2 i.val)) =
-        E (run (stB A pk m₁ st (some (η, rev' ++ freeTag i))) (Cache.extend d' fe'))
+        E (run (stB A pk m₁ st (some (η, rev' ++ ([] : List Bool)))) (Cache.extend d' fe'))
           (fun p => ∑ ξ ∈ T with dataOf (setsName i) ξ = (pk', rev', fe'),
             w * (ind (Cache.Hits p.2 (fHid (some (setsName i)) ξ)) + ind (Spr p.2 ξ) +
               ind (IdxPost d' p.2 i.val))) := by
@@ -416,14 +416,14 @@ theorem stageB_some (pk : BitVec 128) (m₁ : Message) (st : A.State) (d : Cache
       exact mul_le_mul_right (add_le_add_right (ind_mono fun h => ⟨i.val, rfl, h⟩) _) _
     have hI' : Inv (Cache.extend d' fe') b'' := by
       rw [← hdata₀.2.2, Inv_extend_fExp]; exact hI
-    have hB' : CostAtMost (stB A pk m₁ st (some (η, rev' ++ freeTag i))) b'' := by
+    have hB' : CostAtMost (stB A pk m₁ st (some (η, rev' ++ ([] : List Bool)))) b'' := by
       have := hB ξ₀ hξ₀T
       rwa [sigOf_some, hdata₀.2.1] at this
     have hmaster := master_single (κ * sumW (fiberB (setsName i) (pk', rev', fe')))
       (ΦB (T.filter (fun ξ => dataOf (setsName i) ξ = (pk', rev', fe'))) (some (setsName i)) d'
         (some i.val))
       Inv Inv_fresh Inv_cached (ΦB_charge_some (isCut_setsName i) (pk', rev', fe') hTsub d' i.val)
-      (stB A pk m₁ st (some (η, rev' ++ freeTag i)))
+      (stB A pk m₁ st (some (η, rev' ++ ([] : List Bool))))
       (fun _ c => ∑ ξ ∈ T with dataOf (setsName i) ξ = (pk', rev', fe'),
         w * (ind (Cache.Hits c (fHid (some (setsName i)) ξ)) + ind (Spr c ξ) +
           ind (IdxPost d' c i.val)))

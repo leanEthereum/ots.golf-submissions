@@ -1,6 +1,6 @@
 import Submissions.UpperRiscv.Candidate
 
-/-! A capped-rank forest OTS with an equivalent RV64IM verifier, at most 344 cycles on every
+/-! A capped-rank forest OTS with an equivalent RV64IM verifier, at most 341 cycles on every
 execution. -/
 
 namespace OptimalOTS.Challenge.UpperRiscv
@@ -9,8 +9,8 @@ namespace OptimalOTS.Challenge.UpperRiscv
 noncomputable def submission : Riscv.Submission := RiscvUpperForest.submission
 
 /-- Correctness, signing availability, resource limits, 127-bit strong security, exact machine
-refinement on every input, and at most 344 cycles on every execution. -/
-theorem certificate : submission.Certificate 344 := RiscvUpperForest.machineCertificate
+refinement on every input, and at most 341 cycles on every execution. -/
+theorem certificate : submission.Certificate 341 := RiscvUpperForest.machineCertificate
 
 /-- The fixed image occupies 62,552 bytes, strictly less than 1 MiB. -/
 theorem image_size : submission.image.byteSize < 1048576 := RiscvMixedProgram.image_size

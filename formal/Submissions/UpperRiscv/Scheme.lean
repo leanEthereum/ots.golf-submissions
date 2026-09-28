@@ -5,7 +5,8 @@ import Submissions.UpperRiscv.GScheme
 # The bare-chain forest
 
 A family of cuts indexed by the accepted indices, with twenty-one 144-bit and twelve 192-bit
-values, followed by the free digit as an 8-bit tag. Verification costs 192 compressions.
+values. The free digit is a function of the index, so no tag follows the values. Verification
+costs 192 compressions.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -28,12 +29,6 @@ def setsName (i : Idx) : Finset Name := cutOf (fixedChoice i)
 
 theorem setsName_injective : Function.Injective setsName := fixedCut_injective
 
-/-- The free digit of an index as eight bits, least significant first. -/
-def freeTag (i : Idx) : List Bool := toBits (BitVec.ofNat 8 (4 * freeDigit i.val))
-
-theorem length_freeTag (i : Idx) : (freeTag i).length = 8 := by
-  simp [freeTag, toBits]
-
 /-- The concrete scheme. -/
 def forestScheme : GScheme where
   graph := graph
@@ -46,12 +41,12 @@ def forestScheme : GScheme where
   no_hidden_source := by
     intro i
     exact (no_hidden_source_iff (setsName i)).mpr (fixedCut_isCut i).covers
-  tag := freeTag
+  tag := fun _ => []
   reveal_le := by
     intro i
-    show graph.revealBits (fins (setsName i)) + (freeTag i).length ≤ 5376
-    rw [revealBits_eq, length_freeTag]
-    change ∑ n ∈ cutOf (fixedChoice i), n.len + 8 ≤ 5376
+    show graph.revealBits (fins (setsName i)) + 0 ≤ 5376
+    rw [revealBits_eq]
+    change ∑ n ∈ cutOf (fixedChoice i), n.len + 0 ≤ 5376
     rw [reveal_cutOf _ (fixedChoice_capChoice i)]
     norm_num
   keygen_le := by

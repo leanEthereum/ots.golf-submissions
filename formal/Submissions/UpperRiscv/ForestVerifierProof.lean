@@ -154,7 +154,7 @@ def directVerify (pk : PublicKey) (m : Message) (bits : List Bool) :
     OracleComp Spec Bool := do
   let i ← packIndex (emsg m pk) (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
-    if bits.length = 5464 ∧ bits.drop 5456 = Forest.freeTag ⟨i, hi⟩ then
+    if bits.length = 5456 then
       let y ← directReconstruct ⟨i, hi⟩ ((Payload.permute (bits.drop 128)).take 5328)
       return decide ((y rh.fin).setWidth 128 = pk)
     else return false

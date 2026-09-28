@@ -477,9 +477,9 @@ def SprHash (c : Cache) (ξ : Rec) : Prop :=
   ∃ h p, hashParent h = some p ∧ ∃ u : BitVec p.len, u ≠ val ξ p ∧
     ∃ w, c ⟨p.len, u⟩ = some w ∧ sim ξ h w
 
-/-- The root query lengths of signatures shorter than the full `5464` bits: `ℓ + 936` for
-`ℓ < 5464`. No hash node and no index query has such an input length. -/
-def ShortLen (n : ℕ) : Prop := 936 ≤ n ∧ n < 6400
+/-- The root query lengths of signatures shorter than the full `5456` bits: `ℓ + 944` for
+`ℓ < 5456`. No hash node and no index query has such an input length. -/
+def ShortLen (n : ℕ) : Prop := 944 ≤ n ∧ n < 6400
 
 /-- Some cached answer at a short root length begins with the public key. -/
 def SprShort (c : Cache) (ξ : Rec) : Prop :=
