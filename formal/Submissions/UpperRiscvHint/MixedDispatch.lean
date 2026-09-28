@@ -14,7 +14,7 @@ def dispatchFront (q : ℕ) : Code :=
 def dispatchCode (q : ℕ) : Code :=
   dispatchFront q ++
   [.ADDI .x10 .x12 (imm12 ((work (2*q+1) : ℤ) - outAddr (2*q+1))),
-   .JALR .x0 .x28 (imm12 (jumpImm q))]
+   .JALR (linkReg q) .x28 (imm12 (jumpImm q))]
 
 theorem dispatchCode_length (q : ℕ) : (dispatchCode q).length = 4 := rfl
 
@@ -78,7 +78,7 @@ theorem dispatchFront_effect (index : RawIdx) (q : Fin 16) (s : MachineState)
     exact lane
 
 /-- The prologue's pointer moves, its halfword load, and the jump to the table entry. No hash and
-no trap occur on the way. -/
+no trap occur on the way. Pair 0's jump links the address after it into `x1`. -/
 theorem dispatch_refines (index : RawIdx) (q : Fin 16) (s : MachineState) (tail : Code)
     (input : s.getReg .x10 = W (prevInput (2*q.val+1)))
     (lane : (s.getHalfword (W (laneAddr q))).toNat = baseLane q - dispatch index q)
@@ -87,12 +87,13 @@ theorem dispatch_refines (index : RawIdx) (q : Fin 16) (s : MachineState) (tail 
     (continuation : ∀ t : MachineState, t.pc = W (landing0 q + 4 * lead q - dispatch index q) →
       t.getReg .x10 = W (work (2*q.val+1)) → t.getReg .x12 = W (outAddr (2*q.val+1)) →
       (t.getReg .x28).toNat = baseLane q - dispatch index q →
-      (∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → t.getReg r = s.getReg r) →
+      (∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → r ≠ .x1 → t.getReg r = s.getReg r) →
+      t.getReg .x1 = (if q.val = 0 then s.pc + 16 else s.getReg .x1) →
       t.mem = s.mem → t.code = s.code →
       Riscv.Refines (fuel - (dispatchCode q).length) t Q c) :
     Riscv.Refines fuel s Q ((dispatchCode q).length + c) := by
   let move : Instr := .ADDI .x10 .x12 (imm12 ((work (2*q.val+1) : ℤ) - outAddr (2*q.val+1)))
-  let jump : Instr := .JALR .x0 .x28 (imm12 (jumpImm q))
+  let jump : Instr := .JALR (linkReg q) .x28 (imm12 (jumpImm q))
   have code : Riscv.CodeAt s s.pc (dispatchFront q ++ ([move] ++ ([jump] ++ tail))) := by
     simpa only [dispatchCode, List.append_assoc, List.cons_append, List.nil_append] using located
   obtain ⟨ready, A⟩ := dispatchFront_effect index q s input lane
@@ -102,9 +103,10 @@ theorem dispatch_refines (index : RawIdx) (q : Fin 16) (s : MachineState) (tail 
     exact code.append_right.code_eq A.code
   -- the pointer move and the jump, from `a` or its fall-through copy
   have finish : ∀ b : MachineState, b.code = s.code → b.mem = s.mem →
-      (∀ r, b.getReg r = a.getReg r) → Riscv.CodeAt b b.pc ([move] ++ ([jump] ++ tail)) →
+      (∀ r, b.getReg r = a.getReg r) → b.pc = s.pc + 8 →
+      Riscv.CodeAt b b.pc ([move] ++ ([jump] ++ tail)) →
       Riscv.Refines (fuel - (dispatchCode q).length + 2) b Q (2 + c) := by
-    intro b bcode bmem bregs bloc
+    intro b bcode bmem bregs bpc bloc
     have e2 : b.getReg .x12 + signExtend12 (imm12 ((work (2*q.val+1) : ℤ) - outAddr (2*q.val+1))) =
         W (work (2*q.val+1)) := by
       rw [bregs, A.x12]; exact out_to_work' q
@@ -124,17 +126,37 @@ theorem dispatch_refines (index : RawIdx) (q : Fin 16) (s : MachineState) (tail 
     have u28 : (u.getReg .x28).toNat = baseLane q - dispatch index q := by
       rw [uregs .x28 (by decide), bregs]; exact A.x28
     have target := jump_target index q q.isLt (u.getReg .x28) u28
-    have transition := jalr_transition u (imm12 (jumpImm q)) uloc.head
+    have transition := jalr_transition u (linkReg q) (imm12 (jumpImm q)) uloc.head
     rw [target] at transition
-    let t := u.setPC (W (landing0 q + 4 * lead q - dispatch index q))
+    let t := (u.setReg (linkReg q) (u.pc + 4)).setPC (W (landing0 q + 4 * lead q - dispatch index q))
+    have tlink : ∀ r, r ≠ .x1 → t.getReg r = u.getReg r := by
+      intro r h1
+      show (u.setReg (linkReg q) (u.pc + 4)).getReg r = _
+      rw [getReg_setReg_ite, if_neg]
+      rintro ⟨rfl, h0⟩
+      unfold linkReg at h1 h0
+      split_ifs at h1 h0 <;> simp at h1 h0
+    have t1 : t.getReg .x1 = (if q.val = 0 then s.pc + 16 else s.getReg .x1) := by
+      show (u.setReg (linkReg q) (u.pc + 4)).getReg .x1 = _
+      rw [getReg_setReg_ite, upc, bpc, uregs .x1 (by decide), bregs,
+        A.regs .x1 (by decide) (by decide)]
+      by_cases h0 : q.val = 0
+      · simp only [linkReg, h0, if_true, ne_eq, reduceCtorEq, not_false_eq_true, and_self]
+        bv_omega
+      · simp [linkReg, h0]
+    have t10 : t.getReg .x10 = W (work (2*q.val+1)) := by rw [tlink .x10 (by decide)]; exact u10
     have t12 : t.getReg .x12 = W (outAddr (2*q.val+1)) := by
-      show u.getReg .x12 = _; rw [uregs .x12 (by decide), bregs, A.x12]
-    have tregs : ∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → t.getReg r = s.getReg r := by
-      intro r h10 h12 h28
-      show u.getReg r = _
-      rw [uregs r h10, bregs, A.regs r h12 h28]
-    have cont := continuation t rfl u10 t12 u28 tregs (by show u.mem = _; rw [umem, bmem])
-      (by show u.code = _; rw [ucode, bcode])
+      rw [tlink .x12 (by decide), uregs .x12 (by decide), bregs, A.x12]
+    have t28 : (t.getReg .x28).toNat = baseLane q - dispatch index q := by
+      rw [tlink .x28 (by decide)]; exact u28
+    have tregs : ∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → r ≠ .x1 → t.getReg r = s.getReg r := by
+      intro r h10 h12 h28 h1
+      rw [tlink r h1, uregs r h10, bregs, A.regs r h12 h28]
+    have hm : (u.setReg (linkReg q) (u.pc + 4)).mem = u.mem := by
+      generalize linkReg q = r; cases r <;> rfl
+    have cont := continuation t rfl t10 t12 t28 tregs t1
+      (by show (u.setReg (linkReg q) (u.pc + 4)).mem = _; rw [hm, umem, bmem])
+      (by show (u.setReg (linkReg q) (u.pc + 4)).code = _; rw [MachineState.code_setReg, ucode, bcode])
     rw [show fuel - (dispatchCode q).length + 2 =
       [move].length + ((fuel - (dispatchCode q).length) + 1) by simp; omega,
       show 2 + c = [move].length + (c + 1) by simp; omega]
@@ -143,7 +165,7 @@ theorem dispatch_refines (index : RawIdx) (q : Fin 16) (s : MachineState) (tail 
     exact Riscv.Refines.branch uloc.head rfl (fun h => nomatch h) transition cont
   have hlen := dispatchCode_length q
   have flen : (dispatchFront q).length = 2 := rfl
-  have rest := finish a A.code A.mem (fun _ => rfl) aloc
+  have rest := finish a A.code A.mem (fun _ => rfl) A.pc aloc
   rw [show fuel = (dispatchFront q).length + (fuel - (dispatchCode q).length + 2) by omega,
     show (dispatchCode q).length + c = (dispatchFront q).length + (2 + c) by omega]
   apply Riscv.Refines.linear _ code.append_left ready
@@ -157,6 +179,8 @@ theorem prologue_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
     (ctx : Ctx s index wire pk) (input : s.getReg .x10 = W (prevInput k))
     (len : s.getReg .x11 = W (chainBits k)) (payload : PayloadFrom s wire k)
     (done : Completed s (tops x) k) (tail : Code)
+    (start : q.val = 0 → s.pc = W freeLanding)
+    (link : q.val ≠ 0 → s.getReg .x1 = W rootBase)
     (located : Riscv.CodeAt s s.pc (dispatchCode q ++ tail))
     (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : (dispatchCode q).length ≤ fuel)
     (continuation : ∀ u, Prepared index wire pk u x k →
@@ -164,8 +188,13 @@ theorem prologue_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
       Riscv.Refines (fuel - (dispatchCode q).length) u Q c) :
     Riscv.Refines fuel s Q ((dispatchCode q).length + c) := by
   apply dispatch_refines index q s tail (by rw [input, hk]) (ctx.lanes q) located Q c fuel hf
-  · intro t tpc t10 t12 t28 tregs tmem tcode
-    have tctx : Ctx t index wire pk := ctx.prologue q t10 t12 t28 tregs tmem tcode
+  · intro t tpc t10 t12 t28 tregs t1 tmem tcode
+    have tlink : t.getReg .x1 = W rootBase := by
+      rw [t1]
+      by_cases h0 : q.val = 0
+      · rw [if_pos h0, start h0]; unfold rootBase freeLanding; decide
+      · rw [if_neg h0]; exact link h0
+    have tctx : Ctx t index wire pk := ctx.prologue q t10 t12 t28 tlink tregs tmem tcode
     have urange : 32 ≤ work k ∧ work k+24 ≤ 0x78000000 := by
       have h := wireOffset_contained k
       unfold honestViewBits at h
@@ -173,7 +202,7 @@ theorem prologue_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
     have prep : Prepared index wire pk t x k := by
       refine ⟨⟨tctx, ?_, urange, ?_, ?_, ?_, ?_⟩, ?_⟩
       · rw [t10, hk]
-      · rw [tregs .x11 (by decide) (by decide) (by decide)]; exact len
+      · rw [tregs .x11 (by decide) (by decide) (by decide) (by decide)]; exact len
       · rw [t12, hk]
       · intro j hj; exact memBits_of_mem_eq tmem (payload j (by omega))
       · intro j hj; exact memBits_of_mem_eq tmem (done j hj)

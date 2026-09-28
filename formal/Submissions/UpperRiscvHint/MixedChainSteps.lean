@@ -75,7 +75,7 @@ theorem step_refines (k : Chain) (t : Fin 32) (base : ℕ)
     (located : Riscv.CodeAt s s.pc (.ECALL :: tail)) (bound : 1+budget ≤ fuel)
     (continuation : ∀ (u : MachineState) (y : BitVec hashBits),
       HashInv index wire pk u (tripleUpdate x k t v y) k base →
-      MemBits u (W (outAddr k)) y → Riscv.CodeAt u u.pc tail →
+      MemBits u (W (outAddr k)) y → Riscv.CodeAt u u.pc tail → u.pc = s.pc + W 4 →
       ∀ left, budget ≤ left → Riscv.Refines left u (K (tripleUpdate x k t v y, cursor')) c) :
     Riscv.Refines fuel s
       (runNodes' index (viewPayload wire) [ci k t, ch k t, cv k t] x cursor >>= K) (1+c) := by
@@ -99,7 +99,7 @@ theorem step_refines (k : Chain) (t : Fin 32) (base : ℕ)
   have answer := writeHash_memBits s y (by rw [inv.out]; exact aligned_W _ b.2.2 (by omega))
   rw [inv.out] at answer
   apply continuation (Riscv.writeHash s y) y (HashInv.writeHash index wire pk inv t v y) answer
-    (located.tail.code_eq (writeHash_code s y)) (fuel-1) (by omega)
+    (located.tail.code_eq (writeHash_code s y)) rfl (fuel-1) (by omega)
 
 /-- What the working address holds before level t, or the full last answer after level 31. -/
 def HoldsAt (s : MachineState) (x : graph.Assignment) (k : Chain) (t : ℕ) : Prop :=
@@ -144,15 +144,16 @@ theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Chain} {t : 
 
 /-- Levels `t` to `31` of chain `k`, above the disclosed level. -/
 theorem steps_refines (k : Chain) (tail : Code)
-    (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest' cursor : ℕ)
+    (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest' cursor : ℕ) (P : Word)
     (continuation : ∀ (u : MachineState) (y : graph.Assignment),
       HashInv index wire pk u y k (work k) → MemBits u (W (outAddr k)) (lastOut y k) →
-      Riscv.CodeAt u u.pc tail →
+      Riscv.CodeAt u u.pc tail → u.pc = P →
       ∀ left, rest' ≤ left → Riscv.Refines left u (K (y, cursor)) c) :
     ∀ (n t : ℕ), 32 - t = n → t ≤ 32 → firstAt index k < t →
     ∀ (s : MachineState) (x : graph.Assignment) (fuel : ℕ),
       HashInv index wire pk s x k (work k) → HoldsAt s x k t →
       Riscv.CodeAt s s.pc (List.replicate (32 - t) .ECALL ++ tail) →
+      s.pc + W (4 * (32 - t)) = P →
       (32 - t) + rest' ≤ fuel →
       Riscv.Refines fuel s
         (runNodes' index (viewPayload wire) ((List.range' t (32 - t)).flatMap (tripleN k)) x cursor >>= K)
@@ -160,16 +161,17 @@ theorem steps_refines (k : Chain) (tail : Code)
   intro n
   induction n with
   | zero =>
-    intro t ht _ _ s x fuel inv held located bound
+    intro t ht _ _ s x fuel inv held located hP bound
     have h32 : t = 32 := by omega
     subst h32
     simp only [Nat.sub_self, List.range'_zero, List.flatMap_nil, List.nil_append, runNodes',
       pure_bind, List.replicate_zero, Nat.zero_add] at located bound ⊢
     unfold HoldsAt at held
     rw [dif_neg (by omega)] at held
-    exact continuation s x inv held located fuel bound
+    have hpc : s.pc = P := by simpa using hP
+    exact continuation s x inv held located hpc fuel bound
   | succ n ih =>
-    intro t hn ht hp s x fuel inv held located bound
+    intro t hn ht hp s x fuel inv held located hP bound
     have ht' : t < 32 := by omega
     have hsucc : 32 - t = (32 - (t + 1)) + 1 := by omega
     rw [hsucc] at located bound ⊢
@@ -187,9 +189,12 @@ theorem steps_refines (k : Chain) (tail : Code)
         r.1 r.2 >>= K)
       (32 - (t + 1) + c) (32 - (t + 1) + rest') cursor cursor s x fuel _
       (triple_run_step index (viewPayload wire) k ⟨t, ht'⟩ hp x cursor) inv held located (by omega)
-    intro u y inv' answer located' left hleft
-    exact ih (t + 1) (by omega) (by omega) (by omega) u _ left inv' (holdsAt_succ answer)
-      located' (by omega)
+    intro u y inv' answer located' upc left hleft
+    refine ih (t + 1) (by omega) (by omega) (by omega) u _ left inv' (holdsAt_succ answer)
+      located' ?_ (by omega)
+    rw [upc, BitVec.add_assoc, W_add, ← hP]
+    congr 2
+    omega
 
 
 end OptimalOTS.RiscvMixedProgram

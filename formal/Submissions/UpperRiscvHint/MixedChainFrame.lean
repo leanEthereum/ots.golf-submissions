@@ -66,7 +66,15 @@ theorem Ctx.frame {s t : MachineState} {index : RawIdx} {view : List Bool} {pk :
     rw [regs .x10 (by simp [CtxReg]), regs .x12 (by simp [CtxReg])] at h
     rw [regs .x28 (by simp [CtxReg])]
     exact ctx.row q h
-  · rw [regs .x1 (by simp [CtxReg])]; exact ctx.base
+  · intro k hk hk' h
+    rw [regs .x12 (by simp [CtxReg])] at h
+    rw [regs .x1 (by simp [CtxReg])]; exact ctx.base k hk hk' h
+
+/-- While `x12` addresses a chain after the free chain, `x1` holds pair 0's link. -/
+theorem Ctx.link {s : MachineState} {index : RawIdx} {view : List Bool} {pk : PublicKey}
+    (ctx : Ctx s index view pk) {k : ℕ} (hk : 1 ≤ k) (hk' : k < 33)
+    (h : s.getReg .x12 = W (outAddr k)) : s.getReg .x1 = W rootBase :=
+  ctx.base k hk hk' h
 
 /-- Moving the pointers from chain `2q + 1` to chain `2q + 2` keeps pair `q`'s halfword in `x28`. -/
 theorem Ctx.enter {s t : MachineState} {index : RawIdx} {view : List Bool} {pk : PublicKey}
@@ -94,20 +102,23 @@ theorem Ctx.enter {s t : MachineState} {index : RawIdx} {view : List Bool} {pk :
       exact ctx.row q' (Or.inr ⟨s12, s10⟩)
     · have e := outAddr_inj (by omega) (by omega) h
       omega
-  · rw [regs .x1 (by decide) (by decide)]; exact ctx.base
+  · intro _ _ _ _
+    rw [regs .x1 (by decide) (by decide)]
+    exact ctx.link (k := 2*q.val+1) (by omega) (by omega) s12
 
 /-- The prologue of pair `q` points at chain `2q + 1` and loads the pair's halfword into `x28`. -/
 theorem Ctx.prologue {s t : MachineState} {index : RawIdx} {view : List Bool} {pk : PublicKey}
     (ctx : Ctx s index view pk) (q : Fin 16)
     (t10 : t.getReg .x10 = W (work (2*q.val+1))) (t12 : t.getReg .x12 = W (outAddr (2*q.val+1)))
     (t28 : (t.getReg .x28).toNat = baseLane q - dispatch index q)
-    (regs : ∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → t.getReg r = s.getReg r)
+    (t1 : t.getReg .x1 = W rootBase)
+    (regs : ∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → r ≠ .x1 → t.getReg r = s.getReg r)
     (mem : t.mem = s.mem) (code : t.code = s.code) : Ctx t index view pk := by
   have hq := q.isLt
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, by rw [code]; exact ctx.null, ctx.code.code_eq code⟩
-  · rw [regs .x30 (by decide) (by decide) (by decide)]; exact ctx.pk0
-  · rw [regs .x31 (by decide) (by decide) (by decide)]; exact ctx.pk1
-  · rw [regs .x5 (by decide) (by decide) (by decide)]; exact ctx.call
+  · rw [regs .x30 (by decide) (by decide) (by decide) (by decide)]; exact ctx.pk0
+  · rw [regs .x31 (by decide) (by decide) (by decide) (by decide)]; exact ctx.pk1
+  · rw [regs .x5 (by decide) (by decide) (by decide) (by decide)]; exact ctx.call
   · intro q
     simpa only [MachineState.getHalfword, MachineState.getMem, mem] using ctx.lanes q
   · intro q' h
@@ -120,7 +131,7 @@ theorem Ctx.prologue {s t : MachineState} {index : RawIdx} {view : List Bool} {p
       have : q' = q := Fin.ext (by omega)
       subst this
       exact t28
-  · rw [regs .x1 (by decide) (by decide) (by decide)]; exact ctx.base
+  · intro _ _ _ _; exact t1
 
 variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 

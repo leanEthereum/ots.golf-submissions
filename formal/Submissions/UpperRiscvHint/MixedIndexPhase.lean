@@ -81,8 +81,8 @@ end OptimalOTS.RiscvMixedProgram
 /-!
 # The index phase
 
-The machine saves the public key, hashes `pk ‖ message ‖ nonce`, loads the free base into `x1`
-and four times the view's free count into `x6`, builds the four dispatch words, and leaves in `x5`
+The machine saves the public key, hashes `pk ‖ message ‖ nonce`, loads the dispatch constants,
+masks the view length into `x6`, builds the four dispatch words, and leaves in `x5`
 a residue that is the HASH call number exactly when the free count is the index's free digit. It
 sets the cap width. The state `afterIndex` satisfies a raw-index chain invariant; the pair
 restrictions remain to be checked by the dispatch tables.
@@ -102,18 +102,18 @@ attribute [local irreducible] validSet
 
 /-! ## The data image and the view loader -/
 
-theorem dataImage_length : dataImage.length = 64 := by decide
+theorem dataImage_length : dataImage.length = 56 := by decide
 
-/-- The four constant words of the data image, after the 32-byte answer buffer. -/
-def dataWord (j : ℕ) : ℕ := [broadcast 0x3c3c, 255, baseWord 0, freeBase].getD j 0
+/-- The three constant words of the data image, after the 32-byte answer buffer. -/
+def dataWord (j : ℕ) : ℕ := [broadcast 0x3c3c, 255, baseWord 0].getD j 0
 
-theorem dataImage_word (j : ℕ) (hj : j < 4) :
+theorem dataImage_word (j : ℕ) (hj : j < 3) :
     bytesToWordLE ((dataImage.drop (8 * (4 + j))).take 8) = W (dataWord j) := by
   interval_cases j <;> decide
 
-theorem initial_data_word (pk : PublicKey) (m : Message) (view : List Bool) (j : ℕ) (hj : j < 4) :
+theorem initial_data_word (pk : PublicKey) (m : Message) (view : List Bool) (j : ℕ) (hj : j < 3) :
     (RiscvHint.loadView image pk m view).getMem (W (dataAddr + 32 + 8 * j)) = W (dataWord j) := by
-  have hlen : image.data.length = 64 := dataImage_length
+  have hlen : image.data.length = 56 := dataImage_length
   have ha : (W (dataAddr + 32 + 8 * j)).toNat = dataAddr + 32 + 8 * j :=
     W_toNat _ (by unfold dataAddr; omega)
   rw [loadView_getMem, getMem_load_outside, loaderMessage, getMem_load_outside, loaderPublic,
@@ -299,7 +299,7 @@ theorem S2_frame (addr : Word) (h : addr.toNat < dataAddr ∨ dataAddr + 32 ≤ 
   omega
 
 /-- The constants of the data image are still in place after the index query. -/
-theorem S2_const (j : ℕ) (hj : j < 4) :
+theorem S2_const (j : ℕ) (hj : j < 3) :
     (S2 pk m view answer).getMem (W (dataAddr + 32 + 8 * j)) = W (dataWord j) := by
   rw [S2_frame _ _ _ _ _ (Or.inr (by rw [W_toNat _ (by unfold dataAddr; omega)]; omega)),
     (prefix_effect pk m view).frame, initial_data_word pk m view j hj]
@@ -319,7 +319,6 @@ structure LoadEffect (a b : MachineState) : Prop where
   x25 : b.getReg .x25 = W (broadcast 0x3c3c)
   x2 : b.getReg .x2 = W 255
   x3 : b.getReg .x3 = W (baseWord 0)
-  x1 : b.getReg .x1 = W freeBase
   regs : ∀ r, r ≠ .x20 → r ≠ .x21 → r ≠ .x22 → r ≠ .x23 → r ≠ .x6 → r ≠ .x25 → r ≠ .x1 →
     r ≠ .x2 → r ≠ .x3 → r ≠ .x4 → r ≠ .x7 → b.getReg r = a.getReg r
   mem : ∀ addr, b.getMem addr = a.getMem addr
@@ -347,7 +346,7 @@ theorem loadWords_ready : Riscv.LinearReady (S4 pk m view answer) loadWords := b
     show ¬ (Reg.x12 = Reg.x1) by decide, show ¬ (Reg.x12 = Reg.x2) by decide,
     show ¬ (Reg.x12 = Reg.x3) by decide, show ¬ (Reg.x12 = Reg.x4) by decide,
     false_and, if_false, h12]
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> (unfold dataAddr; decide)
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> (unfold dataAddr; decide)
 
 theorem loadWords_effect :
     LoadEffect answer (S4 pk m view answer) (loadWords.foldl execInstrBr (S4 pk m view answer)) := by
@@ -355,13 +354,13 @@ theorem loadWords_effect :
   have mw : ∀ off : ℕ, off < 2048 → (S4 pk m view answer).getReg .x12 +
       signExtend12 (BitVec.ofNat 12 off) = W (dataAddr + off) := by
     intro off hoff; rw [h12, signExtend12_nat _ hoff, W_add]
-  have c : ∀ j, j < 4 → (S4 pk m view answer).getMem (W (dataAddr + (32 + 8 * j))) = W (dataWord j) := by
+  have c : ∀ j, j < 3 → (S4 pk m view answer).getMem (W (dataAddr + (32 + 8 * j))) = W (dataWord j) := by
     intro j hj; rw [S4_mem, ← Nat.add_assoc, S2_const _ _ _ _ j hj]
   have a : ∀ j, j < 4 → (S4 pk m view answer).getMem (W (dataAddr + 8 * j)) = wordOf answer j := by
     intro j hj; rw [S4_mem]; exact S2_answer pk m view answer j hj
   have a0 := a 0 (by norm_num)
   simp only [Nat.mul_zero, Nat.add_zero] at a0
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   all_goals simp only [loadWords, List.foldl_cons, List.foldl_nil, execInstrBr,
     MachineState.getReg_setPC, getReg_setReg_ite, MachineState.getMem_setPC,
     MachineState.getMem_setReg]
@@ -372,9 +371,8 @@ theorem loadWords_effect :
   · simp [mw 32 (by norm_num), c 0 (by norm_num), dataWord]
   · simp [mw 40 (by norm_num), c 1 (by norm_num), dataWord]
   · simp [mw 48 (by norm_num), c 2 (by norm_num), dataWord]
-  · simp [mw 56 (by norm_num), c 3 (by norm_num), dataWord]
-  · intro r h20 h21 h22 h23 h6 h25 h1 h2 h3 h4 h7
-    simp [h20, h21, h22, h23, h6, h25, h1, h2, h3, h4, h7]
+  · intro r h20 h21 h22 h23 h6 h25 _ h2 h3 h4 h7
+    simp [h20, h21, h22, h23, h6, h25, h2, h3, h4, h7]
   · intro addr; trivial
 
 /-- After the loads. -/
@@ -612,12 +610,6 @@ theorem afterIndex_x6 : (afterIndex pk m view answer).getReg .x6 = W (viewTag vi
     (by decide)]
   exact S45_x6 pk m view answer
 
-/-- The free base. -/
-theorem afterIndex_x1 : (afterIndex pk m view answer).getReg .x1 = W freeBase := by
-  rw [afterIndex_regs _ _ _ _ .x1 (by decide), S5_regs _ _ _ _ .x1 (by decide) (by decide)
-    (by decide), S45_regs _ _ _ _ _ (by decide), S44]
-  exact (loadWords_effect pk m view answer).x1
-
 theorem afterIndex_code : (afterIndex pk m view answer).code = (S0 pk m view).code := by
   unfold afterIndex S5 S4
   rw [Riscv.fold_code, Riscv.fold_code]
@@ -711,21 +703,24 @@ theorem afterIndex_ctx (located : Riscv.CodeAt (S0 pk m view) (W 4096) verifier)
     rcases hr with rfl | rfl <;>
       exact afterIndex_prefixReg _ _ _ _ _ (by decide) (by decide) (by decide) (by decide)
         (by decide)
-  refine ⟨?_, ?_, ?_, afterIndex_lanes pk m view answer, ?_, afterIndex_x1 pk m view answer,
+  -- `x12` still addresses the index answer, below every chain buffer
+  have hx : ∀ k : ℕ, k < 33 → W dataAddr ≠ W (outAddr k) := fun k hk =>
+    W_ne (by unfold dataAddr; omega) (by unfold outAddr; split_ifs <;> omega)
+      (by unfold dataAddr outAddr; split_ifs <;> omega)
+  refine ⟨?_, ?_, ?_, afterIndex_lanes pk m view answer, ?_, ?_,
     by rw [afterIndex_code]; exact S0_null pk m view,
     located.code_eq (afterIndex_code pk m view answer)⟩
   · rw [pre .x30 (Or.inl rfl), P.x30]
   · rw [pre .x31 (Or.inr rfl), P.x31]
   · rw [afterIndex_x5]; exact (residue_iff pk m view answer bank).mpr rank
-  · -- `x12` still addresses the index answer, below every chain buffer
-    intro q hq
-    have hx : ∀ k : ℕ, k < 33 → W dataAddr ≠ W (outAddr k) := fun k hk =>
-      W_ne (by unfold dataAddr; omega) (by unfold outAddr; split_ifs <;> omega)
-        (by unfold dataAddr outAddr; split_ifs <;> omega)
+  · intro q hq
     rw [afterIndex_x12] at hq
     rcases hq with h | ⟨h, _⟩
     · exact absurd h (hx _ (by omega))
     · exact absurd h (hx _ (by omega))
+  · intro k _ hk h
+    rw [afterIndex_x12] at h
+    exact absurd h (hx k hk)
 
 end Tail
 
@@ -753,16 +748,16 @@ theorem reject_refines (s : MachineState) (fuel : ℕ)
 theorem indexPhase_parts : indexPhase = indexPrefix ++ ([.ECALL] ++ (mainBlock ++ chainSetup)) := by
   simp only [indexPhase, mainBlock, lanes, lanesUpTo, chainSetup, List.append_assoc]
 
-theorem indexPhase_length : indexPhase.length = 33 := by decide
+theorem indexPhase_length : indexPhase.length = 32 := by decide
 
-theorem mainBlock_length : mainBlock.length = 26 := by decide
+theorem mainBlock_length : mainBlock.length = 25 := by decide
 
 section Refine
 
 variable (pk : PublicKey) (m : Message) (view : List Bool)
 
 /-- The index phase: the specified first query, then the continuation from `afterIndex` on every
-answer, at 33 cycles plus the continuation. The checksum only sets `x5`. -/
+answer, at 32 cycles plus the continuation. The checksum only sets `x5`. -/
 theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (q : BitVec hashBits → OracleComp Spec (Option Bool)) (c : ℕ)
     (located : Riscv.CodeAt (S0 pk m view) (S0 pk m view).pc (indexPhase ++ tail))
@@ -770,7 +765,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     (continuation : ∀ answer,
       ∀ left, rest ≤ left → Riscv.Refines left (afterIndex pk m view answer) (q answer) c) :
     Riscv.Refines fuel (S0 pk m view)
-      (hash (swapHalves (emsg m pk ++ ofBits nonceBits view)) >>= q) (c + 33) := by
+      (hash (swapHalves (emsg m pk ++ ofBits nonceBits view)) >>= q) (c + 32) := by
   rw [indexPhase_length] at bound
   rw [indexPhase_parts] at located
   simp only [List.append_assoc] at located
@@ -778,7 +773,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
   -- the prefix
   have ready := indexPrefix_ready pk m view
   rw [show fuel = indexPrefix.length + ((fuel - 6) + 1) by rw [indexPrefix_length]; omega,
-    show c + 33 = indexPrefix.length + (1 + (c + 27)) by rw [indexPrefix_length]; omega]
+    show c + 32 = indexPrefix.length + (1 + (c + 26)) by rw [indexPrefix_length]; omega]
   apply Riscv.Refines.linear _ located.append_left ready
   have callLocated : Riscv.CodeAt (afterPrefix pk m view) (afterPrefix pk m view).pc
       ([.ECALL] ++ (mainBlock ++ (chainSetup ++ tail))) := by
@@ -788,7 +783,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [e]
     simpa only [List.append_assoc] using h.code_eq P.code
   have hashed := Riscv.Refines.hash (fuel := fuel - 6) callLocated.head P.x5
-    (prefix_hashValid pk m view) (c := c + 27) (k := q) ?_
+    (prefix_hashValid pk m view) (c := c + 26) (k := q) ?_
   · rw [prefix_hashInput pk m view] at hashed
     dsimp only at hashed
     rw [show blockCost 512 = 1 by decide] at hashed
@@ -799,8 +794,8 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
       (mainBlock ++ (chainSetup ++ tail)) :=
     callLocated.tail.code_eq (by simp [Riscv.writeHash])
   have mReady := mainBlock_ready pk m view answer
-  rw [show fuel - 6 = mainBlock.length + (fuel - 32) by rw [mainBlock_length]; omega,
-    show c + 27 = mainBlock.length + (1 + c) by rw [mainBlock_length]; omega]
+  rw [show fuel - 6 = mainBlock.length + (fuel - 31) by rw [mainBlock_length]; omega,
+    show c + 26 = mainBlock.length + (1 + c) by rw [mainBlock_length]; omega]
   apply Riscv.Refines.linear _ (S4code.append_left) mReady
   -- the chainSetup
   have S5code : Riscv.CodeAt (S5 pk m view answer) (S5 pk m view answer).pc (chainSetup ++ tail) := by
@@ -808,7 +803,7 @@ theorem indexPhase_refines (tail : Code) (rest fuel : ℕ)
     rw [show (S5 pk m view answer).pc = (S4 pk m view answer).pc +
       BitVec.ofNat 64 (4 * mainBlock.length) from Riscv.linear_fold_pc _ _ mReady]
     exact h.code_eq (Riscv.fold_code _ _)
-  rw [show fuel - 32 = chainSetup.length + (fuel - 33) by simp [chainSetup]; omega,
+  rw [show fuel - 31 = chainSetup.length + (fuel - 32) by simp [chainSetup]; omega,
     show 1 + c = chainSetup.length + c by simp only [chainSetup, List.length_cons, List.length_nil]]
   apply Riscv.Refines.linear _ S5code.append_left (setup_ready _)
   exact continuation answer _ (by omega)
