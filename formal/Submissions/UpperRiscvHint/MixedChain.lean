@@ -61,14 +61,14 @@ normal chain. -/
 def remaining (index : RawIdx) (k : Chain) : ℕ := 32-firstAt index k
 
 theorem steps_eq_digit (index : RawIdx) (k : Chain) :
-    remaining index k = chainDigit index.val k + 1 - if k.val < 13 then 1 else 0 := by
+    remaining index k = chainDigit index.val k + 1 - if k.val < 13 ∨ 31 ≤ k.val then 1 else 0 := by
   have h := chainDigit_lt_32 index.val k
   unfold remaining firstAt firstEval
   rw [fixedPositions_val]
   split_ifs <;> omega
 
 theorem lead_pair (q : ℕ) (j : ℕ) (hj : j < 2) :
-    (if 2*q+1+j < 13 then 1 else 0) = lead q := by
+    (if 2*q+1+j < 13 ∨ 31 ≤ 2*q+1+j then 1 else 0) = lead q := by
   unfold lead; split_ifs <;> omega
 
 theorem fineDigit_lt (index : RawIdx) (q : ℕ) (hq : q < 16) :
@@ -126,7 +126,7 @@ theorem hidden_refines (k : Chain) (hidden : 32 ≤ firstAt index k)
     (prep : Prepared index wire pk s x k) :
     Riscv.Refines fuel s
       (runNodes' index (viewPayload wire) (chainNodes k) x (cursor k) >>= K) c := by
-  have cap : k.val < 13 := by
+  have cap : k.val < 13 ∨ 31 ≤ k.val := by
     by_contra h
     have : firstAt index k ≤ 31 := by
       unfold firstAt firstEval; rw [if_neg h]; exact pos_le index k
@@ -153,9 +153,10 @@ theorem hidden_refines (k : Chain) (hidden : 32 ≤ firstAt index k)
       apply (memBits_cast _ _ _ _).mpr
       rw [ofBits_take]
       have hw : graph.len (top k).fin = chainBits k := by rw [graph_len_fin]; exact hb
-      have h32 : k.val ≠ 32 := by omega
       have e : work k = topAddr k := by
-        rw [work_eq' k]; simp [truncOff, topAddr, topOff, cap, h32]
+        rw [work_eq' k]
+        unfold topAddr
+        rw [topOff_cap cap]
       have key : ∀ n, n = chainBits k →
           MemBits s (W (topAddr k)) (ofBits n ((viewPayload wire).drop (cursor k))) := by
         intro n hn

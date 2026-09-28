@@ -62,8 +62,8 @@ end OptimalOTS.RiscvMixedProgram
 /-!
 # The arithmetic of the index check
 
-The four dispatch words sum with exactly three 64-bit wraps. Less four times the free count,
-the sum's residue modulo 255 checks that the digit sum plus the count is 145 modulo 255. Each stored lane holds `base − (4 · dA + 1024 · dB)` (`lane_halfword`).
+The four dispatch words sum with exactly three 64-bit wraps. Adding four times the
+complemented free count (31-c), the sum's residue modulo 255 checks that the digit sum plus the count is 145 modulo 255. Each stored lane holds `base − (4 · dA + 1024 · dB)` (`lane_halfword`).
 -/
 
 namespace OptimalOTS.RiscvMixedProgram
@@ -258,7 +258,7 @@ theorem addressSum_toNat (a : MachineState) (hm : MasksLoaded a)
     decide +kernel
   rw [BitVec.toNat_sub_of_le, eb]
   rw [BitVec.le_def, eb]
-  have en : baseWord 0 = 18445836566619508241 := by decide +kernel
+  have en : baseWord 0 = 18445836566619508210 := by decide +kernel
   rw [en]
   omega
 
@@ -281,12 +281,12 @@ theorem digitSum_pack (answer : BitVec hashBits) :
   unfold digitSum
   exact Finset.sum_congr rfl fun k hk => digit_pack answer (Finset.mem_range.mp hk)
 
-/-- The address sum less four times the free count has residue 1 exactly when the count is the
+/-- The address sum plus four times the complemented count has residue 1 exactly when the count is the
 index's free digit, that is when the digit sum plus the count is 145 modulo 255. -/
 theorem free_remainder_iff (a : MachineState) (hm : MasksLoaded a)
     (answer : BitVec hashBits) (hw : WordsLoaded a answer)
-    (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) (c : ℕ) (hc : c < 64) :
-    (addressSum a 4 - W (4 * c)).toNat % 255 = 1 ↔ freeDigit (pack answer) = c := by
+    (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) (c : ℕ) (hc : c < 32) :
+    (addressSum a 4 + W (4 * (31-c))).toNat % 255 = 1 ↔ freeDigit (pack answer) = c := by
   have congruence := raw_sum_mod a hm answer hw
   have bound : (laneSum a 4).toNat ≤ 4 * 4340410370284600380 := by
     rw [laneSum_toNat a hm 4 le_rfl]
@@ -305,12 +305,12 @@ theorem free_remainder_iff (a : MachineState) (hm : MasksLoaded a)
         omega
       _ = 480 := by norm_num
   have hs := addressSum_toNat a hm hb
-  have en : baseWord 0 = 18445836566619508241 := by decide +kernel
+  have en : baseWord 0 = 18445836566619508210 := by decide +kernel
   rw [en] at hs
-  have hc' : (W (4 * c)).toNat = 4 * c := W_toNat _ (by omega)
-  have hle : W (4 * c) ≤ addressSum a 4 := by
-    rw [BitVec.le_def, hc', hs]; omega
-  rw [BitVec.toNat_sub_of_le hle, hc', hs, freeDigit, digitSum_pack]
+  have hc' : (W (4 * (31-c))).toNat = 4 * (31-c) := W_toNat _ (by omega)
+  rw [BitVec.toNat_add, hc', hs, Nat.mod_eq_of_lt (show
+    4 * 18445836566619508210 - 3 * 2 ^ 64 - (laneSum a 4).toNat + 4 * (31-c) < 2^64 by omega),
+    freeDigit, digitSum_pack]
   omega
 
 end OptimalOTS.RiscvMixedProgram

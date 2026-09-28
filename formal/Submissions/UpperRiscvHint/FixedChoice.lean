@@ -85,9 +85,9 @@ theorem fixedPositions_val (i : RawIdx) (k : Chain) :
   simp [fixedPositions, fixedDigits, Fin.val_rev]
 
 theorem fixedPositions_sum (i : Idx) :
-    ∑ k, (32 - firstEval k (fixedPositions i k)) = target + 20 := by
+    ∑ k, (32 - firstEval k (fixedPositions i k)) = target + 18 := by
   have : ∑ k : Chain, (32 - firstEval k (fixedPositions i k)) =
-      ∑ k : Chain, ((fixedDigits i k).val + if k.val < 13 then 0 else 1) := by
+      ∑ k : Chain, ((fixedDigits i k).val + if k.val < 13 ∨ 31 ≤ k.val then 0 else 1) := by
     refine Finset.sum_congr rfl fun k _ => ?_
     simp only [firstEval, fixedPositions, Fin.val_rev]
     have := (fixedDigits i k).isLt
@@ -112,11 +112,11 @@ theorem fixedCut_injective : Function.Injective (fun i : Idx => cutOf (fixedChoi
 
 theorem fixedCut_isCut (i : RawIdx) : IsCut (cutOf (fixedChoice i)) := isCut_cutOf _
 
-/-- Every disclosure set costs `target + 20 + 14 = 179` compressions to reconstruct. -/
+/-- Every disclosure set costs `target + 18 + 14 = 177` compressions to reconstruct. -/
 theorem fixedCut_cost (i : Idx) :
-    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 179 := by
+    ∑ n ∈ evaluatedSet (cutOf (fixedChoice i)), n.cost = 177 := by
   rw [cost_cutOf]
-  change ∑ k, (32 - firstEval k (fixedPositions i k)) + 14 = 179
+  change ∑ k, (32 - firstEval k (fixedPositions i k)) + 14 = 177
   rw [fixedPositions_sum]
   rfl
 

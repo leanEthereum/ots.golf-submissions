@@ -8,7 +8,7 @@ namespace OptimalOTS.CappedCost
 
 /-- Per-pair cycles besides one hash per digit unit: the length setup before pair 6, the prologue,
 the pointer move, and the extra hash of each normal chain. -/
-def overhead (q : ℕ) : ℕ := (if q < 6 then 6 else 8) + if q = 6 then 1 else 0
+def overhead (q : ℕ) : ℕ := (if q < 6 ∨ 15 ≤ q then 6 else 8) + if q = 6 then 1 else 0
 
 def rejectCost (q : ℕ) : ℕ := 8 + if q = 6 then 1 else 0
 
@@ -32,10 +32,10 @@ theorem cost_le (w : ℕ → ℕ) : ∀ n q, cost w n q ≤ 33 * n + 20 := by
     · unfold rejectCost; split_ifs <;> omega
 
 set_option maxHeartbeats 2000000 in
-/-- When all sixteen pairs pass, the pairs, the root and the decision cost 137 cycles besides the
+/-- When all sixteen pairs pass, the pairs, the root and the decision cost 135 cycles besides the
 digit sum. -/
 theorem cost_allowed (w : ℕ → ℕ) (hw : ∀ q < 16, w q ≤ PairCode.cap q) :
-    cost w 16 0 = 137 + ∑ q ∈ Finset.range 16, w q := by
+    cost w 16 0 = 135 + ∑ q ∈ Finset.range 16, w q := by
   have h0 := hw 0 (by omega); have h1 := hw 1 (by omega); have h2 := hw 2 (by omega)
   have h3 := hw 3 (by omega); have h4 := hw 4 (by omega); have h5 := hw 5 (by omega)
   have h6 := hw 6 (by omega); have h7 := hw 7 (by omega); have h8 := hw 8 (by omega)
@@ -86,10 +86,10 @@ theorem stagedCost_le (index : RawIdx) : stagedCost index 16 0 ≤ 548 := by
   rw [stagedCost_eq index 16 0 (by decide)]
   exact CappedCost.cost_le _ 16 0
 
-/-- When every pair passes, the pairs, the root and the decision cost 137 cycles besides the
+/-- When every pair passes, the pairs, the root and the decision cost 135 cycles besides the
 digit sum. -/
 theorem stagedCost_allowed (index : RawIdx) (caps : ∀ q : Fin 16, PairAllowed index.val q) :
-    stagedCost index 16 0 = 137 + digitSum index.val := by
+    stagedCost index 16 0 = 135 + digitSum index.val := by
   rw [stagedCost_eq index 16 0 (by decide), CappedCost.cost_allowed]
   · unfold digitSum
     have h := sum_digit_pairs (digit index.val) 16
@@ -190,7 +190,7 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 /-! ## The free row -/
 
 theorem front_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier) :
-    Riscv.CodeAt s (W (4096 + 4*34)) (freeDispatch ++ (freeRow ++ (prologue 0 ++ tables))) := by
+    Riscv.CodeAt s (W (4096 + 4*33)) (freeDispatch ++ (freeRow ++ (prologue 0 ++ tables))) := by
   have g : Riscv.CodeAt s (W 4096)
       (indexPhase ++ (freeDispatch ++ (freeRow ++ (prologue 0 ++ tables)))) := by
     simpa only [verifier, List.append_assoc] using global
@@ -200,23 +200,23 @@ theorem front_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verif
 /-- The cells reached for free count `c`, followed by pair 0's prologue. -/
 theorem freeLanding_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
     (c : ℕ) (hc : c ≤ 63) :
-    Riscv.CodeAt s (W (freeLanding - 4*c)) (freeRow.drop (63 - c) ++ (prologue 0 ++ tables)) := by
+    Riscv.CodeAt s (W (freeLanding - 4*c)) (freeRow.drop (64 - c) ++ (prologue 0 ++ tables)) := by
   have h := (front_located s global).append_right
   rw [show (freeDispatch.length) = 4 from rfl, W_add] at h
-  have h' := CodeAt.drop h (63 - c)
-  rw [List.drop_append_of_le_length (by simp only [freeRow, List.length_map, List.length_range]; omega),
+  have h' := CodeAt.drop h (64 - c)
+  rw [List.drop_append_of_le_length (by simp only [freeRow, List.length_append, List.length_cons, List.length_nil, List.length_map, List.length_range]; omega),
     W_add] at h'
-  have e : 4096 + 4*34 + 4*4 + 4*(63 - c) = freeLanding - 4*c := by unfold freeLanding; omega
+  have e : 4096 + 4*33 + 4*4 + 4*(64 - c) = freeLanding - 4*c := by unfold freeLanding; omega
   rwa [e] at h'
 
 set_option maxRecDepth 100000 in
 theorem freeRow_hashes : ∀ c : Fin 16,
-    freeRow.drop (63 - c.val) = List.replicate c.val Instr.ECALL := by
+    freeRow.drop (64 - c.val) = List.replicate c.val Instr.ECALL := by
   decide +kernel
 
 set_option maxRecDepth 100000 in
 theorem free_reject_facts : ∀ c : Fin 64, 16 ≤ c.val →
-    freeRow.drop (63 - c.val) = rejectJump (101 - c.val) :: freeRow.drop (64 - c.val) ∧
+    freeRow.drop (64 - c.val) = rejectJump (101 - c.val) :: freeRow.drop (65 - c.val) ∧
     stubFor (101 - c.val) ∈ rejectStubs ∧
     Riscv.admittedInstruction (rejectJump (101 - c.val)) = true ∧
     W (freeLanding - 4*c.val) +
@@ -267,20 +267,13 @@ theorem Ctx.free {s t : MachineState} {index : RawIdx} {view : List Bool} {pk : 
     · have := outAddr_inj (by omega) (by omega) h; omega
   · rw [regs .x1 (by simp)]; exact ctx.base
 
-theorem free_target (c : ℕ) (hc : c < 64) :
-    (W freeBase - W (4*c) + signExtend12 (imm12 ((freeLanding : ℤ) - freeBase))) &&& ~~~(1#64) =
+theorem free_target (c : ℕ) (hc : c < 32) :
+    (W freeBase + W (4*(31-c)) + signExtend12 (imm12 ((freeLanding : ℤ) - freeBase - 124))) &&& ~~~(1#64) =
       W (freeLanding - 4*c) := by
-  have hb : (W freeBase).toNat = 6144 := by decide
-  have hcn : (W (4*c)).toNat = 4*c := W_toNat _ (by omega)
-  have hd : (W (freeBase - 4*c)).toNat = 6144 - 4*c := by
-    rw [W_toNat _ (by unfold freeBase; omega)]; rfl
-  have hsub : W freeBase - W (4*c) = W (freeBase - 4*c) := by
-    apply BitVec.eq_of_toNat_eq
-    rw [BitVec.toNat_sub_of_le (by rw [BitVec.le_def, hcn, hb]; omega), hcn, hb, hd]
-  rw [hsub, W_add_imm _ _ (by unfold freeLanding freeBase; omega)
+  rw [W_add, W_add_imm _ _ (by unfold freeLanding freeBase; omega)
     (by unfold freeLanding freeBase; omega) (by unfold freeLanding freeBase; omega)
     (by unfold freeBase; omega)]
-  have e : (((freeBase - 4*c : ℕ) : ℤ) + ((freeLanding : ℤ) - freeBase)).toNat =
+  have e : (((freeBase + 4*(31-c) : ℕ) : ℤ) + ((freeLanding : ℤ) - freeBase - 124)).toNat =
       freeLanding - 4*c := by unfold freeLanding freeBase; omega
   rw [e]
   apply and_not_one_of_even
@@ -289,9 +282,9 @@ theorem free_target (c : ℕ) (hc : c < 64) :
 
 /-- The free dispatch points at the free chain and jumps `c` cells before pair 0's prologue,
 without a hash or a trap. -/
-theorem freeDispatch_refines (s : MachineState) (tail : Code) (c : ℕ) (hc : c < 64)
+theorem freeDispatch_refines (s : MachineState) (tail : Code) (c : ℕ) (hc : c < 32)
     (x10 : s.getReg .x10 = W hashBase) (x1 : s.getReg .x1 = W freeBase)
-    (x6 : s.getReg .x6 = W (4*c))
+    (x6 : s.getReg .x6 = W (4*(31-c)))
     (located : Riscv.CodeAt s s.pc (freeDispatch ++ tail))
     (Q : OracleComp Spec (Option Bool)) (cost fuel : ℕ) (hf : 4 ≤ fuel)
     (continuation : ∀ t : MachineState, t.pc = W (freeLanding - 4*c) →
@@ -299,8 +292,8 @@ theorem freeDispatch_refines (s : MachineState) (tail : Code) (c : ℕ) (hc : c 
       (∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → t.getReg r = s.getReg r) →
       t.mem = s.mem → t.code = s.code → Riscv.Refines (fuel - 4) t Q cost) :
     Riscv.Refines fuel s Q (4 + cost) := by
-  let lin : Code := enter 0 hashBase ++ [.SUB .x28 .x1 .x6]
-  let jump : Instr := .JALR .x0 .x28 (imm12 ((freeLanding : ℤ) - freeBase))
+  let lin : Code := enter 0 hashBase ++ [.ADD .x28 .x1 .x6]
+  let jump : Instr := .JALR .x0 .x28 (imm12 ((freeLanding : ℤ) - freeBase - 124))
   have code : Riscv.CodeAt s s.pc (lin ++ ([jump] ++ tail)) := by
     simpa only [freeDispatch, lin, jump, List.append_assoc, List.cons_append, List.nil_append]
       using located
@@ -311,7 +304,7 @@ theorem freeDispatch_refines (s : MachineState) (tail : Code) (c : ℕ) (hc : c 
       Riscv.memoryReady])
   set u := lin.foldl execInstrBr s with hu
   set a := (enter 0 hashBase).foldl execInstrBr s with ha
-  have ua : u = execInstrBr a (.SUB .x28 .x1 .x6) := by
+  have ua : u = execInstrBr a (.ADD .x28 .x1 .x6) := by
     rw [hu, List.foldl_append]; rfl
   have upc : u.pc = s.pc + BitVec.ofNat 64 (4 * lin.length) := Riscv.linear_fold_pc s _ ready
   have ucode : u.code = s.code := Riscv.fold_code s _
@@ -327,12 +320,12 @@ theorem freeDispatch_refines (s : MachineState) (tail : Code) (c : ℕ) (hc : c 
   have u12 : u.getReg .x12 = W (outAddr 0) := by
     rw [ua]; simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
     simp [E.out]
-  have u28 : u.getReg .x28 = W freeBase - W (4*c) := by
+  have u28 : u.getReg .x28 = W freeBase + W (4*(31-c)) := by
     rw [ua]; simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
     simp [E.regs .x1 (by decide) (by decide), E.regs .x6 (by decide) (by decide), x1, x6]
   have uloc : Riscv.CodeAt u u.pc ([jump] ++ tail) := by
     rw [upc]; exact code.append_right.code_eq ucode
-  have transition := jalr_transition u (imm12 ((freeLanding : ℤ) - freeBase)) uloc.head
+  have transition := jalr_transition u (imm12 ((freeLanding : ℤ) - freeBase - 124)) uloc.head
   rw [u28, free_target c hc] at transition
   let t := u.setPC (W (freeLanding - 4*c))
   have cont := continuation t rfl u10 u12 uregs umem ucode
@@ -392,7 +385,7 @@ theorem freeDecision_rejects (index : RawIdx) (payload : List Bool) (pk : Public
 theorem remaining_free (index : RawIdx) (c : ℕ) (hc : c < 16) (rank : freeDigit index.val = c) :
     remaining index 0 = c := by
   rw [steps_eq_digit]
-  simp only [chainDigit, Fin.val_zero, if_true, show (0 : ℕ) < 13 by omega]
+  simp only [chainDigit, Fin.val_zero, if_true, show (0 : ℕ) < 13 by omega, true_or]
   omega
 
 /-- On an admitted residue the free row hashes the free chain, and the pairs follow. -/

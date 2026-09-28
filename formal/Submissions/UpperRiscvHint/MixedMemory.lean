@@ -65,7 +65,7 @@ theorem Completed.writeHash {s : MachineState} {tops : (k : Chain) → BitVec (t
   have bj := output_bounds j
   have hn : topBits j % 8 = 0 := by unfold topBits; split_ifs <;> decide
   have hl := topBits_le j
-  have ht : topOff j ≤ 64 := by unfold topOff; split_ifs <;> decide
+  have ht : topOff j ≤ 112 := by unfold topOff; split_ifs <;> decide
   apply writeHash_preserves s y (topAddr j) (outAddr k) (topBits j) _ (hp j hj)
     ho bo.2.2 hn (by unfold topAddr; omega) (by omega)
   exact completed_disjoint j k hj
