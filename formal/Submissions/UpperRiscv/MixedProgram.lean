@@ -1,6 +1,6 @@
 import Submissions.UpperRiscv.Program
 
-/-! The 345-cycle image: a free first chain whose hash count is the signature's count byte, then
+/-! The 344-cycle image: a free first chain whose hash count is encoded in the count byte, then
 sixteen dispatched pairs, whose final chain is a cap (no extra hash), and the root.
 
 Chains are numbered by execution position `k < 33`. Chain `k` reads its signature value at
@@ -74,11 +74,10 @@ def freeImm : ℤ := (4096 + 4*prologue0At : ℤ) - boundWord
 
 /-! ## The index phase -/
 
-/-- The bound `5465` in `x1`, and four times the count byte in `x29`. -/
+/-- The bound `5465` in `x1`, and the already scaled count tag in `x29`. -/
 def countLoad : Code :=
   [.LD .x1 .x12 (BitVec.ofNat 12 72),
-   .LBU .x29 .x10 (imm12 ((payloadAddr + 666 : ℤ) - hashBase)),
-   .SLLI .x29 .x29 2]
+   .LBU .x29 .x10 (imm12 ((payloadAddr + 666 : ℤ) - hashBase))]
 def loadWords : Code :=
   [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
    .LD .x25 .x12 40, .LD .x2 .x12 56,
@@ -89,7 +88,8 @@ def laneWord (g : ℕ) : Code :=
   [.AND dst (wordReg g) (maskReg g), .SUB dst (baseReg g) dst] ++
     (if g = 0 then [] else [.ADD .x27 .x27 .x26]) ++
     [.SD .x10 dst (imm12 ((laneWordAddr g : ℤ) - hashBase))]
-def sumCheck : Code := [.SUB .x27 .x27 .x29, .REMU .x27 .x27 .x2, .BEQ .x27 .x0 16] ++ reject
+def sumCheck : Code :=
+  [.SUB .x27 .x27 .x29, .REMU .x27 .x27 .x2, .BEQ .x27 .x0 20, .ADDI .x0 .x0 0] ++ reject
 def indexPhase : Code :=
   indexPrefix ++ [.ECALL] ++ countLoad ++ loadWords ++
     (List.range 4).flatMap laneWord ++ sumCheck ++ [.ADDI .x11 .x0 144]
@@ -161,7 +161,7 @@ def verifier : Code := indexPhase ++ freePrologue ++ freeTable ++ prologue 0 ++ 
 def firstMask : ℕ := broadcast 0x3c3c
 def dataImage : List (BitVec 8) :=
   List.replicate 32 0 ++ wordBytes firstMask ++ wordBytes (broadcast 0x3c3c) ++
-    wordBytes (broadcast 0x1fc) ++ wordBytes 255 ++ wordBytes 0 ++ wordBytes boundWord ++
+    wordBytes (broadcast 0x1fc) ++ wordBytes 1020 ++ wordBytes 0 ++ wordBytes boundWord ++
     wordBytes (baseWord 0)
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 

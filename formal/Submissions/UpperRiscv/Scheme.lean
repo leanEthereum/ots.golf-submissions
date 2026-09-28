@@ -29,7 +29,7 @@ def setsName (i : Idx) : Finset Name := cutOf (fixedChoice i)
 theorem setsName_injective : Function.Injective setsName := fixedCut_injective
 
 /-- The free digit of an index as eight bits, least significant first. -/
-def freeTag (i : Idx) : List Bool := toBits (BitVec.ofNat 8 (freeDigit i.val))
+def freeTag (i : Idx) : List Bool := toBits (BitVec.ofNat 8 (4 * freeDigit i.val))
 
 theorem length_freeTag (i : Idx) : (freeTag i).length = 8 := by
   simp [freeTag, toBits]

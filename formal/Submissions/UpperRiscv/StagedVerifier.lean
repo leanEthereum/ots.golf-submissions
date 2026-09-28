@@ -4,8 +4,8 @@ import Submissions.UpperRiscv.RejectAdapter
 /-!
 # The verifier with dispatch-time rejection, for every signature length
 
-The machine reads the count byte `v` (signature bits 5456–5463) and rejects unless the 32 index
-digits and `v` sum to 146 modulo 255. It hashes the free chain once, rejects `v ≥ 16`, finishes
+The machine reads the tag `4*v` (signature bits 5456–5463) and rejects a misaligned tag.
+It also rejects unless the 32 index digits and the decoded `v` sum to 146 modulo 255. It hashes the free chain once, rejects `v ≥ 16`, finishes
 the free chain with `v` as its digit, and then runs the sixteen pairs; an expanding left chain is
 hashed once before its pair's cap is tested. Every signature runs through the whole verifier: the
 chains read the signature padded with zeros to 5504 bits (`padded`), and the root query is the
@@ -46,8 +46,8 @@ theorem length_padded (bits : List Bool) : (padded bits).length = 5504 := by
   simp only [List.length_append, List.length_take, List.length_replicate]
   omega
 
-/-- The count byte: the free digit as the machine loads it. -/
-def countByte (bits : List Bool) : ℕ := (ofBits 8 ((padded bits).drop 5456)).toNat
+/-- The decoded free count; a misaligned tag gives the rejecting sentinel 255. -/
+def countByte (bits : List Bool) : ℕ := decodeCount (ofBits 8 ((padded bits).drop 5456)).toNat
 
 /-- The loaded signature suffix retained as an argument of the staged interface. -/
 def sigTail (bits : List Bool) : BitVec 48 := ofBits 48 ((padded bits).drop 5456)
@@ -243,7 +243,7 @@ def stagedVerify (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp 
   let index : RawIdx := ⟨pack answer, pack_lt answer⟩
   let v := countByte bits
   let payload := Payload.permute ((padded bits).drop 128)
-  if (digitSum index.val + v) % 255 = 146 then do
+  if v < 64 ∧ (digitSum index.val + v) % 255 = 146 then do
     let r ← runNodes' index v payload (entryNodes index v 0) (fun _ => 0) 0
     if v < 16 then do
       let r' ← runNodes' index v payload (tableNodes index v 0) r.1 r.2
@@ -395,7 +395,7 @@ def stagedChains (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKe
 theorem stagedVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     stagedVerify pk m bits = (do
       let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits (bits.take 128)))
-      if (digitSum (pack answer) + countByte bits) % 255 = 146 then
+      if countByte bits < 64 ∧ (digitSum (pack answer) + countByte bits) % 255 = 146 then
         stagedChains ⟨pack answer, pack_lt answer⟩ (countByte bits)
           (Payload.permute ((padded bits).drop 128)) pk (min bits.length 5505) (sigTail bits)
       else pure false) := rfl
@@ -583,7 +583,8 @@ theorem freeTag_iff {bits : List Bool} (h : bits.length = 5464) (i : Idx) :
     bits.drop 5456 = freeTag i ↔ countByte bits = freeDigit i.val := by
   have hl : (bits.drop 5456).length = 8 := by simp [h]
   unfold countByte
-  rw [countByte_of_length h]
+  rw [countByte_of_length h, decodeCount_eq_iff (ofBits 8 (bits.drop 5456)).isLt
+    (by have := freeDigit_lt i; omega)]
   constructor
   · intro e
     rw [e, freeTag, ofBits_toBits, BitVec.toNat_ofNat]
@@ -706,7 +707,7 @@ theorem directVerify_prunes_stagedVerify (pk : PublicKey) (m : Message) (bits : 
     · have hc : countByte bits = freeDigit (pack answer) :=
         (freeTag_iff hlen ⟨pack answer, hi⟩).mp htag
       have hv : countByte bits < 16 := hc ▸ freeDigit_lt ⟨pack answer, hi⟩
-      rw [if_pos ⟨hlen, htag⟩, if_pos ((count_iff_free _ acc hv).mpr hc), hc]
+      rw [if_pos ⟨hlen, htag⟩, if_pos (⟨by omega, (count_iff_free _ acc hv).mpr hc⟩), hc]
       have he := stagedChains_eq_direct (⟨pack answer, hi⟩ : Idx)
         (Payload.permute ((padded bits).drop 128)) pk (sigTail bits)
       dsimp only [Idx.toRaw] at he
@@ -732,7 +733,7 @@ theorem directVerify_prunes_stagedVerify (pk : PublicKey) (m : Message) (bits : 
         apply stagedChains_rejects
         left
         intro hv
-        exact htag ((freeTag_iff hlen ⟨pack answer, hi⟩).mpr ((count_iff_free _ acc hv).mp guard))
+        exact htag ((freeTag_iff hlen ⟨pack answer, hi⟩).mpr ((count_iff_free _ acc hv).mp guard.2))
       · exact RejectAdapter.Prunes.refl _
   · rw [dif_neg hi]
     split_ifs with guard
@@ -742,7 +743,7 @@ theorem directVerify_prunes_stagedVerify (pk : PublicKey) (m : Message) (bits : 
       push Not at hgood
       obtain ⟨hv16, caps⟩ := hgood
       exact hi (mem_validSet.mpr ⟨pack_lt answer,
-        (staged_accepted _ _ guard hv16 fun q => caps q.val q.isLt).1⟩)
+        (staged_accepted _ _ guard.2 hv16 fun q => caps q.val q.isLt).1⟩)
     · exact RejectAdapter.Prunes.refl _
 
 /-- The verifier of the security proof: strict on full-length signatures, the machine's program

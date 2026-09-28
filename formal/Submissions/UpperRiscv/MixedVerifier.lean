@@ -19,7 +19,7 @@ theorem index_take (bits : List Bool) : ofBits 128 (bits.take 128) = ofBits 128 
 theorem image_code : image.code = verifier := rfl
 
 /-- The certified cycle bound on every execution. -/
-def cycleBound : ℕ := 345
+def cycleBound : ℕ := 344
 
 /-- A slice inside the first 5504 bits reads the same from the loaded, zero-extended signature. -/
 theorem padded_drop (bits : List Bool) (off n : ℕ) (h : off + n ≤ 5504) :
@@ -32,14 +32,15 @@ theorem padded_drop (bits : List Bool) (off n : ℕ) (h : off + n ≤ 5504) :
   split_ifs <;> first | rfl | omega | (rw [List.getElem?_eq_none (by omega)]; rfl) | simp_all
 
 theorem countByte_eq (bits : List Bool) : countByte bits = rawCountByte bits := by
-  unfold countByte rawCountByte
+  unfold countByte rawCountByte rawCountTag
   rw [padded_drop bits 5456 8 (by norm_num)]
 
 theorem initial_chains (pk : PublicKey) (m : Message) (bits : List Bool) (answer : BitVec hashBits)
-    (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier) :
+    (located : Riscv.CodeAt (S0 pk m bits) (W 4096) verifier)
+    (check : CountCheck (pack answer) (rawCountByte bits)) :
     ChainsInv (rawIdx answer) (rawCountByte bits) ((padded bits).drop 128) pk
       (min bits.length 5505) (afterIndex pk m bits answer) (fun _ => 0) 0 := by
-  refine ⟨afterIndex_ctx pk m bits answer located,
+  refine ⟨afterIndex_ctx pk m bits answer located check,
     (afterIndex_setupRegs pk m bits answer).2, ?_, (afterIndex_setupRegs pk m bits answer).1,
     ?_, ?_, ?_⟩
   · intro h; omega
@@ -72,14 +73,14 @@ theorem stagedVerify_unfold (pk : PublicKey) (m : Message) (bits : List Bool) :
   have htail : sigTail bits = ofBits 48 (((padded bits).drop 128).drop 5328) := by
     unfold sigTail; rw [List.drop_drop]
   by_cases hc : CountCheck (pack answer) (countByte bits)
-  · have hc' : (digitSum (pack answer) + countByte bits) % 255 = 146 := hc
+  · have hc' : countByte bits < 64 ∧ (digitSum (pack answer) + countByte bits) % 255 = 146 := hc
     rw [if_pos hc', if_pos hc]
     unfold stagedChains
     rw [htail, map_bind]
     refine bind_congr (fun r => ?_)
     split_ifs <;> simp only [map_bind, map_pure]
     rfl
-  · have hc' : ¬ (digitSum (pack answer) + countByte bits) % 255 = 146 := hc
+  · have hc' : ¬ (countByte bits < 64 ∧ (digitSum (pack answer) + countByte bits) % 255 = 146) := hc
     rw [if_neg hc', if_neg hc, map_pure]
 
 /-- Every accepted and rejected execution follows the staged verifier's exact oracle trace. -/
@@ -97,7 +98,7 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   have e : verifier = indexPhase ++ (freePrologue ++ freeTable ++ prologue 0 ++ tables) := by
     simp only [verifier, List.append_assoc]
   rw [e] at located
-  rw [stagedVerify_unfold, show cycleBound = 310 + 35 from rfl]
+  rw [stagedVerify_unfold, show cycleBound = 310 + 34 from rfl]
   have hwire : 5328 ≤ ((padded bits).drop 128).length := by
     rw [List.length_drop, length_padded]; norm_num
   apply indexPhase_refines pk m bits _ 1299 1337 _ 310 (by norm_num) located
@@ -105,10 +106,10 @@ theorem image_refines (pk : PublicKey) (m : Message) (bits : List Bool) :
   intro answer check left hleft
   set v := rawCountByte bits
   have hv256 : v < 256 := countByte_lt bits
-  have inv := initial_chains pk m bits answer global
+  have inv := initial_chains pk m bits answer global check
   have pc := afterIndex_pc pk m bits answer
   have small : v < 16 → 6 + v + stagedCost (rawIdx answer) v 16 0 ≤ 310 :=
-    fun hs => stagedCost_le (rawIdx answer) v hs check
+    fun hs => stagedCost_le (rawIdx answer) v hs check.2
   have run := free_refines (rawIdx answer) v ((padded bits).drop 128) pk hv256
     (fun r' => some <$> stagedBlocks (rawIdx answer) v (Payload.permute ((padded bits).drop 128)) pk
       (min bits.length 5505) (ofBits 48 (((padded bits).drop 128).drop 5328)) 16 0 r'.1 r'.2)

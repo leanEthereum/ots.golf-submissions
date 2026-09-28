@@ -1,3 +1,53 @@
+# Scaled count tag: 344-cycle candidate
+
+This extends commit `6de891a01f28562351bc1359c6b22a91a70a7e9a` (345 cycles).
+The final signature byte now stores `4*v`. The machine loads this value directly,
+saving the shift formerly used to form the free-chain jump displacement.
+
+The checksum modulus changes from 255 to 1020. Every address-lane contribution
+is divisible by four, so a passing checksum also proves that the tag is aligned.
+For aligned tags the test is exactly `S + v = 146 (mod 255)`. Misaligned tags
+reject before the free-chain hash. Decoded counts 16 through 63 reach the
+existing rejection table. A sentinel count 255 represents a malformed tag in
+the high-level verifier, and its explicit `< 64` guard rejects it.
+
+The digit language, state widths, availability count, nonce and signature size
+are unchanged. The new tag is injective on honest counts. The security proof
+and the exact oracle-trace refinement have been rebuilt for this encoding.
+The removed shift is replaced by padding on the checksum's rejecting branch,
+so subsequent code addresses and the image size remain unchanged.
+
+Accounting: 34 index cycles plus at most 310 continuation cycles. A full-length
+acceptance uses 192 hash compressions and 152 ordinary instructions. The
+signature is 5464 bits; the image is 62,552 bytes.
+
+Validation:
+
+- Full Lean 4.33.1 certificate build passes.
+- The actual Lean-exported image passes 16,480 independent byte-memory
+  executions with exact ordered oracle-transcript and decision agreement.
+  These include all 4096 pair landings, all 256 tags, 256 checksum aliases,
+  5511 raw bit lengths, every signature-bit flip, key/message-bit flips and
+  random inputs. Maximum observed: 344 cycles.
+- Exact challenge-statement and primitive comparison, permitted-axiom check,
+  and fresh kernel replay of all 22,253 declarations pass. The standalone
+  replay check took 188.476 seconds end to end, with sampled peak PSS about
+  8.02 GB. The only proof axioms are `propext`, `Quot.sound`, `Classical.choice`.
+- Source policy passes against contract
+  `8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c`.
+- The official runner fails closed before compilation because this host has no
+  enabled Landlock. The development checks are not a hosted verdict.
+
+Research: a modulo-257 alternating-digit checksum was screened with exact
+counts. At target 145 the best screened ten-pair cap configuration reaches
+only 0.990145 of the existing availability threshold, so it is not used.
+A larger improvement will need fewer machine instructions, a different
+accepted language with a security proof, or a better buffer arrangement.
+
+Historical notes follow, with their original parameters and validation.
+
+---
+
 # Descending chain buffers: 345-cycle candidate
 
 This extends the 346-cycle non-hinted source in the submissions repository
