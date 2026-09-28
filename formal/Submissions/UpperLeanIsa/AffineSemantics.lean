@@ -123,7 +123,7 @@ end Normal
 
 /-- The preceding XOR forces the new fp to contain the actual destination. -/
 theorem hint_frame (T : Tab) (v : ℕ → E) {f : ℕ} (hf : f < 14) (s : AffineFrames.Slot)
-    (hHint : v (h1Cell f) = v (hCell f) + ofK (base T ^ (stageIndex f+1)))
+    (hHint : v (h1Cell f) = v (hCell f) + ofK (base T ^ AffineFrames.stageExponent (stageIndex f)))
     (hTarget : (v (hCell f)).limb 0 = gpow s.val) :
     (v (h1Cell f)).limb 0 =
       AffineFrames.frame (layout T) ⟨stageIndex f,stageIndex_lt hf⟩ s := by

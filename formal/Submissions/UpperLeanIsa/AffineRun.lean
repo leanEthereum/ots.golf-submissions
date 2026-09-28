@@ -13,7 +13,7 @@ set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
 def incomingFrame (T : Tab) (f : ℕ) (target : K) : K :=
-  base T ^ (stageIndex f+1) + target
+  base T ^ AffineFrames.stageExponent (stageIndex f) + target
 
 theorem finalPc_eq (T : Tab) : (program T).finalPc = gpow sentinel := by
   show gpow (2 ^ 18 - 1) = gpow 262143
@@ -51,7 +51,7 @@ theorem runCost_nonentry {κ : ℕ} (hκ : κ ≤ 32) (M : MemImage κ) (T : Tab
     have ht : target = gpow sentinel := h.1.trans (finalPc_eq T)
     have hn := AffineFrames.frame_halt_ne_one (layout T) ⟨stageIndex f,stageIndex_lt hf⟩
     apply hn
-    simpa only [incomingFrame,ht,AffineFrames.frame,base,
+    simpa only [incomingFrame,ht,AffineFrames.frame,AffineFrames.bias,base,
       show 2 ^ 18 - 1 = sentinel by decide] using h.2
   | succ n =>
     rw [LeanIsa.runCost.eq_2]

@@ -132,8 +132,8 @@ theorem sim_of_path {κ : ℕ} {T : Tab} (hT : T.Hyp) (h16 : 16 ≤ κ) (hκ : �
         pure (some (1+lcost (bodyCode T (base T) j (xs j))+c))
       rw [Nat.add_assoc]
   obtain ⟨n,c,hw⟩ := key 14 le_rfl
-  change simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost (program T) M n ⟨gpow 17,1⟩) = pure (some c) at hw
-  have hrun := sim_list T M f 1 (l:=prefixCode T 17) (t:=0)
+  change simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost (program T) M n ⟨gpow 16,1⟩) = pure (some c) at hw
+  have hrun := sim_list T M f 1 (l:=prefixCode T 16) (t:=0)
     (fun i hi s hs => by
       rw [prefixCode_get T hi]
       rw [prefixCode_length] at hi

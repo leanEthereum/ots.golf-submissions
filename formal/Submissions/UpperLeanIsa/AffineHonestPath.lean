@@ -6,7 +6,7 @@ import Submissions.UpperLeanIsa.AffineReplay
 
 Every op of every block on the honest path holds on the loaded honest image (`honest_blk`), so
 the relations along the path of `hxs T I` hold (`honest_path`), and the machine completes in
-`193` instructions at cost `976` (`honest_run`).
+`192` instructions at cost `975` (`honest_run`).
 -/
 
 set_option maxRecDepth 4000
@@ -43,13 +43,12 @@ theorem honest_free : ∀ y ∈ bodyCode T (base T) 0 (XF P T f pk m bits 0), y.
   have hd0 : hd T (y0F P f pk m bits) 0 = XF P T f pk m bits 0 := by
     rw [hd_XF]; unfold dg; rw [if_pos rfl]
   have hseed : (CInstr.setc (gpCell 0)
-      (ofK (AffineFrames.initialProduct (layout T) 77 (XF P T f pk m bits 0)))).Rel f
+      (ofK (seedProduct (base T) (XF P T f pk m bits 0)))).Rel f
         (hv P T f pk m bits) := by
     show hv P T f pk m bits (gpCell 0) = _
     rw [honest_gp (by omega)]
-    unfold gpV
-    rw [Finset.sum_range_zero]
-    rw [pow_zero,mul_one]
+    unfold gpV gpK
+    simp only [Finset.sum_range_zero,Nat.mul_zero,pow_zero,mul_one,div_one]
   intro y hy
   rw [free_bodyCode] at hy
   simp only [List.mem_append,List.mem_cons,List.not_mem_nil,or_false] at hy
@@ -123,38 +122,40 @@ theorem honest_prodOps {u : ℕ} (hu : u < 13) :
     ∀ ci ∈ prodOps T u (XF P T f pk m bits (u + 1)), ci.Rel f (hv P T f pk m bits) := by
   have hc := LengthFrame.cost_shift_le hT hu (XF_lt_W hC hacc hu)
   change chargedCost T u (XF P T f pk m bits (u+1)) ≤ 16 at hc
+  have hstep := gpK_step T (IF P f pk m bits) u
+  have hprod : (prodOp T u (XF P T f pk m bits (u + 1))).Rel f (hv P T f pk m bits) := by
+    unfold prodOp
+    by_cases hcenter : 6 ≤ chargedCost T u (XF P T f pk m bits (u + 1))
+    · rw [if_pos hcenter]
+      have he := hstep
+      rw [CenteredChecksum.Step, if_pos hcenter] at he
+      change hv P T f pk m bits (gpCell (u+1)) =
+        hv P T f pk m bits (gpCell u) *
+          hv P T f pk m bits (cCell (chargedCost T u (XF P T f pk m bits (u+1)) - 6))
+      rw [honest_gp (by omega), honest_gp (by omega), hv_cc (by omega), cV, gpV, gpV, ← ofK_mul]
+      exact congrArg ofK he
+    · rw [if_neg hcenter]
+      have he := hstep
+      rw [CenteredChecksum.Step, if_neg hcenter] at he
+      change hv P T f pk m bits (gpCell u) =
+        hv P T f pk m bits (gpCell (u+1)) *
+          hv P T f pk m bits (cCell (6 - chargedCost T u (XF P T f pk m bits (u+1))))
+      rw [honest_gp (by omega), honest_gp (by omega), hv_cc (by omega), cV, gpV, gpV, ← ofK_mul]
+      exact congrArg ofK he
   intro ci hi
   unfold prodOps at hi
   by_cases he : 14 < chargedCost T u (XF P T f pk m bits (u+1))
   · rw [if_pos he] at hi
-    simp only [List.mem_append,List.mem_singleton] at hi
+    simp only [List.mem_append, List.mem_singleton] at hi
     rcases hi with rfl | rfl
-    · simp only [prodOp, min_eq_left (by omega : 14 ≤ chargedCost T u (XF P T f pk m bits (u+1))),
-        if_pos he, CInstr.RelB]
-      rw [hv_gpTmp hu, honest_gp (by omega), hv_cost_c (by omega), cV]
-      unfold gpTmpV gpV
-      rw [← ofK_mul,pow_add,mul_assoc]
-    · change hv P T f pk m bits (gpCell (u+1)) =
-        hv P T f pk m bits (gpTmp u) * hv P T f pk m bits (cCell (chargedCost T u (XF P T f pk m bits (u+1))-14))
-      rw [honest_gp (by omega),hv_gpTmp hu,hv_cost_c (by omega),cV]
-      unfold gpV gpTmpV
-      rw [← ofK_mul,Finset.sum_range_succ,mul_assoc,← pow_add]
-      have hexp :
-          (∑ w ∈ Finset.range u, chargedCost T w (hxs T (IF P f pk m bits) (w+1))) +
-            chargedCost T u (hxs T (IF P f pk m bits) (u+1)) =
-          ((∑ w ∈ Finset.range u, chargedCost T w (hxs T (IF P f pk m bits) (w+1))) +14) +
-            (chargedCost T u (XF P T f pk m bits (u+1))-14) := by
-        change _ + chargedCost T u (XF P T f pk m bits (u+1)) = _
-        omega
-      rw [hexp]
+    · exact hprod
+    · change hv P T f pk m bits oneCell =
+        hv P T f pk m bits oneCell * hv P T f pk m bits oneCell
+      rw [hv_one, mul_oneV]
   · rw [if_neg he] at hi
-    simp only [List.append_nil,List.mem_singleton] at hi
+    simp only [List.append_nil, List.mem_singleton] at hi
     subst ci
-    simp only [prodOp,min_eq_right (by omega : chargedCost T u (XF P T f pk m bits (u+1)) ≤ 14),
-      if_neg he,CInstr.RelB]
-    rw [honest_gp (by omega),honest_gp (by omega),hv_cost_c (by omega),cV]
-    unfold gpV
-    rw [← ofK_mul,Finset.sum_range_succ,pow_add,mul_assoc]
+    exact hprod
 
 include hT hC hlen hacc in
 /-- **The honest chains of a group block.** -/
@@ -330,11 +331,11 @@ theorem honest_path : PathFacts T (oracleRel f) (hv P T f pk m bits) (XF P T f p
 
 include hT hC hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`193` instructions. -/
+`192` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 193
-        Regs.initial) = pure (some 976) := by
+      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 192
+        Regs.initial) = pure (some 975) := by
   have hV := hxs_valid T _ (hlive hC hacc)
   have hP := honest_path hT hC hlen hacc hroot
   have hL : Landing (hv P T f pk m bits) (XF P T f pk m bits) := fun r hr => hv_h hr

@@ -29,9 +29,9 @@ structure Compat (P : FourFusion.Params) (T : Tab) : Prop where
       P.codec.tag k j 1 = cellBits (cV T ((OFFT k.val+j)/9%9)) ∧
       P.codec.tag k j 2 = cellBits (cV T ((OFFT k.val+j)/81))
   hiTop : ∀ k : Fin numChains, P.codec.hiTop k = decide (k.val ∈ [1,19,25,34,12,16,23,33,8])
-  cv : P.codec.cv = cellBits (gV T) ++ cellBits oneV
+  cv : P.codec.cv = cellBits (cV T 2) ++ cellBits (cV T 1)
   chainMd : P.codec.chainMd = cellBits oneV
-  idxMd : P.codec.idxMd = cellBits (gV T)
+  idxMd : P.codec.idxMd = cellBits (cV T 11)
   fusedMd : ∀ k : Fin 42, P.fusedMd k = AffineCodec.domainWord (layout T) (FourFusion.mdIndex k).val
   fusedTag : ∀ k : Fin 42, P.fusedTag k = AffineCodec.word (layout T) (FourFusion.tagIndex k).val
   rootMd : ∀ r : Fin 1, P.rootMd r = cellBits (cV T (FourFusion.rootIndex r).val)

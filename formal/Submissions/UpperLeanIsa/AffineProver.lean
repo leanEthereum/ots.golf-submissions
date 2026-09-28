@@ -1,4 +1,5 @@
 import Submissions.UpperLeanIsa.AffineSound
+import Submissions.UpperLeanIsa.CenteredChecksum
 
 /-!
 # The honest fused prover
@@ -148,12 +149,27 @@ def loC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 0 128)
 /-- The high cell of an answer. -/
 def hiC (a : BitVec 256) : E := cellOfBits (a.extractLsb' 128 128)
 
-/-- The honest landing product before group `u`. -/
-def gpV (I : Word) (u : ℕ) : E :=
-  ofK (AffineFrames.initialProduct (layout T) 77 (hxs T I 0) *
-    base T ^ (∑ w ∈ Finset.range u, chargedCost T w (hxs T I (w + 1))))
+/-- The centered product in the base field before group `u`. -/
+def gpK (I : Word) (u : ℕ) : K :=
+  seedProduct (base T) (hxs T I 0) *
+    base T ^ (∑ w ∈ Finset.range u, chargedCost T w (hxs T I (w + 1))) /
+    base T ^ (6 * u)
 
-/-- Intermediate product for blocks whose shifted cost needs two multiplications. -/
+/-- The honest landing product before group `u`. -/
+def gpV (I : Word) (u : ℕ) : E := ofK (gpK T I u)
+
+/-- The honest prefix products satisfy the same single centered multiplication. -/
+theorem gpK_step (I : Word) (u : ℕ) :
+    CenteredChecksum.Step (base T) (chargedCost T u (hxs T I (u + 1)))
+      (gpK T I u) (gpK T I (u + 1)) := by
+  have ha : base T ≠ 0 := AffineFrames.safeBase_ne_zero (layout T)
+  apply (CenteredChecksum.step_iff ha _).mpr
+  unfold gpK
+  rw [Finset.sum_range_succ, show 6 * (u + 1) = 6 * u + 6 by omega,
+    pow_add (base T) (6 * u) 6, pow_add]
+  field_simp
+
+/-- An unused compatibility value from the former two-multiplier checksum. -/
 def gpTmpV (I : Word) (u : ℕ) : E :=
   ofK (AffineFrames.initialProduct (layout T) 77 (hxs T I 0) *
     base T ^ ((∑ w ∈ Finset.range u, chargedCost T w (hxs T I (w + 1))) + 14))

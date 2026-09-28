@@ -33,7 +33,7 @@ theorem init_not_body (T : Tab) (u x : ℕ) (z : Bool) : CInstr.init ∉ body T 
   · unfold tie at hi
     split_ifs at hi <;> simp [copy] at hi
   · unfold prodOps prodOp at hi
-    split_ifs at hi <;> simp at hi
+    split_ifs at hi <;> simp [NOP] at hi
   · obtain ⟨i,hi,hseg⟩ := mem_segs.mp hi
     unfold seg at hseg
     split_ifs at hseg
@@ -66,7 +66,7 @@ theorem bodyCode_ne_init (T : Tab) (a : K) (f x : ℕ) :
     exact init_not_body _ _ _ _ hi
 
 def Hint (T : Tab) (v : ℕ → E) (f : ℕ) : Prop :=
-  v (h1Cell f) = v (hCell f) + ofK (base T ^ (stageIndex f+1))
+  v (h1Cell f) = v (hCell f) + ofK (base T ^ AffineFrames.stageExponent (stageIndex f))
 
 theorem run_dispatch {κ : ℕ} (T : Tab) (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel)

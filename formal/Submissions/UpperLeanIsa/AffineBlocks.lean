@@ -13,7 +13,7 @@ set_option backward.isDefEq.respectTransparency.types false
 
 theorem free_bodyCode (T : Tab) (a : K) (x : ℕ) :
     bodyCode T a 0 x =
-      .setc (gpCell 0) (ofK (gpow sentinel / a ^ 77 * a ^ x)) ::
+      .setc (gpCell 0) (ofK (seedProduct a x)) ::
         (chainOps topCell 0 x tfCell ++ [copy (if x = 0 then wCell 0 else tfCell) tfCell,
           .xor (hCell 1) (cCell 1) (h1Cell 1)]) := rfl
 
@@ -127,7 +127,7 @@ theorem execute_nonentry {κ : ℕ} (hκ : κ ≤ 32) (M : MemImage κ) (T : Tab
     (congrArg Fin.val he.1).symm (congrArg Fin.val he.2))
 
 theorem biasCell_bound {c : ℕ} (hc : c < 2 ^ 16) : biasCell (c-h1Cell 0) < 2 ^ 16 := by
-  unfold biasCell cCell h1Cell gCell
+  unfold biasCell cCell h1Cell oneCell
   split_ifs <;> omega
 
 theorem rehint_bounded {ci : CInstr} (h : ci.Bounded) : (rehint ci).Bounded := by
@@ -196,12 +196,18 @@ theorem bodyCode_slot_lt {T : Tab} (hT : T.Hyp) (a : K) {f x i : ℕ}
     unfold gEnd sentinel at *
     omega
 
-def blockFrame (T : Tab) (f x : ℕ) : K := base T ^ (stageIndex f+1) + gpow (ent f x)
+def blockFrame (T : Tab) (f x : ℕ) : K :=
+  base T ^ AffineFrames.stageExponent (stageIndex f) + gpow (ent f x)
 
 theorem blockFrame_ne_zero (T : Tab) {f x : ℕ} (hf : f < 14) (hx : x < Wf f) :
     blockFrame T f x ≠ 0 := by
   have he : ent f x < 2 ^ 18 := by have := ent_lt hf hx; unfold sentinel at this; omega
-  exact AffineFrames.frame_ne_zero (layout T) ⟨stageIndex f,stageIndex_lt hf⟩ ⟨ent f x,he⟩
+  exact AffineFrames.frame_ne_zero (layout T) ⟨stageIndex f,stageIndex_lt hf⟩ ⟨ent f x,he⟩ (by
+    intro hs
+    change stageIndex f = 13 at hs
+    have hf0 : f = 0 := by unfold stageIndex at hs; split_ifs at hs <;> omega
+    subst f
+    simp [ent,entF,baseF])
 
 theorem ctlOf_bounded {f x : ℕ} (hf : f < 14) : (ctlOf f x).Bounded := by
   unfold ctlOf
@@ -262,7 +268,7 @@ theorem instrAt_body {T : Tab} (hT : T.Hyp) {f x i : ℕ}
   have hp : place s.val = .body f x i := by rw [hs]; exact bodyCode_place hT (base T) hf hx hi
   simp only [instrAt,hd,hp]
   have he : AffineFrames.frame (layout T) d.stage d.entry = blockFrame T f x := by
-    simp only [AffineFrames.frame,blockFrame,base,hstage,hentry]
+    simp only [AffineFrames.frame,AffineFrames.bias,blockFrame,base,hstage,hentry]
   rw [he]
 
 end

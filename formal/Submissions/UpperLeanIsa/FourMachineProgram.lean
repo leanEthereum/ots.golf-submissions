@@ -2,7 +2,7 @@ import OptimalOTS.LeanIsa
 import Submissions.UpperLeanIsa.LengthFrame
 import Submissions.UpperLeanIsa.LengthGate128
 
-/-! Packed group bodies and local cell-instruction algebra for the 1096 machine.
+/-! Packed group bodies and local cell-instruction algebra for the centered-checksum machine.
 The active bytecode/compiler is in `AffineProgram`; legacy entry constructors
 remain only as reusable instruction algebra, not as the certified program. -/
 
@@ -53,7 +53,7 @@ def lenCell : ℕ := 3
 /-- The revealed word of chain `k` (signature cell `k`). -/
 def wCell (k : ℕ) : ℕ := 4 + k
 def nonceCell : ℕ := 46
-/-- `ONE`; `(oneCell, oneCell + 1) = (ONE, g)` is the constant cv pair. -/
+/-- The field multiplicative identity. The normal hash CV uses C1/C2. -/
 def oneCell : ℕ := 48
 def gCell : ℕ := 49
 /-- The cost constant / tag symbol `C_c` (`C_0 = ONE`). -/
@@ -329,7 +329,7 @@ def groupRead (T : Tab) (u v k : ℕ) : ℕ :=
 def rootMdCell (_r : ℕ) : ℕ := cCell 4
 
 /-- Step `t` of the `d` steps of chain `k` (the last writes `dst`): position `LEN k − 1 − d + t`,
-tag cells `C` of the base-9 digits of its tag position, cv pair `(ONE, g)`, metadata `ONE`.
+tag cells `C` of the base-9 digits of its tag position, cv pair `(C1, C2)`, metadata `ONE`.
 A binding final step consumes four or five child tops with a separated packet tag. -/
 def chainOp (readTop : ℕ → ℕ) (k d t dst : ℕ) : CInstr :=
   let x := if t = 0 then wCell k else xcCell k (t-1)
@@ -339,7 +339,7 @@ def chainOp (readTop : ℕ → ℕ) (k d t dst : ℕ) : CInstr :=
       (if fiveChildren k then readTop (depTop k 4) else fusedTagCell k)
       (depCv k) out (fusedMdCell k)
   else .blake x (cCell (tpos k d t % 9)) (cCell (tpos k d t / 9 % 9))
-    (cCell (tpos k d t / 81)) oneCell out oneCell
+    (cCell (tpos k d t / 81)) (cCell 1) out oneCell
 
 /-- The `d` steps of chain `k`. -/
 def chainOps (readTop : ℕ → ℕ) (k d dst : ℕ) : List CInstr :=
@@ -415,16 +415,33 @@ def nextOp (u : ℕ) : CInstr :=
 /-- The cost multiplier omits one guaranteed hash in every binding group. -/
 def chargedCost (T : Tab) (u v : ℕ) : ℕ := cost T u v - LengthFrame.deduction u
 
-/-- A private intermediate word for the 845 two-multiplier blocks. -/
+/-- An unused compatibility cell from the former two-multiplier checksum. -/
 def gpTmp (u : ℕ) : ℕ := 220 + u
 
+/-- One centered checksum equation, reversing its direction below cost six. -/
 def prodOp (T : Tab) (u v : ℕ) : CInstr :=
-  .mul (gpCell u) (cCell (min 14 (chargedCost T u v)))
-    (if 14 < chargedCost T u v then gpTmp u else gpCell (u + 1))
+  if 6 ≤ chargedCost T u v then
+    .mul (gpCell u) (cCell (chargedCost T u v - 6)) (gpCell (u + 1))
+  else .mul (gpCell (u + 1)) (cCell (6 - chargedCost T u v)) (gpCell u)
 
+/-- Retain the exact block lengths, padding the former second multiplication. -/
 def prodOps (T : Tab) (u v : ℕ) : List CInstr :=
-  [prodOp T u v] ++ if 14 < chargedCost T u v then
-    [.mul (gpTmp u) (cCell (chargedCost T u v - 14)) (gpCell (u + 1))] else []
+  [prodOp T u v] ++ if 14 < chargedCost T u v then [NOP] else []
+
+theorem prodOp_cost (T : Tab) (u v : ℕ) : (prodOp T u v).cost = 1 := by
+  unfold prodOp; split_ifs <;> rfl
+
+theorem prodOp_straight (T : Tab) (u v : ℕ) : (prodOp T u v).straight = true := by
+  unfold prodOp; split_ifs <;> rfl
+
+theorem prodOp_bounded {T : Tab} {u v : ℕ} (hu : u < 13)
+    (hc : chargedCost T u v ≤ 16) : (prodOp T u v).Bounded := by
+  have hcell : ∀ n ≤ 10, cCell n < 2 ^ 16 := by
+    intro n hn; unfold cCell; split_ifs <;> omega
+  unfold prodOp
+  split_ifs with h
+  · exact ⟨by unfold gpCell; omega, hcell _ (by omega), by unfold gpCell; omega⟩
+  · exact ⟨by unfold gpCell; omega, hcell _ (by omega), by unfold gpCell; omega⟩
 
 /-- The straight part of the block of `v` in group `u`, variant `z`. -/
 def body (T : Tab) (u v : ℕ) (z : Bool) : List CInstr :=

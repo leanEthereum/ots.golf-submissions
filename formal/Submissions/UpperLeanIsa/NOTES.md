@@ -1,21 +1,21 @@
-# 1096-cycle split-alias leanISA construction
+# 1095-cycle split-alias leanISA construction
 
-The complete `Submission.Certificate 1096` passes a clean local build, exact
-challenge comparison, permitted-axiom checks and fresh Lean kernel replay.
-The competition model and admission requirements are unchanged. Hosted
-acceptance remains pending; local verification timing is close to the limit.
+The complete `Submission.Certificate 1095` passes a clean local build, exact
+challenge comparison, allowed-axiom checking and fresh Lean kernel replay.
+The competition model and admission requirements are unchanged. These are
+local checks, not a hosted verdict. Historical 1096 measurements are marked below.
 
 ## Result and construction
 
-The proved bound is `106 + 87 * 10 + 120 = 1096` cycles, compared with the complete
-1110-cycle ancestor. Every completing run has 193 instructions and 976 execution
+The proved bound is `105 + 87 * 10 + 120 = 1095` cycles, compared with the complete
+1110-cycle ancestor. Every completing run has 192 instructions and 975 execution
 cycles before the unchanged 120-cycle public-boundary surcharge. The signature
 still contains 42 disclosed 128-bit words and the full 128-bit nonce: 5504 bits.
 The effective index has 127 bits. Code and memory have respectively 2^18 and
 2^16 rows, totaling 327680.
 
-The fourteen-cycle improvement is one fewer chain hash (ten cycles) and four
-fewer ordinary instructions. It combines three changes:
+The fifteen-cycle improvement is one fewer chain hash (ten cycles) and five
+fewer ordinary instructions. It combines four changes:
 
 1. A sharper linear security potential permits layer 85.
 2. Mixed four-/five-child binding packets keep chains 10, 11, 36 and 41 internal
@@ -23,6 +23,8 @@ fewer ordinary instructions. It combines three changes:
    signature; a positive-step child is read from its computed top.
 3. Unequal alias multiplicities within a cost band improve the distribution of
    accepted indices while respecting each actual block's ordinary-operation budget.
+4. Centering the checksum and replacing the other uses of the fourteenth power
+   remove one initialization, with group lengths and budgets unchanged.
 
 Eight binding groups replace the earlier nine. Their visible parent prefixes
 are positive, so each accepted tuple binds its children. Hidden coordinates are
@@ -79,11 +81,29 @@ polynomial constraints separate the length word from the needed powers.
 `SplitDomains` and `AffineDomains` prove the resulting packet/domain separation.
 
 Eight guaranteed positive binding hashes are deducted from the checksum.
-The free seed is `g^sentinel / a^77 * a^s`; restoring the eight deductions
-forces the full layer to equal 85. Shifted block costs can reach 16, while
-initialized powers reach 14. The 845 blocks that need two checksum
-multiplications execute and pay for both. Hint rewriting is restricted to
-actual hint cells so it cannot rewrite these checksum operations.
+For each charged cost `c` in 0 through 16, the centered update checks
+`q' = q * a^(c-6)` when `c >= 6`, or `q = q' * a^(6-c)` otherwise.
+Both are one real MUL; reversing the equation executes no division instruction.
+Only powers through 10 are needed for these updates. The 845 blocks that formerly
+used two checksum MULs keep a counted `ONE * ONE = ONE` padding instruction.
+The saving comes from removing the SET for `a^14`, not from free padding.
+
+The new free seed is `g^sentinel * a^(s+1)`. Thirteen centered updates give
+the exponent `s + 1 + (sum costs - 8) - 13*6 = s + sum costs - 85`.
+The exit guard therefore forces the same full layer 85. Hint rewriting remains
+restricted to actual hint cells and cannot rewrite checksum operations.
+
+The free-stage bias is now ONE, giving frame `g^target + 1`; group stages
+retain their positive-power biases. Normal and index hashes use the existing
+adjacent C1/C2 words, with index metadata C11. Domain separation is proved for
+these actual new query words. C1 through C13 and the length guards remain.
+
+Mixed positive/fixed-frame collisions are excluded by polynomial avoidance.
+Fixed-to-fixed landings use exact field certificates for all 4288 non-entry
+free-region slots; fixed-to-initial landings cover all 26 positive initial
+targets. The fixed frame at target zero is zero and its first read fails;
+the proof does not assume this frame nonzero. Correct free entries are positive,
+and the halt frame differs from ONE. These guards cover every admitted memory size.
 
 The packed prefix ends at slot 250577; free blocks begin at 255615, leaving
 5038 slots. There are 14820 raw group blocks. Group 7 has 996 live field codes;
@@ -94,14 +114,38 @@ the 127-bit abstract index but remains pinned by the complete 128-bit index tie.
 memory size. `AffineValues`/`AffineSound` prove that an arbitrary completing
 committed image implies acceptance. `AffineProver`, `AffineCells`,
 `AffineHonestChain` and `AffineHonestPath` construct a faithful honest image,
-including zero-step internal reads and both checksum multiplications.
+including zero-step internal reads, reversed checksum MULs and counted padding.
 `AffineFaithful` handles both verifier decisions.
 
 ## Validation and proof engineering
 
-### Check-time engineering pass (2026-09-28)
+### 1095 proof port (2026-09-28)
 
-The exported statements, the program, the tables and the claim are unchanged;
+The final 1095 sources pass a build with no prior UpperLeanIsa artifacts
+(8962 jobs, 273.201 s). The rendered challenge compiles in 2.250 s; challenge
+and solution exports take 4.924 s and 12.164 s. Exact statement and primitive
+comparison, exported dependency-axiom checking and fresh kernel replay of
+62686 declarations pass in 241.754 s total, with 196.840 s inside kernel replay.
+The measured standalone stages total 534.293 s (8 minutes 54 seconds).
+
+Peak sampled proportional memory is 11.5 GiB for the build and 4.14 GiB for
+comparison/replay, below the 24 GiB budget on this host. These are local process
+samples, not hosted cgroup measurements or a guaranteed hosted runtime.
+The only exported axioms are `propext`, `Classical.choice` and `Quot.sound`.
+The admitted root has 136 files and passes the pinned source policy.
+All Lean-source hashes remained unchanged through build, export and replay.
+Final packaging removed one trailing blank line and finalized this documentation;
+the rebuilt, re-exported solution is byte-identical to the replayed export.
+Seven independent
+centered-checksum/frame regression tests also pass. The 1096 fallback is untouched.
+
+The normal verifier was attempted with the exact pinned contract and configured
+pinned tools. It refuses to start because this kernel lacks Landlock. No sandbox
+requirement was bypassed; hosted verification is still required.
+
+### Historical 1096 check-time engineering pass (2026-09-28)
+
+In that earlier pass, the exported statements, program, tables and claim were unchanged;
 only proof terms and module structure were reworked so that the hosted sandbox
 (build + lean4export + kernel replay under `RuntimeMaxSec=1200`) has margin.
 GF(2^64) products certified by `decide +kernel` (about 10,500 of them, roughly
@@ -118,7 +162,7 @@ An independent structural walk over the old and new lean4export closures of
 no differences. These are local measurements, not a hosted verdict.
 
 
-The complete certificate and seeded-row bound pass a clean build with no prior
+Before that engineering pass, the complete 1096 certificate and seeded-row bound passed a clean build with no prior
 submission artifacts (8968 jobs, 423.679 seconds). Exact comparison against the
 rendered 1096 challenge and its primitive declarations passes. The exported
 dependency audit and named-theorem audits use only `propext`, `Classical.choice`
@@ -206,3 +250,5 @@ security and code-size screening. A still-lower estimate is not a certificate.
   semantics, length check, universal 1110-cycle proof, soundness, honest prover and complete certificate were prepared with Codex.
 
 - The mixed-packet split-alias layer-85 construction, linear security argument, exact multiplicative counting, and 1096 proof port were prepared with Codex using parallel agents.
+- The centered-checksum and fixed-free-frame 1095 revision, exact landing certificates,
+  and full machine proof port were prepared with Codex using parallel agents.

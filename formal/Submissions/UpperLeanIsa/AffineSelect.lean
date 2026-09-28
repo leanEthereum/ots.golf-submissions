@@ -17,6 +17,9 @@ abbrev Slot := Fin (2 ^ 18)
 abbrev Cell := Fin (2 ^ 16)
 abbrev MaxCell := Fin (2 ^ 32)
 
+/-- The free stage uses ONE; every group stage keeps its positive power. -/
+def stageExponent (u : ℕ) : ℕ := if u = 13 then 0 else u + 1
+
 structure BodyDescriptor where
   stage : Stage
   entry : Slot
@@ -28,6 +31,14 @@ inductive SlotShape
   | body (descriptor : BodyDescriptor)
 
 abbrev Layout := Slot → SlotShape
+
+/-- Concrete facts needed for the fixed stage, whose wrong landings are checked
+by exact field logarithms rather than polynomial root avoidance. -/
+structure FixedHyp (L : Layout) : Prop where
+  initial_range : ∀ s c, L s = .initial c → s.val ≤ 26
+  fixed_body : ∀ s d, L s = .body d → d.stage.val = 13 →
+    255615 ≤ s.val ∧ s.val < 259967 ∧
+      d.entry.val = 255615 + 68 * ((s.val - 255615) / 68)
 
 def initialPoly (u s c j : ℕ) : K[X] :=
   C (gpow c) * framePoly u s - C (gpow j)
@@ -55,43 +66,58 @@ theorem initialPoly_degree {u s c j D : ℕ} (hu : u ≤ D) :
 def landingPoly (L : Layout) (u : Stage) (s : Slot) (j : MaxCell) : K[X] :=
   match L s with
   | .trap => 1
-  | .initial c => initialPoly (u.val + 1) s.val c.val j.val
-  | .body d => if u = d.stage ∧ s = d.entry then 1
-      else collisionPoly (u.val + 1) (d.stage.val + 1) s.val d.entry.val d.firstCell.val j.val
+  | .initial c => if u.val = 13 then 1 else initialPoly (u.val + 1) s.val c.val j.val
+  | .body d => if (u = d.stage ∧ s = d.entry) ∨ (u.val = 13 ∧ d.stage.val = 13) then 1
+      else collisionPoly (stageExponent u.val) (stageExponent d.stage.val)
+        s.val d.entry.val d.firstCell.val j.val
 
 theorem landingPoly_ne_zero (L : Layout) (u : Stage) (s : Slot) (j : MaxCell) :
     landingPoly L u s j ≠ 0 := by
   unfold landingPoly
   split
   · exact one_ne_zero
-  · exact initialPoly_ne_zero (Nat.succ_pos _)
+  · split
+    · exact one_ne_zero
+    · exact initialPoly_ne_zero (Nat.succ_pos _)
   · rename_i d hd
     split
     · exact one_ne_zero
     · rename_i hwrong
-      apply collision_ne_zero (Nat.succ_pos _) (Nat.succ_pos _)
-      · have := s.isLt; omega
-      · have := d.entry.isLt; omega
-      · have := d.firstCell.isLt; omega
-      · have := j.isLt; omega
-      · by_cases hu : u = d.stage
-        · right
-          intro hs
-          exact hwrong ⟨hu, Fin.ext hs⟩
-        · left
-          intro he
-          exact hu (Fin.ext (by omega))
+      by_cases hu : u.val = 13
+      · have hv : d.stage.val ≠ 13 := fun hv => hwrong (Or.inr ⟨hu, hv⟩)
+        simp only [stageExponent, if_pos hu, if_neg hv]
+        exact fixed_positive_collision_ne_zero (Nat.succ_pos _)
+      · by_cases hv : d.stage.val = 13
+        · simp only [stageExponent, if_neg hu, if_pos hv]
+          exact positive_fixed_collision_ne_zero (Nat.succ_pos _)
+        · simp only [stageExponent, if_neg hu, if_neg hv]
+          apply collision_ne_zero (Nat.succ_pos _) (Nat.succ_pos _)
+          · have := s.isLt; omega
+          · have := d.entry.isLt; omega
+          · have := d.firstCell.isLt; omega
+          · have := j.isLt; omega
+          · by_cases he : u = d.stage
+            · right
+              intro hs
+              exact hwrong (Or.inl ⟨he, Fin.ext hs⟩)
+            · left
+              intro hh
+              exact he (Fin.ext (by omega))
 
 theorem landingPoly_degree (L : Layout) (u : Stage) (s : Slot) (j : MaxCell) :
     (landingPoly L u s j).natDegree ≤ 300 := by
   unfold landingPoly
   split
   · simp
-  · exact initialPoly_degree (by have := u.isLt; omega)
+  · split
+    · simp
+    · exact initialPoly_degree (by have := u.isLt; omega)
   · rename_i d hd
     split
     · simp
-    · exact collision_degree (by have := u.isLt; omega) (by have := d.stage.isLt; omega)
+    · apply collision_degree
+      · unfold stageExponent; split <;> have := u.isLt <;> omega
+      · unfold stageExponent; split <;> have := d.stage.isLt <;> omega
 
 def powerPoly (i j : Fin 301) : K[X] := if i = j then 1 else X ^ i.val - X ^ j.val
 

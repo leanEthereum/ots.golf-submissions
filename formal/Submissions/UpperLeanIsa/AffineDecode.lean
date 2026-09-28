@@ -62,6 +62,43 @@ theorem body_descriptor (T : Tab) (s : AffineFrames.Slot) (d : AffineFrames.Body
         · contradiction
     · contradiction
 
+/-- The fixed stage occupies only the enumerated free-chain region. -/
+theorem layout_fixed (T : Tab) : AffineFrames.FixedHyp (layout T) := by
+  constructor
+  · intro s c h
+    have hp : ∃ n, place s.val = .initial n := by
+      unfold layout at h
+      dsimp only at h
+      split at h
+      · contradiction
+      · split at h
+        · cases he : place s.val with
+          | initial n => exact ⟨n,rfl⟩
+          | trap => simp only [he] at h; contradiction
+          | body f x i =>
+            simp only [he] at h
+            split at h
+            · split at h <;> contradiction
+            · contradiction
+        · contradiction
+    obtain ⟨n,hp⟩ := hp
+    unfold place at hp
+    split_ifs at hp <;> first | omega | contradiction
+  · intro s d h hd
+    obtain ⟨f,x,i,hp,hf,hs,he⟩ := body_descriptor T s d h
+    have hf0 : f = 0 := by
+      rw [hs] at hd
+      unfold stageIndex at hd
+      split_ifs at hd <;> omega
+    subst f
+    unfold place at hp
+    split_ifs at hp with h27 hg hb hfree
+    · cases hp
+    · cases hp
+      simpa only [ent,ite_true,entF,baseF] using
+        And.intro (show 255615 ≤ s.val by unfold baseF at hb; omega)
+          (And.intro (show s.val < 259967 by unfold baseF at hfree; omega) he)
+
 /-- The compiler's declared first cells agree with the constants it actually chose. -/
 theorem body_first (T : Tab) (s : AffineFrames.Slot) (d : AffineFrames.BodyDescriptor)
     (h : layout T s = .body d) :
@@ -92,10 +129,10 @@ theorem wrong_landing {κ : ℕ} (hκ : κ ≤ 32) (M : MemImage κ)
     rw [instrAt,hs]
     exact exec_pad M _
   | initial c =>
-    exact AffineFrames.execute_wrong_initial hκ M (layout T) u s c (instrAt T s) hs
+    exact AffineFrames.execute_wrong_initial hκ M (layout T) (layout_fixed T) u s c (instrAt T s) hs
       (initial_first T s c hs)
   | body d =>
-    exact AffineFrames.execute_wrong_body hκ M (layout T) u s d (instrAt T s) hs
+    exact AffineFrames.execute_wrong_body hκ M (layout T) (layout_fixed T) u s d (instrAt T s) hs
       (hwrong d hs) (body_first T s d hs)
 
 end

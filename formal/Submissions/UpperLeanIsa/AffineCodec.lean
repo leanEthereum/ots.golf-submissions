@@ -24,12 +24,12 @@ def tag (k : Fin numChains) (j : ℕ) : Fin 3 → Word :=
     word L ((FourChildCodec.off k + j) / 9 % 9),
     word L ((FourChildCodec.off k + j) / 81)]
 
-/-- Cell 49, formerly `g`, supplies the fourteenth stage bias and index metadata. -/
+/-- Existing adjacent C1/C2 cells supply the normal chaining value; C11 separates the index. -/
 def codec : Layer.Params := { FourChildCodec.params with
   tag := tag L
-  cv := word L 14 ++ word L 0
+  cv := word L 2 ++ word L 1
   chainMd := word L 0
-  idxMd := word L 14
+  idxMd := word L 11
   rootMd r := word L (15+r) }
 
 theorem tag_inj (k k' : Fin numChains) (j j' : ℕ)
@@ -75,7 +75,7 @@ theorem codec_hyp : (codec L).Hyp where
   tag_inj := tag_inj L
   chain_idx := by
     intro h
-    have := word_inj L (i:=0) (j:=14) (by decide) (by decide) h
+    have := word_inj L (i:=0) (j:=11) (by decide) (by decide) h
     omega
   chain_root := by
     intro r hr h
@@ -83,7 +83,7 @@ theorem codec_hyp : (codec L).Hyp where
     omega
   root_idx := by
     intro r hr h
-    have := word_inj L (i:=15+r) (j:=14) (by omega) (by omega) h
+    have := word_inj L (i:=15+r) (j:=11) (by omega) (by omega) h
     omega
   root_inj := by
     intro r s hr hs h
@@ -100,11 +100,11 @@ def params : FourFusion.Params where
   fusedTag k := word L (FourFusion.tagIndex k).val
   rootMd r := word L (FourFusion.rootIndex r).val
 
-theorem md_reserved : ∀ k, FourFusion.mdIndex k ≠ 0 ∧ FourFusion.mdIndex k ≠ 14 ∧
+theorem md_reserved : ∀ k, FourFusion.mdIndex k ≠ 0 ∧ FourFusion.mdIndex k ≠ 11 ∧
     ∀ r, FourFusion.mdIndex k ≠ FourFusion.rootIndex r := by decide
 
 theorem root_reserved : ∀ r, FourFusion.rootIndex r ≠ 0 ∧
-    FourFusion.rootIndex r ≠ 14 := by decide
+    FourFusion.rootIndex r ≠ 11 := by decide
 
 theorem word_fin_inj {i j : Fin 47} (h : word L i = word L j) : i = j :=
   Fin.ext (word_inj L (by have := i.isLt; omega) (by have := j.isLt; omega) h)
@@ -121,7 +121,7 @@ theorem params_hyp : (params L).Hyp where
     exact (md_reserved k).1 (Fin.ext hi)
   fused_idx := by
     intro k h
-    have hi := domainWord_inj L (FourFusion.mdIndex_bounds k) (Or.inl (by decide)) (j:=14) h
+    have hi := domainWord_inj L (FourFusion.mdIndex_bounds k) (Or.inl (by decide)) (j:=11) h
     exact (md_reserved k).2.1 (Fin.ext hi)
   fused_root := by
     intro k r h

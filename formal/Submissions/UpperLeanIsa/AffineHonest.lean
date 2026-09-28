@@ -309,11 +309,14 @@ theorem honest_dispatch {r : ℕ} (hr : r < 14) :
 /-- The affine hint asserts the destination plus its stage bias. -/
 theorem honest_hxor {r : ℕ} (hr : r < 14) :
     (CInstr.xor (hCell r) (biasCell r) (h1Cell r)).Rel f (hv P T f pk m bits) := by
-  have hb : hv P T f pk m bits (biasCell r) = cV T (stageIndex r+1) := by
+  have hb : hv P T f pk m bits (biasCell r) =
+      cV T (AffineFrames.stageExponent (stageIndex r)) := by
     by_cases h0 : r = 0
     · subst r
-      exact hv_g
-    · simp only [biasCell,stageIndex,if_neg h0,Nat.sub_add_cancel (show 1 ≤ r by omega)]
+      simpa [biasCell, stageIndex, AffineFrames.stageExponent, cV, oneV] using
+        (hv_one (P:=P) (T:=T) (f:=f) (pk:=pk) (m:=m) (bits:=bits))
+    · simp only [biasCell,stageIndex,if_neg h0,AffineFrames.stageExponent,
+        if_neg (show r-1 ≠ 13 by omega),Nat.sub_add_cancel (show 1 ≤ r by omega)]
       exact hv_cc (by omega)
   show hv P T f pk m bits (h1Cell r) = hv P T f pk m bits (hCell r)+hv P T f pk m bits (biasCell r)
   rw [hv_h1 hr,hv_h hr,hb,cV,← ofK_add,blockFrame,add_comm]
@@ -322,13 +325,14 @@ include hC hlen in
 /-- The index query of the honest image. -/
 theorem honest_idx_query :
     blake2sQuery ![hv P T f pk m bits msgLo, hv P T f pk m bits msgHi,
-      hv P T f pk m bits nonceCell, hv P T f pk m bits pkCell] (hv P T f pk m bits oneCell)
-      (hv P T f pk m bits (oneCell + 1)) (hv P T f pk m bits gCell) =
+      hv P T f pk m bits nonceCell, hv P T f pk m bits pkCell] (hv P T f pk m bits (cCell 1))
+      (hv P T f pk m bits (cCell 1 + 1)) (hv P T f pk m bits (cCell 11)) =
       P.codec.idxInput m (decodeNonce bits) pk := by
   have hpk : cellBits (hv P T f pk m bits pkCell) = pk := by
     rw [show pkCell = 0 from rfl, hv_lt P T f pk m bits (by omega), inputWord_pk]
     exact cellBits_cellOfBits pk
-  rw [blake2sQuery_eq, show oneCell + 1 = gCell from rfl, hv_one, hv_g,
+  rw [blake2sQuery_eq, show cCell 1 + 1 = cCell 2 from rfl,
+    hv_cc (c:=1) (by decide), hv_cc (c:=2) (by decide), hv_cc (c:=11) (by decide),
     show nonceCell = 46 from rfl, show msgHi = 2 from rfl, show msgLo = 1 from rfl,
     hv_lt P T f pk m bits (show 46 < 47 by omega), hv_lt P T f pk m bits (show 2 < 47 by omega),
     hv_lt P T f pk m bits (show 1 < 47 by omega), inputWord_nonce pk m bits hlen, inputWord_two,
@@ -346,7 +350,7 @@ include hT hC hacc in
 /-- On an accepted index the last landing product is `g ^ sentinel`: the exit target. -/
 theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   rw [honest_gp (by omega)]
-  unfold gpV
+  unfold gpV gpK
   apply congrArg ofK
   have hs := hsum hC hacc
   change hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,
@@ -354,24 +358,27 @@ theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
   have hshift := charged_sum hT (hxs_valid T _ (hlive hC hacc))
   have hc : hxs T (IF P f pk m bits) 0 + ∑ w ∈ Finset.range 13,
       chargedCost T w (hxs T (IF P f pk m bits) (w+1)) = 77 := by omega
-  exact (AffineFrames.checksum_exact (layout T) (by decide : 77 ≤ 300) (by omega)).mpr hc
+  have hexp : hxs T (IF P f pk m bits) 0 + 1 +
+      ∑ w ∈ Finset.range 13, chargedCost T w (hxs T (IF P f pk m bits) (w+1)) =
+      6 * 13 := by omega
+  rw [seedProduct, mul_assoc, ← pow_add, hexp]
+  exact mul_div_cancel_right₀ _ (pow_ne_zero _ (AffineFrames.safeBase_ne_zero (layout T)))
 
 include hC hlen hacc in
 /-- **The honest prologue.** -/
-theorem honest_pro : ∀ y ∈ prefixCode T 17, y.Rel f (hv P T f pk m bits) := by
+theorem honest_pro : ∀ y ∈ prefixCode T 16, y.Rel f (hv P T f pk m bits) := by
   intro y hy
-  have he : prefixCode T 17 = ((List.range 13).map (fun c => CInstr.setc (cCell (c+1)) (cV T (c+1)))) ++
-      [.init,.setc gCell (gV T),.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell,
-        .xor (hCell 0) gCell (h1Cell 0)] := by rfl
+  have he : prefixCode T 16 = ((List.range 13).map (fun c => CInstr.setc (cCell (c+1)) (cV T (c+1)))) ++
+      [.init,.blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11),
+        .xor (hCell 0) oneCell (h1Cell 0)] := by rfl
   rw [he] at hy
   simp only [List.mem_append, List.mem_cons, List.mem_map, List.mem_range, List.not_mem_nil,
     or_false] at hy
-  rcases hy with ⟨c,hc,rfl⟩ | h | h | h | h
+  rcases hy with ⟨c,hc,rfl⟩ | h | h | h
   · exact hv_cc (by omega)
   · subst h; refine ⟨hv_one, ?_⟩
     show hv P T f pk m bits 3 = natV 5504
     rw [hv_lt P T f pk m bits (by omega)]; exact inputWord_len_of pk m bits hlen
-  · subst h; exact hv_g
   · subst h
     refine blake_rel (a := y0F P f pk m bits) ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hv_idx hv_idx1
     · rw [show msgLo = 1 from rfl, hv_lt P T f pk m bits (by omega), inputWord_one]
@@ -383,9 +390,9 @@ theorem honest_pro : ∀ y ∈ prefixCode T 17, y.Rel f (hv P T f pk m bits) := 
       exact canon_cellOfBits _
     · rw [show pkCell = 0 from rfl, hv_lt P T f pk m bits (by omega), inputWord_pk]
       exact canon_cellOfBits _
-    · rw [hv_one]; exact canon_ofK 1
-    · rw [show oneCell + 1 = gCell from rfl, hv_g]; exact canon_ofK _
-    · rw [hv_g]; exact canon_ofK _
+    · rw [hv_cc (c:=1) (by decide)]; exact canon_ofK _
+    · rw [show cCell 1 + 1 = cCell 2 from rfl, hv_cc (c:=2) (by decide)]; exact canon_ofK _
+    · rw [hv_cc (c:=11) (by decide)]; exact canon_ofK _
     · rw [honest_idx_query hC hlen]; rfl
   · subst h; exact honest_hxor (by omega)
 

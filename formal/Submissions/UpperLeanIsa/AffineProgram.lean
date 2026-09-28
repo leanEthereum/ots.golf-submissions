@@ -4,7 +4,7 @@ import Submissions.UpperLeanIsa.FourMachineDecode
 /-! The fixed affine-frame bytecode. Each block starts with its first
 useful instruction; packed group blocks reserve exactly one control slot.
 `AffineMachine` combines the domain-separated codec and this machine in the
-1096-cycle certificate. -/
+1095-cycle certificate. -/
 
 namespace OptimalOTS.AffineVM
 
@@ -18,10 +18,13 @@ open scoped Classical
 set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
-/-- The existing fourteen initialized constants, in execution-stage order. -/
-def biasCell (f : ℕ) : ℕ := if f = 0 then gCell else cCell f
+/-- The free stage uses ONE; the thirteen charged stages use their cost powers. -/
+def biasCell (f : ℕ) : ℕ := if f = 0 then oneCell else cCell f
 
 def stageIndex (f : ℕ) : ℕ := if f = 0 then 13 else f-1
+
+/-- The free branch seeds the centered checksum without a negative power. -/
+def seedProduct (a : K) (s : ℕ) : K := gpow sentinel * a ^ (s+1)
 
 theorem stageIndex_lt {f : ℕ} (hf : f < 14) : stageIndex f < 14 := by
   unfold stageIndex
@@ -65,14 +68,13 @@ def raw (T : Tab) (a : K) : Place → CInstr
   | .initial s =>
       if s < 13 then .setc (cCell (s+1)) (ofK (a ^ (s+1)))
       else if s = 13 then .init
-      else if s = 14 then .setc gCell (ofK (a ^ 14))
-      else if s = 15 then .blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell
-      else if s = 16 then .xor (hCell 0) gCell (h1Cell 0)
-      else if s = 17 then .dispatch 0
+      else if s = 14 then .blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11)
+      else if s = 15 then .xor (hCell 0) oneCell (h1Cell 0)
+      else if s = 16 then .dispatch 0
       else .pad
   | .body f x i =>
       if f = 0 then
-        if i = 0 then .setc (gpCell 0) (ofK (gpow sentinel / a ^ 77 * a ^ x))
+        if i = 0 then .setc (gpCell 0) (ofK (seedProduct a x))
         else if i ≤ x then chainOp topCell 0 x (i-1) tfCell
         else if i = x+1 then copy (if x = 0 then wCell 0 else tfCell) tfCell
         else if i = x+2 then .xor (hCell 1) (cCell 1) (h1Cell 1)

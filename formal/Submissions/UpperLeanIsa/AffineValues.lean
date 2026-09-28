@@ -24,15 +24,14 @@ include hP in
 theorem v_one : v oneCell = oneV := pro_one hP.pro
 include hP in
 theorem v_len : v lenCell = natV 5504 := pro_length hP.pro
-include hP in
-theorem v_g : v gCell = gV T := pro_g hP.pro
 
 include hP in
 theorem v_c {c : ℕ} (hc : c ≤ 13) : v (cCell c) = cV T c := pro_c hP.pro (by omega)
 
 include hP in
-theorem cb_cv (hC : Compat P T) : cellBits (v (oneCell+1)) ++ cellBits (v oneCell) = P.codec.cv := by
-  rw [show oneCell+1 = gCell from rfl,v_g hP,v_one hP,hC.cv]
+theorem cb_cv (hC : Compat P T) : cellBits (v (cCell 1+1)) ++ cellBits (v (cCell 1)) = P.codec.cv := by
+  rw [show cCell 1+1 = cCell 2 from rfl,v_c hP (by decide : 2 ≤ 13),
+    v_c hP (by decide : 1 ≤ 13),hC.cv]
 
 theorem factor_bits (T : Tab) (i : Fin 47) :
     cellBits (cV T i.val) = AffineCodec.word (layout T) i.val := rfl
@@ -107,7 +106,7 @@ theorem fusion_query (hC : Compat P T) (readTop : ℕ → ℕ)
 theorem chainOp_plain_query (hP : PathFacts T (oracleRel f) v xs) (hC : Compat P T) {k : ℕ}
     (hk : k < 42) {d t : ℕ} (hd : d < LEN k) (ht : t < d) (x : E) :
     blake2sQuery ![x, v (cCell (tpos k d t % 9)), v (cCell (tpos k d t / 9 % 9)),
-        v (cCell (tpos k d t / 81))] (v oneCell) (v (oneCell + 1)) (v oneCell) =
+        v (cCell (tpos k d t / 81))] (v (cCell 1)) (v (cCell 1 + 1)) (v oneCell) =
       P.codec.chainInput ⟨k, hk⟩ (LEN k - 1 - d + t) (cellBits x) := by
   have hj : LEN k - 1 - d + t + 1 < LEN k := by omega
   obtain ⟨h0, h1, h2⟩ := hC.tag ⟨k, hk⟩ _ hj

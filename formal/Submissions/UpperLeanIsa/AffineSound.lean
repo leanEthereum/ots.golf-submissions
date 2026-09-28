@@ -38,8 +38,9 @@ theorem layer_of_facts {B : BlakeRel} {v : ℕ → E} {xs : ℕ → ℕ}
         exact LengthFrame.cost_shift_le hT hw' hx
       _ = _ := by simp
   have hx0 : xs 0 < 64 := by have h := hV 0 (by decide); rwa [Wf_zero] at h
-  have hc := (AffineFrames.checksum_exact (layout T) (by decide : 77 ≤ 300)
-    (by omega : xs 0+(∑ w ∈ Finset.range 13, chargedCost T w (xs (w+1))) ≤ 300)).mp
+  rw [centered_final_product] at hgp
+  have hc := (AffineFrames.checksum_exact (layout T) (by decide : 78 ≤ 300)
+    (by omega : xs 0+1+(∑ w ∈ Finset.range 13, chargedCost T w (xs (w+1))) ≤ 300)).mp
     (ofK_injective hgp).symm
   have hshift := charged_sum hT hV
   unfold gsum
@@ -171,15 +172,15 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
     length_of_inputWord_len pk m bits ((hpin 3 (by omega)).symm.trans (v_len hP))
   -- the index
   have hidx : (ans f (P.codec.idxInput m (decodeNonce bits) pk)).extractLsb' 0 128 = cellBits (v idxCell) := by
-    have h : (CInstr.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell).Rel f v :=
+    have h : (CInstr.blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11)).Rel f v :=
       hP.index
     have hlo := oracle_lo h
     have hpk : cellBits (v pkCell) = pk := by
       rw [show pkCell = 0 from rfl, hpin 0 (by omega), inputWord_pk]
       exact cellBits_cellOfBits pk
-    have hq : blake2sQuery ![v msgLo, v msgHi, v nonceCell, v pkCell] (v oneCell)
-        (v (oneCell + 1)) (v gCell) = P.codec.idxInput m (decodeNonce bits) pk := by
-      rw [blake2sQuery_eq, cb_cv hP hC, v_g hP,
+    have hq : blake2sQuery ![v msgLo, v msgHi, v nonceCell, v pkCell] (v (cCell 1))
+        (v (cCell 1 + 1)) (v (cCell 11)) = P.codec.idxInput m (decodeNonce bits) pk := by
+      rw [blake2sQuery_eq, cb_cv hP hC, v_c hP (by decide : 11 ≤ 13),
         show nonceCell = 46 from rfl, show msgHi = 2 from rfl,
         show msgLo = 1 from rfl, hpin 46 (by omega), hpin 2 (by omega),
         hpin 1 (by omega), inputWord_nonce pk m bits hlen, inputWord_two,

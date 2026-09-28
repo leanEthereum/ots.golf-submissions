@@ -73,8 +73,8 @@ theorem PathFacts.pk_copy (hp : PathFacts T B v xs) : (copy (stCell 0) pkCell).R
   hp.group_rel (u:=12) (by decide) (by unfold body nextOp; simp) (rehint_copy _ _)
 
 theorem PathFacts.index (hp : PathFacts T B v xs) :
-    (CInstr.blake msgLo msgHi nonceCell pkCell oneCell idxCell gCell).RelB B v :=
-  hp.pro _ (prefixCode_mem T (i:=15) (by decide : 15 < 17))
+    (CInstr.blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11)).RelB B v :=
+  hp.pro _ (prefixCode_mem T (i:=14) (by decide : 14 < 16))
 
 end Path
 end

@@ -153,15 +153,15 @@ theorem honest_chainOp (readTop : ℕ → ℕ) {k : ℕ} (hk : k < 42)
     have := OFFT_bound k hk; unfold tpos; omega
   have hq : blake2sQuery ![hv P T f pk m bits (if t = 0 then wCell k else xcCell k (t - 1)),
       hv P T f pk m bits (cCell (tpos k d t % 9)), hv P T f pk m bits (cCell (tpos k d t / 9 % 9)),
-      hv P T f pk m bits (cCell (tpos k d t / 81))] (hv P T f pk m bits oneCell)
-      (hv P T f pk m bits (oneCell + 1)) (hv P T f pk m bits oneCell) =
+      hv P T f pk m bits (cCell (tpos k d t / 81))] (hv P T f pk m bits (cCell 1))
+      (hv P T f pk m bits (cCell 1 + 1)) (hv P T f pk m bits oneCell) =
       P.codec.chainInput ⟨k, hk⟩ (LEN k - 1 - d + t)
         (P.chainValue f (ctxF P f pk m bits) ⟨k, hk⟩ (LEN k - 1 - d) t (sigW bits k)) := by
     have hj : LEN k - 1 - d + t + 1 < LEN k := by omega
     obtain ⟨h0, h1, h2⟩ := hC.tag ⟨k, hk⟩ _ hj
     rw [blake2sQuery_eq, hv_cc (c := tpos k d t % 9) (by omega),
-      hv_cc (c := tpos k d t / 9 % 9) (by omega), hv_cc hp, show oneCell + 1 = gCell from rfl,
-      hv_g, hv_one, hsrc.2]
+      hv_cc (c := tpos k d t / 9 % 9) (by omega), hv_cc hp, show cCell 1 + 1 = cCell 2 from rfl,
+      hv_cc (c:=1) (by decide), hv_cc (c:=2) (by decide), hv_one, hsrc.2]
     unfold Params.chainInput
     rw [h0, h1, h2, hC.chainMd, hC.cv]
     rfl

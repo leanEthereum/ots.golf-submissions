@@ -13,11 +13,19 @@ set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
 structure PathFacts (T : Tab) (B : BlakeRel) (v : ℕ → E) (xs : ℕ → ℕ) : Prop where
-  pro : ∀ ci ∈ prefixCode T 17, ci.RelB B v
+  pro : ∀ ci ∈ prefixCode T 16, ci.RelB B v
   disp : ∀ f < 14, (CInstr.dispatch f).RelB B v
   blk : ∀ f < 14, ∀ ci ∈ bodyCode T (base T) f (xs f), ci.RelB B v
   exit : CInstr.exit.RelB B v
   gp13 : v (gpCell 13) = ofK (gpow sentinel)
+
+/-- Recenter the final checksum into the generic guarded-product form. -/
+theorem centered_final_product (T : Tab) (s c : ℕ) :
+    seedProduct (base T) s * base T ^ c / base T ^ (6*13) =
+      AffineFrames.initialProduct (layout T) 78 (s+1) * base T ^ c := by
+  change (gpow sentinel * base T ^ (s+1)) * base T ^ c / base T ^ 78 =
+    (gpow sentinel / base T ^ 78 * base T ^ (s+1)) * base T ^ c
+  rw [mul_div_right_comm,mul_div_right_comm]
 
 theorem run_exit {κ : ℕ} (T : Tab) (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (d : AffineFrames.Slot) (hd : d.val < sentinel)
@@ -122,9 +130,11 @@ theorem run_full {κ : ℕ} {T : Tab} (hT : T.Hyp) (h16 : 16 ≤ κ) (hκ : κ �
         exact LengthFrame.cost_shift_le hT hw' hx
       _ = _ := by simp
   have hx0 : xs 0 < 64 := by have hh := hV 0 (by decide); rwa [Wf_zero] at hh
-  have hbound : xs 0+(∑ w ∈ Finset.range 13, chargedCost T w (xs (w+1))) ≤ 300 := by omega
+  have hbound : xs 0+1+(∑ w ∈ Finset.range 13, chargedCost T w (xs (w+1))) ≤ 300 := by omega
+  have htarget' := htarget
+  rw [centered_final_product] at htarget'
   obtain ⟨hcharged,hsent⟩ := (AffineFrames.checksum_landing_exact (layout T) target
-    (by decide : 77 ≤ 300) hbound).mp htarget
+    (by decide : 78 ≤ 300) hbound).mp htarget'
   have hgp_final : Lx M (gpCell 13) = ofK (gpow sentinel) := by
     rw [hgp,htarget,hsent]
     rfl

@@ -12,7 +12,7 @@ noncomputable section
 
 def bodyCode (T : Tab) (a : K) (f x : ℕ) : List CInstr :=
   if f = 0 then
-    [.setc (gpCell 0) (ofK (gpow sentinel / a ^ 77 * a ^ x))] ++
+    [.setc (gpCell 0) (ofK (seedProduct a x))] ++
       chainOps topCell 0 x tfCell ++ [copy (if x = 0 then wCell 0 else tfCell) tfCell,
         .xor (hCell 1) (cCell 1) (h1Cell 1)]
   else (body T (f-1) x false).map rehint
@@ -65,10 +65,10 @@ theorem bodyCode_weight (T : Tab) (a q : K) (f x : ℕ) :
 
 /-- Each of the fourteen dispatches now costs one instruction. -/
 def pathCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  27 + ∑ f ∈ Finset.range 14, (1 + lcost (bodyCode T (base T) f (xs f)))
+  26 + ∑ f ∈ Finset.range 14, (1 + lcost (bodyCode T (base T) f (xs f)))
 
 def pathSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  18 + ∑ f ∈ Finset.range 14, (1 + (bodyCode T (base T) f (xs f)).length)
+  17 + ∑ f ∈ Finset.range 14, (1 + (bodyCode T (base T) f (xs f)).length)
 
 theorem ordinary_body_sum :
     ∑ f ∈ Finset.range 14, (gcuF f - 2) = 75 := by decide
@@ -82,7 +82,7 @@ theorem hash_body_sum (T : Tab) (xs : ℕ → ℕ) :
   congr 1
 
 theorem pathCost_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 85) : pathCost T xs = 976 := by
+    (hLayer : xs 0 + gsum T xs = 85) : pathCost T xs = 975 := by
   unfold pathCost
   simp only [bodyCode_lcost]
   have he : ∀ f ∈ Finset.range 14, lcost (bodyF T f (xs f)) =
@@ -95,7 +95,7 @@ theorem pathCost_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
   norm_num
 
 theorem pathSteps_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 85) : pathSteps T xs = 193 := by
+    (hLayer : xs 0 + gsum T xs = 85) : pathSteps T xs = 192 := by
   unfold pathSteps
   simp only [bodyCode_length]
   have he : ∀ f ∈ Finset.range 14, (bodyF T f (xs f)).length =
@@ -110,7 +110,7 @@ theorem pathSteps_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
 theorem boundary_eq : LeanIsa.boundaryCycles = 120 := by decide
 
 theorem path_with_boundary {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 85) : LeanIsa.boundaryCycles + pathCost T xs = 1096 := by
+    (hLayer : xs 0 + gsum T xs = 85) : LeanIsa.boundaryCycles + pathCost T xs = 1095 := by
   rw [pathCost_eq hT hV hLayer]
   rw [boundary_eq]
 
