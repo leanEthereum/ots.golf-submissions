@@ -1,79 +1,14 @@
-import Submissions.UpperLeanIsa.LayerBits
+import Submissions.UpperLeanIsa.IndexBits
 import OptimalOTS.OracleAlgorithm
 import OptimalOTS.LeanIsaMachine
 import VCVio.OracleComp.Constructions.SampleableType
-
-/-! The effective index discards bit zero of the raw 128-bit hash slice. -/
-
-namespace OptimalOTS.LeanIsaBaseline.Layer
-
-set_option linter.constructorNameAsVariable false
-
-abbrev RawIndex := BitVec 128
-abbrev Index := BitVec 127
-
-def effective (w : RawIndex) : Index := w.extractLsb' 1 127
-
-def indexSlice {n : ℕ} (w : BitVec n) : Index := w.extractLsb' 1 127
-
-def indexRest (w : BitVec 256) : BitVec 129 :=
-  w.extractLsb' 128 128 ++ w.extractLsb' 0 1
-
-def joinIndex (i : Index) (r : BitVec 129) : BitVec 256 :=
-  (r.extractLsb' 1 128 ++ i) ++ r.extractLsb' 0 1
-
-theorem indexSlice_effective (w : BitVec 256) :
-    indexSlice w = effective (w.extractLsb' 0 128) := by
-  unfold indexSlice effective
-  exact (BitVec.extractLsb'_extractLsb'_of_le (by decide)).symm
-
-theorem joinIndex_split (w : BitVec 256) : joinIndex (indexSlice w) (indexRest w) = w := by
-  unfold joinIndex indexSlice indexRest
-  rw [BitVec.extractLsb'_append_eq_left, BitVec.extractLsb'_append_eq_right]
-  rw [BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (by decide : 128 = 1 + 127)]
-  rw [BitVec.extractLsb'_append_extractLsb'_eq_extractLsb' (by decide : 1 = 0 + 1)]
-  exact BitVec.extractLsb'_eq_self
-
-theorem indexSlice_join (i : Index) (r : BitVec 129) : indexSlice (joinIndex i r) = i := by
-  unfold indexSlice joinIndex
-  rw [BitVec.extractLsb'_append_eq_of_le (by decide : 1 ≤ 1)]
-  exact BitVec.extractLsb'_append_eq_right
-
-theorem indexRest_join (i : Index) (r : BitVec 129) : indexRest (joinIndex i r) = r := by
-  unfold indexRest joinIndex
-  simp only [BitVec.extractLsb'_append_eq_ite]
-  norm_num
-
-theorem card_indexSlice (p : Index → Prop) [DecidablePred p] :
-    (Finset.univ.filter fun w : BitVec 256 => p (indexSlice w)).card =
-      (Finset.univ.filter p).card * 2 ^ 129 := by
-  have hu : (Finset.univ : Finset (BitVec 129)).card = 2 ^ 129 := by
-    rw [Finset.card_univ, Fintype.card_bitVec]
-  rw [← hu, ← Finset.card_product]
-  refine Finset.card_nbij' (fun w => (indexSlice w, indexRest w))
-    (fun x => joinIndex x.1 x.2) ?_ ?_ ?_ ?_
-  · intro w hw
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq] at hw
-    simp [hw]
-  · intro x hx
-    simp only [Finset.coe_product, Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_prod,
-      Set.mem_ofPred_eq, Finset.coe_univ, Set.mem_univ, and_true] at hx
-    simp only [Finset.coe_filter, Finset.mem_univ, true_and, Set.mem_ofPred_eq,
-      indexSlice_join]
-    exact hx
-  · intro w _
-    exact joinIndex_split w
-  · intro x _
-    exact Prod.ext (indexSlice_join _ _) (indexRest_join _ _)
-
-end OptimalOTS.LeanIsaBaseline.Layer
 
 /-!
 # Layer schemes with a 127-bit effective index
 
 The 42 chains hold 128-bit words. Accepted remaining-step digits sum to a fixed layer,
-forming an antichain. Index queries use the zero-padded 127-bit nonce; answer bits 1..127
-select the effective index. The signature has 42 words plus the nonce, totaling 5503 bits.
+forming an antichain. Index queries use the 128-bit nonce; answer bits 1..127
+select the effective index. The signature has 42 words plus the nonce, totaling 5504 bits.
 Signing makes 2^19 trials at fresh untried nonces and keeps the accepted trial of least weight
 (the number of accepted indices with its digits), the earliest among equals.
 
@@ -96,20 +31,19 @@ namespace OptimalOTS.LeanIsaBaseline.Layer
 
 /-- A 128-bit chain word (one canonical cell). -/
 abbrev Word := BitVec 128
-/-- The signing nonce: 127 bits, zero-padded in its machine cell. -/
-abbrev Nonce := BitVec 127
+/-- The signing nonce: one full 128-bit machine cell. -/
+abbrev Nonce := BitVec 128
 
 /-- Canonical nonce word consumed by the fixed-width hash input. -/
-def nonceWord (η : Nonce) : Word := (0 : BitVec 1) ++ η
+def nonceWord (η : Nonce) : Word := η
 
 theorem nonceWord_injective : Function.Injective nonceWord := by
   intro a b h
-  have hh := congrArg (fun w : Word => w.extractLsb' 0 127) h
-  simpa only [nonceWord, BitVec.extractLsb'_append_eq_right] using hh
+  exact h
 /-- Number of chains. -/
 abbrev numChains : ℕ := 42
 /-- Signature length in bits: 42 words and the nonce. -/
-def sigBits : ℕ := 5503
+def sigBits : ℕ := 5504
 /-- Maximal number of signing trials: `signBudget / blockCost 896`. -/
 def trials : ℕ := 2 ^ 19
 
@@ -127,8 +61,6 @@ structure Params where
   cv : BitVec 256
   /-- Metadata of chain steps. -/
   chainMd : Word
-  /-- Chaining value of the index query. -/
-  idxCv : BitVec 256
   /-- Metadata of the index query. -/
   idxMd : Word
   /-- Metadata of root call `r < 9`. -/
@@ -148,7 +80,7 @@ def chainInput (k : Fin numChains) (j : ℕ) (x : Word) : BitVec 896 :=
 
 /-- The index query: `m = [msg.lo, msg.hi, η, pk]`. -/
 def idxInput (m : Message) (η : Nonce) (pk : PublicKey) : BitVec 896 :=
-  LeanIsa.hashInput P.idxCv (pk ++ nonceWord η ++ m) P.idxMd
+  LeanIsa.hashInput P.cv (pk ++ nonceWord η ++ m) P.idxMd
 
 /-- Bit offset of the answer slice that the step of chain `k` at position `j` keeps: `128` for
 the step producing the top (`j + 2 = len k`) of a `hiTop` chain, `0` otherwise. -/
@@ -266,7 +198,7 @@ def decodeWord (bits : List Bool) (k : Fin numChains) : Word :=
   ofBits 128 ((bits.drop (128 * k.val)).take 128)
 
 /-- The nonce: signature cell 42 (machine cell 46). -/
-def decodeNonce (bits : List Bool) : Nonce := ofBits 127 ((bits.drop 5376).take 127)
+def decodeNonce (bits : List Bool) : Nonce := ofBits 128 ((bits.drop 5376).take 128)
 
 namespace Params
 

@@ -116,4 +116,12 @@ theorem posW_mono {n k : ℕ} (hk : n ≤ k) : posW w n ≤ posW w k := by
     · exact (ih (by omega)).trans (by rw [posW_succ]; omega)
     · rw [h]
 
+/-- Digits of a number below `2 ^ posW w n` vanish from `n` on. -/
+theorem digitW_eq_zero_of_lt {i n k : ℕ} (hi : i < 2 ^ posW w n) (hk : n ≤ k) :
+    digitW w i k = 0 := by
+  unfold digitW
+  have : i < 2 ^ posW w k :=
+    lt_of_lt_of_le hi (Nat.pow_le_pow_right (by norm_num) (posW_mono w hk))
+  rw [Nat.div_eq_of_lt this, Nat.zero_mod]
+
 end OptimalOTS.LeanIsaBaseline.Layer

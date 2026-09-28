@@ -31,7 +31,7 @@ abbrev emsgBits : ℕ := msgBits + pkBits
 abbrev EMessage := BitVec emsgBits
 
 /-- An encoding input: an extended message above a nonce. -/
-abbrev EncInput := BitVec (emsgBits + 127)
+abbrev EncInput := BitVec (emsgBits + 128)
 
 /-- The extended message of `m` under the public key `pk`. -/
 def emsg (m : Message) (pk : PublicKey) : EMessage := m ++ pk
@@ -43,15 +43,15 @@ theorem append_nonce_inj (m : EMessage) {η η' : Nonce} (h : m ++ η = m ++ η'
   (append_inj h).2
 
 theorem exists_append (u : EncInput) : ∃ (m : EMessage) (η : Nonce), u = m ++ η := by
-  refine ⟨u.extractLsb' 127 emsgBits, u.extractLsb' 0 127, ?_⟩
+  refine ⟨u.extractLsb' 128 emsgBits, u.extractLsb' 0 128, ?_⟩
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
   rw [BitVec.getLsbD_append]
   split_ifs with h
   · simp [BitVec.getLsbD_extractLsb', h]
   · rw [BitVec.getLsbD_extractLsb']
-    have : i - 127 < emsgBits := by omega
-    simp [this, show 127 + (i - 127) = i by omega]
+    have : i - 128 < emsgBits := by omega
+    simp [this, show 128 + (i - 128) = i by omega]
 
 theorem emsg_inj {m m' : Message} {pk pk' : PublicKey} (h : emsg m pk = emsg m' pk') :
     m = m' ∧ pk = pk' := append_inj h
@@ -74,8 +74,8 @@ variable (P : Params)
 
 /-- The index query of an encoding input `emsg m pk ++ η`. -/
 def encQuery (u : EncInput) : Query :=
-  ⟨896, P.idxInput ((u.extractLsb' 127 emsgBits).extractLsb' pkBits msgBits)
-    (u.extractLsb' 0 127) ((u.extractLsb' 127 emsgBits).extractLsb' 0 pkBits)⟩
+  ⟨896, P.idxInput ((u.extractLsb' 128 emsgBits).extractLsb' pkBits msgBits)
+    (u.extractLsb' 0 128) ((u.extractLsb' 128 emsgBits).extractLsb' 0 pkBits)⟩
 
 theorem encQuery_emsg (m : Message) (pk : PublicKey) (η : Nonce) :
     P.encQuery (emsg m pk ++ η) = ⟨896, P.idxInput m η pk⟩ := by
@@ -98,6 +98,27 @@ theorem encQuery_inj {u u' : EncInput} (h : P.encQuery u = P.encQuery u') : u = 
   rw [encQuery_emsg, encQuery_emsg] at h
   obtain ⟨hm, hη, hpk⟩ := P.idxInput_inj (query_inj h)
   rw [hm, hη, hpk]
+
+theorem idx_eq_encQuery (m : Message) (η : Nonce) (pk : PublicKey) :
+    (⟨896, P.idxInput m η pk⟩ : Query) = P.encQuery (emsg m pk ++ η) :=
+  (P.encQuery_emsg m pk η).symm
+
+theorem chainInput_ne_encQuery (hP : P.Hyp) (k : Fin numChains) (j : ℕ) (x : Word)
+    (u : EncInput) : (⟨896, P.chainInput k j x⟩ : Query) ≠ P.encQuery u := by
+  intro h
+  exact P.chainInput_ne_idxInput hP k j x _ _ _ (query_inj h)
+
+theorem rootInput_ne_encQuery (hP : P.Hyp) {r : ℕ} (hr : r < 9) (t : Fin numChains → Word)
+    (st : BitVec 256) (u : EncInput) : (⟨896, P.rootInput t r st⟩ : Query) ≠ P.encQuery u := by
+  intro h
+  exact P.rootInput_ne_idxInput hP hr t st _ _ _ (query_inj h)
+
+theorem record_query_ne_encQuery (hP : P.Hyp) (ξ : Record P) (a : Loc P) (u : EncInput) :
+    ξ.query a ≠ P.encQuery u := by
+  obtain ⟨M, η, rfl⟩ := exists_append u
+  obtain ⟨m, pk, rfl⟩ := exists_emsg M
+  rw [encQuery_emsg]
+  exact ξ.query_ne_idx hP a m η pk
 
 end Params
 

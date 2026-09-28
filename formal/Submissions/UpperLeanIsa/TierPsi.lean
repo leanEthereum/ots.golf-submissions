@@ -61,7 +61,7 @@ theorem psi_mass_mono {s t : ℕ} (h : s ≤ t) : (S.mass s : ℝ) ≤ S.mass t 
   exact Finset.sum_le_sum_of_subset_of_nonneg (Finset.range_mono h)
     (fun _ _ _ => by positivity)
 
-theorem psi_mass_T_lt_one (hS : S.Valid) : (S.mass S.T : ℝ) < 1 := by
+theorem psi_mass_T_lt_one (hS : S.Analytic) : (S.mass S.T : ℝ) < 1 := by
   have h : (∑ t ∈ Finset.range S.T, (S.N t * S.a t : ℝ)) < 2 ^ S.K := by
     exact_mod_cast hS.mass_lt
   unfold Tier.Sched.mass
@@ -69,20 +69,20 @@ theorem psi_mass_T_lt_one (hS : S.Valid) : (S.mass S.T : ℝ) < 1 := by
   rw [div_lt_one (by positivity)]
   exact h
 
-theorem psiD_pos (hS : S.Valid) {t : ℕ} (ht : t < S.T) : 0 < psiD S t := by
+theorem psiD_pos (hS : S.Analytic) {t : ℕ} (ht : t < S.T) : 0 < psiD S t := by
   have h1 := psi_mass_mono (S := S) (show t + 1 ≤ S.T by omega)
   have h2 := psi_mass_T_lt_one hS
   have h3 := mul_nonneg (psi_mass_nonneg (S := S) (t + 1)) (Real.exp_pos (-lam)).le
   unfold psiD
   linarith
 
-theorem psiRow_nonneg (hS : S.Valid) (d : Cache) (M : EMessage) {t : ℕ} (ht : t < S.T) :
+theorem psiRow_nonneg (hS : S.Analytic) (d : Cache) (M : EMessage) {t : ℕ} (ht : t < S.T) :
     0 ≤ P.psiRow S d M t := by
   have := psiD_pos hS ht
   unfold psiRow
   positivity
 
-theorem Psi_nonneg (hS : S.Valid) (d : Cache) : 0 ≤ P.Psi S d :=
+theorem Psi_nonneg (hS : S.Analytic) (d : Cache) : 0 ≤ P.Psi S d :=
   Finset.sum_nonneg fun M _ => Finset.sum_nonneg fun _ ht =>
     psiRow_nonneg hS d M (Finset.mem_range.1 ht)
 
@@ -139,7 +139,7 @@ theorem rowN_upd (w : BitVec hashBits) (M : EMessage) (t : ℕ) :
   · rw [if_neg (fun h => hM h.1), add_zero]
     exact congrArg Finset.card (Finset.ext fun η => by simp [psi_upd_apply, hM])
 
-theorem psiRow_upd (hS : S.Valid) (w : BitVec hashBits) (M : EMessage) {t : ℕ} (ht : t < S.T) :
+theorem psiRow_upd (hS : S.Analytic) (w : BitVec hashBits) (M : EMessage) {t : ℕ} (ht : t < S.T) :
     P.psiRow S (c.cacheQuery (P.encQuery (M₀ ++ η₀)) w) M t =
       P.psiRow S c M t * if M = M₀ then
         (if P.tierW S w ≤ t then Real.exp (-lam) else 1) / psiD S t else 1 := by
@@ -158,7 +158,7 @@ theorem psiRow_upd (hS : S.Valid) (w : BitVec hashBits) (M : EMessage) {t : ℕ}
 
 end Fresh
 
-theorem psi_sum_tierW (hS : S.Valid) (hT : P.TierHyp S) {t : ℕ} (ht : t < S.T) :
+theorem psi_sum_tierW (hS : S.Analytic) (hT : P.TierHyp S) {t : ℕ} (ht : t < S.T) :
     ∑ w : BitVec hashBits, (if P.tierW S w ≤ t then Real.exp (-lam) else 1) =
       (Fintype.card (BitVec hashBits) : ℝ) * psiD S t := by
   have hc := card_tierW_lt hS hT (show t + 1 ≤ S.T by omega)
@@ -188,7 +188,7 @@ theorem psi_sum_tierW (hS : S.Valid) (hT : P.TierHyp S) {t : ℕ} (ht : t < S.T)
       linarith, hc']
   ring
 
-theorem psi_sum_psiRow (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {M₀ : EMessage}
+theorem psi_sum_psiRow (hS : S.Analytic) (hT : P.TierHyp S) {c : Cache} {M₀ : EMessage}
     {η₀ : Nonce} (hq : c (P.encQuery (M₀ ++ η₀)) = none) (M : EMessage) {t : ℕ}
     (ht : t < S.T) :
     ∑ w : BitVec hashBits, P.psiRow S (c.cacheQuery (P.encQuery (M₀ ++ η₀)) w) M t =
@@ -201,7 +201,7 @@ theorem psi_sum_psiRow (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {M₀ : EMe
     field_simp
   · simp [hM, mul_comm]
 
-theorem psi_sum_Psi (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {M₀ : EMessage}
+theorem psi_sum_Psi (hS : S.Analytic) (hT : P.TierHyp S) {c : Cache} {M₀ : EMessage}
     {η₀ : Nonce} (hq : c (P.encQuery (M₀ ++ η₀)) = none) :
     ∑ w : BitVec hashBits, P.Psi S (c.cacheQuery (P.encQuery (M₀ ++ η₀)) w) =
       (Fintype.card (BitVec hashBits) : ℝ) * P.Psi S c := by
@@ -211,7 +211,7 @@ theorem psi_sum_Psi (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {M₀ : EMessa
   rw [Finset.sum_comm, Finset.mul_sum]
   exact Finset.sum_congr rfl fun t ht => psi_sum_psiRow hS hT hq M (Finset.mem_range.1 ht)
 
-theorem PsiE_enc (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {u₀ : EncInput}
+theorem PsiE_enc (hS : S.Analytic) (hT : P.TierHyp S) {c : Cache} {u₀ : EncInput}
     (hq : c (P.encQuery u₀) = none) :
     ∑ w : BitVec hashBits, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
       P.PsiE S (c.cacheQuery (P.encQuery u₀) w) = P.PsiE S c := by
@@ -238,7 +238,7 @@ theorem PsiE_of_ne {c : Cache} {q : Query} (hq : ∀ u, q ≠ P.encQuery u) (w :
     fun u => QueryCache.cacheQuery_of_ne _ _ (hq u).symm
   simp only [PsiE, Psi, psiRow, rowU, rowN, h]
 
-theorem PsiE_noEnc (hS : S.Valid) {c : Cache} (hc : ∀ u, c (P.encQuery u) = none) :
+theorem PsiE_noEnc (hS : S.Analytic) {c : Cache} (hc : ∀ u, c (P.encQuery u) = none) :
     P.PsiE S c ≤ (2 ^ 500 : ℝ≥0∞)⁻¹ := by
   have hU : ∀ M, P.rowU c M = 0 := fun M => by
     unfold rowU
@@ -274,7 +274,7 @@ theorem PsiE_noEnc (hS : S.Valid) {c : Cache} (hc : ∀ u, c (P.encQuery u) = no
 
 /-! ## A bad row -/
 
-theorem thetaRG_le_psiRow (hS : S.Valid) {c : Cache} {M : EMessage} {t : ℕ} (ht : t < S.T)
+theorem thetaRG_le_psiRow (hS : S.Analytic) {c : Cache} {M : EMessage} {t : ℕ} (ht : t < S.T)
     (hu : P.rowU c M ≤ 2 ^ 126)
     (hbad : (P.rowN S c M t : ℝ) + 2 ^ 66 < (P.rowU c M : ℝ) * (S.mass (t + 1) : ℝ)) :
     thetaRG ≤ P.psiRow S c M t := by
@@ -321,7 +321,7 @@ theorem thetaRG_le_psiRow (hS : S.Valid) {c : Cache} {M : EMessage} {t : ℕ} (h
 
 -- `hT` is part of the fixed interface.
 set_option linter.unusedVariables false in
-theorem one_le_PsiE (hS : S.Valid) (hT : P.TierHyp S) {c : Cache} {M : EMessage}
+theorem one_le_PsiE (hS : S.Analytic) (hT : P.TierHyp S) {c : Cache} {M : EMessage}
     (hu : P.rowU c M ≤ 2 ^ 126) (h : ¬ P.RowGood S c M) : 1 ≤ P.PsiE S c := by
   unfold RowGood at h
   simp only [not_forall, not_le, exists_prop] at h

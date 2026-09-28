@@ -1,143 +1,168 @@
-# Fused chain binding at 1115 cycles
+# 1096-cycle split-alias leanISA construction
 
-Claim **1115 cycles**: **125 ordinary instructions + 87 BLAKE2S × 10 + 120 boundary cycles**.
-Every completing path executes 212 instructions. The 87 hashes are 85 chain steps, one index,
-and one root call. This improves the 1209 reference by 94 cycles (7.78%), the 1149 fused
-record by 34 cycles, the recorded 1138 root by 23 cycles, and the unsubmitted 1125 root, from
-which this root descends, by 10 cycles. The step from 1125 is one chain hash: the layer drops
-from 86 to 85, and a new pre-sign potential keeps the security slope below 1 at layer 85.
+The complete `Submission.Certificate 1096` passes a clean local build, exact
+challenge comparison, permitted-axiom checks and fresh Lean kernel replay.
+The competition model and admission requirements are unchanged. Hosted
+acceptance remains pending; local verification timing is close to the limit.
 
-The reference is the verified submission by lucemans at
-`6363c32ead978b927a23860bfb863dff4ba9987e`:
-https://ots.golf/submissions/ae54a7a1c4f0d7c6f00e42030c96e468.
-All modules of this root are part of the certificate's import closure.
+## Result and construction
 
-## Fusing chain and root work
+The proved bound is `106 + 87 * 10 + 120 = 1096` cycles, compared with the complete
+1110-cycle ancestor. Every completing run has 193 instructions and 976 execution
+cycles before the unchanged 120-cycle public-boundary surcharge. The signature
+still contains 42 disclosed 128-bit words and the full 128-bit nonce: 5504 bits.
+The effective index has 127 bits. Code and memory have respectively 2^18 and
+2^16 rows, totaling 327680.
 
-A chain's final hash can include other chain tops in its packet. A chain hash that
-reconstruction needs anyway then authenticates those dependency tops. Nine groups work this
-way. Five groups use **five-dep** packets: two dependency tops as cv words and three alongside
-the current chain word as message words, with metadata that identifies the parent chain.
-Four groups use **three-dep** packets: three dependency tops in message words 1–3.
+The fourteen-cycle improvement is one fewer chain hash (ten cycles) and four
+fewer ordinary instructions. It combines three changes:
 
-| Unit | Kind | Parent chains | Dependency tops |
-| --- | --- | --- | --- |
-| 5 | five-dep | 3, 4, 5, 6 | 7, 8, 9, 10, 11 |
-| 0 | five-dep | 1, 2, 7 | 14, 15, 16, 19, 20 |
-| 7 | five-dep | 14, 15, 16 | 26, 29, 30, 31, 34 |
-| 8 | five-dep | 19, 20, 21 | 35, 36, 39, 40, 41 |
-| 9 | five-dep | 24, 25, 26 | 12, 13, 0, 17, 18 |
-| 6 | three-dep | 8, 9, 10, 11 | 21, 24, 25 |
-| 10 | three-dep | 29, 30, 31 | 22, 23, 27 |
-| 11 | three-dep | 34, 35, 36 | 28, 32, 33 |
-| 12 | three-dep | 39, 40, 41 | 37, 38 (38 twice) |
+1. A sharper linear security potential permits layer 85.
+2. Mixed four-/five-child binding packets keep chains 10, 11, 36 and 41 internal
+   to their group blocks. A zero-step internal child is read directly from the
+   signature; a positive-step child is read from its computed top.
+3. Unequal alias multiplicities within a cost band improve the distribution of
+   accepted indices while respecting each actual block's ordinary-operation budget.
 
-The first two dependency tops of a five-dep group are its cv pair. Their cells are adjacent:
-(289, 290), (269, 270), (285, 286), (277, 278) and (257, 258).
+Eight binding groups replace the earlier nine. Their visible parent prefixes
+are positive, so each accepted tuple binds its children. Hidden coordinates are
+included in the full digit tuple and its injectivity proof, but are not assumed
+to be positive binding parents. The graph is acyclic and covers all 42 tops.
+The verifier uses 85 chain hashes, one index hash and one root hash.
 
-A three-dep final step has the message `[x, d0, d1, d2]`, the cv pair `(C_a, C_(a+1))` at
-cells `(50 + a, 51 + a)` and the metadata `ONE`. Chains 8..11 use `a = 1..4`, 29..31 use 5..7,
-34..36 use 8..10 and 39..41 use 11..13. The cv word `C_a ≠ ONE` separates these steps from
-ordinary chain steps, the metadata `ONE` separates them from fused and root queries, the cv
-word `C_a ≠ C_14` separates them from the index, and distinct `a` separate the three-dep
-parents from each other.
+## Exact counting, not an entropy approximation
 
-Each binding group's all-zero tuple is excluded, so every accepted signature reconstructs
-at least one final binding hash in that group. The acyclic dependency order makes key
-generation and reconstruction coherent.
+A field code selects a tuple through disjoint contiguous intervals. An interval
+length is the tuple's alias multiplicity. Two tuples of the same cost can have
+different multiplicities; therefore cost alone is insufficient to identify a
+security tier.
 
-The root is a single hash in group 5. It takes tops 1 and 2 as cv (cells 281, 282), tops 3–6
-as message, and `C_1` (cell 51) as metadata. Its output pair is at cells 302 and 303, and its
-low half is the public key. Binding propagates through the DAG to all 42 tops.
+`SplitIntervals`, `SplitCodec` and `FourChildCodec` prove the actual aliases,
+full tuple injectivity, visible-prefix positivity and class weights. The weight
+of a full index class is the product of its local multiplicities. A sparse
+multiplicative dynamic program counts raw indices jointly by cost and weight,
+then selects the accepted cost window 22 through 85. This yields 440 exact
+weight tiers, including the exceptional local multiplicities 496 and 144.
+`SplitCount` links this calculation to all actual 127-bit effective indices;
+`FourChildTier` links it to the security schedule. No floating-point estimate
+is used in the certificate.
 
-## Tables, signing, and exact probability bounds
+The numeric schedule uses exact outward rounding at precision 2^256.
+Its linear security coefficient, normalized by 2^-127, is
+`1094562261779 / 2^40`, approximately 0.995499. The fresh-index drift bound is
+`2189121718849 / (2^40 * 2^127)`, no greater than twice that coefficient.
+Rarest-cut signing still uses 2^19 trials. The research-model failure upper
+bound is approximately 0.587825 times 2^-128; Lean checks the required inequality.
 
-The signature is 42 complete 128-bit words and a 127-bit nonce, totaling 5503 bits. The signer
-tries `2^19` nonces and keeps the accepted class of least weight, breaking ties by earliest
-trial. A class's weight counts its effective 127-bit indices. Thirteen group tables encode
-41 chain digits; the free chain digit completes the total to **85**. The group cost lies in
-`[22,85]`, so the free digit lies in `[0,63]`.
+The linear argument jointly accounts for new classes and repeated classes.
+These are disjoint cases, not two simultaneous costs. The nonce space is twice
+the effective-index space, and every nonempty class has weight at least one.
+The duplicate increment is paid within the same potential, allowing a constant
+fresh-query drift. Hidden key generation, post-signing, second-preimage and
+signing self-collision terms remain in the proof. The competition's security
+definition and budget accounting are unchanged.
 
-The field lengths are `[1024,512,512,512,512,2048,2048,1024,1024,1024,1024,1024,1024]`. Unit 7
-has 1020 live values; its last 4 field values are dummies, which no accepted index uses. Units
-from 7 on enumerate digits at most 15. Units 8, 9 and 10 have a cost-17 band. An exporter can
-run the all-zero tuple only at raw field value 0. `FusionCodec` specifies the exact tuples
-and aliases; `FusionTier` and `FusionNumeric` prove their counts and numerical bounds.
+This is consistent with an information-theoretic design heuristic—allocate
+limited index mass where it helps the exact objective—but is not an application
+of a named Shannon or Bourbaki theorem. No optimality or lower bound is claimed.
 
-There are 21 dyadic class weights `1,2,...,2^20`. The schedule uses
-`hp = 2014953938675 / 2^40 / 2^127`, `k1 = 1007477734885 / 2^40 / 2^127`,
-`h1 = 568695663674 / 2^40 / 2^127` and `b0 = 916139622403514217087474011998551`. The
-normalized security slope is 0.980948 and the signing availability is about 129.9 bits.
+## Machine proof
 
-The pre-sign potential is `G + Z + Y + (b / 2I) · G₁`, where `G₁` is the `G` mass of the held
-classes of weight 1. A fresh index answer whose class is already held does not raise `G`, and
-this saving pays for the `Z` increase of every class of weight at least 2. Only the weight-1 tier
-keeps a budget term, with the coefficient `h1 / 8`. The slope is
-`k1 + (h1 / 8) · max(0, 1 − 2 (2 k1 − hp) / h1)²` in units of `2^-127`, where `h1` bounds the
-weight-1 part of `H̄`. The Lean proof uses exact integer counts and
-outward-rounded rational certificates, proving signing failure at most `2^-128` and 127-bit
-strong unforgeability for the actual adaptive cached-oracle experiment.
+The affine-frame architecture of the 1110 ancestor is retained. A fixed field
+base is chosen by finite polynomial avoidance; it depends only on the table,
+not on an input, execution, committed image or oracle. Per-block affine frames
+remove entry jumps, and a separate checksum guard excludes prologue re-entry.
 
-## Addresses, constants, and execution
+Four-child packets use a tag and the actual validated length word as metadata.
+Five-child packets use the extra child word and power metadata. Additional
+polynomial constraints separate the length word from the needed powers.
+`SplitDomains` and `AffineDomains` prove the resulting packet/domain separation.
 
-The prologue has 18 straight instructions: the length gate (which also forces `ONE`), `g`,
-`C_1 … C_14`, the index hash and `MUL H'_0`. It dispatches at slot 18; slots 19 to 26 are
-never-executed pads. The prologue sets no `C_15`:
+Eight guaranteed positive binding hashes are deducted from the checksum.
+The free seed is `g^sentinel / a^77 * a^s`; restoring the eight deductions
+forces the full layer to equal 85. Shifted block costs can reach 16, while
+initialized powers reach 14. The 845 blocks that need two checksum
+multiplications execute and pay for both. Hint rewriting is restricted to
+actual hint cells so it cannot rewrite these checksum operations.
 
-- The landing product of a block multiplies by `C_p` for its product exponent `p`. When
-  `p = 15`, the block multiplies by `C_14` into a scratch cell and then by `C_1`. This occurs
-  only at cost 16 of the five shifted units, whose digits are at most 15, so such a block has
-  at most one zero digit and the second multiplication takes a padding slot.
-- The index hash uses the cv pair `(C_14, GP_13)` at cells 64 and 65 and the metadata `ONE`.
-  `GP_13` is the exit target, forced to `g^262143` on every completing run. The cv word `C_14`
-  separates the index from ordinary and three-dep steps. This frees `g` as the tag of
-  five-dep chain 4, so the 17 tags `C_1 … C_14`, `g`, 5503 and `GP_13` need no extra constant.
+The packed prefix ends at slot 250577; free blocks begin at 255615, leaving
+5038 slots. There are 14820 raw group blocks. Group 7 has 996 live field codes;
+the remaining 28 codes trap. The low raw bit of the first field is ignored by
+the 127-bit abstract index but remains pinned by the complete 128-bit index tie.
 
-Group 0 blocks have `7 + c` slots, group 5 blocks `7 + c` (with the root call), group 6 blocks
-`9 + c`, and the other groups `8 + c`. Group regions run from slot 27 through 241721. Free
-blocks begin at 255615 with stride 68; the sentinel is 262143. The code and memory tables have
-`2^18` and `2^16` rows, respectively, for **327680 seeded rows**.
+`AffinePath`/`AffineCycles` cover every completing run and every permitted
+memory size. `AffineValues`/`AffineSound` prove that an arbitrary completing
+committed image implies acceptance. `AffineProver`, `AffineCells`,
+`AffineHonestChain` and `AffineHonestPath` construct a faithful honest image,
+including zero-step internal reads and both checksum multiplications.
+`AffineFaithful` handles both verifier decisions.
 
-The cycle accounting is 18 prologue and exit, and 107 block non-hash instructions (125), one
-index hash, 85 chain hashes and one root hash (87), and the 120-cycle boundary charge:
-`125 + 87 × 10 + 120 = 1115`.
+## Validation and proof engineering
 
-Units 7, 8, 9, 10 and 12 have no cost-0 tuple and multiply `C_(cost − 1)`. The landing seed
-is `initialProduct(80,s)`, and `initialProduct(80,s) · C_p = initialProduct(85,s) · C_(p+5)`.
-The final exponent is `(12682136550675578873 + 2^60 * (s + sum(group costs))) mod (2^64 - 1)`.
-Only total 85 reaches the sentinel; every other total in the range 0..284 lands on a pad or
-beyond the program. Frame guards (frames 0 to 13, constants `C_1 … C_14`) reject entry into a
-block's middle. The universal cycle theorem quantifies over every admitted memory size, image,
-and step count.
+### Check-time engineering pass (2026-09-28)
 
-The machine executes groups in unit order, but committed memory lets an instruction assert a
-relation involving values checked later. Soundness reconstructs those relations in dependency
-order. The honest prover first reconstructs all tops, then collects the output pairs and the
-root state; repeated oracle queries share cached answers.
+The exported statements, the program, the tables and the claim are unchanged;
+only proof terms and module structure were reworked so that the hosted sandbox
+(build + lean4export + kernel replay under `RuntimeMaxSec=1200`) has margin.
+GF(2^64) products certified by `decide +kernel` (about 10,500 of them, roughly
+20 ms each in replay) were replaced by structural Bool/Nat-primitive checks
+(`BF64Fast`, `GenOrderFast`); the serial `SplitDPStage*` dynamic-program chain was
+replaced by a packed certificate (`SplitPack`, `SplitContraction`, `SplitDP`); the
+length-power and log-value tables use `rfl`/linear Bool scans instead of
+`decide`; and the `SplitNumeric`/`AffineCodec`/`FourChildTier` checks use
+certified scans (`ListCert`). Measured on an idle host: clean build 203.5 s
+(peak PSS 12.96 GB, was 423.7 s / 18.75 GB), Solution export 10.4 s (288 MB),
+CheckExports replay 117.3 s of which kernel replay 74.6 s (was 743.2 s / 695.6 s).
+An independent structural walk over the old and new lean4export closures of
+`submission`, `certificate` and `seeded_rows` found 3656 constants in each and
+no differences. These are local measurements, not a hosted verdict.
 
-## Validation status
 
-`lake build Submissions.UpperLeanIsa.Solution` succeeds, and `#print axioms` on `certificate`
-and `seeded_rows` reports only `propext`, `Classical.choice` and `Quot.sound`. The 1149 parent's
-hosted check timed out after 1232 seconds; its revision consolidated the length certificates
-into `LengthPowers`, `LengthLogValues` and `LengthBounds` and checks the location order through
-adjacent pairs. This root keeps those changes. A hosted run still has to confirm the wall-clock
-limit.
+The complete certificate and seeded-row bound pass a clean build with no prior
+submission artifacts (8968 jobs, 423.679 seconds). Exact comparison against the
+rendered 1096 challenge and its primitive declarations passes. The exported
+dependency audit and named-theorem audits use only `propext`, `Classical.choice`
+and `Quot.sound`. A fresh, unchanged Lean kernel replay accepts all 62151
+exported declarations: replay itself takes 695.624 seconds, and parsing,
+comparison, axiom checking and replay together take 743.160 seconds including
+the local process wrapper.
 
-## Failed directions
+The measured required build/export/check stages total 1187.366 seconds
+(19 minutes 47 seconds), leaving only about 13 seconds against the 20-minute
+limit on this host. This is a sum of standalone local measurements, not an
+official sandboxed end-to-end verdict; hosted timeout remains a material risk.
+Peak sampled proportional memory is about 17.5 GiB during the parallel build
+and 6.0 GiB during replay. These are PSS samples, not a hosted cgroup measurement.
+Build output is 34036 bytes. Source hashes were unchanged through validation.
 
-- Allowing zero-cost binding tuples breaks binding: a group can disclose all its parent tops
-  without executing a hash that authenticates its children.
-- Without the cost-17 band, nine binding tables fail the exact gate (slope 1.000959).
-- Binding top 11 inside group 6 (so group 6 copies at most two zero tops) needs the tuples
-  `(0,0,0,c)` excluded; the exact gate fails (slope 1.0088). Relaxing the binding of group 12
-  would pay for it, but the packets then lack two dependency slots.
-- Dropping `C_15` by leaving holes in the cost bands fails the gate (slope 1.0186).
-- Layer 85 fails the earlier potential `(1 + b/I) · G + Z + Y` for every design searched
-  (slope 1.374 on these tables).
-- Layer 84 stays out of reach with the new potential: its slope is at least `hp / 2`, and that
-  is at least 1.056 for the best layer-84 design found. That is search evidence, not an impossibility
-  proof.
+Large dynamic-program certificates must be split into serial modules and
+bounded row checks: a monolithic check exceeded the hosted memory cap locally.
+The last two profiles are composed algebraically and their cost-window sum is
+transposed into seven coefficient-vector dot products against the stage-11 rows.
+This avoids constructing the last two full matrices. The generic composition
+and transposition identities and every resulting count are kernel checked.
+The numeric schedule similarly uses a certified linear scan of tier masses;
+the cached schedule is proved equal to the original for every index.
+These transformations change proof representation, not the table, arithmetic,
+security conditions or machine score.
+Obsolete unreachable machine/research modules are archived outside the
+submission; the admitted root contains the active dependency chain.
+
+The official Linux verifier fails closed here because Landlock is unavailable.
+No sandbox requirement is bypassed, and local development checks are not a
+hosted verdict. Submission requests the official hosted check.
+
+## Failed approaches and next work
+
+Earlier 1094/sub-1095 candidates failed exact security checks; removing padding
+alone did not suffice. Uniform alias multiplicities by cost restricted the
+search unnecessarily. Rotating packets alone does not separate domains on
+attacker-chosen child values. None of these failures is an impossibility proof.
+
+Further savings must count every initialization, copy, extra multiplication,
+jump, length check and boundary charge. Useful next targets are a joint search
+over packet arity, internal-child placement and split aliases, followed by exact
+security and code-size screening. A still-lower estimate is not a certificate.
 
 ## Credits
 
@@ -149,23 +174,35 @@ limit.
   with rotated chain numbering, ONE padding, and the effective-index budget proof added here.
 - `Cache`, `IUB`, `Master`, counting/availability lemmas, and adaptive index-grinding proofs
   inherit the earlier UpperRiscv and leanISA authors' work, including Tom Wambsgans (PR #5)
-  and Holindauer with Claude Fable 5.1 (PR #15).
+  and Holindauer with Claude Fable 5.1 (PR #15), as credited in the preserved baseline.
 - The field-rescaling model and 1295 plan are retained in `leanisa-frontier/field-opt`.
   The 1295 implementation and proof adaptation were completed with Codex.
-- The landing exit is from the 1319-cycle record, prepared with Claude Opus 5.5; its port onto
-  the 1295 machine (1294), the root rehoming (1291), the 8-call root (1283), TRIM16 (1282),
-  FREE-Z (1281), the 9-call root (1289), rarest-cut signing with the `Tier*` proofs, and the
-  1209 machine were prepared with Claude Opus 5.5.
-- The layer-87 table search, regenerated tier certificates, fused length-guard port, the
-  six-group fused construction, exact layer-86 search, dependency-aware security proof and the
-  1149-cycle machine certificate were prepared with Codex.
-- The light seventh binding group, the two-call root and the 1138-cycle machine certificate
-  were prepared with Claude Opus 5.5.
-- The single-call root, the nine binding groups with three-dep packets, the cost-17 band with
-  `C_(cost − 1)` landing factors and the 1126-cycle machine certificate were prepared with
-  Claude Opus 5.5.
-- The removal of `C_15` (split product, index cv `(C_14, GP_13)`), the digit bound 15 with
-  the retuned tier certificate, the 1125-cycle machine certificate and the removal of the
-  pre-fusion modules were prepared with Claude Opus 5.5.
-- The pre-sign potential with the weight-1 budget term, the layer-85 tables and the 1115-cycle
-  machine certificate were prepared with Claude Opus 5.5.
+- The landing exit (hash-free exit table, pads below the sentinel) is from the 1319-cycle
+  record, prepared with Claude Opus 5.5; its port onto the 1295 machine (1294) was prepared
+  with Claude Opus 5.5.
+- The root rehoming (1291) was prepared with Claude Opus 5.5.
+- The 8-call root with a state-word tag (1283), its good-record security argument and the
+  one-entry signing bound were prepared with Claude Opus 5.5.
+- TRIM16 (dummy cost-17 entries, 1282) and FREE-Z (the free top in call 1 with a frame-14 variant
+  of the first group, 1281) were prepared with Claude Opus 5.5.
+- The 9-call root with constant tags on the 1281 machine (1289) was prepared with Claude Opus 5.5.
+- Rarest-cut signing (the tier proof, the `Tier*` files and the rewired stage proofs), the
+  aliased layer-88 tables with their tier-schedule certificate, and the 1209 machine were
+  prepared with Claude Opus 5.5.
+
+- This layer-87 table search, regenerated tier certificates, and fused length-guard port were prepared with Codex.
+
+- The six-group fused construction, exact layer-86 search, dependency-aware security proof,
+  new address layout, and complete 1149-cycle machine certificate were prepared with Codex.
+
+- The light seventh binding group on chains 39, 40, 41, the two-call root, the (C_1, C_2) light
+  cv, and the 1138-cycle machine certificate were prepared with Claude Opus 5.5.
+
+- The full-nonce revision and the four-child single-root construction, exact codec/tier
+  proofs, address layout, security proof and 1125-cycle machine certificate were prepared with Codex.
+- The validated-length frame and shifted checksum, reducing the machine to 1124 cycles,
+  were prepared with Codex.
+- The affine-frame candidate and its polynomial avoidance, secure codec, instruction
+  semantics, length check, universal 1110-cycle proof, soundness, honest prover and complete certificate were prepared with Codex.
+
+- The mixed-packet split-alias layer-85 construction, linear security argument, exact multiplicative counting, and 1096 proof port were prepared with Codex using parallel agents.

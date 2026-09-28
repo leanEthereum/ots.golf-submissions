@@ -3,8 +3,8 @@ import Submissions.UpperLeanIsa.LayerDigits
 import Submissions.UpperLeanIsa.LayerProfile
 import Submissions.UpperLeanIsa.TierCodec
 
-/-! Layer-85 codec for the fixed-tag fusion candidate. Each unit has its own table.
-The nine binding units omit the zero tuple. Their live bands start at field zero;
+/-! Layer-86 codec for the fixed-tag fusion candidate. Each unit has its own table.
+The seven binding units omit the zero tuple. Their live bands start at field zero;
 unused field values occur only after the live bands. The base `params` stores the
 index and signing codec; the fusion construction supplies different chain/root queries. -/
 
@@ -37,58 +37,58 @@ def shK (s : ℕ) : ℕ := if s = 5 ∨ s = 6 then 4 else 3
 def shB (s : ℕ) : ℕ := if s = 5 ∨ s = 6 then 11 else if 7 ≤ s then 10 else 9
 
 /-- The digit bound of the tuple enumeration of shape `s`. -/
-def gB (s : ℕ) : ℕ := if 7 ≤ s then 16 else 13
+def gB (s : ℕ) : ℕ := if 7 ≤ s then 17 else 13
 
 /-- Digit bound of coordinate `i` of shape `s`: one more than its maximum over the table. -/
 def shLen (s i : ℕ) : ℕ := if 7 ≤ s then 17 else if (s = 5 ∨ s = 6) ∧ i = 0 then 12 else 13
 
 /-- Tuples of each cost. -/
 def shN (s : ℕ) : List ℕ :=
-  ([[0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 58, 0, 0, 0, 0],
-    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0],
-    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0],
-    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0],
-    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0, 0],
-    [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 106, 0, 0, 0, 0],
-    [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 230, 0, 0, 0, 0],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 0],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 38],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 38],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 150, 59],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 84, 0, 0, 0],
-    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 145, 0]]).getD s []
+  ([[0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 51, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 54, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 47, 0, 0, 0],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 57, 0, 0, 0],
+    [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229, 0, 0, 0],
+    [0, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 454, 229, 0, 0, 0],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 118],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153],
+    [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 83, 0, 0],
+    [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136, 153]]).getD s []
 
 /-- Field values per tuple of each cost (`1` for an empty band). -/
 def shMu (s : ℕ) : List ℕ :=
-  ([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 32, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 2, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 128, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 4, 1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).getD s []
+  ([[1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 128, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).getD s []
 
 /-- Cumulative band sizes: entry `c` counts the live values of cost `< c`. -/
 def shCum (s : ℕ) : List ℕ :=
-  ([[0, 0, 3, 9, 19, 34, 55, 83, 119, 164, 219, 285, 363, 454, 512, 512, 512, 512, 512],
-    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512, 512],
-    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512, 512],
-    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512, 512],
-    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512, 512],
-    [0, 0, 128, 138, 158, 193, 249, 333, 453, 618, 838, 1124, 1488, 1942, 2048, 2048, 2048, 2048, 2048],
-    [0, 0, 4, 14, 34, 69, 125, 209, 329, 494, 714, 1000, 1364, 1818, 2048, 2048, 2048, 2048, 2048],
-    [0, 0, 6, 18, 38, 68, 110, 138, 174, 219, 274, 340, 418, 509, 614, 734, 870, 1020, 1020],
-    [0, 0, 24, 30, 40, 55, 76, 104, 140, 185, 240, 306, 384, 475, 580, 700, 836, 986, 1024],
-    [0, 0, 6, 30, 40, 55, 76, 104, 140, 185, 240, 306, 384, 475, 580, 700, 836, 986, 1024],
-    [0, 0, 3, 9, 19, 34, 55, 83, 119, 164, 219, 285, 363, 454, 559, 679, 815, 965, 1024],
-    [0, 0, 384, 390, 400, 415, 436, 464, 500, 545, 600, 666, 744, 835, 940, 1024, 1024, 1024, 1024],
-    [0, 0, 12, 18, 38, 53, 74, 102, 138, 228, 283, 349, 427, 518, 623, 743, 879, 1024, 1024]]).getD s []
+  ([[0, 0, 3, 15, 25, 40, 61, 89, 125, 170, 225, 291, 369, 460, 511, 511, 511, 511],
+    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512],
+    [0, 1, 7, 13, 23, 38, 59, 87, 123, 168, 223, 289, 367, 458, 512, 512, 512, 512],
+    [0, 1, 4, 10, 30, 45, 66, 94, 130, 175, 230, 296, 374, 465, 512, 512, 512, 512],
+    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 512, 512, 512, 512],
+    [0, 0, 4, 14, 34, 69, 125, 209, 329, 494, 714, 1000, 1364, 1818, 2047, 2047, 2047, 2047],
+    [0, 0, 4, 14, 34, 69, 125, 209, 329, 494, 714, 1000, 1364, 1818, 2047, 2047, 2047, 2047],
+    [0, 0, 3, 99, 109, 124, 145, 173, 209, 254, 309, 375, 453, 544, 649, 769, 905, 1023],
+    [0, 0, 12, 36, 46, 61, 82, 110, 146, 191, 246, 312, 390, 481, 586, 706, 842, 995],
+    [0, 0, 3, 15, 25, 40, 61, 89, 125, 170, 225, 291, 369, 460, 565, 685, 821, 974],
+    [0, 1, 4, 10, 20, 35, 56, 84, 120, 165, 220, 286, 364, 455, 560, 680, 816, 969],
+    [0, 1, 385, 391, 401, 416, 437, 465, 501, 546, 601, 667, 745, 836, 941, 1024, 1024, 1024],
+    [0, 0, 3, 9, 19, 34, 55, 83, 119, 164, 219, 285, 363, 454, 559, 679, 815, 968]]).getD s []
 
 /-- Number of cost bands of shape `s`. -/
 def nb (s : ℕ) : ℕ := (shN s).length
@@ -151,7 +151,7 @@ def bandOK (s c : ℕ) : Bool :=
 /-- The kernel-checked facts of shape `s`: tuples, band sizes, positive multiplicities. -/
 def shapeOK (s : ℕ) : Bool :=
   (List.range (nb s)).all (fun c => bandOK s c && AS s (c + 1) == AS s c + nT s c * muT s c &&
-    decide (1 ≤ muT s c)) && AS s 0 == 0 && decide (cutS s ≤ 2 ^ shB s) && decide (nb s ≤ 18) &&
+    decide (1 ≤ muT s c)) && AS s 0 == 0 && decide (cutS s ≤ 2 ^ shB s) && decide (nb s ≤ 17) &&
     decide (1 ≤ nb s)
 
 theorem shape0_ok : shapeOK 0 = true := by decide +kernel
@@ -186,7 +186,7 @@ theorem shape_ok {s : ℕ} (hs : s < 13) : shapeOK s = true := by
 
 theorem shapeOK_iff (s : ℕ) : shapeOK s = true ↔
     (∀ c < nb s, bandOK s c = true ∧ AS s (c + 1) = AS s c + nT s c * muT s c ∧ 1 ≤ muT s c) ∧
-      AS s 0 = 0 ∧ cutS s ≤ 2 ^ shB s ∧ nb s ≤ 18 ∧ 1 ≤ nb s := by
+      AS s 0 = 0 ∧ cutS s ≤ 2 ^ shB s ∧ nb s ≤ 17 ∧ 1 ≤ nb s := by
   simp only [shapeOK, Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq, List.all_eq_true,
     List.mem_range, and_assoc]
 
@@ -227,7 +227,10 @@ theorem AS_succ {s c : ℕ} (hs : s < 13) (hc : c < nb s) :
 theorem muT_pos {s c : ℕ} (hs : s < 13) (hc : c < nb s) : 1 ≤ muT s c :=
   (((shapeOK_iff s).mp (shape_ok hs)).1 c hc).2.2
 
-theorem nb_le {s : ℕ} (hs : s < 13) : nb s ≤ 18 := ((shapeOK_iff s).mp (shape_ok hs)).2.2.2.1
+theorem cutS_le {s : ℕ} (hs : s < 13) : cutS s ≤ 2 ^ shB s :=
+  ((shapeOK_iff s).mp (shape_ok hs)).2.2.1
+
+theorem nb_le {s : ℕ} (hs : s < 13) : nb s ≤ 17 := ((shapeOK_iff s).mp (shape_ok hs)).2.2.2.1
 
 theorem nb_pos {s : ℕ} (hs : s < 13) : 1 ≤ nb s := ((shapeOK_iff s).mp (shape_ok hs)).2.2.2.2
 
@@ -322,27 +325,6 @@ theorem tupS_lt {s v : ℕ} (hs : s < 13) (hv : v < 2 ^ shB s) {i : ℕ} (hi : i
   · exact (tupR_facts hs (band_spec hs h).2.2 (rank_lt hs h)).2.2 i hi
   · rw [List.getD_eq_getElem?_getD, List.getElem?_replicate]
     unfold shLen
-    split_ifs <;> simp
-
-/-- Every table digit is below the enumeration bound `gB s`. -/
-theorem tabR_lt_gB : ∀ s < 13, ∀ c < nb s, ∀ t ∈ tabR s c, ∀ x ∈ t, x < gB s := by
-  decide +kernel
-
-theorem tupS_lt_gB {s v : ℕ} (hs : s < 13) (hv : v < 2 ^ shB s) (i : ℕ) :
-    (tupS s v).getD i 0 < gB s := by
-  unfold tupS
-  split_ifs with h
-  · have hc := (band_spec hs h).2.2
-    have hr := rank_lt hs h
-    have hl := (tabR_facts hs hc).1
-    have hm : tupR s (band s v) (rank s v) ∈ tabR s (band s v) := by
-      unfold tupR; rw [List.getD_eq_getElem _ _ (by omega)]; exact List.getElem_mem _
-    rw [List.getD_eq_getElem?_getD]
-    cases he : (tupR s (band s v) (rank s v))[i]? with
-    | none => simp only [Option.getD_none]; unfold gB; split_ifs <;> omega
-    | some x => exact tabR_lt_gB s hs _ hc _ hm x (List.mem_of_getElem? he)
-  · rw [List.getD_eq_getElem?_getD, List.getElem?_replicate]
-    unfold gB
     split_ifs <;> simp
 
 /-- The first alias of the tuple of a live value. -/
@@ -464,6 +446,8 @@ theorem pos_facts : ∀ k < 42, ∀ j < lenN k - 1, off k + j < 729 ∧ locate (
 
 theorem posW_13 : posW ubits 13 = 127 := by decide
 
+theorem steps_eq : ∑ k : Fin 42, (lenN k - 1) = 625 := by decide +kernel
+
 /-! ## Digits -/
 
 /-- Entry `v` of unit `u`. -/
@@ -479,7 +463,7 @@ def field (u : ℕ) (I : Index) : ℕ := digitW ubits I.toNat u
 def gsum (I : Index) : ℕ := ∑ u ∈ Finset.range 13, cost u (field u I)
 
 /-- The free chain's digit: the layer minus the total cost, when that is in `[0, 63]`. -/
-def freeDigit (c : ℕ) : ℕ := if 22 ≤ c ∧ c ≤ 85 then 85 - c else 0
+def freeDigit (c : ℕ) : ℕ := if 23 ≤ c ∧ c ≤ 86 then 86 - c else 0
 
 /-- The live entries of unit `u`. -/
 def cut (u : ℕ) : ℕ := cutS (ushape u)
@@ -488,10 +472,10 @@ def cut (u : ℕ) : ℕ := cutS (ushape u)
 entries, and the free digit keeps dummy indices off the layer. -/
 def dummy (I : Index) : Prop := ∃ u < 13, cut u ≤ field u I
 
-/-- The free digit of an index: `[gsum = 85]` for a dummy (so its digit sum is never `85`),
+/-- The free digit of an index: `[gsum = 86]` for a dummy (so its digit sum is never `86`),
 else `freeDigit (gsum I)`. -/
 def freeD (I : Index) : ℕ :=
-  if dummy I then (if gsum I = 85 then 1 else 0) else freeDigit (gsum I)
+  if dummy I then (if gsum I = 86 then 1 else 0) else freeDigit (gsum I)
 
 /-- Digit of chain `k` (on naturals). -/
 def digitN (I : Index) (k : ℕ) : ℕ :=
@@ -563,7 +547,7 @@ def rootExp (r : ℕ) : ℕ := (r + 1) * 1152921504606846976
 def len (k : Fin numChains) : ℕ := lenN k
 
 /-- The accepted layer. -/
-def layer : ℕ := 85
+def layer : ℕ := 86
 
 /-- Digit of chain `k`. -/
 def digit (I : Index) (k : Fin numChains) : ℕ := digitN I k
@@ -579,16 +563,13 @@ def cv : BitVec 256 := gword 1 ++ gword 0
 /-- Metadata of chain steps: `ONE`. -/
 def chainMd : Word := gword 0
 
-/-- The index chaining value `(C_14, GP_13)`: the machine's adjacent cells `64`, `65`. -/
-def idxCv : BitVec 256 := gword 262143 ++ gword (1152921504606846976 * 14)
-
-/-- Metadata of the index query: `ONE`, as for chain steps; the cv word `C_14` separates them. -/
-def idxMd : Word := gword 0
+/-- Metadata of the index query: `G`. -/
+def idxMd : Word := gword 1
 
 /-- Metadata of root call `r`: the frame constant `F_r`. -/
 def rootMd (r : ℕ) : Word := gword (rootExp r)
 
-/-- The layer-85 fusion parameters. -/
+/-- The GROUP-3 parameters. -/
 def params : Params where
   len := len
   layer := layer
@@ -596,10 +577,13 @@ def params : Params where
   tag := tag
   cv := cv
   chainMd := chainMd
-  idxCv := idxCv
   idxMd := idxMd
   rootMd := rootMd
   hiTop := fun k => decide (k.val ∈ [1, 7, 12, 14, 21, 22, 26, 33, 35])
+
+/-- The HL-GROUP-3 scheme. -/
+def scheme : OracleAlgorithm.Scheme := params.scheme
+
 
 /-! ## Field-constant words -/
 
@@ -621,12 +605,28 @@ theorem sym_inj {a b : ℕ} (ha : a < 9) (hb : b < 9) (h : sym a = sym b) : a = 
   have := gword_inj (by omega) (by omega) h
   omega
 
-theorem cv_ne_idxCv : params.cv ≠ params.idxCv := by
+theorem chainMd_ne : params.chainMd ≠ params.idxMd := by
   intro h
-  change gword 1 ++ gword 0 = gword 262143 ++ gword (1152921504606846976 * 14) at h
-  have h' := congrArg (fun z : BitVec 256 => z.extractLsb' 0 128) h
-  simp only [BitVec.extractLsb'_append_eq_right] at h'
-  have := gword_inj (a := 0) (b := 1152921504606846976 * 14) (by norm_num) (by norm_num) h'
+  have := gword_inj (a := 0) (b := 1) (by norm_num) (by norm_num) h
+  omega
+
+theorem rootMd_ne : ∀ r < 9, params.rootMd r ≠ params.idxMd := by
+  intro r hr h
+  have := gword_inj (a := rootExp r) (b := 1) (by unfold rootExp; omega) (by norm_num) h
+  unfold rootExp at this
+  omega
+
+theorem chainMd_ne_root : ∀ r < 9, params.chainMd ≠ params.rootMd r := by
+  intro r hr h
+  have := gword_inj (a := 0) (b := rootExp r) (by norm_num) (by unfold rootExp; omega) h
+  unfold rootExp at this
+  omega
+
+theorem rootMd_inj : ∀ r s, r < 9 → s < 9 → params.rootMd r = params.rootMd s → r = s := by
+  intro r s hr hs h
+  have := gword_inj (a := rootExp r) (b := rootExp s) (by unfold rootExp; omega)
+    (by unfold rootExp; omega) h
+  unfold rootExp at this
   omega
 
 /-! ## Digits: bounds, injectivity, acceptance -/
@@ -672,8 +672,8 @@ theorem sum_digits (I : Index) :
 
 /-- **Acceptance** is a window on the total cost. -/
 theorem accepted_iff (I : Index) :
-    params.Accepted I ↔ ¬ dummy I ∧ 22 ≤ gsum I ∧ gsum I < 86 := by
-  change ∑ k : Fin numChains, digit I k = 85 ↔ _
+    params.Accepted I ↔ ¬ dummy I ∧ 23 ≤ gsum I ∧ gsum I < 87 := by
+  change ∑ k : Fin numChains, digit I k = 86 ↔ _
   rw [sum_digits]
   unfold freeD freeDigit
   by_cases hd : dummy I
@@ -727,6 +727,9 @@ theorem gsum_eq (I : Index) : gsum I = ∑ u : Fin 13, cost u (field u I) :=
   (Fin.sum_univ_eq_sum_range (fun u => cost u (field u I)) 13).symm
 
 theorem cut_le : ∀ u < 13, cut u ≤ 2 ^ ubits u := by decide
+
+theorem cut_le' {u : ℕ} (hu : u < 13) : cut u ≤ 2 ^ shB (ushape u) := by
+  rw [← ubits_eq hu]; exact cut_le u hu
 
 theorem not_dummy_iff (I : Index) : ¬ dummy I ↔ ∀ u < 13, field u I < cut u := by
   simp only [dummy, not_exists, not_and, not_le]
@@ -845,6 +848,10 @@ theorem weight_eq {I : Index} (hI : params.Accepted I) : params.weight I = wprod
 
 /-! ## Interface for the machine -/
 
+/-- The bit positions of the group fields (`POS`), and `128` past the last one. -/
+theorem posW_eq : ∀ u < 14, posW ubits u =
+    [0, 9, 18, 27, 36, 45, 56, 67, 77, 87, 97, 107, 117, 127].getD u 0 := by decide
+
 theorem digit_free (I : Index) : digit I 0 = freeD I := by
   simp only [digit, digitN]; rfl
 
@@ -863,12 +870,19 @@ theorem cost_spec {u v : ℕ} (hv : v < cut u) :
   rw [cost_live hv]
   exact ⟨(band_spec (ushape_lt u) hv).1, (band_spec (ushape_lt u) hv).2.1⟩
 
-theorem cost_lt {u v : ℕ} (hv : v < cut u) : cost u v < 18 := by
+theorem cost_lt {u v : ℕ} (hv : v < cut u) : cost u v < 17 := by
   rw [cost_live hv]
   have := (band_spec (ushape_lt u) hv).2.2
   have := nb_le (ushape_lt u)
   omega
 
+theorem gword_zero : gword 0 = LeanIsa.cellBits (ofK 1) := by
+  show LeanIsa.cellBits (ofK (g ^ 0)) = _; rw [pow_zero]
+
+theorem gword_one : gword 1 = LeanIsa.cellBits (ofK g) := by
+  show LeanIsa.cellBits (ofK (g ^ 1)) = _; rw [pow_one]
+
 end FusionCodec
+
 
 end OptimalOTS.LeanIsaBaseline.Layer

@@ -23,6 +23,8 @@ open scoped Classical
 
 namespace OptimalOTS.LeanIsaBaseline
 
+
+
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget verifyBudget
 
 /-- The cache of the random oracle. -/
@@ -34,6 +36,7 @@ abbrev run {α : Type} (oa : OracleComp Spec α) (c : Cache) :
   (simulateQ (oracleImpl) oa).run c
 
 namespace Cache
+
 
 /-- Overlay `f` under `c`: entries of `c` take priority. -/
 def extend (c f : Cache) : Cache := fun q => (c q).or (f q)
@@ -65,6 +68,12 @@ theorem extend_apply_of_some {c f : Cache} {q : Query} {u : BitVec hashBits}
 theorem extend_apply_of_none {c f : Cache} {q : Query} (h : c q = none) :
     extend c f q = f q := by simp [extend, h]
 
+@[simp] theorem extend_empty (c : Cache) : extend c ∅ = c := by
+  funext q; simp [extend]
+
+@[simp] theorem empty_extend (f : Cache) : extend ∅ f = f := by
+  funext q; simp [extend]
+
 theorem extend_cacheQuery (c f : Cache) (q : Query) (u : BitVec hashBits) :
     extend (c.cacheQuery q u) f = (extend c f).cacheQuery q u := by
   funext q'
@@ -74,6 +83,13 @@ theorem extend_cacheQuery (c f : Cache) (q : Query) (u : BitVec hashBits) :
 
 theorem extend_assoc (c f g : Cache) : extend (extend c f) g = extend c (extend f g) := by
   funext q; simp [extend, Option.or_assoc]
+
+theorem extend_isSome (c f : Cache) (q : Query) :
+    (extend c f q).isSome ↔ (c q).isSome ∨ (f q).isSome := by
+  simp [extend, Option.isSome_or]
+
+theorem not_hits_empty (f : Cache) : ¬ Hits ∅ f := by
+  rintro ⟨q, -, h⟩; simp at h
 
 theorem Disjoint.not_hits {c f : Cache} (h : Disjoint c f) : ¬ Hits c f := by
   rintro ⟨q, hf, hc⟩
@@ -92,6 +108,17 @@ theorem hits_cacheQuery (c f : Cache) (q : Query) (u : BitVec hashBits) :
       · subst h; exact ⟨q', hf, by simp⟩
       · exact ⟨q', hf, by rw [QueryCache.cacheQuery_of_ne _ _ h]; exact hc⟩
     · exact ⟨q, hf, by simp⟩
+
+theorem hits_extend (c f g : Cache) : Hits (extend c f) g ↔ Hits c g ∨ Hits f g := by
+  constructor
+  · rintro ⟨q, hg, hc⟩
+    rw [extend_isSome] at hc
+    rcases hc with hc | hc
+    · exact Or.inl ⟨q, hg, hc⟩
+    · exact Or.inr ⟨q, hg, hc⟩
+  · rintro (⟨q, hg, hc⟩ | ⟨q, hg, hc⟩)
+    · exact ⟨q, hg, (extend_isSome c f q).2 (Or.inl hc)⟩
+    · exact ⟨q, hg, (extend_isSome c f q).2 (Or.inr hc)⟩
 
 theorem disjoint_cacheQuery {c f : Cache} (h : Disjoint c f) {q : Query}
     (hq : f q = none) (u : BitVec hashBits) : Disjoint (c.cacheQuery q u) f := by

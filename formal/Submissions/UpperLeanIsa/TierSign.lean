@@ -98,7 +98,7 @@ theorem sign_eq_map (sk : SecretKey) (m : Message) :
   exact P.signLoop_eq_map sk m trials ∅ none
 
 theorem card_pool {tried : Finset Nonce} :
-    (Finset.univ \ tried).card = 2 ^ 127 - tried.card := by
+    (Finset.univ \ tried).card = 2 ^ 128 - tried.card := by
   rw [Finset.card_sdiff_of_subset (Finset.subset_univ _), Finset.card_univ, Fintype.card_bitVec]
 
 theorem pool_pos {tried : Finset Nonce} (h : tried.card < trials) :
@@ -555,7 +555,7 @@ theorem pool_card_ne_zero {tried : Finset Nonce} (h : tried.card < trials) :
   Nat.cast_ne_zero.2 (pool_pos h).ne'
 
 theorem pool_ge {tried : Finset Nonce} (h : tried.card < trials) :
-    2 ^ 127 - 2 ^ 19 ≤ (Finset.univ \ tried).card := by
+    2 ^ 128 - 2 ^ 19 ≤ (Finset.univ \ tried).card := by
   rw [card_pool]
   unfold trials at h
   omega
@@ -632,7 +632,7 @@ theorem trialAvg_fresh_cls (d : Cache) (M : EMessage) {tried : Finset Nonce}
 theorem trialAvg_nonce (d : Cache) (M : EMessage) {tried : Finset Nonce}
     (htr : tried.card < trials) (η₀ : Nonce) :
     P.trialAvg d M tried (fun η _ _ => if η = η₀ then 1 else 0) ≤
-      ((2 ^ 127 - 2 ^ 19 : ℕ) : ℝ≥0∞)⁻¹ := by
+      ((2 ^ 128 - 2 ^ 19 : ℕ) : ℝ≥0∞)⁻¹ := by
   unfold trialAvg
   have hx : ∀ η, P.trialVal d M (fun η _ _ => if η = η₀ then 1 else 0) η =
       if η = η₀ then 1 else 0 := by
@@ -714,15 +714,15 @@ theorem ennreal_frac_le {n A F : ℕ} {x y : ℝ} (hn : 0 < n) (hx : 0 ≤ x)
 /-- The arithmetic of T1a. -/
 theorem t1a_arith {A a F n rU rN r₁ r₂ r Pm eta : ℝ}
     (hA : 0 ≤ A) (ha : 0 ≤ a) (hF : 0 ≤ F) (hr1 : 0 ≤ r₁) (hr2 : 0 ≤ r₂)
-    (hpart : A + a + F = n) (hN : rN ≤ a + r₁) (hU : rU + F + r₂ = 2 ^ 127)
-    (hr : r₁ + r₂ = r) (hn : n = 2 ^ 127 - r) (hrL : r < 2 ^ 19) (hPm0 : 0 ≤ Pm)
+    (hpart : A + a + F = n) (hN : rN ≤ a + r₁) (hU : rU + F + r₂ = 2 ^ 128)
+    (hr : r₁ + r₂ = r) (hn : n = 2 ^ 128 - r) (hrL : r < 2 ^ 19) (hPm0 : 0 ≤ Pm)
     (hPm1 : Pm ≤ 1) (hgood : rU * Pm ≤ rN + 2 ^ 66)
-    (heta : (2 ^ 66 + 2 ^ 19) / (2 ^ 127 - 2 ^ 19) ≤ eta) :
+    (heta : (2 ^ 66 + 2 ^ 19) / (2 ^ 128 - 2 ^ 19) ≤ eta) :
     n⁻¹ * (A + F * (1 - Pm)) ≤ 1 - Pm + eta := by
   have hn0 : 0 < n := by rw [hn]; linarith
   rw [inv_mul_le_iff₀ hn0]
   have hne : 2 ^ 66 + 2 ^ 19 ≤ n * eta := by
-    have h1 : (2 ^ 66 + 2 ^ 19 : ℝ) ≤ n * ((2 ^ 66 + 2 ^ 19) / (2 ^ 127 - 2 ^ 19)) := by
+    have h1 : (2 ^ 66 + 2 ^ 19 : ℝ) ≤ n * ((2 ^ 66 + 2 ^ 19) / (2 ^ 128 - 2 ^ 19)) := by
       rw [mul_div_assoc', le_div_iff₀ (by norm_num)]
       nlinarith
     exact h1.trans (mul_le_mul_of_nonneg_left heta hn0.le)
@@ -732,7 +732,7 @@ theorem t1a_arith {A a F n rU rN r₁ r₂ r Pm eta : ℝ}
 variable {S : Tier.Sched}
 
 /-- One trial misses the tiers below `t` with probability at most `ȳ_t` (T1a). -/
-theorem trialAvg_tier_ge (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem trialAvg_tier_ge (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) {tried : Finset Nonce} (htr : tried.card < trials) {t : ℕ}
     (ht : t ≤ S.T) :
     P.trialAvg d M tried (fun _ w _ => if t ≤ P.tierW S w then 1 else 0) ≤ S.yb t := by
@@ -829,9 +829,9 @@ theorem trialAvg_tier_ge (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMes
   have hrowU : P.rowU d M = (Finset.univ.filter fun η =>
       (d (P.encQuery (M ++ η))).isSome).card := rfl
   rw [Finset.card_univ, Fintype.card_bitVec] at hU
-  have hpool : (Finset.univ \ tried).card = 2 ^ 127 - tried.card := card_pool
+  have hpool : (Finset.univ \ tried).card = 2 ^ 128 - tried.card := card_pool
   have htr' : tried.card < 2 ^ 19 := by unfold trials at htr; exact htr
-  have heta_eq : ((Tier.eta0 : ℚ) : ℝ) = (2 ^ 66 + 2 ^ 19) / (2 ^ 127 - 2 ^ 19) := by
+  have heta_eq : ((Tier.eta0 : ℚ) : ℝ) = (2 ^ 66 + 2 ^ 19) / (2 ^ 128 - 2 ^ 19) := by
     norm_num [Tier.eta0]
   have hy : (((1 : ℚ) - S.mass (s + 1) + Tier.eta0 : ℚ) : ℝ) = 1 - Pm + Tier.eta0 := by
     rw [hPm]; push_cast; rfl
@@ -847,7 +847,7 @@ theorem trialAvg_tier_ge (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMes
   · rw [hrowN, hN]
     exact_mod_cast Nat.add_le_add_left hr₁ _
   · have : P.rowU d M + F + (tried.filter fun η => d (P.encQuery (M ++ η)) = none).card =
-        2 ^ 127 := by rw [hrowU]; omega
+        2 ^ 128 := by rw [hrowU]; omega
     exact_mod_cast this
   · rw [hpool, Nat.cast_sub (by omega)]
     push_cast
@@ -856,7 +856,7 @@ theorem trialAvg_tier_ge (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMes
 
 /-! ## The winner law (K1-K5) -/
 
-theorem upd_cases (hS : S.Valid) (hT : P.TierHyp S) {β : Option (Nonce × Index)}
+theorem upd_cases (hS : S.Analytic) (hT : P.TierHyp S) {β : Option (Nonce × Index)}
     (hβ : ∀ b, β = some b → P.Accepted b.2) (η : Nonce) (I : Index) :
     (P.tierI S I < P.tierB S β ∧ P.upd β η I = some (η, I)) ∨
       (P.tierB S β ≤ P.tierI S I ∧ P.upd β η I = β) := by
@@ -885,7 +885,7 @@ theorem winU_some (θ : Nonce → Index → Prop) (t : ℕ) (x y q : ℝ≥0∞)
 
 /-- **K1, K2.** The best trial is a target trial (a set `θ` of trials of tier `t`) with
 probability at most `q w̄_t` when one trial hits `θ` with probability at most `q`. -/
-theorem win_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem win_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) (θ : Nonce → Index → Prop) {t : ℕ} (ht : t < S.T)
     (hθ : ∀ η I, θ η I → P.tierI S I = t) {q : ℝ≥0∞}
     (hq : ∀ tried : Finset Nonce, tried.card < trials →
@@ -1025,7 +1025,7 @@ theorem sc_alg (y r : ℝ≥0∞) (k : ℕ) :
 
 /-- **K3.** The best trial is a target trial of tier `t` and class `v₀` and a fresh non-winning
 trial holds `v₀`, with probability at most `q r SCK_t`. -/
-theorem win_sc_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem win_sc_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) (θ : Nonce → Index → Prop) {t : ℕ} (ht : t < S.T)
     (hθ : ∀ η I, θ η I → P.tierI S I = t) {v₀ : Cls} (hθv : ∀ η I, θ η I → P.digit I = v₀)
     {q r : ℝ≥0∞}
@@ -1220,7 +1220,7 @@ def tailU (t : ℕ) (y : ℝ≥0∞) (k : ℕ) (β : Option (Nonce × Index)) : 
   if t ≤ P.tierB S β then y ^ k else 0
 
 /-- **K4.** No trial has tier `< t` with probability at most `ȳ_t ^ L`. -/
-theorem tail_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem tail_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) {t : ℕ} (ht : t ≤ S.T) :
     E (run (P.signTier M) d) (fun p => if t ≤ P.tierB S p.1 then 1 else 0) ≤
       S.yb t ^ trials := by
@@ -1287,7 +1287,7 @@ def kappaB : Option (Nonce × Index) → ℝ≥0∞
   | some b => (2 ^ 128 : ℝ≥0∞)⁻¹ + S.fE (P.tierI S b.2) / 2
 
 /-- **K5.** The average post-sign rate. -/
-theorem kappaB_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem kappaB_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) :
     E (run (P.signTier M) d) (fun p => P.kappaB S p.1) ≤
       (2 ^ 128 : ℝ≥0∞)⁻¹ + ENNReal.ofReal S.Pos / 2 := by

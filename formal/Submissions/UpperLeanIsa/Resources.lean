@@ -86,8 +86,58 @@ namespace Params
 
 variable (P : Params)
 
+theorem cost_chainStep (k : Fin numChains) (j : ℕ) (x : Word) : CostAtMost (P.chainStep k j x) 2 :=
+  cost_map (cost_hash _) _
+
+theorem cost_chain (k : Fin numChains) : ∀ (j n : ℕ) (x : Word),
+    CostAtMost (P.chain k j n x) (2 * n) := by
+  intro j n
+  induction n generalizing j with
+  | zero => intro x; exact cost_pure _ _
+  | succ n ih =>
+    intro x
+    have h := cost_bind (P.cost_chainStep k j x) (fun y => ih (j + 1) y)
+    simpa only [chain, Nat.mul_succ, Nat.add_comm] using h
+
+theorem cost_chainList (k : Fin numChains) : ∀ (j n : ℕ) (x : Word),
+    CostAtMost (P.chainList k j n x) (2 * n) := by
+  intro j n
+  induction n generalizing j with
+  | zero => intro x; exact cost_pure _ _
+  | succ n ih =>
+    intro x
+    have h := cost_bind (P.cost_chainStep k j x)
+      (fun y => cost_bind (ih (j + 1) y) (fun ys => cost_pure (x :: ys) 0))
+    simpa only [chainList, Nat.mul_succ, Nat.add_comm, Nat.add_zero, Nat.zero_add] using h
+
 theorem cost_index (m : Message) (η : Nonce) (pk : PublicKey) : CostAtMost (P.index m η pk) 2 :=
   cost_map (cost_hash _) _
+
+theorem cost_rootFrom (t : Fin numChains → Word) : ∀ (r n : ℕ) (st : BitVec 256),
+    CostAtMost (P.rootFrom t r n st) (2 * n) := by
+  intro r n
+  induction n generalizing r with
+  | zero => intro st; exact cost_pure _ _
+  | succ n ih =>
+    intro st
+    have h := cost_bind (cost_hash (P.rootInput t r st)) (fun st' => ih (r + 1) st')
+    simpa only [rootFrom, Nat.mul_succ, Nat.add_comm] using h
+
+theorem cost_root (t : Fin numChains → Word) : CostAtMost (P.root t) 18 :=
+  cost_map (P.cost_rootFrom t 0 9 _) _
+
+/-- Key generation costs `2 · Σ (len k - 1) + 18` on every path. -/
+theorem cost_keygen : CostAtMost P.keygen (2 * (∑ k, (P.len k - 1)) + 18) := by
+  unfold keygen
+  have h1 := cost_tabulate (fun _ => 0) (fun _ : Fin numChains => sampleBits 128)
+    (fun _ => cost_sample 128)
+  have h2 (seeds : Fin numChains → Word) := cost_tabulate (fun k => 2 * (P.len k - 1))
+    (fun k => P.chainList k 0 (P.len k - 1) (seeds k)) (fun k => P.cost_chainList k _ _ _)
+  have h := cost_bind h1 (fun seeds => cost_bind (h2 seeds) (fun tables =>
+    cost_bind (P.cost_root (fun k => (tables k).getD (P.len k - 1) 0))
+      (fun pk => cost_pure (pk, (⟨tables, pk⟩ : SecretKey)) 0)))
+  simp only [Finset.sum_const_zero, Nat.zero_add, Nat.add_zero, ← Finset.mul_sum] at h
+  exact h
 
 theorem cost_signLoop (sk : SecretKey) (m : Message) :
     ∀ (k : ℕ) (tried : Finset Nonce) (β : Option (Nonce × Index)),
@@ -111,6 +161,24 @@ theorem cost_sign (sk : SecretKey) (m : Message) : CostAtMost (P.sign sk m) (2 ^
   have h := P.cost_signLoop sk m trials ∅ none
   have ht : 2 * trials = 2 ^ 20 := by unfold trials; norm_num
   rwa [ht] at h
+
+/-- Verification costs at most `20 + 2 · layer` on every path, including rejects. -/
+theorem cost_verify (pk : PublicKey) (m : Message) (bits : List Bool) :
+    CostAtMost (P.verify pk m bits) (20 + 2 * P.layer) := by
+  unfold verify
+  split
+  · exact cost_pure _ _
+  · refine CostAtMost.mono (b := 2 + (2 * P.layer + 18)) ?_ (by omega)
+    refine cost_bind (P.cost_index m (decodeNonce bits) pk) (fun I => ?_)
+    refine cost_ite _ (fun _ => cost_pure _ _) (fun hI' => ?_)
+    · have hI : P.Accepted I := not_not.mp hI'
+      have hsum : ∑ k : Fin numChains, 2 * P.digit I k = 2 * P.layer := by
+        rw [← Finset.mul_sum]
+        exact congrArg (2 * ·) hI
+      have ht := cost_tabulate (fun k => 2 * P.digit I k) _
+        (fun k => P.cost_chain k (P.len k - 1 - P.digit I k) (P.digit I k) (decodeWord bits k))
+      rw [hsum] at ht
+      exact cost_bind ht (fun tops => cost_bind (P.cost_root tops) (fun r => cost_pure _ 0))
 
 end Params
 

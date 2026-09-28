@@ -56,7 +56,7 @@ theorem cached_target {d : Cache} {M : EMessage} {η : Nonce} {v : Cls}
 
 variable (P) in
 /-- **P1.** The loss of signing is at most `G(d) + Z(d) + Y(d) + SC_f`. -/
-theorem loss_le (hS : S.Valid) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
+theorem loss_le (hS : S.Analytic) (hT : P.TierHyp S) {d : Cache} {M : EMessage}
     (hRG : P.RowGood S d M) :
     E (run (P.signTier M) d) (fun p => if ∃ b, p.1 = some b ∧
         (P.IdxPreC d (M ++ b.1) (P.digit b.2) ∨ P.SelfCol d M p.2 b) then 1 else 0) ≤

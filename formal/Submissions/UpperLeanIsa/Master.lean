@@ -28,6 +28,8 @@ open scoped Classical
 
 namespace OptimalOTS.LeanIsaBaseline
 
+
+
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget verifyBudget
 
 theorem costAtMost_query_bind_iff {α : Type} (t : Spec.Domain)
@@ -125,6 +127,72 @@ end OptimalOTS.LeanIsaBaseline
 
 namespace OptimalOTS.LeanIsaBaseline
 
+
+
 attribute [local irreducible] hashBits blockBits pkBits msgBits securityBits maxSignatureBits keygenBudget signBudget verifyBudget
+
+/-- **Master lemma, for a family of continuations.** The continuation may depend on an index
+`j` (in the application: the hidden part of the key), as long as every member of the family
+respects the budget. -/
+theorem master_family {α β J : Type} [Nonempty J] (κ : ℝ≥0∞) (Φ : Cache → ℝ≥0∞)
+    (I : Cache → ℕ → Prop)
+    (hI_fresh : ∀ c b q, I c b → c q = none → queryCost (.inr q) ≤ b →
+      ∀ u, I (c.cacheQuery q u) (b - queryCost (.inr q)))
+    (hI_cached : ∀ c b q, I c b → (c q).isSome → queryCost (.inr q) ≤ b →
+      I c (b - queryCost (.inr q)))
+    (hΦ : ∀ c b q, I c b → c q = none → queryCost (.inr q) ≤ b →
+      ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * Φ (c.cacheQuery q u) ≤
+        Φ c + κ * queryCost (.inr q))
+    (oa : OracleComp Spec α) (k : J → α → OracleComp Spec β) (Fv : α → Cache → ℝ≥0∞)
+    (hF : ∀ x d b', I d b' → (∀ j, CostAtMost (k j x) b') → Fv x d ≤ Φ d + κ * b') :
+    ∀ (c : Cache) (b : ℕ), I c b → (∀ j, CostAtMost (oa >>= k j) b) →
+      E (run oa c) (fun p => Fv p.1 p.2) ≤ Φ c + κ * b := by
+  induction oa using OracleComp.inductionOn with
+  | pure x =>
+    intro c b hI hB
+    rw [run_pure, E_pure]
+    exact hF x c b hI fun j => by simpa [pure_bind] using hB j
+  | query_bind t k' ih =>
+    intro c b hI hB
+    have hcost : queryCost t ≤ b := by
+      have := hB (Classical.arbitrary J)
+      rw [bind_assoc, costAtMost_query_bind_iff] at this
+      exact this.1
+    have hB' : ∀ u j, CostAtMost (k' u >>= k j) (b - queryCost t) := fun u j => by
+      have := hB j
+      rw [bind_assoc, costAtMost_query_bind_iff] at this
+      exact this.2 u
+    rw [run_query_bind, E_bind]
+    rcases t with t | q
+    · rw [oracleImpl_run_inl, E_bind]
+      refine (expectedValue_le_of_le _ fun u => ?_)
+      rw [E_pure]
+      have := ih u c b hI (hB' u)
+      simpa [queryCost] using this
+    · rcases hcq : c q with _ | v
+      · rw [oracleImpl_run_inr_none hcq, E_bind, E_uniform]
+        calc ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+              E (pure (u, c.cacheQuery q u)) (fun p => E (run (k' p.1) p.2) fun p => Fv p.1 p.2)
+            ≤ ∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ *
+                (Φ (c.cacheQuery q u) + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞)) := by
+              refine Finset.sum_le_sum fun u _ => ?_
+              rw [E_pure]
+              dsimp only
+              gcongr
+              exact ih u _ _ (hI_fresh c b q hI hcq hcost u) (hB' u)
+          _ = (∑ u, (Fintype.card (BitVec hashBits) : ℝ≥0∞)⁻¹ * Φ (c.cacheQuery q u)) +
+                κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) := by
+              simp only [mul_add, Finset.sum_add_distrib, sum_inv_card_mul]
+          _ ≤ Φ c + κ * queryCost (.inr q) + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) :=
+              add_le_add_left (hΦ c b q hI hcq hcost) _
+          _ = Φ c + κ * b := by rw [add_assoc, kappa_split κ hcost]
+      · rw [oracleImpl_run_inr_some hcq, E_pure]
+        have hsome : (c q).isSome := by simp [hcq]
+        calc E (run (k' v) c) (fun p => Fv p.1 p.2)
+            ≤ Φ c + κ * ((b - queryCost (.inr q) : ℕ) : ℝ≥0∞) :=
+              ih v c _ (hI_cached c b q hI hsome hcost) (hB' v)
+          _ ≤ Φ c + κ * b := by
+              gcongr
+              exact Nat.sub_le _ _
 
 end OptimalOTS.LeanIsaBaseline

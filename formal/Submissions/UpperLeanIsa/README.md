@@ -1,17 +1,29 @@
-# 1115-cycle leanISA construction
+# 1096-cycle leanISA construction
 
-This root exports `Submission.Certificate 1115`. Nine groups use final chain hashes to bind
-dependency tops: five with five-dep packets and four with three-dep packets. One root hash
-remains. The complete proof covers admissibility, 127-bit strong security, bytecode validity,
-honest-prover equivalence, soundness against any committed image, and the cycle bound. The
-score is `125 + 87 × 10 + 120 = 1115`.
+`Solution.lean` exports the complete `Submission.Certificate 1096` and its
+seeded-row bound. The score is `106 + 87 × 10 + 120 = 1096`, with 193 executed
+instructions and 327680 seeded rows. The full 128-bit nonce remains within the
+5504-bit signature budget.
 
-See [NOTES.md](NOTES.md) for the construction, validation status, and credits.
+Split alias multiplicities, mixed four- and five-child binding packets, four
+internal child chains, and a linear security potential support layer 85.
+All 440 security tiers are connected to exact counts of the actual codec.
 
-Build in a prepared project with the pinned dependencies:
+The certificate covers admissibility, 127-bit strong security, bytecode validity,
+honest-prover equivalence, soundness against arbitrary committed images and all
+completing executions. See [NOTES.md](NOTES.md) for the proof map and credits.
+
+The complete proof passes a clean local build, exact challenge comparison,
+permitted-axiom checks and fresh Lean kernel replay. After the check-time
+engineering pass of 2026-09-28 (see NOTES.md), the measured build/export/check
+stages total about 339 seconds locally (build 203.5 s, export 10.4 s, replay
+117.3 s), down from about 19 minutes 47 seconds; hosted timing and acceptance
+remain unverified. No optimality claim is made.
+
+Build with the pinned dependencies:
 
 ```sh
 lake build Submissions.UpperLeanIsa.Solution
 ```
 
-`Solution.lean` is the competition entry point and `claim.txt` contains the score.
+The 1110-cycle fallback remains at commit `0c066e7`.

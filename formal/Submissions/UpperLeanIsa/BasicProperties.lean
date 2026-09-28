@@ -3,9 +3,9 @@ import Submissions.UpperLeanIsa.Resources
 /-!
 # The wire format and the admissibility of a layer scheme
 
-* `encode_decode`: a 5503-bit string is the encoding of its decoded words and nonce, so two
+* `encode_decode`: a 5504-bit string is the encoding of its decoded words and nonce, so two
   signatures of the right length with the same words and nonce are equal;
-* signatures have exactly `sigBits = 5503` bits, verification is deterministic;
+* signatures have exactly `sigBits = 5504` bits, verification is deterministic;
 * `admissible`: all eight fields of `Admissible` under `Params.Hyp`.
 -/
 
@@ -47,10 +47,10 @@ theorem flatMap_chunks {w : ℕ} :
     rw [hrest, ih (l.drop w) (by rw [List.length_drop, hl, Nat.mul_succ]; omega),
       List.take_append_drop]
 
-/-- A 5503-bit string is the encoding of its decoded words and nonce. -/
+/-- A 5504-bit string is the encoding of its decoded words and nonce. -/
 theorem encode_decode (bits : List Bool) (h : bits.length = sigBits) :
     encode (decodeWord bits) (decodeNonce bits) = bits := by
-  have hs : sigBits = 5503 := rfl
+  have hs : sigBits = 5504 := rfl
   rw [hs] at h
   unfold encode decodeWord decodeNonce
   have h1 := flatMap_chunks (w := 128) 42 (bits.take 5376) (by rw [List.length_take, h]; rfl)
@@ -139,7 +139,60 @@ theorem deterministic_ite {α : Type} (p : Prop) [Decidable p] {a c : OracleComp
   · exact ha ‹_›
   · exact hc ‹_›
 
+theorem deterministic_tabulate {α : Type} {n : ℕ} (f : Fin n → OracleComp Spec α)
+    (h : ∀ i, Deterministic (f i)) : Deterministic (tabulate f) := by
+  induction n with
+  | zero => exact deterministic_pure _
+  | succ n ih =>
+    have ht := deterministic_bind (h 0) (fun x =>
+      deterministic_map (ih _ (fun i => h i.succ))
+        (fun (xs : Fin n → α) (i : Fin (n + 1)) =>
+          Fin.cases (motive := fun _ => α) x xs i))
+    simpa only [tabulate, map_eq_bind_pure_comp, Function.comp_def] using ht
+
 attribute [local irreducible] Deterministic
+
+theorem deterministic_chain (k : Fin numChains) : ∀ (j n : ℕ) (x : Word),
+    Deterministic (P.chain k j n x) := by
+  intro j n
+  induction n generalizing j with
+  | zero => intro x; exact deterministic_pure _
+  | succ n ih =>
+    intro x
+    exact deterministic_bind (deterministic_map (deterministic_hash _) _) (fun y => ih (j + 1) y)
+
+theorem deterministic_rootFrom (t : Fin numChains → Word) : ∀ (r n : ℕ) (st : BitVec 256),
+    Deterministic (P.rootFrom t r n st) := by
+  intro r n
+  induction n generalizing r with
+  | zero => intro st; exact deterministic_pure _
+  | succ n ih =>
+    intro st
+    exact deterministic_bind (deterministic_hash _) (fun st' => ih (r + 1) st')
+
+theorem verifyDeterministic : P.scheme.VerifyDeterministic := by
+  intro pk m bits
+  change Deterministic (P.verify pk m bits)
+  unfold verify
+  refine deterministic_ite _ (fun _ => deterministic_pure _) (fun _ => ?_)
+  refine deterministic_bind (deterministic_map (deterministic_hash _) _) (fun I => ?_)
+  refine deterministic_ite _ (fun _ => deterministic_pure _) (fun _ => ?_)
+  exact deterministic_bind (deterministic_tabulate _ fun k => P.deterministic_chain k _ _ _)
+    (fun tops => deterministic_bind (deterministic_map (P.deterministic_rootFrom _ _ _ _) _)
+      (fun _ => deterministic_pure _))
+
+/-- **Admissibility** of a layer scheme: every requirement except security. -/
+theorem admissible (hP : P.Hyp) : P.scheme.Admissible where
+  correct := P.correct hP
+  verifyDeterministic := P.verifyDeterministic
+  signingFailure := P.signingFailure hP.chain_idx hP.root_idx hP.tier.choose_spec.1
+    hP.tier.choose_spec.2
+  signatureSize := P.signatureSize
+  rejectsOversized := rejectsOversized P
+  keygenCost := CostAtMost.mono P.cost_keygen (by unfold keygenBudget; exact hP.keygen_le)
+  signCost := fun sk m => CostAtMost.mono (P.cost_sign sk m) (by unfold signBudget; exact le_rfl)
+  verifyCost := fun pk m σ => CostAtMost.mono (P.cost_verify pk m σ)
+    (by unfold verifyBudget; exact hP.verify_le)
 
 end Params
 

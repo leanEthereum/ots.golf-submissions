@@ -97,6 +97,7 @@ theorem E_query_unif (n : ℕ) (g : Fin (n + 1) → ℝ≥0∞) :
   congr 1
   exact ProbComp.probOutput_uniformFin n j
 
+
 end Params
 
 end OptimalOTS.LeanIsaBaseline.Layer

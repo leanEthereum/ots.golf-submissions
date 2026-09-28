@@ -39,6 +39,9 @@ def encCount (d : Cache) : ℕ :=
 def IdxPost (d' c : Cache) (v : Cls) : Prop :=
   ∃ u, d' (P.encQuery u) = none ∧ ∃ w, c (P.encQuery u) = some w ∧ P.cls w = some v
 
+theorem encCount_empty : P.encCount ∅ = 0 := by
+  simp [Params.encCount]
+
 theorem encCount_cacheQuery_of_ne (d : Cache) {q : Query}
     (hq : ∀ u : EncInput, q ≠ P.encQuery u) (w : BitVec hashBits) :
     P.encCount (d.cacheQuery q w) = P.encCount d := by
