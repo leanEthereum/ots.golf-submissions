@@ -25,9 +25,9 @@ theorem accepted_payload_positive (pk : PublicKey) (m : Message)
   obtain ⟨i, _, accepted⟩ := accepted
   split_ifs at accepted with hi hlen
   · rw [hlen.1]
-    change 0 < _ + (Forest.freeTag ⟨i, hi⟩).length
-    rw [Forest.length_freeTag]
-    omega
+    change 0 < Forest.graph.revealBits (Forest.fins (Forest.cutOf (Forest.fixedChoice (⟨i, hi⟩ : Idx)))) + 0
+    rw [Forest.revealBits_eq, Forest.reveal_cutOf _ (Forest.fixedChoice_capChoice _)]
+    norm_num
   · simp at accepted
   · simp at accepted
 

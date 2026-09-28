@@ -1,17 +1,18 @@
-# RISC-V upper bound: 344 cycles
+# RISC-V upper bound: 341 cycles
 
-The final count tag stores `4*v`, so the verifier can load the free-chain jump
-width directly. A modulo-1020 checksum verifies both alignment and the digit
-sum, removing one instruction from the 345-cycle image.
+The signature carries no count tag. The lane sum of the index phase, reduced
+modulo 1020, is already four times the free digit `(146 - S) mod 255`, so the
+remainder feeds the free-chain jump directly and the free table rejects every
+digit of 16 or more. This removes the tag load, the tag subtraction and the
+checksum branch from the 344-cycle image.
 
 The certificate covers every accepting and rejecting raw-input execution.
-Full-length acceptance costs 192 hash compressions and 152 ordinary
-instructions. The signature is 5464 bits and the image is 62,552 bytes.
+Full-length acceptance costs 192 hash compressions and 149 ordinary
+instructions. The signature is 5456 bits and the image is 62,552 bytes.
 
-The full Lean build, exact statement/primitive comparison, permitted-axiom
-check and fresh kernel replay of 22,253 declarations pass. The exported image
-also passes 16,480 independent exact oracle-transcript executions.
-The official runner stops at Landlock preflight on this host; these are
-local development checks, not a hosted verdict.
+The full Lean build and the permitted-axiom check pass. The Lean-exported
+image equals an independent generator and passes 16,330 exact
+oracle-transcript executions. These are local development checks, not a
+hosted verdict.
 
 See [NOTES.md](NOTES.md) for the construction, validation and research history.

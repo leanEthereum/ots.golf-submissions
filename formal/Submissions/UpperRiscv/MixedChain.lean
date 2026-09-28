@@ -21,7 +21,7 @@ structure Prepared (s : MachineState) (x : graph.Assignment) (k : Fin 33) : Prop
   inv : HashInv index v wire pk a s x k (work k)
   ready : if expands k then HoldsAt s x k (RiscvUpperForest.ForestVerifier.pos index v k+1)
     else MemBits s (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k)))
-  tail1 : k.val = 1 → MemBits s (W tailAddr) (0 : BitVec 48)
+  tail1 : k.val = 1 → MemBits s (W tailAddr) (0 : BitVec 56)
 
 theorem Prepared.frame {s t : MachineState} {x : graph.Assignment} {k : Fin 33}
     (prep : Prepared index v wire pk a s x k) (inv : HashInv index v wire pk a t x k (work k))

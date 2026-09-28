@@ -72,7 +72,7 @@ set_option maxRecDepth 100000 in
 /-- The bytes beyond the root are outside the loader and all index stores. -/
 theorem afterIndex_tail (pk : PublicKey) (m : Message) (bits : List Bool)
     (answer : BitVec hashBits) :
-    MemBits (afterIndex pk m bits answer) (W tailAddr) (0 : BitVec 48) := by
+    MemBits (afterIndex pk m bits answer) (W tailAddr) (0 : BitVec 56) := by
   apply memBits_of_words _ _ _ (by decide +kernel)
   intro j hj
   have hj0 : j = 0 := by omega

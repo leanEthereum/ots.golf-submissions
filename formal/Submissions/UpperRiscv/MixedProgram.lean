@@ -1,7 +1,7 @@
 import Submissions.UpperRiscv.Program
 
-/-! The 344-cycle image: a free first chain whose hash count is encoded in the count byte, then
-sixteen dispatched pairs, whose final chain is a cap (no extra hash), and the root.
+/-! The 341-cycle image: a free first chain whose hash count is the index checksum remainder,
+then sixteen dispatched pairs, whose final chain is a cap (no extra hash), and the root.
 
 Chains are numbered by execution position `k < 33`. Chain `k` reads its signature value at
 `valueAddr k`, writes every answer at `outAddr k`, and after its first hash reads its state
@@ -49,7 +49,7 @@ def pairCap (q : ℕ) : ℕ := if q < 5 then 20 else if q < 10 then 21 else 30
 
 /-! ## Code layout -/
 
-def indexStub : ℕ := 34
+def indexStub : ℕ := 37
 def freeTableAt : ℕ := 44
 def prologue0At : ℕ := 299
 def copiesAt : ℕ := 305
@@ -69,15 +69,13 @@ def baseReg (_g : ℕ) : Reg := .x3
 def laneAddr (q : ℕ) : ℕ := laneBase + 2*q
 
 /-- The dispatch base of the free chain's table and the length bound of the decision. -/
-def boundWord : ℕ := 5465
+def boundWord : ℕ := 5457
 def freeImm : ℤ := (4096 + 4*prologue0At : ℤ) - boundWord
 
 /-! ## The index phase -/
 
-/-- The bound `5465` in `x1`, and the already scaled count tag in `x29`. -/
-def countLoad : Code :=
-  [.LD .x1 .x12 (BitVec.ofNat 12 72),
-   .LBU .x29 .x10 (imm12 ((payloadAddr + 666 : ℤ) - hashBase))]
+/-- The bound `5457` in `x1`. -/
+def countLoad : Code := [.LD .x1 .x12 (BitVec.ofNat 12 72)]
 def loadWords : Code :=
   [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
    .LD .x25 .x12 40, .LD .x2 .x12 56,
@@ -88,8 +86,8 @@ def laneWord (g : ℕ) : Code :=
   [.AND dst (wordReg g) (maskReg g), .SUB dst (baseReg g) dst] ++
     (if g = 0 then [] else [.ADD .x27 .x27 .x26]) ++
     [.SD .x10 dst (imm12 ((laneWordAddr g : ℤ) - hashBase))]
-def sumCheck : Code :=
-  [.SUB .x27 .x27 .x29, .REMU .x27 .x27 .x2, .BEQ .x27 .x0 20, .ADDI .x0 .x0 0] ++ reject
+/-- `x29 = 4 * ((146 - S) mod 255)`: the scaled free digit, from the lane sum alone. -/
+def sumCheck : Code := [.REMU .x29 .x27 .x2]
 def indexPhase : Code :=
   indexPrefix ++ [.ECALL] ++ countLoad ++ loadWords ++
     (List.range 4).flatMap laneWord ++ sumCheck ++ [.ADDI .x11 .x0 144]
@@ -106,8 +104,10 @@ def widthChange (k previous : ℕ) : Code :=
 /-- The free chain's first hash, then the jump to `v` hash steps before prologue 0. -/
 def freePrologue : Code :=
   enter 0 hashBase ++ [.SUB .x28 .x1 .x29, .JALR .x0 .x28 (imm12 freeImm)]
-/-- Entry `i` serves the count byte `v = 255 - i`: a hash step for `v < 16`, else a branch to
-the index phase's rejection. -/
+/-- The rejection of a free digit of 16 or more, then padding up to the table. -/
+def freePad : Code := reject ++ List.replicate 4 nop
+/-- Entry `i` serves the free digit `v = 255 - i`: a hash step for `v < 16`, else a branch to
+the rejection after the free jump. -/
 def freeEntry (i : ℕ) : Instr :=
   if 255 - i < 16 then .ECALL
   else .BEQ .x0 .x0 (BitVec.ofInt 13 (4*((indexStub : ℤ) - (freeTableAt + i))))
@@ -117,10 +117,10 @@ def prologue (q : ℕ) : Code :=
   widthChange (2*q+1) (2*q) ++ enter (2*q+1) (work (2*q)) ++
     [.LHU .x28 .x12 (imm12 ((laneAddr q : ℤ) - outAddr (2*q+1))),
      .JALR .x0 .x28 (imm12 (jumpImm q))]
-/-- The root reads the first `a3 + 936` bits of the region: 6400 bits for a full signature. -/
+/-- The root reads the first `a3 + 944` bits of the region: 6400 bits for a full signature. -/
 def root : Code :=
-  [.ADDI .x11 .x13 936, .ECALL]
-/-- Accept exactly when both root words match the public key and `a3 < 5465`. -/
+  [.ADDI .x11 .x13 944, .ECALL]
+/-- Accept exactly when both root words match the public key and `a3 < 5457`. -/
 def decision : Code :=
   [.LD .x26 .x12 0, .BNE .x26 .x30 24, .LD .x28 .x12 8, .BNE .x28 .x31 16,
    .SLTU .x10 .x13 .x1, .ADDI .x5 .x0 0, .ECALL] ++ reject
@@ -156,7 +156,7 @@ def assemble (cursor : ℕ) : List (ℕ × Code) → Code
   | (off, body) :: rest =>
     List.replicate (off-cursor) nop ++ body ++ assemble (off+body.length) rest
 def tables : Code := assemble copiesAt fragments
-def verifier : Code := indexPhase ++ freePrologue ++ freeTable ++ prologue 0 ++ tables
+def verifier : Code := indexPhase ++ freePrologue ++ freePad ++ freeTable ++ prologue 0 ++ tables
 
 def firstMask : ℕ := broadcast 0x3c3c
 def dataImage : List (BitVec 8) :=
@@ -165,8 +165,9 @@ def dataImage : List (BitVec 8) :=
     wordBytes (baseWord 0)
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
-theorem index_length : indexPhase.length = 38 := by decide +kernel
-theorem head_length : (indexPhase ++ freePrologue ++ freeTable ++ prologue 0).length = copiesAt := by
+theorem index_length : indexPhase.length = 31 := by decide +kernel
+theorem head_length :
+    (indexPhase ++ freePrologue ++ freePad ++ freeTable ++ prologue 0).length = copiesAt := by
   decide +kernel
 theorem code_length : verifier.length = 15616 := by decide +kernel
 theorem data_length : dataImage.length = 88 := by decide +kernel

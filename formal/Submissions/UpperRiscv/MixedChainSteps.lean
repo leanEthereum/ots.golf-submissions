@@ -12,13 +12,13 @@ attribute [local irreducible] Forest.fixedDigits
 
 variable (index : RawIdx) (v : ℕ) (wire : List Bool) (pk : PublicKey) {a : ℕ}
 
-/-- The six bytes past the region stay zero throughout the chain phase. -/
-def tailAfter (_index : RawIdx) (_v : ℕ) (_wire : List Bool) (_x : graph.Assignment) : BitVec 48 := 0
+/-- The seven bytes past the region stay zero throughout the chain phase. -/
+def tailAfter (_index : RawIdx) (_v : ℕ) (_wire : List Bool) (_x : graph.Assignment) : BitVec 56 := 0
 
-/-- The six bytes past the region at the boundary before chain `k`. -/
+/-- The seven bytes past the region at the boundary before chain `k`. -/
 def TailInv (_index : RawIdx) (_v : ℕ) (_wire : List Bool)
     (s : MachineState) (_x : graph.Assignment) (_k : ℕ) : Prop :=
-  MemBits s (W tailAddr) (0 : BitVec 48)
+  MemBits s (W tailAddr) (0 : BitVec 56)
 
 variable (a) in
 /-- Invariant at a chain hash, with either its value or its working input address. -/

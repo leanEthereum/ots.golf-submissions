@@ -1,3 +1,67 @@
+# Computed free digit: 341-cycle candidate
+
+This extends the 344-cycle scaled-count-tag candidate below.
+
+## Change
+
+The four lane words already sum, modulo 1020, to `4 * ((146 - S) mod 255)`,
+where `S` is the index digit sum (`MixedIndexArith.free_remainder`). This is
+four times the free digit, so the signature needs no count byte. The index
+phase ends with `REMU x29, x27, x2`, and `x29` feeds the unchanged free-chain
+jump `SUB x28, x1, x29; JALR`. The free table rejects every value of 16 or
+more, which is exactly the old checksum and range test. The accepted language
+is unchanged: `S` in `[131, 146]` with the same pair caps; the alias
+`S` in `[386, 401]` still fails a cap.
+
+Removed from every accepting path: `LBU x29`, `SUB x27, x27, x29` and the
+checksum `BEQ`. The index phase is 31 cycles. The rejection moves after the
+free `JALR` and is padded, so the free table, all prologues, bodies and stubs
+keep their addresses. The signature is 5456 bits: the nonce and the 5328 value
+bits. The decision bound is `5457` and the root reads `a3 + 944` bits, still
+6400 bits and 13 blocks at full length. The root query of an oversized
+signature reads 49 bits past the region; the invariant now covers seven zero
+bytes there.
+
+Accounting: 31 index cycles plus at most 310 continuation cycles
+(`CappedCost.bound`, unchanged). A full-length acceptance uses 192 hash
+compressions and 149 ordinary instructions. The image is unchanged in size:
+15,616 instructions and 88 data bytes, 62,552 bytes.
+
+## Proof
+
+- `Valid.freeCount i = (656 - digitSum i) % 255` is the machine's free digit
+  for every raw index. It equals `freeDigit` on accepted indices
+  (`freeCount_eq`), and `digitSum + freeCount` is 146 modulo 255
+  (`freeCount_check`).
+- The scheme's tag is empty (`forestScheme.tag = []`). Well-formed signatures
+  are exactly the 5456-bit ones (`Layout.payload_wellFormed_iff`).
+- `stagedVerify` runs the free chain with `freeCount` directly; there is no
+  checksum branch. `strict_prunes_staged` and the security reduction are
+  otherwise unchanged. Short signatures give root queries of length
+  `ℓ + 944 ∈ [944, 6400)` (`Values.ShortLen`).
+- `MixedIndexPhase.indexPhase_refines` is now branch-free and ends with
+  `x29 = 4 * freeCount` (`S5_free`).
+
+## Validation
+
+- `lake build Submissions.UpperRiscv.Solution` succeeds; `certificate`
+  (`Certificate 341`) and `image_size` use only `propext`,
+  `Classical.choice` and `Quot.sound`.
+- An independent generator reproduces the Lean-exported 344 record image
+  (canonical JSON sha256
+  `35b00c3b5fc5beb3c9818a795b78d5fc36fc88961df1766b30923405f7fc8dc6`) and the
+  new image (`65d9779afa9971c5f101d9861ad0058574d41764ce86d9fe5ed7e21f3bfcbfd1`).
+- 16,330 byte-memory executions of the new image agree with a chain-level
+  staged reference on the ordered oracle queries, the verdict and the analytic
+  cycle count: all 4096 pair landings, every digit sum from 0 to 480, first
+  forbidden pairs at sums 131, 146, 386 and 401, every length from 0 to 5506
+  and four large lengths, programmed short roots, every signature-bit flip and
+  512 random inputs. The maximum is 341. An exact worst-case search over the
+  same cost model gives 341. The same harness gives 344 on the record image
+  (22,470 executions).
+
+---
+
 # Scaled count tag: 344-cycle candidate
 
 This extends commit `6de891a01f28562351bc1359c6b22a91a70a7e9a` (345 cycles).

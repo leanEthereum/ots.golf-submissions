@@ -62,7 +62,7 @@ theorem HashInv.complete {s : MachineState} {x : graph.Assignment} {k : Fin 33}
   · exact inv.done.addTop _ (topSlice_of_answer s k _ answer)
   · exact inv.tail
 
-/-- After the last chain `x10` is its working address; the region and the six bytes past it
+/-- After the last chain `x10` is its working address; the region and the seven bytes past it
 are the root input. -/
 theorem final_root {s : MachineState} {x : graph.Assignment}
     (inv : ChainsInv index v wire pk a s x 33) :

@@ -4,13 +4,13 @@ import Submissions.UpperRiscv.RejectAdapter
 /-!
 # The verifier with dispatch-time rejection, for every signature length
 
-The machine reads the tag `4*v` (signature bits 5456–5463) and rejects a misaligned tag.
-It also rejects unless the 32 index digits and the decoded `v` sum to 146 modulo 255. It hashes the free chain once, rejects `v ≥ 16`, finishes
+The machine derives the free digit `v = (146 - S) mod 255` from the 32 index digits (their sum
+`S`); the signature carries no tag. It hashes the free chain once, rejects `v ≥ 16`, finishes
 the free chain with `v` as its digit, and then runs the sixteen pairs; an expanding left chain is
 hashed once before its pair's cap is tested. Every signature runs through the whole verifier: the
 chains read the signature padded with zeros to 5504 bits (`padded`), and the root query is the
-first `a + 936` bits of the memory from the root region on, where `a = min |σ| 5505` is the
-loaded length. The six bytes past the region remain zero (`rootTail`). The verdict is the public-key test and `a < 5465`.
+first `a + 944` bits of the memory from the root region on, where `a = min |σ| 5505` is the
+loaded length. The seven bytes past the region remain zero (`rootTail`). The verdict is the public-key test and `a < 5457`.
 
 `strictVerify` is the verifier of the security proof (`Forest.WireVerifier`): the forest verifier
 on full-length signatures, this verifier on shorter ones, and immediate rejection of longer
@@ -46,30 +46,27 @@ theorem length_padded (bits : List Bool) : (padded bits).length = 5504 := by
   simp only [List.length_append, List.length_take, List.length_replicate]
   omega
 
-/-- The decoded free count; a misaligned tag gives the rejecting sentinel 255. -/
-def countByte (bits : List Bool) : ℕ := decodeCount (ofBits 8 ((padded bits).drop 5456)).toNat
-
 /-- The loaded signature suffix retained as an argument of the staged interface. -/
-def sigTail (bits : List Bool) : BitVec 48 := ofBits 48 ((padded bits).drop 5456)
+def sigTail (bits : List Bool) : BitVec 56 := ofBits 56 ((padded bits).drop 5456)
 
 /-- The chain tops of an assignment. -/
 def topsOf (x : graph.Assignment) : (k : Fin 33) → BitVec (topBits k) :=
   fun k => (x (tp k).fin).cast (lenF_fin _)
 
-/-- The six bytes past the root region: outside all loader and chain writes, hence zero. -/
-def rootTail (index : RawIdx) (v : ℕ) (tail : BitVec 48) (x : graph.Assignment) : BitVec 48 :=
+/-- The seven bytes past the root region: outside all loader and chain writes, hence zero. -/
+def rootTail (index : RawIdx) (v : ℕ) (tail : BitVec 56) (x : graph.Assignment) : BitVec 56 :=
   0
 
 /-- The root query for the loaded length `a`, and the decision. -/
-def rootStep (index : RawIdx) (v : ℕ) (pk : PublicKey) (a : ℕ) (tail : BitVec 48)
+def rootStep (index : RawIdx) (v : ℕ) (pk : PublicKey) (a : ℕ) (tail : BitVec 56)
     (x : graph.Assignment) : OracleComp Spec Bool := do
-  let y ← hash ((rootTail index v tail x ++ rootRegion (topsOf x)).setWidth (a + 936))
-  return (decide (y.setWidth 128 = pk) && decide (a < 5465))
+  let y ← hash ((rootTail index v tail x ++ rootRegion (topsOf x)).setWidth (a + 944))
+  return (decide (y.setWidth 128 = pk) && decide (a < 5457))
 
 /-- The exact staged oracle program of the pairs. `payload` is already in chain execution
 order. -/
 def stagedBlocks (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey) (a : ℕ)
-    (tail : BitVec 48) : (n q : ℕ) → graph.Assignment → ℕ → OracleComp Spec Bool
+    (tail : BitVec 56) : (n q : ℕ) → graph.Assignment → ℕ → OracleComp Spec Bool
   | 0, _, x, _ => rootStep index v pk a tail x
   | n+1, q, x, cursor => if hq : q < 16 then do
       let r ← runNodes' index v payload (entryNodes index v ⟨2*q+1, by omega⟩) x cursor
@@ -84,7 +81,7 @@ attribute [local irreducible] stagedBlocks
 
 /-- Machine-facing expansion: `some` changes the output interface, never the query trace. -/
 theorem stagedBlocks_some_succ (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    (a : ℕ) (tail : BitVec 48) (n q : ℕ) (hq : q < 16) (x : graph.Assignment) (cursor : ℕ) :
+    (a : ℕ) (tail : BitVec 56) (n q : ℕ) (hq : q < 16) (x : graph.Assignment) (cursor : ℕ) :
     some <$> stagedBlocks index v payload pk a tail (n+1) q x cursor = (do
       let r ← runNodes' index v payload (entryNodes index v ⟨2*q+1, by omega⟩) x cursor
       if PairAllowed index.val q then
@@ -98,14 +95,14 @@ theorem stagedBlocks_some_succ (index : RawIdx) (v : ℕ) (payload : List Bool) 
   split_ifs <;> simp only [map_bind, map_pure]
 
 theorem stagedBlocks_some_zero (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    (a : ℕ) (tail : BitVec 48) (q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
+    (a : ℕ) (tail : BitVec 56) (q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
     some <$> stagedBlocks index v payload pk a tail 0 q x cursor = (do
-      let y ← hash ((rootTail index v tail x ++ rootRegion (topsOf x)).setWidth (a + 936))
-      return some (decide (y.setWidth 128 = pk) && decide (a < 5465))) := by
+      let y ← hash ((rootTail index v tail x ++ rootRegion (topsOf x)).setWidth (a + 944))
+      return some (decide (y.setWidth 128 = pk) && decide (a < 5457))) := by
   simp only [stagedBlocks, rootStep, map_bind, map_pure]
 
 theorem stagedBlocks_eq_of_allowed (index : RawIdx) (v : ℕ) (payload : List Bool)
-    (pk : PublicKey) (a : ℕ) (tail : BitVec 48) (n q : ℕ) (hq : q+n ≤ 16)
+    (pk : PublicKey) (a : ℕ) (tail : BitVec 56) (n q : ℕ) (hq : q+n ≤ 16)
     (caps : ∀ j, q ≤ j → j < q+n → PairAllowed index.val j)
     (x : graph.Assignment) (cursor : ℕ) :
     stagedBlocks index v payload pk a tail n q x cursor =
@@ -129,7 +126,7 @@ theorem stagedBlocks_eq_of_allowed (index : RawIdx) (v : ℕ) (payload : List Bo
 
 /-- A failed cap eventually returns false, despite any earlier chain queries. -/
 theorem stagedBlocks_rejects (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    (a : ℕ) (tail : BitVec 48) (n q : ℕ)
+    (a : ℕ) (tail : BitVec 56) (n q : ℕ)
     (bad : ∃ j, q ≤ j ∧ j < q+n ∧ ¬ PairAllowed index.val j)
     (x : graph.Assignment) (cursor : ℕ) :
     ∀ b ∈ support (stagedBlocks index v payload pk a tail n q x cursor), b = false := by
@@ -158,7 +155,7 @@ theorem stagedBlocks_rejects (index : RawIdx) (v : ℕ) (payload : List Bool) (p
 
 /-- An oversized loaded length always returns false, after its queries. -/
 theorem stagedBlocks_oversized (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    {a : ℕ} (ha : 5465 ≤ a) (tail : BitVec 48) (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
+    {a : ℕ} (ha : 5457 ≤ a) (tail : BitVec 56) (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
     ∀ b ∈ support (stagedBlocks index v payload pk a tail n q x cursor), b = false := by
   induction n generalizing q x cursor with
   | zero =>
@@ -189,11 +186,11 @@ theorem stagedBlocks_oversized (index : RawIdx) (v : ℕ) (payload : List Bool) 
 /-- An accepting run leaves the root query of loaded length `a` in the cache, with an answer
 beginning with the public key. -/
 theorem stagedBlocks_accept (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    (a : ℕ) (tail : BitVec 48) (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) (c : Cache)
+    (a : ℕ) (tail : BitVec 56) (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) (c : Cache)
     (p : Bool × Cache)
     (hp : p ∈ support (run (stagedBlocks index v payload pk a tail n q x cursor) c))
     (hok : p.1 = true) :
-    ∃ u : BitVec (a + 936), ∃ w, p.2 ⟨a + 936, u⟩ = some w ∧ w.setWidth 128 = pk ∧ a < 5465 := by
+    ∃ u : BitVec (a + 944), ∃ w, p.2 ⟨a + 944, u⟩ = some w ∧ w.setWidth 128 = pk ∧ a < 5457 := by
   induction n generalizing q x cursor c with
   | zero =>
     rw [stagedBlocks, rootStep, run_bind, support_bind] at hp
@@ -241,14 +238,12 @@ theorem pairNodes_all : chainNodes 0 ++ pairNodes 16 0 ++ [rc, rh] = order :=
 def stagedVerify (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp Spec Bool := do
   let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits (bits.take 128)))
   let index : RawIdx := ⟨pack answer, pack_lt answer⟩
-  let v := countByte bits
+  let v := freeCount index.val
   let payload := Payload.permute ((padded bits).drop 128)
-  if v < 64 ∧ (digitSum index.val + v) % 255 = 146 then do
-    let r ← runNodes' index v payload (entryNodes index v 0) (fun _ => 0) 0
-    if v < 16 then do
-      let r' ← runNodes' index v payload (tableNodes index v 0) r.1 r.2
-      stagedBlocks index v payload pk (min bits.length 5505) (sigTail bits) 16 0 r'.1 r'.2
-    else pure false
+  let r ← runNodes' index v payload (entryNodes index v 0) (fun _ => 0) 0
+  if v < 16 then do
+    let r' ← runNodes' index v payload (tableNodes index v 0) r.1 r.2
+    stagedBlocks index v payload pk (min bits.length 5505) (sigTail bits) 16 0 r'.1 r'.2
   else pure false
 
 /-! ## Costs and determinism -/
@@ -283,18 +278,18 @@ theorem chainNodes_cost (k : Fin 33) : ((chainNodes k).map Name.cost).sum = 32 :
   exact h k
 
 /-- A root query of at most 6448 bits costs at most thirteen compressions. -/
-theorem blockCost_root_le {a : ℕ} (ha : a ≤ 5505) : blockCost (a + 936) ≤ 13 := by
+theorem blockCost_root_le {a : ℕ} (ha : a ≤ 5505) : blockCost (a + 944) ≤ 13 := by
   unfold blockCost blockBits
   exact max_le (by norm_num) (by omega)
 
 theorem rootStep_cost (index : RawIdx) (v : ℕ) (pk : PublicKey) {a : ℕ} (ha : a ≤ 5505)
-    (tail : BitVec 48) (x : graph.Assignment) :
+    (tail : BitVec 56) (x : graph.Assignment) :
     CostAtMost (rootStep index v pk a tail x) 13 :=
   AlgorithmCosts.CostAtMost.bind_le (AlgorithmCosts.costAtMost_hash _ (blockCost_root_le ha))
     (b₂ := 0) (fun _ => AlgorithmCosts.costAtMost_pure _ _) (by norm_num)
 
 theorem stagedBlocks_cost (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    {a : ℕ} (ha : a ≤ 5505) (tail : BitVec 48) (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
+    {a : ℕ} (ha : a ≤ 5505) (tail : BitVec 56) (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
     CostAtMost (stagedBlocks index v payload pk a tail n q x cursor) (64*n+13) := by
   induction n generalizing q x cursor with
   | zero =>
@@ -352,7 +347,7 @@ theorem runNodes'_deterministic (index : RawIdx) (v : ℕ) (payload : List Bool)
       fun r => ih r.1 r.2
 
 theorem stagedBlocks_deterministic (index : RawIdx) (v : ℕ) (payload : List Bool)
-    (pk : PublicKey) (a : ℕ) (tail : BitVec 48) (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
+    (pk : PublicKey) (a : ℕ) (tail : BitVec 56) (n q : ℕ) (x : graph.Assignment) (cursor : ℕ) :
     Deterministic (stagedBlocks index v payload pk a tail n q x cursor) := by
   induction n generalizing q x cursor with
   | zero =>
@@ -385,7 +380,7 @@ private theorem cost_ite (p : Prop) [Decidable p] (left right : OracleComp Spec 
 
 /-- The free chain, then the pairs and the root. -/
 def stagedChains (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey) (a : ℕ)
-    (tail : BitVec 48) : OracleComp Spec Bool := do
+    (tail : BitVec 56) : OracleComp Spec Bool := do
   let r ← runNodes' index v payload (entryNodes index v 0) (fun _ => 0) 0
   if v < 16 then do
     let r' ← runNodes' index v payload (tableNodes index v 0) r.1 r.2
@@ -395,13 +390,11 @@ def stagedChains (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKe
 theorem stagedVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
     stagedVerify pk m bits = (do
       let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits (bits.take 128)))
-      if countByte bits < 64 ∧ (digitSum (pack answer) + countByte bits) % 255 = 146 then
-        stagedChains ⟨pack answer, pack_lt answer⟩ (countByte bits)
-          (Payload.permute ((padded bits).drop 128)) pk (min bits.length 5505) (sigTail bits)
-      else pure false) := rfl
+      stagedChains ⟨pack answer, pack_lt answer⟩ (freeCount (pack answer))
+        (Payload.permute ((padded bits).drop 128)) pk (min bits.length 5505) (sigTail bits)) := rfl
 
 theorem stagedChains_deterministic (index : RawIdx) (v : ℕ) (payload : List Bool)
-    (pk : PublicKey) (a : ℕ) (tail : BitVec 48) :
+    (pk : PublicKey) (a : ℕ) (tail : BitVec 56) :
     Deterministic (stagedChains index v payload pk a tail) := by
   unfold stagedChains
   apply Deterministic.bind (runNodes'_deterministic _ _ _ _ _ _)
@@ -412,7 +405,7 @@ theorem stagedChains_deterministic (index : RawIdx) (v : ℕ) (payload : List Bo
     (Deterministic.of_pure _)
 
 theorem stagedChains_cost (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    {a : ℕ} (ha : a ≤ 5505) (tail : BitVec 48) :
+    {a : ℕ} (ha : a ≤ 5505) (tail : BitVec 56) :
     CostAtMost (stagedChains index v payload pk a tail) 1069 := by
   unfold stagedChains
   let e := ((entryNodes index v 0).map Name.cost).sum
@@ -435,8 +428,7 @@ theorem stagedVerify_deterministic (pk : PublicKey) (m : Message) (bits : List B
   rw [stagedVerify_eq]
   apply Deterministic.bind (Deterministic.hash _)
   intro answer
-  exact deterministic_ite _ _ _ (stagedChains_deterministic _ _ _ _ _ _)
-    (Deterministic.of_pure false)
+  exact stagedChains_deterministic _ _ _ _ _ _
 
 /-- A deliberately loose independent admission bound; the machine proof establishes the cycles. -/
 theorem stagedVerify_cost (pk : PublicKey) (m : Message) (bits : List Bool) :
@@ -445,15 +437,13 @@ theorem stagedVerify_cost (pk : PublicKey) (m : Message) (bits : List Bool) :
   apply AlgorithmCosts.CostAtMost.bind_le
     (AlgorithmCosts.costAtMost_hash _ (b := 1) (by decide)) (b₂ := 1069)
   · intro answer
-    exact cost_ite _ _ _ 1069
-      (stagedChains_cost _ _ _ pk (min_le_right _ _) _)
-      (AlgorithmCosts.costAtMost_pure false 1069)
+    exact stagedChains_cost _ _ _ pk (min_le_right _ _) _
   · decide
 
 /-! ## Rejection and acceptance -/
 
 theorem stagedChains_rejects (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    (a : ℕ) (tail : BitVec 48) (bad : ¬ v < 16 ∨ ∃ q, q < 16 ∧ ¬ PairAllowed index.val q) :
+    (a : ℕ) (tail : BitVec 56) (bad : ¬ v < 16 ∨ ∃ q, q < 16 ∧ ¬ PairAllowed index.val q) :
     ∀ b ∈ support (stagedChains index v payload pk a tail), b = false := by
   unfold stagedChains
   intro b hb
@@ -470,7 +460,7 @@ theorem stagedChains_rejects (index : RawIdx) (v : ℕ) (payload : List Bool) (p
   · simpa only [support_pure, Set.mem_singleton_iff] using hb
 
 theorem stagedChains_oversized (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    {a : ℕ} (ha : 5465 ≤ a) (tail : BitVec 48) :
+    {a : ℕ} (ha : 5457 ≤ a) (tail : BitVec 56) :
     ∀ b ∈ support (stagedChains index v payload pk a tail), b = false := by
   unfold stagedChains
   intro b hb
@@ -485,9 +475,9 @@ theorem stagedChains_oversized (index : RawIdx) (v : ℕ) (payload : List Bool) 
   · simpa only [support_pure, Set.mem_singleton_iff] using hb
 
 theorem stagedChains_accept (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    (a : ℕ) (tail : BitVec 48) (c : Cache) (p : Bool × Cache)
+    (a : ℕ) (tail : BitVec 56) (c : Cache) (p : Bool × Cache)
     (hp : p ∈ support (run (stagedChains index v payload pk a tail) c)) (hok : p.1 = true) :
-    ∃ u : BitVec (a + 936), ∃ w, p.2 ⟨a + 936, u⟩ = some w ∧ w.setWidth 128 = pk ∧ a < 5465 := by
+    ∃ u : BitVec (a + 944), ∃ w, p.2 ⟨a + 944, u⟩ = some w ∧ w.setWidth 128 = pk ∧ a < 5457 := by
   unfold stagedChains at hp
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
@@ -529,8 +519,7 @@ theorem digitSum_le (i : ℕ) : digitSum i ≤ 480 := by
   unfold digitSum
   omega
 
-/-- A passing count check with a small byte and the caps give an accepted index with the byte as
-its free digit. -/
+/-- A small free digit with the caps gives an accepted index. -/
 theorem staged_accepted (i v : ℕ) (hc : (digitSum i + v) % 255 = 146) (hv : v < 16)
     (caps : ∀ q : Fin 16, PairAllowed i q.val) : Accepted i ∧ v = freeDigit i := by
   have h1 := staged_caps_sum_le i caps
@@ -540,37 +529,26 @@ theorem staged_accepted (i v : ℕ) (hc : (digitSum i + v) % 255 = 146) (hv : v 
   · unfold target; omega
   · unfold freeDigit target; omega
 
-/-- On an accepted index the count check holds exactly at the free digit. -/
-theorem count_iff_free (i : ℕ) (hi : Accepted i) {v : ℕ} (hv : v < 16) :
-    (digitSum i + v) % 255 = 146 ↔ v = freeDigit i := by
+/-- The digits and the free count sum to 146 modulo 255. -/
+theorem freeCount_check (i : ℕ) : (digitSum i + freeCount i) % 255 = 146 := by
+  have := digitSum_le i
+  unfold freeCount
+  omega
+
+/-- On an accepted index the free count is the free digit. -/
+theorem freeCount_eq (i : ℕ) (hi : Accepted i) : freeCount i = freeDigit i := by
   obtain ⟨⟨hlo, hhi⟩, -⟩ := hi
   unfold freeLow at hlo
   unfold target at hhi
-  unfold freeDigit target
+  unfold freeCount freeDigit target
   omega
 
 /-! ## Agreement with the strict forest verifier -/
 
-theorem padded_of_length {bits : List Bool} (h : bits.length = 5464) :
-    padded bits = bits ++ List.replicate 40 false := by
+theorem padded_of_length {bits : List Bool} (h : bits.length = 5456) :
+    padded bits = bits ++ List.replicate 48 false := by
   unfold padded
   rw [List.take_of_length_le (by omega), h]
-
-theorem ofBits_congr {n : ℕ} {l l' : List Bool} (h : ∀ j < n, l.getD j false = l'.getD j false) :
-    ofBits n l = ofBits n l' := by
-  apply BitVec.eq_of_getLsbD_eq
-  intro j hj
-  simp only [ofBits, BitVec.getLsbD_ofNat, hj, decide_true, Bool.true_and, testBit_foldr_bits]
-  exact h j hj
-
-/-- At the honest length the count byte is the tag's value. -/
-theorem countByte_of_length {bits : List Bool} (h : bits.length = 5464) :
-    ofBits 8 ((padded bits).drop 5456) = ofBits 8 (bits.drop 5456) := by
-  apply ofBits_congr
-  intro j hj
-  rw [padded_of_length h, List.drop_append_of_le_length (by omega)]
-  simp only [List.getD_eq_getElem?_getD]
-  rw [List.getElem?_append_left (by simp [h]; omega)]
 
 theorem freeDigit_lt (i : Idx) : freeDigit i.val < 16 := by
   have := digitSum_bounds i
@@ -578,21 +556,6 @@ theorem freeDigit_lt (i : Idx) : freeDigit i.val < 16 := by
   unfold freeLow target at this
   unfold target
   omega
-
-theorem freeTag_iff {bits : List Bool} (h : bits.length = 5464) (i : Idx) :
-    bits.drop 5456 = freeTag i ↔ countByte bits = freeDigit i.val := by
-  have hl : (bits.drop 5456).length = 8 := by simp [h]
-  unfold countByte
-  rw [countByte_of_length h, decodeCount_eq_iff (ofBits 8 (bits.drop 5456)).isLt
-    (by have := freeDigit_lt i; omega)]
-  constructor
-  · intro e
-    rw [e, freeTag, ofBits_toBits, BitVec.toNat_ofNat]
-    apply Nat.mod_eq_of_lt
-    have := freeDigit_lt i
-    omega
-  · intro e
-    rw [freeTag, ← e, BitVec.ofNat_toNat, BitVec.setWidth_eq, toBits_ofBits _ hl]
 
 theorem offset_add_len_le (G : Graph) (A : Finset (Fin G.size)) {u : Fin G.size} (hu : u ∈ A) :
     G.offset A u + G.len u ≤ G.revealBits A := by
@@ -654,12 +617,12 @@ theorem hash_bind_congr {n m : ℕ} (h : n = m) {u : BitVec n} {u' : BitVec m}
 
 /-- At the honest length the root step is the graph's root input and root hash. -/
 theorem rootStep_eq (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : PublicKey)
-    (tail : BitVec 48) (x : graph.Assignment) (cursor : ℕ) :
-    rootStep index v pk 5464 tail x = runNodes' index v payload [rc, rh] x cursor >>= fun r =>
+    (tail : BitVec 56) (x : graph.Assignment) (cursor : ℕ) :
+    rootStep index v pk 5456 tail x = runNodes' index v payload [rc, rh] x cursor >>= fun r =>
       pure (decide ((r.1 rh.fin).setWidth 128 = pk)) := by
-  have hlt : decide (5464 < 5465) = true := rfl
+  have hlt : decide (5456 < 5457) = true := rfl
   unfold rootStep
-  rw [show (5464 + 936 : ℕ) = Name.rootBits from rfl, setWidth_append_lo]
+  rw [show (5456 + 944 : ℕ) = Name.rootBits from rfl, setWidth_append_lo]
   simp only [runNodes', cursorStep_rc, cursorStep_rh, pure_bind, bind_assoc, bind_map_left,
     Function.update_self]
   refine hash_bind_congr (graph_len_fin rc).symm rfl fun y => ?_
@@ -669,8 +632,8 @@ theorem rootStep_eq (index : RawIdx) (v : ℕ) (payload : List Bool) (pk : Publi
 set_option maxRecDepth 100000 in
 /-- Equality on valid indices at the honest length; no claim on rejecting inputs. -/
 theorem stagedChains_eq_direct (index : Idx) (payload : List Bool) (pk : PublicKey)
-    (tail : BitVec 48) :
-    stagedChains index (freeDigit index.val) payload pk 5464 tail = (do
+    (tail : BitVec 56) :
+    stagedChains index (freeDigit index.val) payload pk 5456 tail = (do
       let y ← directReconstruct index payload
       return decide ((y rh.fin).setWidth 128 = pk)) := by
   have hv : freeDigit index.val < 16 := freeDigit_lt index
@@ -684,7 +647,7 @@ theorem stagedChains_eq_direct (index : Idx) (payload : List Bool) (pk : PublicK
   intro r
   apply bind_congr
   intro r'
-  rw [stagedBlocks_eq_of_allowed _ _ payload pk 5464 tail 16 0 (by omega)
+  rw [stagedBlocks_eq_of_allowed _ _ payload pk 5456 tail 16 0 (by omega)
     (fun j _ hj => (mem_validSet_accepted index.2).2 ⟨j, by omega⟩)]
   apply bind_congr
   intro r''
@@ -692,81 +655,63 @@ theorem stagedChains_eq_direct (index : Idx) (payload : List Bool) (pk : PublicK
 
 /-- On full-length signatures the strict forest verifier only removes always-reject suffixes. -/
 theorem directVerify_prunes_stagedVerify (pk : PublicKey) (m : Message) (bits : List Bool)
-    (hlen : bits.length = 5464) :
+    (hlen : bits.length = 5456) :
     RejectAdapter.Prunes (directVerify pk m bits) (stagedVerify pk m bits) := by
   rw [stagedVerify_eq]
   unfold directVerify packIndex
-  rw [bind_map_left, show min bits.length 5505 = 5464 by omega]
+  rw [bind_map_left, show min bits.length 5505 = 5456 by omega]
   apply RejectAdapter.Prunes.bind_left
   intro answer
   dsimp only
   by_cases hi : pack answer ∈ validSet
-  · rw [dif_pos hi]
-    have acc := mem_validSet_accepted hi
-    by_cases htag : bits.drop 5456 = freeTag ⟨pack answer, hi⟩
-    · have hc : countByte bits = freeDigit (pack answer) :=
-        (freeTag_iff hlen ⟨pack answer, hi⟩).mp htag
-      have hv : countByte bits < 16 := hc ▸ freeDigit_lt ⟨pack answer, hi⟩
-      rw [if_pos ⟨hlen, htag⟩, if_pos (⟨by omega, (count_iff_free _ acc hv).mpr hc⟩), hc]
-      have he := stagedChains_eq_direct (⟨pack answer, hi⟩ : Idx)
-        (Payload.permute ((padded bits).drop 128)) pk (sigTail bits)
-      dsimp only [Idx.toRaw] at he
-      rw [he]
-      have hp : (Payload.permute ((padded bits).drop 128)).take 5328 =
-          ((Payload.permute (bits.drop 128)).take 5328).take 5328 := by
-        rw [List.take_take, Nat.min_self]
-        apply Payload.take_permute_congr
-        · rw [List.length_drop, length_padded]; unfold Payload.valueBits; norm_num
-        · rw [List.length_drop, hlen]; unfold Payload.valueBits; norm_num
-        · rw [padded_of_length hlen, List.drop_append_of_le_length (by rw [hlen]; norm_num),
-            List.take_append_of_le_length
-              (by rw [List.length_drop, hlen]; unfold Payload.valueBits; norm_num)]
-      rw [directReconstruct_congr _ hp]
-      apply RejectAdapter.Prunes.bind_left
-      intro y
-      convert RejectAdapter.Prunes.refl
-        (pure (decide ((y rh.fin).setWidth 128 = pk)) : OracleComp Spec Bool) using 1
-      exact congrArg pure (decide_eq_decide.mpr Iff.rfl)
-    · rw [if_neg (fun h => htag h.2)]
-      split_ifs with guard
-      · apply RejectAdapter.Prunes.of_support
-        apply stagedChains_rejects
-        left
-        intro hv
-        exact htag ((freeTag_iff hlen ⟨pack answer, hi⟩).mpr ((count_iff_free _ acc hv).mp guard.2))
-      · exact RejectAdapter.Prunes.refl _
+  · rw [dif_pos hi, if_pos hlen,
+      freeCount_eq _ (mem_validSet_accepted hi)]
+    have he := stagedChains_eq_direct (⟨pack answer, hi⟩ : Idx)
+      (Payload.permute ((padded bits).drop 128)) pk (sigTail bits)
+    dsimp only [Idx.toRaw] at he
+    rw [he]
+    have hp : (Payload.permute ((padded bits).drop 128)).take 5328 =
+        ((Payload.permute (bits.drop 128)).take 5328).take 5328 := by
+      rw [List.take_take, Nat.min_self]
+      apply Payload.take_permute_congr
+      · rw [List.length_drop, length_padded]; unfold Payload.valueBits; norm_num
+      · rw [List.length_drop, hlen]; unfold Payload.valueBits; norm_num
+      · rw [padded_of_length hlen, List.drop_append_of_le_length (by rw [hlen]; norm_num),
+          List.take_append_of_le_length
+            (by rw [List.length_drop, hlen]; unfold Payload.valueBits; norm_num)]
+    rw [directReconstruct_congr _ hp]
+    apply RejectAdapter.Prunes.bind_left
+    intro y
+    convert RejectAdapter.Prunes.refl
+      (pure (decide ((y rh.fin).setWidth 128 = pk)) : OracleComp Spec Bool) using 1
+    exact congrArg pure (decide_eq_decide.mpr Iff.rfl)
   · rw [dif_neg hi]
-    split_ifs with guard
-    · apply RejectAdapter.Prunes.of_support
-      apply stagedChains_rejects
-      by_contra hgood
-      push Not at hgood
-      obtain ⟨hv16, caps⟩ := hgood
-      exact hi (mem_validSet.mpr ⟨pack_lt answer,
-        (staged_accepted _ _ guard.2 hv16 fun q => caps q.val q.isLt).1⟩)
-    · exact RejectAdapter.Prunes.refl _
+    apply RejectAdapter.Prunes.of_support
+    apply stagedChains_rejects
+    by_contra hgood
+    push Not at hgood
+    obtain ⟨hv16, caps⟩ := hgood
+    exact hi (mem_validSet.mpr ⟨pack_lt answer,
+      (staged_accepted _ _ (freeCount_check _) hv16 fun q => caps q.val q.isLt).1⟩)
 
 /-- The verifier of the security proof: strict on full-length signatures, the machine's program
 on shorter ones, and immediate rejection of longer ones. -/
 def strictVerify (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp Spec Bool :=
-  if bits.length = 5464 then directVerify pk m bits
-  else if bits.length < 5464 then stagedVerify pk m bits
+  if bits.length = 5456 then directVerify pk m bits
+  else if bits.length < 5456 then stagedVerify pk m bits
   else pure false
+
 
 theorem stagedVerify_accept (pk : PublicKey) (m : Message) (bits : List Bool) (c : Cache)
     (p : Bool × Cache) (hp : p ∈ support (run (stagedVerify pk m bits) c)) (hok : p.1 = true) :
-    ∃ u : BitVec (min bits.length 5505 + 936), ∃ w, p.2 ⟨_, u⟩ = some w ∧ trunc128 w = pk ∧
-      min bits.length 5505 < 5465 := by
+    ∃ u : BitVec (min bits.length 5505 + 944), ∃ w, p.2 ⟨_, u⟩ = some w ∧ trunc128 w = pk ∧
+      min bits.length 5505 < 5457 := by
   rw [stagedVerify_eq] at hp
   rw [run_bind, support_bind] at hp
   simp only [Set.mem_iUnion] at hp
   obtain ⟨⟨answer, c₁⟩, -, hp⟩ := hp
-  dsimp only at hp
-  split_ifs at hp
-  · exact stagedChains_accept _ _ _ _ _ _ c₁ p hp hok
-  · rw [run_pure, support_pure, Set.mem_singleton_iff] at hp
-    subst hp
-    cases hok
+  exact stagedChains_accept ⟨pack answer, pack_lt answer⟩ (freeCount (pack answer))
+    (Payload.permute ((padded bits).drop 128)) pk (min bits.length 5505) (sigTail bits) c₁ p hp hok
 
 theorem strictVerify_wire : Forest.WireVerifier strictVerify where
   full := fun pk m bits h => by
@@ -784,22 +729,22 @@ theorem strictVerify_wire : Forest.WireVerifier strictVerify where
       cases hok
 
 theorem stagedVerify_oversized (pk : PublicKey) (m : Message) (bits : List Bool)
-    (h : 5464 < bits.length) : ∀ b ∈ support (stagedVerify pk m bits), b = false := by
+    (h : 5456 < bits.length) : ∀ b ∈ support (stagedVerify pk m bits), b = false := by
   rw [stagedVerify_eq]
   intro b hb
   rw [support_bind] at hb
   simp only [Set.mem_iUnion] at hb
   obtain ⟨answer, -, hb⟩ := hb
-  split_ifs at hb
-  · exact stagedChains_oversized _ _ _ _ (by omega) _ b hb
-  · simpa only [support_pure, Set.mem_singleton_iff] using hb
+  exact stagedChains_oversized ⟨pack answer, pack_lt answer⟩ (freeCount (pack answer))
+    (Payload.permute ((padded bits).drop 128)) pk (a := min bits.length 5505) (by omega)
+    (sigTail bits) b hb
 
 /-- The machine's verifier only adds terminal constant-answer suffixes to the strict one. -/
 theorem strict_prunes_staged (pk : PublicKey) (m : Message) (bits : List Bool) :
     RejectAdapter.Prunes (strictVerify pk m bits) (stagedVerify pk m bits) := by
   unfold strictVerify
-  split_ifs with h5464 hlt
-  · exact directVerify_prunes_stagedVerify pk m bits h5464
+  split_ifs with h5456 hlt
+  · exact directVerify_prunes_stagedVerify pk m bits h5456
   · exact RejectAdapter.Prunes.refl _
   · exact RejectAdapter.Prunes.of_support _ _ (stagedVerify_oversized pk m bits (by omega))
 
@@ -840,10 +785,10 @@ section Scheme
 
 attribute [local irreducible] Forest.graph GScheme.sign GScheme.signLoop
 
-/-- Honest signatures have exactly 5464 bits. -/
+/-- Honest signatures have exactly 5456 bits. -/
 theorem honest_length (sk : RiscvUpperForest.Wire.scheme.SecretKey) (m : Message)
     (bits : List Bool) (h : some bits ∈ support (RiscvUpperForest.Wire.scheme.sign sk m)) :
-    bits.length = 5464 := by
+    bits.length = 5456 := by
   change some bits ∈ support
     (Option.map AlgorithmAdapter.encodeSignature <$> forestScheme.sign sk m) at h
   rw [support_map] at h
@@ -855,8 +800,7 @@ theorem honest_length (sk : RiscvUpperForest.Wire.scheme.SecretKey) (m : Message
     have e : AlgorithmAdapter.encodeSignature σ = bits := Option.some.inj he
     rw [← e, AlgorithmAdapter.length_encodeSignature, hi, List.length_append,
       AlgorithmAdapter.length_encode _ _ sk, fixed_revealBits i]
-    change nonceBits + (5328 + (freeTag i).length) = 5464
-    rw [length_freeTag]
+    change nonceBits + (5328 + ([] : List Bool).length) = 5456
     rfl
 
 /-- The forest's keys and signer with the verifier of the security proof. -/
@@ -889,7 +833,7 @@ theorem strictScheme_admissible : strictScheme.Admissible where
 
 end Scheme
 
-/-- The 345-cycle scheme retains the restricted forest's keys and signer. -/
+/-- The machine scheme retains the restricted forest's keys and signer. -/
 def stagedScheme : OracleAlgorithm.Scheme := RejectAdapter.scheme strictScheme stagedVerify
 
 theorem stagedScheme_secure : stagedScheme.Secure :=
