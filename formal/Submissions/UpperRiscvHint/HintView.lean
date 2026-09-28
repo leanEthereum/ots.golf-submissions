@@ -30,10 +30,10 @@ def viewCompress (view : List Bool) : List Bool :=
   if 16 ≤ viewDigit view then rawDecode view
   else viewNonce view ++ viewPayload view
 
-/-- Raw signatures are marked then padded to a multiple of 128 bits. The length count is 31,
+/-- Raw signatures are marked then padded to at least 8192 bits and a multiple of 128 bits. The length count is 31,
 including when the loader caps an oversized view. -/
 def rawView (σ : List Bool) : List Bool :=
-  (σ ++ [true]) ++ List.replicate (127 - σ.length % 128) false
+  (σ ++ [true]) ++ List.replicate ((127 - σ.length % 128) + (8192 - 128*(σ.length/128+1))) false
 
 /-- The index query of a signature. -/
 def indexQuery (pk : PublicKey) (m : Message) (σ : List Bool) :=
@@ -103,6 +103,16 @@ theorem viewDigit_honestView (σ : List Bool) (c : ℕ) (hc : c < 32) :
     viewDigit (honestView σ c) = c := by
   simp only [viewDigit, viewLength, honestView, List.length_ofFn, RiscvHint.maxViewBits]
   rw [Nat.min_eq_left (by omega)]
+  omega
+
+theorem viewBank_honestView (σ : List Bool) (c : ℕ) (hc : c < 32) :
+    viewBank (honestView σ c) = 3 := by
+  simp only [viewBank, viewLength, honestView, List.length_ofFn, RiscvHint.maxViewBits]
+  omega
+
+theorem viewBank_rawView (σ : List Bool) : 4 ≤ viewBank (rawView σ) := by
+  simp only [viewBank, viewLength, rawView, List.length_append, List.length_cons,
+    List.length_nil, List.length_replicate, RiscvHint.maxViewBits]
   omega
 
 theorem viewDigit_rawView (σ : List Bool) : viewDigit (rawView σ) = 31 := by
@@ -184,7 +194,8 @@ theorem trap_raw (pk : PublicKey) (m : Message) (σ : List Bool) :
   unfold trapVerify at ho
   rw [mem_support_bind_iff] at ho
   obtain ⟨answer, -, ho⟩ := ho
-  rw [if_pos (by rw [viewDigit_rawView]; omega), support_pure, Set.mem_singleton_iff] at ho
+  have bank := viewBank_rawView σ
+  rw [if_neg (by omega), if_pos (by omega), support_pure, Set.mem_singleton_iff] at ho
   exact ho
 
 /-- The verdict on a staged run accepts exactly when the verifier's decision does. -/
@@ -211,6 +222,14 @@ theorem trap_sound (pk : PublicKey) (m : Message) (view : List Bool)
   rw [Riscv.cachedPaths.path_bind] at h
   obtain ⟨answer, ca, ha, h⟩ := h
   dsimp only [rawIdx] at h
+  by_cases low : viewBank view < 3
+  · rw [if_pos low, Riscv.cachedPaths.path_pure] at h
+    exact absurd h.1 (by simp)
+  rw [if_neg low] at h
+  by_cases high : 3 < viewBank view
+  · rw [if_pos high, Riscv.cachedPaths.path_pure] at h
+    exact absurd h.1 (by simp)
+  rw [if_neg high] at h
   by_cases big : 16 ≤ viewDigit view
   · rw [if_pos big, Riscv.cachedPaths.path_pure] at h
     exact absurd h.1 (by simp)
@@ -281,7 +300,8 @@ theorem trap_accepts (pk : PublicKey) (m : Message) (σ : List Bool)
   obtain ⟨rfl, hcb⟩ := ha'
   rw [hcb] at h
   dsimp only [rawIdx] at h
-  rw [hd, if_neg (by omega), if_pos (by omega), viewPayload_honestView c len] at h
+  rw [viewBank_honestView σ c (by omega), if_neg (by omega), if_neg (by omega),
+    hd, if_neg (by omega), if_pos (by omega), viewPayload_honestView c len] at h
   unfold freeDecision at h
   rw [Riscv.cachedPaths.path_map] at h
   obtain ⟨o'', ho'', rfl⟩ := h

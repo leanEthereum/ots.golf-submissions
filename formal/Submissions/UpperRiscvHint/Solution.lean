@@ -4,12 +4,12 @@ namespace OptimalOTS.Challenge.UpperRiscvHint
 open RiscvMixedProgram
 
 /-- The free-chain scheme's signatures, laid out in place with their free count when accepted and
-in the raw form otherwise, read by the 317-cycle trapping image. -/
+in the raw form otherwise, read by the 316-cycle trapping image. -/
 noncomputable def submission : RiscvHint.Submission :=
   HintTrap.submission stagedScheme image viewCompress layoutView rawView 1337
 
-theorem certificate : submission.Certificate 317 :=
-  HintTrap.certificate stagedScheme image viewCompress layoutView rawView 1337 trapVerify 317
+theorem certificate : submission.Certificate 316 :=
+  HintTrap.certificate stagedScheme image viewCompress layoutView rawView 1337 trapVerify 316
     stagedScheme_admissible stagedScheme_secure image_valid
     (fun pk m v n h => (image_refines_trap pk m v n h).1)
     (fun pk m v n h => (image_refines_trap pk m v n h).2)

@@ -1,5 +1,8 @@
 import Submissions.UpperRiscvHint.MixedLanding
 
+set_option maxRecDepth 100000
+set_option maxHeartbeats 2000000
+
 namespace OptimalOTS.RiscvMixedProgram
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp

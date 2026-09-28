@@ -1,18 +1,20 @@
 import Submissions.UpperRiscvHint.Program
 
-/-! The 317-cycle free-chain image. Caps 31 and 32 occupy the opposite boundaries
+/-! The 316-cycle free-chain image. Caps 31 and 32 occupy the opposite boundaries
 of an 884-byte root at 0x400046; caps 0 through 12 have 192-bit states, and the boundary
 caps have 144-bit states. Other chains have 144-bit states and a mandatory final hash.
 Chain 32's state uses answer bits [112,256), leaving its input pointer at the root start.
 Chain 31's top uses [0,144); chain 30 contributes a full 256-bit top before it.
 
-The free count c is encoded by the view length. The loader supplies its capped length L
-in x13, and ANDI computes x6 = L & 124 = 4 d, where c = 31-d. The checksum adds 4 d to
-the biased address sum. Its residue is the HASH call number exactly when S+c = 145
-modulo 255. Free dispatch adds x6 to the base and lands c cells before pair 0.
-Counts at least 16 select rejection stubs; oversized honest raw forms have count 31. -/
+The loader supplies the capped view length L in x13. ANDI with -1924 preserves its
+2048-bit bank and bits 2 through 6. An honest view supplies the dispatch base 6144
+and displacement 4*(31-c) together, removing one ADD before the indirect jump.
+The adjusted checksum equals the HASH call number exactly when S+c = 145 modulo 255.
+Other banks either fault outside the image or land in reserved rejection windows.
+Counts at least 16 reject within the honest bank. Raw forms are padded into a guarded bank. -/
 
 set_option maxRecDepth 100000
+set_option maxHeartbeats 2000000
 
 namespace OptimalOTS.RiscvMixedProgram
 
@@ -42,10 +44,9 @@ def copies (_q : ℕ) : ℕ := 16
 their boundary rows; the final row has fifteen fewer hashes in each body. -/
 def group (q : ℕ) : ℕ := q % 4
 def withinGroup (q : ℕ) : ℕ := q / 4
-def groupOffset (g : ℕ) : ℕ := 3840*g
+def groupOffset (_g : ℕ) : ℕ := 0
 def slotOffset (q : ℕ) : ℕ :=
-  ([[0,63,126,190], [25,87,152,213], [48,112,175,236], [72,136,198,259]].getD
-    (group q) []).getD (withinGroup q) 0
+  [0,3899,7446,11596,37,3705,7506,11407,352,4253,7861,11558,181,4093,7799,11517].getD q 0
 /-- The code index of the first copy: after the index phase, the free dispatch, the free row and
 pair 0's prologue. -/
 def copiesIndex : ℕ := 105
@@ -53,9 +54,9 @@ def copiesStart : ℕ := 4096 + 4 * copiesIndex
 def copyStart (q d : ℕ) : ℕ :=
   copiesStart + 4 * (groupOffset (group q) + 256 * (copies q - 1 - d) + slotOffset q)
 def landing0 (q : ℕ) : ℕ := copyStart q 0 + 4 * (2 ^ fineWidth q - 1)
-/-- Lane 0 carries the bias for the complemented count: adding `4*(31-c)` gives
+/-- Lane 0 carries the bias for the masked tag: adding `6144 + 4*(31-c)` gives
 residue 1 exactly when the digit sum plus `c` is 145 modulo 255. -/
-def baseLane (q : ℕ) : ℕ := min (landing0 (q % 4)) 65532 + if q % 4 = 0 then 18 else 0
+def baseLane (q : ℕ) : ℕ := min (landing0 (q % 4)) 65532 + if q % 4 = 0 then 239 else 0
 def baseWord (g : ℕ) : ℕ :=
   (List.range 4).foldl (fun n j => n + baseLane (4 * g + j) * 2 ^ (16 * j)) 0
 /-- A cap pair's first chain hashes once per digit unit, one hash fewer than a normal chain, so
@@ -69,9 +70,9 @@ base. -/
 def loadWords : Code :=
   [.LD .x20 .x12 0, .LD .x21 .x12 8, .LD .x22 .x12 16, .LD .x23 .x12 24,
    .LD .x25 .x12 32, .LD .x2 .x12 40, .LD .x3 .x12 48, .LD .x1 .x12 56]
-/-- Four times the complemented count: `x6 = cappedViewLength & 124`. -/
+/-- The length bank and complemented count: `x6 = cappedViewLength & ~0x783`. -/
 def freeCount : Code :=
-  [.ANDI .x6 .x13 (imm12 0x7C)]
+  [.ANDI .x6 .x13 (imm12 (-1924))]
 def maskReg (_g : ℕ) : Reg := .x25
 def laneWord (g : ℕ) : Code :=
   let dst := if g = 0 then Reg.x27 else Reg.x26
@@ -95,7 +96,7 @@ def enter (k previous : ℕ) : Code :=
 def freeLanding : ℕ := 4096 + 4 * 101
 /-- The free chain's pointers, then the jump `c` cells before pair 0's prologue. -/
 def freeDispatch : Code :=
-  enter 0 hashBase ++ [.ADD .x28 .x1 .x6, .JALR .x0 .x28 (imm12 ((freeLanding : ℤ) - freeBase - 124))]
+  enter 0 hashBase ++ [.JALR .x0 .x6 (imm12 ((freeLanding : ℤ) - freeBase - 124)), nop]
 /-- The table-row register `x28` changes only while `x12` points at neither chain of the pair. -/
 def prologue (q : ℕ) : Code :=
   (if q = 6 then [.ADDI .x11 .x0 144] else []) ++
@@ -107,10 +108,14 @@ def prologue (q : ℕ) : Code :=
 is the free base plus 928. -/
 def root : Code := [.ADDI .x11 .x1 (imm12 (7072 - (freeBase : ℤ))), .ECALL]
 def pairCap (_q : ℕ) : ℕ := 24
-/-- Rejection fragments occupy previously unreachable padding, in discovery order. -/
-def rejectStubs : List ℕ := [655,4518,8382,12247,716,4581,8447,12310]
+/-- Each unexpected length bank has 32 rejection targets and a preceding rejection stub. -/
+def guardStart (bank : ℕ) : ℕ := 70 + 512*(bank-3)
+def guardBanks : List ℕ := (List.range 509).map (· + 4)
+def rejectStubs : List ℕ := guardBanks.map (fun bank => guardStart bank - 3)
+def guardCode : Code := (List.range 32).map fun d =>
+  .BEQ .x0 .x0 (BitVec.ofInt 13 (-12 - 4*(d : ℤ)))
 def stubFor (ip : ℕ) : ℕ :=
-  (rejectStubs.find? fun (s : ℕ) => decide (-4096 ≤ 4*((s : ℤ)-ip) ∧ 4*((s : ℤ)-ip) < 4096)).getD 655
+  (rejectStubs.find? fun (s : ℕ) => decide (-4096 ≤ 4*((s : ℤ)-ip) ∧ 4*((s : ℤ)-ip) < 4096)).getD 579
 def rejectJump (ip : ℕ) : Instr :=
   .BEQ .x0 .x0 (BitVec.ofInt 13 (4*((stubFor ip : ℤ)-ip)))
 /-- The free cell `c` instructions before pair 0's prologue: a hash of the free chain, or for
@@ -130,10 +135,38 @@ def copyCode (q d : ℕ) : Code :=
 def rowKeys (g c : ℕ) : List (ℕ × ℕ) :=
   (List.range 4).map fun j => (g+4*j, 15-c)
 def fragmentKeys : List (ℕ × ℕ) :=
-  (List.range 15).flatMap (rowKeys 0) ++
-  (List.range 3).flatMap (fun g =>
-    (List.range 4).flatMap (fun j => [(g+4*j, 0), (g+1+4*j, 15)]) ++
-    (List.range 14).flatMap (fun c => rowKeys (g+1) (c+1))) ++ rowKeys 3 15
+  [(0,15), (4,15), (12,15), (0,14), (4,14), (8,15), (12,14), (0,13),
+   (4,13), (8,14), (12,13), (0,12), (4,12), (8,13), (12,12), (0,11),
+   (4,11), (8,12), (12,11), (0,10), (4,10), (8,11), (12,10), (0,9),
+   (4,9), (8,10), (12,9), (0,8), (4,8), (8,9), (12,8), (0,7),
+   (4,7), (8,8), (12,7), (0,6), (4,6), (8,7), (12,6), (0,5),
+   (4,5), (8,6), (12,5), (0,4), (4,4), (8,5), (12,4), (0,3),
+   (4,3), (8,4), (12,3), (0,2), (4,2), (8,3), (12,2), (0,1),
+   (4,1), (8,2), (5,15), (12,1), (0,0), (4,0), (1,15), (8,1),
+   (5,14), (12,0), (13,15), (1,14), (8,0), (5,13), (9,15), (13,14),
+   (1,13), (5,12), (9,14), (13,13), (1,12), (5,11), (9,13), (13,12),
+   (1,11), (5,10), (9,12), (13,11), (1,10), (5,9), (9,11), (13,10),
+   (1,9), (5,8), (9,10), (13,9), (1,8), (5,7), (9,9), (13,8),
+   (1,7), (5,6), (9,8), (13,7), (1,6), (5,5), (9,7), (13,6),
+   (1,5), (5,4), (9,6), (13,5), (1,4), (5,3), (9,5), (13,4),
+   (1,3), (5,2), (9,4), (13,3), (1,2), (5,1), (9,3), (13,2),
+   (2,15), (1,1), (6,15), (5,0), (9,2), (13,1), (2,14), (1,0),
+   (6,14), (14,15), (9,1), (10,15), (13,0), (2,13), (6,13), (14,14),
+   (9,0), (10,14), (2,12), (6,12), (14,13), (10,13), (2,11), (6,11),
+   (14,12), (10,12), (2,10), (6,10), (14,11), (10,11), (2,9), (6,9),
+   (14,10), (10,10), (2,8), (6,8), (14,9), (10,9), (2,7), (6,7),
+   (14,8), (10,8), (2,6), (6,6), (14,7), (10,7), (2,5), (6,5),
+   (14,6), (10,6), (2,4), (6,4), (14,5), (10,5), (2,3), (6,3),
+   (14,4), (10,4), (2,2), (6,2), (14,3), (10,3), (2,1), (6,1),
+   (14,2), (10,2), (2,0), (6,0), (14,1), (7,15), (10,1), (15,15),
+   (11,15), (3,15), (14,0), (7,14), (10,0), (15,14), (11,14), (3,14),
+   (7,13), (15,13), (11,13), (3,13), (7,12), (15,12), (11,12), (3,12),
+   (7,11), (15,11), (11,11), (3,11), (7,10), (15,10), (11,10), (3,10),
+   (7,9), (15,9), (11,9), (3,9), (7,8), (15,8), (11,8), (3,8),
+   (7,7), (15,7), (11,7), (3,7), (7,6), (15,6), (11,6), (3,6),
+   (7,5), (15,5), (11,5), (3,5), (7,4), (15,4), (11,4), (3,4),
+   (7,3), (15,3), (11,3), (3,3), (7,2), (15,2), (11,2), (3,2),
+   (7,1), (15,1), (11,1), (3,1), (7,0), (15,0), (11,0), (3,0)]
 def copyFragments : List (ℕ × Code) :=
   fragmentKeys.map fun (q, d) =>
     (groupOffset (group q) + 256 * (15-d) + slotOffset q, copyCode q d)
@@ -143,11 +176,32 @@ def insertFragment (a : ℕ × Code) : List (ℕ × Code) → List (ℕ × Code)
 def addStubs : List ℕ → List (ℕ × Code)
   | [] => copyFragments
   | ip :: rest => insertFragment (ip-copiesIndex,reject) (addStubs rest)
-def fragments : List (ℕ × Code) := addStubs rejectStubs
+def addGuards : List ℕ → List (ℕ × Code) → List (ℕ × Code)
+  | [], parts => parts
+  | bank :: rest, parts => insertFragment (guardStart bank-copiesIndex,guardCode) (addGuards rest parts)
+def fragments : List (ℕ × Code) := addGuards guardBanks (addStubs rejectStubs)
 def assemble (cursor : ℕ) : List (ℕ × Code) → Code
   | [] => []
   | (off, body) :: rest =>
-    List.replicate (off-cursor) nop ++ body ++ assemble (off+body.length) rest
+    List.replicate (off-cursor) (.JALR .x0 .x0 0) ++ body ++ assemble (off+body.length) rest
+def assembledLength (cursor : ℕ) : List (ℕ × Code) → ℕ
+  | [] => 0
+  | (off, body) :: rest => off-cursor + body.length + assembledLength (off+body.length) rest
+
+theorem assemble_length (cursor : ℕ) (parts : List (ℕ × Code)) :
+    (assemble cursor parts).length = assembledLength cursor parts := by
+  induction parts generalizing cursor with
+  | nil => rfl
+  | cons p rest ih => simp only [assemble, assembledLength, List.length_append, List.length_replicate, ih]
+
+theorem assemble_admitted (cursor : ℕ) (parts : List (ℕ × Code))
+    (h : ∀ p ∈ parts, p.2.all Riscv.admittedInstruction = true) :
+    (assemble cursor parts).all Riscv.admittedInstruction = true := by
+  induction parts generalizing cursor with
+  | nil => rfl
+  | cons p rest ih =>
+    simp [assemble, List.all_append, h p (by simp),
+      ih (p.1+p.2.length) (fun q hq => h q (by simp [hq])), Riscv.admittedInstruction]
 def tables : Code := assemble 0 fragments
 def verifier : Code := indexPhase ++ freeDispatch ++ freeRow ++ prologue 0 ++ tables
 
@@ -158,9 +212,16 @@ def dataImage : List (BitVec 8) :=
 def image : Riscv.Image := ⟨verifier, dataImage⟩
 
 theorem index_length : indexPhase.length = 33 := by decide +kernel
-theorem code_length : verifier.length = 15750 := by decide +kernel
+theorem code_length : verifier.length = 260710 := by
+  simp only [verifier, List.length_append, tables, assemble_length]
+  decide +kernel
 theorem data_length : dataImage.length = 64 := by decide +kernel
-theorem admitted : verifier.all Riscv.admittedInstruction = true := by decide +kernel
+theorem admitted : verifier.all Riscv.admittedInstruction = true := by
+  have h : fragments.all (fun p => p.2.all Riscv.admittedInstruction) = true := by decide +kernel
+  have ht := assemble_admitted 0 fragments (List.all_eq_true.mp h)
+  have hf : (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).all Riscv.admittedInstruction = true :=
+    by decide +kernel
+  exact (List.all_append).trans (by rw [hf, tables, ht]; rfl)
 theorem image_valid : image.Valid := by
   refine ⟨?_, ?_, ?_⟩
   · change verifier.length ≤ 262144
@@ -170,8 +231,7 @@ theorem image_valid : image.Valid := by
   · exact List.all_eq_true.mp admitted
 
 theorem image_size : image.byteSize < 1048576 := by
-  change 4 * verifier.length + dataImage.length < 1048576
-  rw [code_length, data_length]
-  norm_num
+  simp only [Riscv.Image.byteSize, image, code_length, data_length]
+  decide
 
 end OptimalOTS.RiscvMixedProgram

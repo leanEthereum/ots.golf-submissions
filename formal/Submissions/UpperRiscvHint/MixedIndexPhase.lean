@@ -385,6 +385,14 @@ def viewLength (view : List Bool) : ℕ := min view.length (RiscvHint.maxViewBit
 
 def viewDigit (view : List Bool) : ℕ := 31 - viewLength view % 128 / 4
 
+def viewBank (view : List Bool) : ℕ := viewLength view / 2048
+
+def viewTag (view : List Bool) : ℕ := 2048 * viewBank view + 4 * (31 - viewDigit view)
+
+theorem viewBank_le (view : List Bool) : viewBank view ≤ 512 := by
+  unfold viewBank viewLength RiscvHint.maxViewBits
+  omega
+
 theorem viewDigit_lt (view : List Bool) : viewDigit view < 32 := by
   unfold viewDigit; omega
 
@@ -420,20 +428,29 @@ theorem and_124 (n : ℕ) : n &&& 124 = 4 * (n % 128 / 4) := by
   rw [e]
   omega
 
+theorem and_banked (n : ℕ) (hn : n < 2^64) :
+    n &&& (2^64 - 1924) = 2048*(n/2048) + 4*(n%128/4) := by
+  have lo := Nat.and_mod_two_pow (a := n) (b := 2^64-1924) (n := 11)
+  have hi := Nat.and_div_two_pow (a := n) (b := 2^64-1924) (n := 11)
+  norm_num at lo hi ⊢
+  rw [and_124, Nat.mod_mod_of_dvd n (by decide : 128 ∣ 2048)] at lo
+  have mask : 9007199254740991 = 2^53-1 := by decide
+  rw [mask, Nat.and_two_pow_sub_one_eq_mod, Nat.mod_eq_of_lt (by omega)] at hi
+  omega
+
 theorem freeCount_x6 (a : MachineState) (view : List Bool)
     (hw : a.getReg .x13 = W (viewLength view)) :
-    (freeCount.foldl execInstrBr a).getReg .x6 = W (4 * (31 - viewDigit view)) := by
+    (freeCount.foldl execInstrBr a).getReg .x6 = W (viewTag view) := by
   simp only [freeCount, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
     getReg_setReg_ite]
   simp only [ne_eq, reduceCtorEq, not_false_eq_true, and_self, if_true, hw]
   apply BitVec.eq_of_toNat_eq
   have hl : viewLength view ≤ 1048577 := by
     unfold viewLength RiscvHint.maxViewBits; omega
-  have hd := Nat.mod_lt (viewLength view) (show 0 < 128 by omega)
   rw [BitVec.toNat_and, W_toNat _ (by omega),
-    show (signExtend12 (imm12 124)).toNat = 124 by decide, and_124,
-    W_toNat _ (by unfold viewDigit; omega)]
-  unfold viewDigit
+    show (signExtend12 (imm12 (-1924))).toNat = 2^64-1924 by decide,
+    and_banked _ (by omega), W_toNat _ (by unfold viewTag viewBank viewDigit; omega)]
+  unfold viewTag viewBank viewDigit
   omega
 
 theorem freeCount_regs (a : MachineState) (r : Reg) (h6 : r ≠ .x6) :
@@ -451,7 +468,7 @@ theorem S44_x13 : (S44 pk m view answer).getReg .x13 = W (viewLength view) := by
   rw [S44_regs _ _ _ _ .x13 (by decide), S4_regs]
   rfl
 
-theorem S45_x6 : (S45 pk m view answer).getReg .x6 = W (4 * (31 - viewDigit view)) := by
+theorem S45_x6 : (S45 pk m view answer).getReg .x6 = W (viewTag view) := by
   exact freeCount_x6 _ view (S44_x13 pk m view answer)
 
 theorem S45_regs (r : Reg) (h6 : r ≠ .x6) :
@@ -509,12 +526,12 @@ theorem mainBlock_ready : Riscv.LinearReady (S4 pk m view answer) mainBlock := b
   simp [freeSum, sumCheck, Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
 
 theorem S5_x5 : (S5 pk m view answer).getReg .x5 =
-    rv64_remu (addressSum (S45 pk m view answer) 4 + W (4 * (31 - viewDigit view))) (W 255) := by
+    rv64_remu (addressSum (S45 pk m view answer) 4 + W (viewTag view)) (W 255) := by
   have L := (lanes_effect pk m view answer).2
   have x2 : (S46 pk m view answer).getReg .x2 = W 255 := by
     rw [L.regs .x2 (by decide) (by decide), S45_regs _ _ _ _ _ (by decide), S44]
     exact (loadWords_effect pk m view answer).x2
-  have x6 : (S46 pk m view answer).getReg .x6 = W (4 * (31 - viewDigit view)) := by
+  have x6 : (S46 pk m view answer).getReg .x6 = W (viewTag view) := by
     rw [L.regs .x6 (by decide) (by decide)]
     exact S45_x6 pk m view answer
   rw [S5_eq]
@@ -536,9 +553,10 @@ theorem S5_mem (addr : Word) : (S5 pk m view answer).getMem addr = (S46 pk m vie
 
 /-- The residue is the HASH call number exactly when the view's free count is the index's free
 digit. -/
-theorem residue_iff : (S5 pk m view answer).getReg .x5 = Riscv.hashCall ↔
+theorem residue_iff (bank : viewBank view = 3) : (S5 pk m view answer).getReg .x5 = Riscv.hashCall ↔
     freeDigit (pack answer) = viewDigit view := by
-  rw [S5_x5, show Riscv.hashCall = 1#64 from rfl]
+  rw [S5_x5, show Riscv.hashCall = 1#64 from rfl,
+    show viewTag view = 6144 + 4*(31-viewDigit view) by unfold viewTag; rw [bank]]
   have total := free_remainder_iff (S45 pk m view answer) (S45_masks pk m view answer) answer
     (S45_words pk m view answer) (S45_bases pk m view answer) _ (viewDigit_lt view)
   have e : ∀ x : Word, (rv64_remu x (W 255)).toNat = x.toNat % 255 := by
@@ -589,7 +607,7 @@ theorem afterIndex_prefixReg (r : Reg) (h11 : r ≠ .x11) (hl : LoadFree r)
     S44_regs _ _ _ _ r hl, S4_regs]
 
 /-- Four times the view's free count. -/
-theorem afterIndex_x6 : (afterIndex pk m view answer).getReg .x6 = W (4 * (31 - viewDigit view)) := by
+theorem afterIndex_x6 : (afterIndex pk m view answer).getReg .x6 = W (viewTag view) := by
   rw [afterIndex_regs _ _ _ _ .x6 (by decide), S5_regs _ _ _ _ .x6 (by decide) (by decide)
     (by decide)]
   exact S45_x6 pk m view answer
@@ -684,7 +702,7 @@ theorem S0_null : (S0 pk m view).code 0 = none := by
   decide
 
 theorem afterIndex_ctx (located : Riscv.CodeAt (S0 pk m view) (W 4096) verifier)
-    (rank : freeDigit (pack answer) = viewDigit view) :
+    (rank : freeDigit (pack answer) = viewDigit view) (bank : viewBank view = 3) :
     Ctx (afterIndex pk m view answer) (rawIdx answer) view pk := by
   have P := prefix_effect pk m view
   have pre : ∀ r : Reg, r = .x30 ∨ r = .x31 →
@@ -698,7 +716,7 @@ theorem afterIndex_ctx (located : Riscv.CodeAt (S0 pk m view) (W 4096) verifier)
     located.code_eq (afterIndex_code pk m view answer)⟩
   · rw [pre .x30 (Or.inl rfl), P.x30]
   · rw [pre .x31 (Or.inr rfl), P.x31]
-  · rw [afterIndex_x5]; exact (residue_iff pk m view answer).mpr rank
+  · rw [afterIndex_x5]; exact (residue_iff pk m view answer bank).mpr rank
   · -- `x12` still addresses the index answer, below every chain buffer
     intro q hq
     have hx : ∀ k : ℕ, k < 33 → W dataAddr ≠ W (outAddr k) := fun k hk =>

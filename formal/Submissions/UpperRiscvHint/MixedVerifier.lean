@@ -1,4 +1,4 @@
-import Submissions.UpperRiscvHint.MixedFree
+import Submissions.UpperRiscvHint.MaskedDispatch
 
 namespace OptimalOTS.RiscvMixedProgram
 
@@ -51,7 +51,9 @@ noncomputable def trapVerify (pk : PublicKey) (m : Message) (view : List Bool) :
     OracleComp Spec (Option Bool) := do
   let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits view))
   let index := rawIdx answer
-  if 16 ≤ viewDigit view then pure (some false)
+  if viewBank view < 3 then pure none
+  else if 3 < viewBank view then pure (some false)
+  else if 16 ≤ viewDigit view then pure (some false)
   else if freeDigit index.val = viewDigit view then freeDecision index (viewPayload view) pk
   else if viewDigit view ≠ 0 then pure none
   else if PairAllowed index.val (firstBusy index) then pure none
@@ -250,10 +252,10 @@ theorem free_sum (index : RawIdx) (c : ℕ) (hc : c < 16) (rank : freeDigit inde
 
 set_option maxRecDepth 100000 in
 /-- Every execution on every view refines `trapVerify`, and every accepting path costs at most
-317 cycles. -/
+316 cycles. -/
 theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n : ℕ)
     (hn : 1337 ≤ n) :
-    Riscv.Refines n (RiscvHint.loadView image pk m view) (trapVerify pk m view) 317 := by
+    Riscv.Refines n (RiscvHint.loadView image pk m view) (trapVerify pk m view) 316 := by
   have initial := Riscv.CodeAt.initial image pk m view image_valid
   rw [image_code] at initial
   have global : Riscv.CodeAt (S0 pk m view) (W 4096) verifier :=
@@ -264,7 +266,7 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
     rw [pc0]
     simpa only [verifier, List.append_assoc] using global
   unfold trapVerify
-  rw [show (317 : ℕ) = 284 + 33 from rfl]
+  rw [show (316 : ℕ) = 283 + 33 from rfl]
   apply indexPhase_refines pk m view _ (n - 33) n _ _ located (by rw [indexPhase_length]; omega)
   intro answer left hleft
   set index := rawIdx answer
@@ -278,14 +280,26 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
     exact (front_located s sglobal)
   have x10 : s.getReg .x10 = W hashBase := (afterIndex_setupRegs pk m view answer).2
   have x11 : s.getReg .x11 = W 192 := (afterIndex_setupRegs pk m view answer).1
-  have x1 : s.getReg .x1 = W freeBase := afterIndex_x1 pk m view answer
-  have x6 : s.getReg .x6 = W (4 * (31 - c)) := afterIndex_x6 pk m view answer
+  have x6 : s.getReg .x6 = W (viewTag view) := afterIndex_x6 pk m view answer
   have c32 : c < 32 := viewDigit_lt view
   have c64 : c < 64 := by omega
   dsimp only
-  apply freeDispatch_refines s _ c c32 x10 x1 x6 sloc _ 280 left (by omega)
+  apply freeDispatch_refines s _ (viewTag view) x10 x6 sloc _ 280 left (by omega)
   intro t tpc t10 t12 tregs tmem tcode
   have tglobal : Riscv.CodeAt t (W 4096) verifier := sglobal.code_eq tcode
+  by_cases low : viewBank view < 3
+  · rw [if_pos low]
+    exact smallBank_refines pk m view t (tcode.trans (afterIndex_code pk m view answer)) tpc low _ _
+  rw [if_neg low]
+  by_cases high : 3 < viewBank view
+  · rw [if_pos high]
+    rw [viewTag, dispatchTarget_guard _ _ (by omega) (viewBank_le view) c32] at tpc
+    exact (guard_refines t tglobal (viewBank view) (31-c) (by omega)
+      (viewBank_le view) (by omega) tpc _ (by omega)).mono (by omega)
+  rw [if_neg high]
+  have bank : viewBank view = 3 := by omega
+  rw [dispatchTarget_honest view bank] at tpc
+  change t.pc = W (freeLanding - 4*c) at tpc
   by_cases big : 16 ≤ c
   · -- the raw form: a rejection stub before any possible trap
     rw [if_pos big]
@@ -295,7 +309,7 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
   by_cases rank : freeDigit index.val = c
   · -- an admitted residue: the free chain, all pairs, the root and the decision
     rw [if_pos rank]
-    have sctx := afterIndex_ctx pk m view answer global rank
+    have sctx := afterIndex_ctx pk m view answer global rank bank
     have tctx : Ctx t index view pk :=
       sctx.free t12 (fun r hr => tregs r (by rcases hr with rfl | rfl | rfl | rfl <;> decide)
         (by rcases hr with rfl | rfl | rfl | rfl <;> decide)
@@ -304,7 +318,7 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
     have tpay : PayloadFrom t view 0 := fun j hj =>
       memBits_of_mem_eq tmem (afterIndex_payloadFrom pk m view answer j hj)
     have fits := stagedCost_le index
-    have run := free_refines index view pk c c16 rank t tctx tpc t10 t12 t11 tpay (left - 4)
+    have run := free_refines index view pk c c16 rank t tctx tpc t10 t12 t11 tpay (left - 3)
       (by omega)
     by_cases caps : ∀ q : Fin 16, PairAllowed index.val q
     · have cost := stagedCost_allowed index caps
@@ -314,7 +328,7 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
       exact run.anyCost (freeDecision_rejects index _ pk caps)
   · rw [if_neg rank]
     have t5 : t.getReg .x5 ≠ Riscv.hashCall := by
-      rw [tregs .x5 (by decide) (by decide) (by decide), afterIndex_x5, Ne, residue_iff]
+      rw [tregs .x5 (by decide) (by decide) (by decide), afterIndex_x5, Ne, residue_iff _ _ _ _ bank]
       exact rank
     by_cases c0 : c ≠ 0
     · -- a positive free count: the free chain's first hash traps on the residue
@@ -325,7 +339,7 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
       obtain ⟨c', hc'⟩ : ∃ c', c = c' + 1 := ⟨c - 1, by omega⟩
       dsimp only at loc
       rw [hc', List.replicate_succ, List.cons_append] at loc
-      obtain ⟨f, hf⟩ : ∃ f, left - 4 = f + 1 := ⟨left - 5, by omega⟩
+      obtain ⟨f, hf⟩ : ∃ f, left - 3 = f + 1 := ⟨left - 4, by omega⟩
       rw [hf]
       exact ecall_traps t f loc.head t5 0 t10
     · -- free count 0: the zero cap pairs, then the first hashing pair
@@ -341,6 +355,6 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
         simpa only [MachineState.getHalfword, MachineState.getMem, tmem] using
           afterIndex_lanes pk m view answer q'
       have hb : firstBusy index ≤ 6 := (busyAux_spec index 6 0).2.1
-      exact (walk_refines index _ 0 rfl (by omega) t (left - 4) w (by omega)).mono (by omega)
+      exact (walk_refines index _ 0 rfl (by omega) t (left - 3) w (by omega)).mono (by omega)
 
 end OptimalOTS.RiscvMixedProgram

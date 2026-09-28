@@ -3,6 +3,12 @@ import Submissions.UpperRiscvHint.StagedVerifier
 import Submissions.UpperRiscvHint.MixedIndexArith
 import Submissions.UpperRiscvHint.Valid
 
+set_option maxRecDepth 100000
+set_option maxHeartbeats 2000000
+
+set_option allowUnsafeReducibility true in
+attribute [local irreducible] OptimalOTS.RiscvMixedProgram.tables OptimalOTS.RiscvMixedProgram.verifier
+
 /-! Arithmetic of the capped-pair verifier's cycles after the free chain. -/
 namespace OptimalOTS.CappedCost
 
@@ -173,7 +179,8 @@ end OptimalOTS.RiscvMixedProgram
 # The free dispatch and the free chain
 
 After the index phase the machine points `x10` and `x12` at the free chain's cell and jumps
-`c` cells before pair 0's prologue, where `4 c` is the free count in `x6`. A cell with `c ≥ 16`
+`c` cells before pair 0's prologue. The masked tag in `x6` includes the length bank
+and complemented count. A cell with `c ≥ 16`
 jumps to a rejection stub. The other cells hash the free chain `c` times; on an admitted residue
 this is the free chain of the staged run, and the pairs follow from pair 0's prologue.
 -/
@@ -280,60 +287,78 @@ theorem free_target (c : ℕ) (hc : c < 32) :
   rw [W_toNat _ (by unfold freeLanding; omega)]
   unfold freeLanding; omega
 
-/-- The free dispatch points at the free chain and jumps `c` cells before pair 0's prologue,
-without a hash or a trap. -/
-theorem freeDispatch_refines (s : MachineState) (tail : Code) (c : ℕ) (hc : c < 32)
-    (x10 : s.getReg .x10 = W hashBase) (x1 : s.getReg .x1 = W freeBase)
-    (x6 : s.getReg .x6 = W (4*(31-c)))
+def dispatchTarget (tag : ℕ) : Word :=
+  (W tag + signExtend12 (imm12 ((freeLanding : ℤ) - freeBase - 124))) &&& ~~~(1#64)
+
+theorem setPC_mem (s : MachineState) (pc : Word) : (s.setPC pc).mem = s.mem := rfl
+
+theorem maskedJump_refines (s : MachineState) (tag : ℕ)
+    (x6 : s.getReg .x6 = W tag)
+    (fetch : s.code s.pc = some (.JALR .x0 .x6
+      (imm12 ((freeLanding : ℤ) - freeBase - 124))))
+    (Q : OracleComp Spec (Option Bool)) (cost fuel : ℕ)
+    (continuation : Riscv.Refines fuel (s.setPC (dispatchTarget tag)) Q cost) :
+    Riscv.Refines (fuel+1) s Q (cost+1) := by
+  have transition : RiscvZkvm.Rv64.step s = some (s.setPC (dispatchTarget tag)) := by
+    rw [RiscvZkvm.Rv64.step, fetch]
+    change some (s.setPC ((s.getReg .x6 + signExtend12
+      (imm12 ((freeLanding : ℤ) - freeBase - 124))) &&& ~~~(1#64))) = _
+    rw [x6]
+    rfl
+  exact Riscv.Refines.branch fetch rfl (fun h => nomatch h) transition continuation
+
+/-- Direct masked dispatch: the padding after the jump is never executed. -/
+theorem freeDispatch_refines (s : MachineState) (tail : Code) (tag : ℕ)
+    (x10 : s.getReg .x10 = W hashBase) (x6 : s.getReg .x6 = W tag)
     (located : Riscv.CodeAt s s.pc (freeDispatch ++ tail))
-    (Q : OracleComp Spec (Option Bool)) (cost fuel : ℕ) (hf : 4 ≤ fuel)
-    (continuation : ∀ t : MachineState, t.pc = W (freeLanding - 4*c) →
+    (Q : OracleComp Spec (Option Bool)) (cost fuel : ℕ) (hf : 3 ≤ fuel)
+    (continuation : ∀ t : MachineState, t.pc = dispatchTarget tag →
       t.getReg .x10 = W (work 0) → t.getReg .x12 = W (outAddr 0) →
       (∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → t.getReg r = s.getReg r) →
-      t.mem = s.mem → t.code = s.code → Riscv.Refines (fuel - 4) t Q cost) :
-    Riscv.Refines fuel s Q (4 + cost) := by
-  let lin : Code := enter 0 hashBase ++ [.ADD .x28 .x1 .x6]
-  let jump : Instr := .JALR .x0 .x28 (imm12 ((freeLanding : ℤ) - freeBase - 124))
-  have code : Riscv.CodeAt s s.pc (lin ++ ([jump] ++ tail)) := by
+      t.mem = s.mem → t.code = s.code → Riscv.Refines (fuel - 3) t Q cost) :
+    Riscv.Refines fuel s Q (3 + cost) := by
+  let lin : Code := enter 0 hashBase
+  let jump : Instr := .JALR .x0 .x6 (imm12 ((freeLanding : ℤ) - freeBase - 124))
+  have code : Riscv.CodeAt s s.pc (lin ++ ([jump] ++ (nop :: tail))) := by
     simpa only [freeDispatch, lin, jump, List.append_assoc, List.cons_append, List.nil_append]
       using located
-  have E : EntryEffect s ((enter 0 hashBase).foldl execInstrBr s) 0 :=
+  have E : EntryEffect s (lin.foldl execInstrBr s) 0 :=
     enter_effect s 0 (by rw [x10]; rfl)
-  have ready : Riscv.LinearReady s lin :=
-    (enter_ready s 0 hashBase).append (by simp [Riscv.LinearReady, Riscv.linearInstruction,
-      Riscv.memoryReady])
-  set u := lin.foldl execInstrBr s with hu
-  set a := (enter 0 hashBase).foldl execInstrBr s with ha
-  have ua : u = execInstrBr a (.ADD .x28 .x1 .x6) := by
-    rw [hu, List.foldl_append]; rfl
-  have upc : u.pc = s.pc + BitVec.ofNat 64 (4 * lin.length) := Riscv.linear_fold_pc s _ ready
-  have ucode : u.code = s.code := Riscv.fold_code s _
-  have umem : u.mem = s.mem := by rw [ua]; exact E.mem
+  have ready : Riscv.LinearReady s lin := enter_ready s 0 hashBase
+  generalize hu : lin.foldl execInstrBr s = u at E
+  have upc : u.pc = s.pc + BitVec.ofNat 64 (4 * lin.length) := by
+    rw [← hu]; exact Riscv.linear_fold_pc s _ ready
+  have ucode : u.code = s.code := by
+    rw [← hu]; exact Riscv.fold_code s _
   have uregs : ∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → u.getReg r = s.getReg r := by
-    intro r h10 h12 h28
-    rw [ua]
-    simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
-    simp [h28, E.regs r h10 h12]
-  have u10 : u.getReg .x10 = W (work 0) := by
-    rw [ua]; simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
-    simp [E.input]
-  have u12 : u.getReg .x12 = W (outAddr 0) := by
-    rw [ua]; simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
-    simp [E.out]
-  have u28 : u.getReg .x28 = W freeBase + W (4*(31-c)) := by
-    rw [ua]; simp only [execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
-    simp [E.regs .x1 (by decide) (by decide), E.regs .x6 (by decide) (by decide), x1, x6]
-  have uloc : Riscv.CodeAt u u.pc ([jump] ++ tail) := by
+    intro r h10 h12 _
+    exact E.regs r h10 h12
+  have u6 : u.getReg .x6 = W tag := by rw [E.regs .x6 (by decide) (by decide), x6]
+  have uloc : Riscv.CodeAt u u.pc ([jump] ++ (nop :: tail)) := by
     rw [upc]; exact code.append_right.code_eq ucode
-  have transition := jalr_transition u (imm12 ((freeLanding : ℤ) - freeBase - 124)) uloc.head
-  rw [u28, free_target c hc] at transition
-  let t := u.setPC (W (freeLanding - 4*c))
-  have cont := continuation t rfl u10 u12 uregs umem ucode
-  rw [show fuel = lin.length + ((fuel - 4) + 1) by simp [lin, enter]; omega,
-    show 4 + cost = lin.length + (cost + 1) by simp [lin, enter]; omega]
+  generalize htarget : dispatchTarget tag = target at continuation
+  let t := u.setPC target
+  have t10 : t.getReg .x10 = W (work 0) := by
+    simpa only [t, MachineState.getReg_setPC, Fin.val_zero] using E.input
+  have t12 : t.getReg .x12 = W (outAddr 0) := by
+    simpa only [t, MachineState.getReg_setPC, Fin.val_zero] using E.out
+  have tregs : ∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → t.getReg r = s.getReg r := by
+    simpa only [t, MachineState.getReg_setPC] using uregs
+  have tmem : t.mem = s.mem := (setPC_mem u target).trans E.mem
+  have tcode : t.code = s.code := MachineState.code_setPC.trans ucode
+  have cont := continuation t rfl t10 t12 tregs tmem tcode
+  rw [show fuel = lin.length + ((fuel - 3) + 1) by simp [lin, enter]; omega,
+    show 3 + cost = lin.length + (cost + 1) by simp [lin, enter]; omega]
   apply Riscv.Refines.linear _ code.append_left ready
-  rw [← hu]
-  exact Riscv.Refines.branch uloc.head rfl (fun h => nomatch h) transition cont
+  rw [hu]
+  apply maskedJump_refines u tag u6 uloc.head Q cost (fuel - 3)
+  simpa only [htarget] using cont
+
+theorem dispatchTarget_honest (view : List Bool) (bank : viewBank view = 3) :
+    dispatchTarget (viewTag view) = W (freeLanding - 4*viewDigit view) := by
+  unfold dispatchTarget viewTag
+  rw [bank, show (2048 * 3 : ℕ) = freeBase from rfl, ← W_add]
+  exact free_target _ (viewDigit_lt view)
 
 /-! ## The staged run's rejections -/
 
