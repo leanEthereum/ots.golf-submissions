@@ -12,7 +12,7 @@ noncomputable section
 abbrev affineMachine : LeanIsa.Submission :=
   machineSubmission (AffineCodec.params (layout fusionTab)) fusionTab
 
-theorem affine_certificate : affineMachine.Certificate 1096 where
+theorem affine_certificate : affineMachine.Certificate 1095 where
   admissible := AffineCodec.admissible (layout fusionTab)
   secure := AffineCodec.secure (layout fusionTab)
   valid := machine_valid

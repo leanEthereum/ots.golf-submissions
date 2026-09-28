@@ -30,7 +30,7 @@ theorem xOf_ent {f x : ℕ} (hf : f < 14) (hx : x < Wf f) : xOf f (ent f x) = x 
   · obtain ⟨u,rfl⟩ : ∃ u, f = u+1 := ⟨f-1,by omega⟩
     rw [Wf_succ (by omega)] at hx
     unfold xOf; rw [if_neg (by omega),ent_succ (by omega)]
-    have hh := dec_entry (i:=0) (by omega) hx (by have := L_pos u (band u x); omega)
+    have hh := dec_entry (i:=0) (by omega) hx (by have := SL_pos (by omega) hx; omega)
     rw [Nat.add_zero] at hh
     rw [hh]
 
@@ -53,10 +53,11 @@ def cF (T : Tab) (f x : ℕ) : ℕ := if f = 0 then x else cost T (gOf f) x
 def hmF (f : ℕ) : ℕ := if f = 0 then 0 else hm (gOf f)
 
 theorem body_len_L {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13) (hv : v < VF u) :
-    (body T u v z).length + 1 = L u (band u v) := by
+    (body T u v z).length + 1 ≤ SL u v := by
   rw [body_len hT hu hv, hT.cost_eq u hu v hv]
   have := gcu_ge u
-  unfold L; omega
+  have := L_le_SL hv
+  unfold L at this; omega
 
 theorem gcuF_zero : gcuF 0 = 5 := rfl
 theorem cF_zero (T : Tab) (x : ℕ) : cF T 0 x = x := rfl
@@ -163,7 +164,7 @@ theorem body_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13)
   rcases hx with ((((h | h) | h) | h) | h) | h
   · unfold tie at h
     split_ifs at h <;> simp at h <;> (try rcases h with rfl | rfl) <;>
-      simp only [CInstr.Bounded, accCell, tCell, copy, oneCell, idxCell] <;> (try split_ifs) <;> omega
+      simp only [CInstr.Bounded, accCell, tCell, copy, oneCell, idxCell, hCell] <;> (try split_ifs) <;> omega
   · have hc := LengthFrame.cost_shift_le hT hu hv
     change chargedCost T u v ≤ 16 at hc
     unfold prodOps at h
@@ -299,7 +300,7 @@ theorem cinstrAt_pro (T : Tab) {s : ℕ} (h : s < 27) : cinstrAt T s = prologue 
   unfold cinstrAt; rw [if_pos h]
 
 theorem cinstrAt_grp (T : Tab) {u v i : ℕ} (hu : u < 13) (hv : v < VF u)
-    (hi : i < L u (band u v)) : cinstrAt T (entryOf u v + i) = blockInstr T u v false i := by
+    (hi : i < SL u v) : cinstrAt T (entryOf u v + i) = blockInstr T u v false i := by
   have h1 := entryOf_ge hu hv
   have h2 := block_lt_gEnd hu hv hi
   unfold cinstrAt
@@ -319,7 +320,7 @@ theorem ent_lt {f x : ℕ} (hf : f < 14) (hx : x < Wf f) : ent f x+68 ≤ sentin
   · obtain ⟨u,rfl⟩ : ∃ u, f = u+1 := ⟨f-1,by omega⟩
     rw [Wf_succ (by omega)] at hx
     rw [ent_succ (by omega)]
-    have := block_lt_gEnd (i:=0) (by omega) hx (by have := L_pos u (band u x); omega)
+    have := block_lt_gEnd (i:=0) (by omega) hx (by have := SL_pos (by omega) hx; omega)
     unfold gEnd sentinel at *; omega
 
 def ctlOf (f x : ℕ) : CInstr := if f = 0 then .dispatch (frG0 x) else ctlF (gOf f + 1)

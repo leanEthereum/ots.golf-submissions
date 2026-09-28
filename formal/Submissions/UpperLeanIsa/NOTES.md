@@ -1,15 +1,47 @@
-# 1096-cycle split-alias leanISA construction
+# 1095-cycle split-alias leanISA construction
 
-The complete `Submission.Certificate 1096` passes a clean local build, exact
-challenge comparison, permitted-axiom checks and fresh Lean kernel replay.
-The competition model and admission requirements are unchanged. Hosted
-acceptance remains pending; local verification timing is close to the limit.
+The complete `Submission.Certificate 1095` builds locally, and `#print axioms` on
+`certificate` and `seeded_rows` shows only `propext`, `Classical.choice` and `Quot.sound`.
+The competition model and admission requirements are unchanged. Hosted acceptance is pending.
 
 ## Result and construction
 
-The proved bound is `106 + 87 * 10 + 120 = 1096` cycles, compared with the complete
-1110-cycle ancestor. Every completing run has 193 instructions and 976 execution
-cycles before the unchanged 120-cycle public-boundary surcharge. The signature
+The proved bound is `105 + 87 * 10 + 120 = 1095` cycles. Every completing run has 192
+instructions and 975 execution cycles before the unchanged 120-cycle public-boundary
+surcharge. The signature, the tables, the tiers and the security schedule are those of the
+1096 construction below. The only change is in the machine and the index decoding.
+
+### 1095: unit 11 tied by its landing hint
+
+The index tie adds one pattern per group into an accumulator. A group normally writes its
+pattern with `setc` and adds it with `xor`: two instructions. Unit 11 uses one instruction,
+`xor(acc_10, H_12, acc_11)`. `H_12` is the landing hint of its dispatch, the word `g ^ e` of
+the block entry `e`. Its budget drops from 6 to 5 ordinary instructions (`gcu 11 = 6`).
+
+- Placement. Unit 11's 512 blocks are not packed by cost band. Block `v` starts at a slot `e`
+  where bits 28..36 of `g ^ e` equal `v`. A greedy scan from the region start places all
+  512 blocks; the slots between a control op and the next entry are trap pads. The region
+  uses 9587 slots, and the group regions end at 252171, below the free blocks at 255615.
+  The packed tables `gap11N`, `ord11N` and `pos11N` (`FourMachineLayout`) give the block spans
+  and order. `HintTie.hint11_chain` checks `g ^ e` of the first block, then the 511 products
+  `g ^ e_(j+1) = g ^ e_j · g ^ gap11 j` in slot order.
+- Index layout. The other tie patterns are the field layout rotated left by 47 bits, which
+  moves unit 11's field (bits 109..117) onto bits 28..36. The rest of `g ^ e` is the fixed
+  mask `hintMask v`. So the final accumulator is `rotl47 D ^^^ hintMask (field 11 of D)`,
+  where `D` is the field word.
+- Decoding. `IndexBits.unmask` removes the mask selected by bits 28..36 and rotates back.
+  It is a bijection (`remask` is its inverse), so `card_indexSlice`, and with it every class
+  count, tier and probability of the 1096 schedule, is unchanged. The effective index is
+  bit 1..127 of `unmask` of the raw 128-bit slice.
+- Proof map. `HintTie` proves the tie algebra (`accBits_step`, `accBits_11`,
+  `unmask_accBits`, `accBits_digits`). `AffineValues.acc_eq` uses the landing facts for the
+  unit-11 step. `AffineSound` reads the fields through `unmask`. The honest prover writes
+  `accBits` into the accumulator cells.
+
+## The 1096 construction
+
+The 1096 bound is `106 + 87 * 10 + 120 = 1096` cycles, compared with the complete
+1110-cycle ancestor. The signature
 still contains 42 disclosed 128-bit words and the full 128-bit nonce: 5504 bits.
 The effective index has 127 bits. Code and memory have respectively 2^18 and
 2^16 rows, totaling 327680.
@@ -85,8 +117,8 @@ initialized powers reach 14. The 845 blocks that need two checksum
 multiplications execute and pay for both. Hint rewriting is restricted to
 actual hint cells so it cannot rewrite these checksum operations.
 
-The packed prefix ends at slot 250577; free blocks begin at 255615, leaving
-5038 slots. There are 14820 raw group blocks. Group 7 has 996 live field codes;
+In the 1096 layout the packed prefix ended at slot 250577; with unit 11's hint placement the
+group regions end at 252171, and free blocks begin at 255615. There are 14820 raw group blocks. Group 7 has 996 live field codes;
 the remaining 28 codes trap. The low raw bit of the first field is ignored by
 the 127-bit abstract index but remains pinned by the complete 128-bit index tie.
 
@@ -206,3 +238,5 @@ security and code-size screening. A still-lower estimate is not a certificate.
   semantics, length check, universal 1110-cycle proof, soundness, honest prover and complete certificate were prepared with Codex.
 
 - The mixed-packet split-alias layer-85 construction, linear security argument, exact multiplicative counting, and 1096 proof port were prepared with Codex using parallel agents.
+
+- The landing-hint tie of unit 11, its placement and index unmasking, and the 1095 proof port were prepared with Claude Opus 5.5.

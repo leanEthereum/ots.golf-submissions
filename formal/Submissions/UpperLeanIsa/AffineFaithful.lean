@@ -4,8 +4,8 @@ import Submissions.UpperLeanIsa.AffineHonestPath
 # The Fused chain machine submission and its machine clauses
 
 * `machineSubmission P T`: the fused scheme `P.scheme`, the HL bytecode `program T`, memory
-  `2 ^ 16`, the honest prover `prover P T` and the step count `193` (every completing run
-  executes exactly `193` instructions, `totalSteps_eq`).
+  `2 ^ 16`, the honest prover `prover P T` and the step count `192` (every completing run
+  executes exactly `192` instructions, `totalSteps_eq`).
 * `faithful`: under every fixed table, the honest run completes when the verifier accepts
   (`honest_run`) and only then (`fixed_sound`).
 * `machine_sound`, `machine_cycles`, `machine_valid`, `machine_seededRows`: the other machine
@@ -30,7 +30,7 @@ def machineSubmission (P : FourFusion.Params) (T : Tab) : LeanIsa.Submission whe
   program := program T
   memLog := 16
   prover := prover P T
-  steps := fun _ _ _ => 193
+  steps := fun _ _ _ => 192
 
 variable {P : FourFusion.Params} {T : Tab}
 
@@ -59,27 +59,27 @@ theorem faithful (hT : T.Hyp) (hC : Compat P T) : (machineSubmission P T).Faithf
   intro f
   have hrun : simulateQ (unifFwdAnswerImpl f) ((machineSubmission P T).honestRun pk m bits) =
       (fun o : Option ℕ => o.isSome) <$> simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 193
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 192
           Regs.initial) := by
     show simulateQ _ (prover P T pk m bits >>= fun L => (fun o : Option ℕ => o.isSome) <$>
-      LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits L) 193 Regs.initial) = _
+      LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits L) 192 Regs.initial) = _
     rw [simulateQ_bind, fixed_prover, pure_bind, simulateQ_map]
   have hver : (machineSubmission P T).scheme.verify pk m bits = P.verify pk m bits := rfl
   have hs := fun c (h : some c ∈ support (simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 193
+      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 192
         Regs.initial))) =>
     fixed_sound hT hC (le_refl 16) (by norm_num) f pk m bits _ h
   have hh : ∀ (h1 : bits.length = sigBits) (h2 : P.codec.Accepted (idxValue f P m (decodeNonce bits) pk))
       (h3 : rootValue f P (topsOf f P (idxValue f P m (decodeNonce bits) pk) bits) = pk),
       simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 193
-          Regs.initial) = pure (some 976) :=
+        (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 192
+          Regs.initial) = pure (some 975) :=
     fun h1 h2 h3 => honest_run hT hC h1
       (by simpa only [idxValue, Params.idxValue, indexSlice_effective, IF, idxOf, y0F, HLG3.ans] using h2)
       (by simpa only [idxValue, Params.idxValue, indexSlice_effective, IF, idxOf, y0F, HLG3.ans] using h3)
   rw [simulateQ_bind, hrun, hver]
   generalize simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost (program T)
-    (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 193 Regs.initial) = X at hs hh ⊢
+    (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 192 Regs.initial) = X at hs hh ⊢
   simp only [simulateQ_bind, simulateQ_pure, FourFusion.Params.fixed_verify, pure_bind]
   intro hmem
   rw [mem_support_bind_iff] at hmem
@@ -105,8 +105,8 @@ theorem faithful (hT : T.Hyp) (hC : Compat P T) : (machineSubmission P T).Faithf
 theorem machine_sound (hT : T.Hyp) (hC : Compat P T) : (machineSubmission P T).Sound :=
   sound hT hC (machineSubmission P T) rfl rfl
 
-/-- **Cycles** for the machine submission: every completing run costs `1096`. -/
-theorem machine_cycles (hT : T.Hyp) : (machineSubmission P T).CyclesAtMost 1096 :=
+/-- **Cycles** for the machine submission: every completing run costs `1095`. -/
+theorem machine_cycles (hT : T.Hyp) : (machineSubmission P T).CyclesAtMost 1095 :=
   cycles hT (machineSubmission P T) rfl
 
 /-- **Valid** bytecode. -/

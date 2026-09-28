@@ -60,8 +60,8 @@ theorem unitOf_eq : ∀ k < 42, 1 ≤ k → FourChildCodec.unitOf k = unitOf k �
 theorem shLen_eq : ∀ u < 13, ∀ i < gk u,
     FourChildCodec.shLen (FourChildCodec.ushape u) i = LEN (chainOf u i) := by decide
 
-theorem effective_toNat (I : Word) : (effective I).toNat = I.toNat / 2 := by
-  have hi := I.isLt
+theorem effective_toNat (I : Word) : (effective I).toNat = (unmask I).toNat / 2 := by
+  have hi := (unmask I).isLt
   simp only [effective, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
   norm_num
   norm_num at hi
@@ -146,7 +146,7 @@ theorem fusion_ordinary {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
   rw [← hsame] at hcopies
   unfold machineOrdinary
   rw [hcopies, fusion_cost_eq hu hvb]
-  change 3 + (if FourChildCodec.ushape u = 0 ∨ rawCode u v = 0 then 1 else 2) +
+  change 3 + (if FourChildCodec.ushape u = 0 ∨ FourChildCodec.ushape u = 11 ∨ rawCode u v = 0 then 1 else 2) +
     (if FourChildCodec.ushape u = 5 then 0 else
       SplitTables.zeroCount ((FourChildCodec.tup u (rawCode u v)).take
         (SplitTables.visible (FourChildCodec.ushape u)))) +
@@ -163,8 +163,12 @@ theorem fusion_ordinary {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
   · subst u
     simpa only [rawCode, if_true, true_or, ite_false, ne_eq, not_true_eq_false, false_and,
       Nat.add_comm, Nat.add_left_comm, Nat.add_assoc] using ho
-  · simp only [rawCode, if_neg h0, h0, false_or] at ho
-    by_cases hv0 : v = 0 <;> simp [rawCode, h0, hv0] at ho ⊢ <;> omega
+  · by_cases h11 : u = 11
+    · subst u
+      simp [rawCode] at ho ⊢
+      omega
+    simp only [rawCode, if_neg h0, h0, h11, false_or] at ho
+    by_cases hv0 : v = 0 <;> simp [rawCode, h0, h11, hv0] at ho ⊢ <;> omega
 
 theorem fusionTab_hyp : fusionTab.Hyp where
   cost_eq u hu v hv := by

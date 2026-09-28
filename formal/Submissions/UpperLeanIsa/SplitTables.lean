@@ -16,7 +16,7 @@ def visible (u : ℕ) : ℕ := dim u - hidden u
 def binding (u : ℕ) : Bool := !(1 ≤ u && u ≤ 4) && u != 7
 def zeroCount (t : List ℕ) : ℕ := (t.filter (· == 0)).length
 def bits (u : ℕ) : ℕ := [9, 9, 9, 9, 9, 12, 11, 10, 10, 10, 10, 9, 10].getD u 0
-def budget (u : ℕ) : ℕ := [6, 7, 7, 7, 7, 5, 6, 7, 7, 7, 7, 6, 6].getD u 0
+def budget (u : ℕ) : ℕ := [6, 7, 7, 7, 7, 5, 6, 7, 7, 7, 7, 5, 6].getD u 0
 
 def entries0 : List Entry :=
   [([0, 0, 1],0,1),
@@ -13501,7 +13501,7 @@ def entries (u : ℕ) : List Entry :=
   if u = 0 then entries0 else if u = 1 then entries1 else if u = 2 then entries2 else if u = 3 then entries3 else if u = 4 then entries4 else if u = 5 then entries5 else if u = 6 then entries6 else if u = 7 then entries7 else if u = 8 then entries8 else if u = 9 then entries9 else if u = 10 then entries10 else if u = 11 then entries11 else if u = 12 then entries12 else []
 
 def ordinary (u : ℕ) (e : Entry) (a : ℕ) : ℕ :=
-  3 + (if u = 0 ∨ e.2.1 + a = 0 then 1 else 2) +
+  3 + (if u = 0 ∨ u = 11 ∨ e.2.1 + a = 0 then 1 else 2) +
     (if u = 5 then 0 else zeroCount (e.1.take (visible u))) +
     (if 14 < e.1.sum - (if binding u then 1 else 0) then 1 else 0)
 def worstOrdinary (u : ℕ) (e : Entry) : ℕ := ordinary u e (e.2.2 - 1)
@@ -13586,7 +13586,7 @@ noncomputable def entryR (u d pw vis bud : ℕ) (bind : Bool) (e : Entry) : Bool
   Nat.beq e.1.length d && allR e.1 && Nat.blt 0 e.2.2 && Nat.ble (Nat.add e.2.1 e.2.2) pw &&
   (!bind || anyR e.1 vis) &&
   Nat.ble (Nat.add (Nat.add (Nat.add 3
-      (bif Nat.beq u 0 || Nat.beq (Nat.add e.2.1 (Nat.sub e.2.2 1)) 0 then 1 else 2))
+      (bif Nat.beq u 0 || Nat.beq u 11 || Nat.beq (Nat.add e.2.1 (Nat.sub e.2.2 1)) 0 then 1 else 2))
       (bif Nat.beq u 5 then 0 else zcR e.1 vis))
       (bif Nat.blt 14 (Nat.sub (sumR e.1) (bif bind then 1 else 0)) then 1 else 0)) bud
 
@@ -13595,7 +13595,7 @@ theorem entryR_eq (u : ℕ) (e : Entry) :
   unfold entryR entryOK worstOrdinary ordinary
   rw [allR_eq, anyR_eq, zcR_eq, sumR_eq]
   simp only [beq_eq_decide, ble_eq_decide, blt_eq_decide, Nat.add_eq, Nat.sub_eq,
-    Bool.cond_eq_ite, decide_eq_true_eq, ← Bool.decide_or, natBEq_eq_decide]
+    Bool.cond_eq_ite, decide_eq_true_eq, ← Bool.decide_or, natBEq_eq_decide, or_assoc]
 
 /-- `tableOK` fused into one pass: entry checks and alias intervals together. -/
 noncomputable def tableR (u d pw vis bud : ℕ) (bind : Bool) (es : List Entry) : ℕ → Bool :=
@@ -13667,18 +13667,6 @@ theorem block_ordinary_le {u : ℕ} {e : Entry} {a : ℕ}
   exact (ordinary_le_worst u e a ha).trans hb
 
 theorem total_bits : ((List.range 13).map bits).sum = 127 := by decide
-theorem budgets_sum : ((List.range 13).map budget).sum = 85 := by decide
-def rows (u : ℕ) : ℕ :=
-  (if u = 0 then 2 else 1) * ((entries u).map fun e =>
-    e.2.2 * (budget u + e.1.sum + if u = 5 then 1 else 0)).sum
-def prefixRows : ℕ := 27 + ((List.range 13).map rows).sum
-theorem prefix_rows_eq : prefixRows = 250577 := by decide +kernel
-theorem prefix_fits : prefixRows < 255615 := by rw [prefix_rows_eq]; decide
-
-/-- Conditional path arithmetic, not a statement about all machine executions. -/
-theorem padded_path_cost (free : ℕ) (costs : List ℕ)
-    (hlayer : free + costs.sum = 85) :
-    21 + ((List.range 13).map budget).sum + 10 * (free + costs.sum + 2) + 120 = 1096 := by
-  rw [budgets_sum,hlayer]
+theorem budgets_sum : ((List.range 13).map budget).sum = 84 := by decide
 
 end OptimalOTS.LeanIsaBaseline.Layer.SplitTables
