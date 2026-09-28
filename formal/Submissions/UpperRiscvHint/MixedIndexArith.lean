@@ -258,7 +258,7 @@ theorem addressSum_toNat (a : MachineState) (hm : MasksLoaded a)
     decide +kernel
   rw [BitVec.toNat_sub_of_le, eb]
   rw [BitVec.le_def, eb]
-  have en : baseWord 0 = 18445836566619508210 := by decide +kernel
+  have en : baseWord 0 = 18445831721905311439 := by decide +kernel
   rw [en]
   omega
 
@@ -286,7 +286,7 @@ index's free digit, that is when the digit sum plus the count is 145 modulo 255.
 theorem free_remainder_iff (a : MachineState) (hm : MasksLoaded a)
     (answer : BitVec hashBits) (hw : WordsLoaded a answer)
     (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) (c : ℕ) (hc : c < 32) :
-    (addressSum a 4 + W (4 * (31-c))).toNat % 255 = 1 ↔ freeDigit (pack answer) = c := by
+    (addressSum a 4 + W (6144 + 4 * (31-c))).toNat % 255 = 1 ↔ freeDigit (pack answer) = c := by
   have congruence := raw_sum_mod a hm answer hw
   have bound : (laneSum a 4).toNat ≤ 4 * 4340410370284600380 := by
     rw [laneSum_toNat a hm 4 le_rfl]
@@ -305,11 +305,11 @@ theorem free_remainder_iff (a : MachineState) (hm : MasksLoaded a)
         omega
       _ = 480 := by norm_num
   have hs := addressSum_toNat a hm hb
-  have en : baseWord 0 = 18445836566619508210 := by decide +kernel
+  have en : baseWord 0 = 18445831721905311439 := by decide +kernel
   rw [en] at hs
-  have hc' : (W (4 * (31-c))).toNat = 4 * (31-c) := W_toNat _ (by omega)
+  have hc' : (W (6144 + 4 * (31-c))).toNat = 6144 + 4 * (31-c) := W_toNat _ (by omega)
   rw [BitVec.toNat_add, hc', hs, Nat.mod_eq_of_lt (show
-    4 * 18445836566619508210 - 3 * 2 ^ 64 - (laneSum a 4).toNat + 4 * (31-c) < 2^64 by omega),
+    4 * 18445831721905311439 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) < 2^64 by omega),
     freeDigit, digitSum_pack]
   omega
 

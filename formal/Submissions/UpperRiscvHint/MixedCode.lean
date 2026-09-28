@@ -2,6 +2,7 @@ import Submissions.UpperRiscvHint.MixedProgram
 import Submissions.UpperRiscvHint.MachineFacts
 
 set_option maxRecDepth 100000
+set_option maxHeartbeats 2000000
 
 namespace OptimalOTS.RiscvMixedProgram
 open RiscvZkvm.Rv64
@@ -30,6 +31,16 @@ theorem mem_addStubs (a : ℕ × Code) (stubs : List ℕ) :
   | nil => simp [addStubs]
   | cons ip rest ih =>
     rw [addStubs, mem_insertFragment, ih]
+    simp only [List.mem_cons, exists_eq_or_imp]
+    tauto
+
+theorem mem_addGuards (a : ℕ × Code) (banks : List ℕ) (parts : List (ℕ × Code)) :
+    a ∈ addGuards banks parts ↔ a ∈ parts ∨
+      ∃ bank ∈ banks, a = (guardStart bank-copiesIndex,guardCode) := by
+  induction banks with
+  | nil => simp [addGuards]
+  | cons bank rest ih =>
+    rw [addGuards, mem_insertFragment, ih]
     simp only [List.mem_cons, exists_eq_or_imp]
     tauto
 
@@ -74,8 +85,8 @@ theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifi
   rw [show (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).length = copiesIndex by decide,
     W_add] at ht
   have mem : (groupOffset (group q)+256*(15-d.val)+slotOffset q, copyCode q d) ∈ fragments :=
-    (mem_addStubs _ _).mpr (Or.inl
-      (List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩))
+    (mem_addGuards _ _ _).mpr (Or.inl ((mem_addStubs _ _).mpr (Or.inl
+      (List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩))))
   have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
   exact h
 
@@ -86,12 +97,33 @@ theorem rejectStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) 
   rw [show (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).length = copiesIndex by decide,
     W_add] at ht
   have mem : (ip-copiesIndex,reject) ∈ fragments :=
-    (mem_addStubs _ _).mpr (Or.inr ⟨ip,hi,rfl⟩)
+    (mem_addGuards _ _ _).mpr (Or.inl ((mem_addStubs _ _).mpr (Or.inr ⟨ip,hi,rfl⟩)))
   have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
   have hb : copiesIndex ≤ ip := by
-    simp only [rejectStubs, List.mem_cons, List.not_mem_nil, or_false] at hi
-    unfold copiesIndex; omega
+    obtain ⟨bank, hbank, rfl⟩ := List.mem_map.mp hi
+    obtain ⟨j, hj, rfl⟩ := List.mem_map.mp hbank
+    unfold copiesIndex guardStart
+    omega
   have he : copiesStart+4*(ip-copiesIndex) = 4096+4*ip := by unfold copiesStart; omega
+  simpa only [he] using h
+
+/-- Every length bank other than the honest bank has a reserved rejection row. -/
+theorem guard_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
+    (bank : ℕ) (hb : 4 ≤ bank) (hu : bank ≤ 512) :
+    Riscv.CodeAt s (W (4096+4*guardStart bank)) guardCode := by
+  have ht := global.append_right (first := indexPhase ++ freeDispatch ++ freeRow ++ prologue 0)
+    (last := tables)
+  rw [show (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).length = copiesIndex by decide,
+    W_add] at ht
+  have member : bank ∈ guardBanks := by
+    apply List.mem_map.mpr
+    exact ⟨bank-4, List.mem_range.mpr (by omega), by omega⟩
+  have mem : (guardStart bank-copiesIndex,guardCode) ∈ fragments :=
+    (mem_addGuards _ _ _).mpr (Or.inr ⟨bank,member,rfl⟩)
+  have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
+  have he : copiesStart+4*(guardStart bank-copiesIndex) = 4096+4*guardStart bank := by
+    unfold copiesStart copiesIndex guardStart
+    omega
   simpa only [he] using h
 
 end OptimalOTS.RiscvMixedProgram

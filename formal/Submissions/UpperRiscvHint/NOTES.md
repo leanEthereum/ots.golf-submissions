@@ -1,3 +1,66 @@
+# Hinted RISC-V: 316 cycles through masked dispatch
+
+The 317-cycle image masked the view length to obtain a displacement, then added
+the free-chain base. The new mask obtains both in one instruction. The OTS,
+accepted index set, signature format, state widths and root input are unchanged.
+
+## Mask and guarded targets
+
+The loader supplies `L = min(view.length, 1048577)`. Let `bank = L / 2048`,
+`d = (L % 128) / 4` and `c = 31-d`. `ANDI x6 x13 -1924` computes
+`2048*bank + 4*d`, preserving bits 2 through 6 and bits above 10. Honest view
+lengths have bank 3, so `JALR x0 x6 -1768` lands at `4500 - 4*c` directly.
+The former ADD is replaced by padding after the jump, preserving the free row
+and pair 0's prologue. The checksum bias is 239 instead of 18, accounting for
+the base now included in the masked tag.
+
+Banks 0 through 2 fault outside the image. For each bank 4 through 512, the 32
+possible targets occupy a reserved instruction window beginning at
+`70 + 512*(bank-3)`. Every instruction jumps to a three-instruction rejection
+stub immediately before its window. The 256 chain bodies are packed around
+these windows; kernel-checked fragment coverage and non-overlap justify every
+landing. Unused gaps contain a jump to the faulting zero address.
+
+Raw encodings are padded to at least 8192 bits, as well as to a multiple of 128.
+Their projection still recovers the original signature, including oversized
+signatures. They now select a guarded bank and halt rejecting. `HintView`
+proves the projection, expansion, faithfulness and accepted-view soundness;
+`MaskedDispatch` covers every possible bank and `MixedVerifier` proves the
+accepting bound for arbitrary views and fuel.
+
+Exact accepting cost: **316 = 33 index + 3 free dispatch + 145 digit units +
+135 pair/root/decision overhead**, comprising 178 compression cycles and 138
+ordinary instructions. There are 260,710 instructions and 64 data bytes:
+**1,042,904 bytes**, strictly less than 1 MiB.
+
+## Validation
+
+The complete certificate and image-size theorem build with Lean 4.33.1 against
+contract `8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c`.
+Exact statement/primitive comparison and permitted-axiom checking pass. A fresh
+Lean kernel replay passes all 22,494 exported declarations. Comparison and replay
+take 238.72 seconds wall clock with sampled peak PSS of 9.96 GiB.
+Source policy passes all 86 files, and all 18 protected build files match the
+pinned contract.
+
+The byte-memory interpreter runs the actual Lean-exported image, which exactly
+matches the independently assembled prototype. All 21,305 cases pass: 4,288
+accepting transcripts, 256 ignored-byte variants, 395 length cases, 13 raw
+forms and 16,353 out-of-bank cases. Accepting oracle queries match the abstract
+forest in order, and each accepting run costs 316 cycles. An arithmetic check
+also covers all 1,048,578 possible capped length values.
+
+The official local runner fails closed at Landlock preflight on this host.
+Standalone development checks are not a hosted verdict; hosted verification
+is pending.
+
+The constrained-target layout adapts the address-masking idea described by
+[McCamant and Morrisett (2006)](https://people.csail.mit.edu/smcc/projects/pittsfield/pubs/usenix-sec-2006/pittsfield.html).
+The OTS layout and cycle saving here are our implementation and proof.
+The following sections record the historical 317, 318 and 320 versions.
+
+---
+
 # Hinted RISC-V: 317 cycles with a count encoded in the view length
 
 This extends the locally checked 318-cycle boundary-cap construction below.
