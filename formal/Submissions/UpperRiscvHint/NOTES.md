@@ -1,3 +1,52 @@
+# Hinted RISC-V: 315 cycles with a linked root length
+
+In the 316-cycle image, `x1` held the constant 6144 only for the root length
+`ADDI x11 x1 928`. The masked dispatch had already removed its other use. Pair 0's
+prologue occurs once in the image, so its jump can link into `x1` at no cost:
+`JALR x1 x28 imm` writes the fixed address 5028. The root then computes
+`ADDI x11 x1 2044`, and the index phase loses `LD x1`. The OTS, accepted index set,
+signature format, view encoding and banks are unchanged.
+
+## Layout
+
+The link must lie within `ADDI` reach of 7072, so pair 0's jump must be at code
+index 231 or later. The free row, pair 0's prologue, every chain body, every
+rejection stub and every guard window move up by 128 instructions. Pair 0's
+prologue is at index 229. The masked jump immediate is -1256, and bank `b` has its
+window at `198 + 512*(b-3)`. The padding after the free dispatch's jump is 130
+unreachable `ADDI x0 x0 0`. Lanes 0 to 2 move their bases with the tables, and the
+lane-0 bias becomes 233. Lane 3 keeps base 65532, and its largest jump immediate
+grows from 792 to 1304, still below 2048.
+
+`Ctx.base` now states that `x1` holds pair 0's link whenever `x12` addresses a
+chain after the free chain. The free phase satisfies it vacuously. Pair 0's
+prologue sets it, and nothing writes `x1` again. The chain lemmas report their
+final `pc`, so the free chain ends exactly at `freeLanding` and pair 0's link is
+known.
+
+Exact accepting cost: **315 = 32 index + 3 free dispatch + 145 digit units +
+135 pair/root/decision overhead**, comprising 178 compression cycles and 137
+ordinary instructions. There are 260,838 instructions and 56 data bytes:
+**1,043,408 bytes**, strictly less than 1 MiB.
+
+## Validation
+
+`lake build Submissions.UpperRiscvHint.Solution` passes with Lean 4.33.1.
+`certificate : submission.Certificate 315` and `image_size` depend on `propext`,
+`Classical.choice` and `Quot.sound` only. The Lean-exported image equals the
+independent generator (sha256 `b08b7fd4…`). The generator also reproduces the
+316-cycle image exactly. The byte-memory transcript test passes 17,079 cases:
+all 4,096 pair landings (3,760 accepting), every encodable count on accepted
+and out-of-window digit sums, 2,372 view lengths across banks 0 to 5 and 255 to
+512 including every bank-3 length, 16 raw forms, and all 7,392 bit flips of one
+honest view. Accepting oracle queries match the abstract forest in order, and
+every accepting run costs 315 cycles. An arithmetic check covers all 1,048,578
+capped length values.
+
+The following sections record the historical 316, 317, 318 and 320 versions.
+
+---
+
 # Hinted RISC-V: 316 cycles through masked dispatch
 
 The 317-cycle image masked the view length to obtain a displacement, then added

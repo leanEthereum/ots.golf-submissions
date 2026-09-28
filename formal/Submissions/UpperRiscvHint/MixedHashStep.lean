@@ -66,9 +66,10 @@ theorem jump_target (index : RawIdx) (q : ℕ) (hq : q < 16) (v : Word)
   unfold dispatch at *
   omega
 
-theorem jalr_transition (s : MachineState) (i : BitVec 12)
-    (fetch : s.code s.pc = some (.JALR .x0 .x28 i)) :
-    RiscvZkvm.Rv64.step s = some (s.setPC ((s.getReg .x28 + signExtend12 i) &&& ~~~(1#64))) := by
+theorem jalr_transition (s : MachineState) (rd : Reg) (i : BitVec 12)
+    (fetch : s.code s.pc = some (.JALR rd .x28 i)) :
+    RiscvZkvm.Rv64.step s =
+      some ((s.setReg rd (s.pc + 4)).setPC ((s.getReg .x28 + signExtend12 i) &&& ~~~(1#64))) := by
   rw [RiscvZkvm.Rv64.step, fetch]
   rfl
 
@@ -172,7 +173,7 @@ theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {view : List Bool} {pk
       omega
     rw [he]; exact ctx.lanes q
   · simp only [writeHash_regs]; exact ctx.row
-  · rw [writeHash_regs]; exact ctx.base
+  · simp only [writeHash_regs]; exact ctx.base
 
 /-- Each admitted chain input costs one oracle compression, at either state width. -/
 theorem chain_blockCost (k : Chain) : blockCost (chainBits k) = 1 := by

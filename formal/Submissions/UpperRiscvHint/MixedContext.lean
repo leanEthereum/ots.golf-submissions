@@ -7,7 +7,7 @@ open Riscv2Program (W Code laneBase hashBase)
 open OptimalOTS.Dag
 
 /-- The free dispatch, after the index phase. -/
-def freeStart : ℕ := 4096 + 4*33
+def freeStart : ℕ := 4096 + 4*32
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q
@@ -41,8 +41,9 @@ structure Ctx (s : MachineState) (index : RawIdx) (view : List Bool) (pk : Publi
   row : ∀ q : Fin 16, (s.getReg .x12 = W (outAddr (2*q.val+2)) ∨
       (s.getReg .x12 = W (outAddr (2*q.val+1)) ∧ s.getReg .x10 = W (work (2*q.val+1)))) →
     (s.getReg .x28).toNat = baseLane q - dispatch index q
-  /-- The free base, from which the root length is computed. -/
-  base : s.getReg .x1 = W freeBase
+  /-- Pair 0's link, from which the root length is computed. It is set by pair 0's jump, before
+  `x12` addresses any chain after the free chain. -/
+  base : ∀ k, 1 ≤ k → k < 33 → s.getReg .x12 = W (outAddr k) → s.getReg .x1 = W rootBase
   /-- No code at address 0: the decision's `JALR x0 x0 0` traps. -/
   null : s.code 0 = none
   code : Riscv.CodeAt s (W 4096) verifier

@@ -7,7 +7,7 @@ import Submissions.UpperRiscvHint.MixedIndexPhase
 The 884 bytes from the last chain's state are the 7072-bit root input (`rootCat`), so `x10`
 already points at it. Its hash, charged fourteen cycles, is written into the last chain's answer
 buffer, and the low 128 bits of the answer are compared with the public key saved in `x30`/`x31`,
-whose high word has bit 0 flipped. The root length is the free base in `x1` plus 960. The decision
+whose high word has bit 0 flipped. The root length is pair 0's link in `x1` plus 2044. The decision
 costs five cycles on every completed path.
 -/
 
@@ -24,7 +24,7 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 variable (index : RawIdx) (payload : List Bool) (view : List Bool) (pk : PublicKey)
 
-def rootLin : Code := [.ADDI .x11 .x1 (imm12 (7072 - (freeBase : ℤ)))]
+def rootLin : Code := [.ADDI .x11 .x1 (imm12 (7072 - (rootBase : ℤ)))]
 
 /-- Where the root answer is written: the answer buffer of the last chain. -/
 def rootOut : ℕ := outAddr 32
@@ -184,7 +184,7 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
       getReg_setReg_ite]
     simp only [true_and, ne_eq, reduceCtorEq, not_false_eq_true, if_true,
       show ¬ (Reg.x1 = Reg.x11) by decide]
-    rw [inv.ctx.base]
+    rw [inv.ctx.base 32 (by omega) (by omega) inv.out]
     decide
   have w12 : w.getReg .x12 = W rootOut := by
     rw [wRegs .x12 (by decide)]
