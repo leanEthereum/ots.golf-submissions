@@ -1,8 +1,7 @@
 import Submissions.UpperLeanIsa.FreeLastLayoutData
 
-/-! The complete candidate bytecode, parameterized by its field base. The code
-image is concrete, but a safe-base construction and complete machine certificate
-are still required before claiming 1089 cycles. -/
+/-! The free-last bytecode, parameterized by its field base. `FreeLastBase`
+selects a safe base; `FreeLastFaithful` supplies the complete 1089-cycle certificate. -/
 namespace OptimalOTS.FreeLastProgram
 open LeanerVM.Parameters LeanerVM.Semantics OptimalOTS.HLFour
 open OptimalOTS.FreeLastLayout OptimalOTS.FreeLastBlocks

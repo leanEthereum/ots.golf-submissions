@@ -1,82 +1,91 @@
-# 1089 research continuation; certified baseline remains 1093
+# 1089-cycle leanISA proof
 
-The 2026-09-29 continuation in `autoresearch/leanisa-sub1090` constructs a new
-1089-cycle candidate from the completed 1093 checkpoint `40a9697f`. This root
-still exports `Submission.Certificate 1093`: **no 1089 certificate is claimed**.
-The original `Solution.lean`, claim, scheme and certified machine are unchanged.
+The 2026-09-29 continuation ports the recovered free-last candidate into a complete
+`Submission.Certificate 1089`. `Solution.lean` exports the new certificate and
+seeded-row bound, and `claim.txt` is 1089. This extends the completed 1093 local
+checkpoint `40a9697f` and the selected-base research checkpoint `b843c616`.
+The original 1093 checkout remains available separately.
 
-The new candidate combines partial landing-hint ties for 56 group-8 raw codes
-and 59 group-9 raw codes, the existing group-11 hint, and the corrected
-free-last/ZVAR' design recovered from the earlier Claude research. The execution
-order is `[0,2,3,4,5,6,7,8,9,10,11,12,1]`. Group 1 has normal and zero-free-chain
-twins; duplicating a hinted group would change its tie pattern. The group budgets
-sum to 82. Both intended paths have 99 ordinary instructions and 87 hashes:
-186 instructions, 969 execution cycles, 1089 with the boundary charge.
+The exact bound is `99 + 87 * 10 + 120 = 1089`: 186 executed instructions,
+969 execution cycles, and the contract's 120-cycle boundary charge. The program
+uses 2^18 slots and 2^16 memory cells, totaling 327680 seeded rows. The same
+layer-85 tuples, alias multiplicities, 440-tier signing schedule, 5504-bit
+signature and full 128-bit nonce remain in use.
 
-`TriangularHints`, `PartialHintData`, `PartialHintIndex`, `PartialHintLabels`
-and `PartialHintCodec` supply the complete reversible raw-index encoding and
-the exact `2^129` oracle-output fiber factor. Selector positions are group 11:
-28..36; group 8: 37..42 plus 64..67; group 9: 0..9. Masks must be removed in
-that order. Full class-count/security integration remains to be done.
+## Construction
 
-`FreeLastBlocks`, `FreeLastLayout`, `FreeLastLayoutData`, `FreeLastProgram`,
-`FreeLastCompile` and `FreeLastPathCost` define the actual candidate instruction
-lists, balanced layout decoder and complete bytecode parameterized by its field
-base. `FreeLastBase.program` fixes this parameter using weighted root avoidance. They prove block budgets, contiguous layout coverage, special hint entry
-checks, bytecode/seeded-row validity, compiler weights and the intended-path
-counts. The layout has 14820 normal group blocks, 512 Z twins and 63 positive
-free blocks; groups 11 and 12 retain their old addresses. The compact free tail
-occupies `[260064,262143)` and there are 999 unused slots immediately before it.
+Two partial landing hints save an ordinary instruction in groups 8 and 9. The
+corrected free-last/ZVAR' design recovered from the earlier Claude research
+saves two more. The group order is `[0,2,3,4,5,6,7,8,9,10,11,12,1]`; group 1
+has normal and zero-free-chain twins. Duplicating a hinted group would change
+its tie pattern. The group budgets sum to 82, and both variants cost 1089.
 
-`FreeLastNoRepeat` proves that completing executions cannot revisit registers,
-including under the uncached support semantics. `FreeLastVariant` proves the
-last group's raw-code tie is injective and the N-to-Z checksum contradiction.
-`FreeLastExitData` checks all 1024 new frame-1 exit guards for the length-biased
-group. `FreeLastResearch` proves the centered product invariant, a weighted
-nonroot lemma, and the arithmetic root bound
-`11006439705738751537 < 2^64`. That arithmetic is not yet connected to complete
-polynomial families; the later selected-base proof instead uses the larger
-conservative exponent interval described next. `FreeLastChecks` imports the new
-component proofs for auditing; it is separate from the submission exports.
+The triangular index codec uses hints for 56 group-8 raw codes, 59 group-9 raw
+codes and the existing group-11 hint. `IndexPrimitives` contains the previous
+raw-word helper operations; `IndexBits` exposes the new scheme-facing codec.
+`PartialHintCodec` proves a reversible encoding and exactly 2^129 oracle
+outputs per effective 127-bit index. `FreeLastTie` proves that actual decoded
+landing hints reconstruct this encoding. `FreeLastCodec` reinstantiates the
+scheme's admissibility and security proof with the selected field base and
+new index slice.
 
-`FreeLastPolys`, `FreeLastSelect` and `FreeLastBase` now construct a fixed base
-for the candidate decoder. Laurent collision degrees use the span of the two
-signed exponents and zero. The interval `[-77,131]` uses the existing charged
-cost bound 16, and the formal weighted family has total degree bound
-`14637193990199924808 < 2^64`. A nonconstant polynomial identity forces matching
-exponents and coefficients; constant identities use the finite certificates.
-The layout checks now include the group/free physical partition. The selected
-bytecode is valid, satisfies the seeded-row cap, and every declared group/free
-frame is nonzero. Matching first-cell descriptors to actual reads and applying
-all landing guards remain part of the control-flow integration.
+The layout has 14820 normal group blocks, 512 zero twins, 63 positive free
+blocks and three trap intervals. Groups 11 and 12 preserve their old addresses.
+The free tail occupies `[260064,262143)`. The selected-base proof uses signed
+checksum exponents in `[-77,131]` and a weighted collision-degree bound of
+`14637193990199924808 < 2^64`.
 
-The initial 21 component theorems passed primitive/axiom comparison and fresh
-kernel replay (30806 declarations in 177.112 seconds). An initial audit caught
-a native-solver axiom from `bv_decide`; all seven uses were replaced by ordinary
-BitVec lemmas before the passing replay. The expanded audit passes for 35 component
-theorems, including signed-family selection and concrete frame nonzeroness.
-Fresh kernel replay of 31118 declarations passes in 192.365 seconds; the complete
-parse/comparison/audit/replay stage takes 225.894 seconds and 7.440 GiB peak PSS.
-Its receipt is in `leanisa-sub1090-evidence/RESULT.md`. A component audit
-is not an exact 1089 challenge comparison or a hosted submission verdict.
+## Proof map
 
-Remaining work: finish actual-read and fixed-frame guard integration; prove
-exact entry inversion and every completing path, including re-entry and N/Z
-switching; connect the new accumulator/codec to the scheme; port the honest
-image, faithful and arbitrary-memory soundness proofs. Only then can the claim
-change to 1089 and undergo full challenge comparison and replay. The imported
-old `IndexBits` helpers must be factored before installing the new decoder, to
-avoid an import cycle.
+- `FreeLastDecode`, `FreeLastGuard`, `FreeLastSemantics` and `FreeLastRun`
+  connect actual instructions and reads to the selected-base guards.
+- `FreeLastPrefix`, `FreeLastFacts`, `FreeLastGroups`, `FreeLastChecksum` and
+  `FreeLastPath` classify every completing execution, including prologue
+  re-entry, repeated groups, variant switching and the two exits. `run_exact`
+  proves 186 instructions and 969 cycles for every completing run.
+- `FreeLastValues`, `FreeLastTie` and `FreeLastSound` derive the accepted
+  signature from any completing committed memory at every allowed memory
+  log-size 16 through 32.
+- `FreeLastEntries` checks entry inversion for every candidate.
+  `FreeLastProver`, `FreeLastHonest` and `FreeLastHonestPath` construct and
+  verify all honest cells. `FreeLastFaithful` assembles the actual execution,
+  proves faithfulness, and exports the complete certificate.
 
-The local design, generators and validation receipts are saved in
-`/projects/golf/leanisa-sub1090-evidence/`, especially `DESIGN_1089.md` and
-`RESULT.md`. Independent arithmetic checked all layout entries and budgets,
-67,108,864 selector/context roundtrips, and 4096 complete accumulators. The
-universal Lean inverse covers every raw word, beyond those finite tests.
+No proof uses `sorry`, `native_decide`, `bv_decide` or an additional axiom.
+The permitted-axiom dependency check and fresh kernel replay are separate from
+ordinary compilation. Clean build, exact 1089 challenge/primitive comparison, permitted-axiom audit
+and fresh Lean kernel replay all pass locally. The 66967-declaration export
+replays in 588.018 seconds. The measured stages total 1158.334 seconds,
+with 15.386 GiB peak sampled process-tree PSS. The official local runner fails
+closed because Landlock is unavailable; this is not a hosted verification verdict.
+Receipts are saved in `leanisa-sub1090-evidence/certificate1089/`.
 
-The construction preserves the baseline tuples, alias multiplicities, layer 85,
-signing schedule, domains, nonce and signature sizes. No claim of optimality is
-made. The older layer-84/root-fusion candidates failed security and are not reused.
+## Elaboration and continuation notes
+
+Keep decoded rows opaque during unification. `groupRow` wraps the candidate
+lookup behind a choice with a proved equality; unfolding the entire concrete
+tree caused excessive memory use. Use explicit row equalities and entry bounds.
+For entry tables, compose checked chunks with `check_append_true`. A large
+combined `simp` over list lengths and checks was much slower than small kernel
+checks and explicit append composition.
+
+Use the symbolic permutation lemmas in `FreeLastTie`; the finite geometry has
+128 positions, while enumerating raw words would be infeasible. Rewrite `dg`
+and `XF` explicitly when reducing the free digit. Comparing concrete machine
+runs by definitional equality can unfold field arithmetic; retain theorem
+functions until the execution is abstracted in the faithfulness proof.
+
+The root is at the 200-file limit. New helpers can be added to existing modules,
+or unused historical modules can be removed after checking the import closure.
+No optimality claim is made. A further saving would require reducing an executed
+ordinary instruction while retaining both honest execution and the universal
+committed-memory path proof. The discarded layer-84/root-fusion candidates
+failed security and are not used here.
+
+The earlier component audits remain in the evidence directory. Their 35-theorem
+checkpoint was not a complete certificate; the new `Solution.lean` is the full
+1089 target. Generators and design notes remain outside the admitted source
+root, including `DESIGN_1089.md`. No remote push or PR is part of this port.
 
 ## Preserved report for the completed 1093 checkpoint
 

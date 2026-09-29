@@ -1,23 +1,19 @@
-# 1093-cycle leanISA construction
+# 1089-cycle leanISA construction
 
-This revision removes one more constant initialization from the proved 1094
-construction. The final group uses the already validated 5504-bit length as its
-frame bias; the free stage uses ONE. All other groups retain distinct powers.
-The proved bound is `103 + 87 × 10 + 120 = 1093` cycles, with 190 executed instructions
-and 327680 seeded rows.
+`Solution.lean` exports the complete `Submission.Certificate 1089` and the
+seeded-row bound. Three landing hints and a free-last execution order reduce
+the completed 1093 construction by four ordinary instructions.
 
-The index classes, 440 security tiers, signing schedule, 5504-bit signature and
-full 128-bit nonce are unchanged. Domain labels are relabeled to use powers
-through twelve. The full arbitrary-memory guard includes exact field checks for
-both fixed biases and every possible first operand below 2^16.
+The bound is `99 + 87 × 10 + 120 = 1089` cycles: 186 executed instructions and
+327680 seeded rows. The certificate includes scheme admissibility and security,
+honest execution, soundness for every admissible committed memory image, and
+the universal execution cost. The signature has 5504 bits and a full 128-bit nonce.
 
-`Solution.lean` exports `Submission.Certificate 1093` and the seeded-row bound.
-Clean build, exact challenge comparison, permitted-axiom audit, twelve arithmetic
-regression tests, and fresh Lean kernel replay pass locally. The measured
-build/export/check stages total 907.680 seconds, with peak sampled process-tree
-PSS of 12.383 GiB. Hosted verification remains pending: the official local
-runner fails closed because Landlock is unavailable.
-See [NOTES.md](NOTES.md) for the proof structure, attribution and further research.
+Clean build, exact challenge comparison, permitted-axiom audit and fresh Lean
+kernel replay pass with Lean 4.33.1. The measured stages total 1158.334 seconds.
+Receipts are in `leanisa-sub1090-evidence/certificate1089/`. Hosted verification
+remains pending: the official local runner requires Landlock, which is unavailable.
+See [NOTES.md](NOTES.md) for the construction, proof map and continuation notes.
 
 Build with the pinned dependencies:
 

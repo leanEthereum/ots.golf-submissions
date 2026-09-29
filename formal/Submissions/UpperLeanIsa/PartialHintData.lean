@@ -1,5 +1,5 @@
 import Submissions.UpperLeanIsa.TriangularHints
-import Submissions.UpperLeanIsa.IndexBits
+import Submissions.UpperLeanIsa.IndexPrimitives
 import Submissions.UpperLeanIsa.GenOrderFast
 
 /-! Concrete masks for two partial hints, checked independently of the

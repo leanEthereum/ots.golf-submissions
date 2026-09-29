@@ -65,4 +65,42 @@ theorem Tree.lookup_good (t : Tree) {lo hi : Nat} (h : t.check lo hi = true)
     · simpa only [Tree.lookup, if_pos hs] using ihl h.1.2 hlo hs
     · simpa only [Tree.lookup, if_neg hs] using ihr h.2 (by omega) hhi
 
+theorem Tree.lookup_bounds (t : Tree) {lo hi s : Nat} (h : t.check lo hi = true)
+    (hlo : lo ≤ s) (hhi : s < hi) :
+    lo ≤ (t.lookup s).entry ∧ (t.lookup s).entry+(t.lookup s).length ≤ hi := by
+  induction t generalizing lo hi with
+  | leaf r =>
+    simp only [Tree.check, decide_eq_true_eq] at h
+    change lo ≤ r.entry ∧ r.entry+r.length ≤ hi
+    exact ⟨h.1.ge,h.2.1.le⟩
+  | branch p l r ihl ihr =>
+    simp only [Tree.check, Bool.and_eq_true, decide_eq_true_eq] at h
+    by_cases hs : s < p
+    · have hg := ihl h.1.2 hlo hs
+      simp only [Tree.lookup, if_pos hs]
+      exact ⟨hg.1,hg.2.trans h.1.1.2.le⟩
+    · have hg := ihr h.2 (by omega) hhi
+      simp only [Tree.lookup, if_neg hs]
+      exact ⟨h.1.1.1.le.trans hg.1,hg.2⟩
+
+/-- Every slot of a decoded interval returns the same complete row. -/
+theorem Tree.lookup_stable (t : Tree) {lo hi s q : Nat} (h : t.check lo hi = true)
+    (hlo : lo ≤ s) (hhi : s < hi) (hq : (t.lookup s).entry ≤ q)
+    (hq' : q < (t.lookup s).entry+(t.lookup s).length) : t.lookup q = t.lookup s := by
+  induction t generalizing lo hi with
+  | leaf r => rfl
+  | branch p l r ihl ihr =>
+    simp only [Tree.check, Bool.and_eq_true, decide_eq_true_eq] at h
+    by_cases hs : s < p
+    · simp only [Tree.lookup, if_pos hs] at hq hq' ⊢
+      have hb := l.lookup_bounds h.1.2 hlo hs
+      have hqp : q < p := by omega
+      rw [if_pos hqp]
+      exact ihl h.1.2 hlo hs hq hq'
+    · simp only [Tree.lookup, if_neg hs] at hq hq' ⊢
+      have hb := r.lookup_bounds h.2 (by omega) hhi
+      have hqp : ¬q < p := by omega
+      rw [if_neg hqp]
+      exact ihr h.2 (by omega) hhi hq hq'
+
 end OptimalOTS.FreeLastLayout
