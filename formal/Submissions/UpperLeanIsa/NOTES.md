@@ -1,4 +1,73 @@
-# 1093-cycle split-alias leanISA construction
+# 1089 research continuation; certified baseline remains 1093
+
+The 2026-09-29 continuation in `autoresearch/leanisa-sub1090` constructs a new
+1089-cycle candidate from the completed 1093 checkpoint `40a9697f`. This root
+still exports `Submission.Certificate 1093`: **no 1089 certificate is claimed**.
+The original `Solution.lean`, claim, scheme and certified machine are unchanged.
+
+The new candidate combines partial landing-hint ties for 56 group-8 raw codes
+and 59 group-9 raw codes, the existing group-11 hint, and the corrected
+free-last/ZVAR' design recovered from the earlier Claude research. The execution
+order is `[0,2,3,4,5,6,7,8,9,10,11,12,1]`. Group 1 has normal and zero-free-chain
+twins; duplicating a hinted group would change its tie pattern. The group budgets
+sum to 82. Both intended paths have 99 ordinary instructions and 87 hashes:
+186 instructions, 969 execution cycles, 1089 with the boundary charge.
+
+`TriangularHints`, `PartialHintData`, `PartialHintIndex`, `PartialHintLabels`
+and `PartialHintCodec` supply the complete reversible raw-index encoding and
+the exact `2^129` oracle-output fiber factor. Selector positions are group 11:
+28..36; group 8: 37..42 plus 64..67; group 9: 0..9. Masks must be removed in
+that order. Full class-count/security integration remains to be done.
+
+`FreeLastBlocks`, `FreeLastLayout`, `FreeLastLayoutData`, `FreeLastProgram`,
+`FreeLastCompile` and `FreeLastPathCost` define the actual candidate instruction
+lists, balanced layout decoder and complete bytecode parameterized by its field
+base. They prove block budgets, contiguous layout coverage, special hint entry
+checks, bytecode/seeded-row validity, compiler weights and the intended-path
+counts. The layout has 14820 normal group blocks, 512 Z twins and 63 positive
+free blocks; groups 11 and 12 retain their old addresses. The compact free tail
+occupies `[260064,262143)` and there are 999 unused slots immediately before it.
+
+`FreeLastNoRepeat` proves that completing executions cannot revisit registers,
+including under the uncached support semantics. `FreeLastVariant` proves the
+last group's raw-code tie is injective and the N-to-Z checksum contradiction.
+`FreeLastExitData` checks all 1024 new frame-1 exit guards for the length-biased
+group. `FreeLastResearch` proves the centered product invariant, a weighted
+nonroot lemma, and the arithmetic root bound
+`11006439705738751537 < 2^64`. That arithmetic is not yet connected to complete
+polynomial families or a selected safe base. `FreeLastChecks` imports the new
+component proofs for auditing; it is separate from the submission exports.
+
+The 21 selected component theorems pass trusted primitive comparison and the
+dependency-axiom audit, using only `propext`, `Classical.choice` and `Quot.sound`.
+Fresh kernel replay of their 30806 exported declarations passes in 177.112
+seconds. An initial audit caught a native-solver axiom from `bv_decide`; all
+seven uses were replaced by ordinary BitVec lemmas before the passing replay.
+This is a component audit, not an exact 1089 challenge comparison or a hosted
+submission verdict.
+
+Remaining work: instantiate/prove the signed-frame and exit-landing families;
+prove exact entry inversion and every completing path, including re-entry and
+N/Z switching; connect the new accumulator/codec to the scheme; port the honest
+image, faithful and arbitrary-memory soundness proofs. Only then can the claim
+change to 1089 and undergo full challenge comparison and replay. The imported
+old `IndexBits` helpers must be factored before installing the new decoder, to
+avoid an import cycle.
+
+The local design, generators and validation receipts are saved in
+`/projects/golf/leanisa-sub1090-evidence/`, especially `DESIGN_1089.md` and
+`RESULT.md`. Independent arithmetic checked all layout entries and budgets,
+67,108,864 selector/context roundtrips, and 4096 complete accumulators. The
+universal Lean inverse covers every raw word, beyond those finite tests.
+
+The construction preserves the baseline tuples, alias multiplicities, layer 85,
+signing schedule, domains, nonce and signature sizes. No claim of optimality is
+made. The older layer-84/root-fusion candidates failed security and are not reused.
+
+## Preserved report for the completed 1093 checkpoint
+
+The validation measurements and historical credits below refer to `40a9697f`,
+before the separate research components above were added.
 
 This revision by Nicolas Consigny and Codex extends the locally proved 1094
 construction, which combines our centered checksum with Luc's verified PR #66
