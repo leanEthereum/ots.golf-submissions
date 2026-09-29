@@ -182,7 +182,7 @@ theorem actual_small_shared_ennreal {α : Type}
 end OptimalOTS.WeightedConstruction.LongChain91SmallShared
 
 /-!
-# Small-budget actual-game closure for the cost-88 long-chain construction
+# Small-budget actual-game closure for the cost-87 long-chain construction
 
 The stopped pair envelope and the authentication/post-sign clocks share one
 physical query budget.  The branch closes through `B <= 2^86 / 64`.
@@ -216,11 +216,11 @@ theorem choose_shared_clock {B : ℕ} (hB : CostAtMost (scheme.toAlgorithm.exper
     (pk : PublicKey) :
     E (run (A.choose pk) ∅) (fun p => (queryCount p.2:ℝ≥0∞))+
       expectedCharge (otherPaid (isIndexLength 342)) (A.choose pk) ∅+
-      E (runRemaining (A.choose pk) ∅ (B-820)) (postRemaining A pk) ≤ B := by
+      E (runRemaining (A.choose pk) ∅ (B-865)) (postRemaining A pk) ≤ B := by
   have h := (add_le_add (distinct_other_le_expected_paid (A.choose pk) ∅ (fun _ _ => rfl))
-    (le_refl (E (runRemaining (A.choose pk) ∅ (B-820)) (postRemaining A pk)))).trans
+    (le_refl (E (runRemaining (A.choose pk) ∅ (B-865)) (postRemaining A pk)))).trans
       (choose_spent_post_remaining_le A hB pk)
-  exact h.trans (by exact_mod_cast ((Nat.sub_le (B-820) signBudget).trans (Nat.sub_le B 820)))
+  exact h.trans (by exact_mod_cast ((Nat.sub_le (B-865) signBudget).trans (Nat.sub_le B 865)))
 
 theorem hazard_le_pair (B : ℕ) :
     weightedClock A B (gatedHazard A (smallGood A)) ≤ weightedClock A B (pairPayoff A) := by
@@ -240,13 +240,13 @@ theorem hazard_le_pair (B : ℕ) :
 theorem bad_gate_bound (B : ℕ) :
     weightedClock A B (badGate A (smallGood A)) ≤ ENNReal.ofReal (((2:ℝ)^512)⁻¹) := by
   have ht (pk : PublicKey) :
-      E (runRemaining (A.choose pk) ∅ (B-820)) (badGate A (smallGood A) pk) ≤
+      E (runRemaining (A.choose pk) ∅ (B-865)) (badGate A (smallGood A) pk) ≤
         ENNReal.ofReal (((2:ℝ)^512)⁻¹) := by
     have h := LongChain91Empirical.terminal_bad (A.choose pk) ∅ (fun _ _ => rfl)
     change Pr[fun out => ¬LongChain91Empirical.Good out.2 | run (A.choose pk) ∅] ≤ _ at h
     rw [← expectedValue_ite_one] at h
     change E (run (A.choose pk) ∅) _ ≤ _ at h
-    rw [← runRemaining_project (A.choose pk) ∅ (B-820),E_map] at h
+    rw [← runRemaining_project (A.choose pk) ∅ (B-865),E_map] at h
     convert h using 1
     congr 1
     funext r
@@ -267,22 +267,22 @@ theorem small_core_bound {B : ℕ} (hB : CostAtMost (scheme.toAlgorithm.experime
   have hp (pk : PublicKey) := actual_small_shared_ennreal (A.choose pk) B
     (choose_budget A hB pk) hBN ∅ (fun _ _ => rfl)
     (expectedCharge (otherPaid (isIndexLength 342)) (A.choose pk) ∅)
-    (E (runRemaining (A.choose pk) ∅ (B-820)) (postRemaining A pk))
+    (E (runRemaining (A.choose pk) ∅ (B-865)) (postRemaining A pk))
     (choose_shared_clock A hB pk)
   have hpair (pk : PublicKey) :
-      E (runRemaining (A.choose pk) ∅ (B-820)) (pairPayoff A pk)=
+      E (runRemaining (A.choose pk) ∅ (B-865)) (pairPayoff A pk)=
         ENNReal.ofReal C*E (run (A.choose pk) ∅) (fun p => ENNReal.ofReal (pairEnvelope p.2)) := by
     rw [E_const_mul]
-    have h := runRemaining_project (A.choose pk) ∅ (B-820)
+    have h := runRemaining_project (A.choose pk) ∅ (B-865)
     rw [← h,E_map]
     congr 1
     funext r
     exact ENNReal.ofReal_mul LongChain91BudgetArithmetic.C_nonneg
   have hs : (∑ pk : PublicKey,sumW (fiberA pk)*
-      (E (runRemaining (A.choose pk) ∅ (B-820)) (pairPayoff A pk)+
+      (E (runRemaining (A.choose pk) ∅ (B-865)) (pairPayoff A pk)+
         ENNReal.ofReal (kappa/2)*expectedCharge (otherPaid (isIndexLength 342)) (A.choose pk) ∅+
         ENNReal.ofReal LongChain91BudgetArithmetic.postRate*
-          E (runRemaining (A.choose pk) ∅ (B-820)) (postRemaining A pk)+
+          E (runRemaining (A.choose pk) ∅ (B-865)) (postRemaining A pk)+
         ENNReal.ofReal (kappa*(B:ℝ)/1000))) ≤
       ENNReal.ofReal ((6235189:ℝ)/6272000*kappa*(B:ℝ)) := by
     calc

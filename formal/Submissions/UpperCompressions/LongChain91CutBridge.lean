@@ -2,11 +2,11 @@ import Submissions.UpperCompressions.ProofBundle03
 import Submissions.UpperCompressions.LongChain91Geometry
 
 /-!
-# Concrete DAG for the cost-87 fused shared-DAG construction
+# Concrete DAG for the cost-86 fused shared-DAG construction
 
 This module turns the names of `LongChain91Geometry` into the `Dag.Graph`
 consumed by the generic weighted scheme: three blocks of fourteen length-18
-chains and twenty ternary hashes with shared inputs, under a fifteen-word root
+chains and 35 ternary hashes with shared inputs, under a fifteen-word root
 hash.
 -/
 
@@ -35,18 +35,18 @@ def ofFin (v : Fin N) : Name :=
     if h₂ : r < 42 then .ci ⟨r / 14, by omega⟩ ⟨r % 14, by omega⟩ t
     else if h₃ : r < 84 then .ch ⟨(r - 42) / 14, by omega⟩ ⟨(r - 42) % 14, by omega⟩ t
     else .cv ⟨(r - 84) / 14, by omega⟩ ⟨(r - 84) % 14, by omega⟩ t
-  else if h₄ : v.val < 2490 then
+  else if h₄ : v.val < 2625 then
     let m := v.val - 2310
-    let b : Fin 3 := ⟨m / 60, by omega⟩
-    let j : Fin 20 := ⟨m % 60 / 3, by omega⟩
+    let b : Fin 3 := ⟨m / 105, by omega⟩
+    let j : Fin 35 := ⟨m % 105 / 3, by omega⟩
     if m % 3 = 0 then .hc b j
     else if m % 3 = 1 then .hh b j
     else .hv b j
-  else if h₅ : v.val < 2491 then .rc
+  else if h₅ : v.val < 2626 then .rc
   else .rh
 
 theorem fin_ofFin_aux (v : Fin N) : (ofFin v).fin = v := by
-  have hv : v.val < 2492 := v.isLt
+  have hv : v.val < 2627 := v.isLt
   rw [Fin.ext_iff]
   simp only [ofFin]
   split_ifs <;> simp only [fin, idx] <;> omega
@@ -74,7 +74,7 @@ def parents : Name → Finset Name
   | .rc => Finset.univ.image rootIn
   | .rh => {.rc}
 
-@[simp] theorem mem_parents_hc (m : Name) (b : Fin 3) (j : Fin 20) :
+@[simp] theorem mem_parents_hc (m : Name) (b : Fin 3) (j : Fin 35) :
     m ∈ parents (.hc b j) ↔ ∃ i, (kid j i).name b = m := by
   simp [parents]
 
@@ -82,7 +82,7 @@ def parents : Name → Finset Name
     m ∈ parents .rc ↔ ∃ r, rootIn r = m := by
   simp [parents]
 
-theorem kid_name_idx_lt (b : Fin 3) (j : Fin 20) (i : Fin 3) :
+theorem kid_name_idx_lt (b : Fin 3) (j : Fin 35) (i : Fin 3) :
     ((kid j i).name b).idx < (Name.hc b j).idx := by
   cases hk : kid j i with
   | c k => simp only [Kid.name, idx]; omega
@@ -282,8 +282,8 @@ theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
   cases n <;> simp only [kindOf, graph_len_fin] <;>
     simp [Name.cost, Name.len, blockCost, blockBits]
 
-theorem graph_keygenCost : graph.keygenCost = 820 := by
-  show ∑ v : Fin N, graph.nodeCost v = 820
+theorem graph_keygenCost : graph.keygenCost = 865 := by
+  show ∑ v : Fin N, graph.nodeCost v = 865
   rw [← Fintype.sum_equiv Name.nameEquiv
     (fun n => graph.nodeCost n.fin) (fun v => graph.nodeCost v) (fun _ => rfl)]
   simp only [graph_nodeCost_fin]
@@ -292,13 +292,13 @@ theorem graph_keygenCost : graph.keygenCost = 820 := by
 end OptimalOTS.WeightedConstruction.LongChain91
 
 /-!
-# Concrete cut bridge for the cost-87 fused shared-DAG graph
+# Concrete cut bridge for the cost-86 fused shared-DAG graph
 
 This module connects the combinatorial cuts of `LongChain91Geometry` to the
 protected `Dag.Graph` interface.  The visited set of a supported cut is
 characterized by name (`VisN`): a block's needed hash values, its expanded
 triples, and each needed chain from its disclosure position upward.  From it we
-read off the exact reconstruction cost 87, the disclosure size, injectivity of
+read off the exact reconstruction cost 86, the disclosure size, injectivity of
 the codec, the binding rule, and the equal-cost cross-cut witness.
 -/
 
@@ -583,7 +583,7 @@ theorem evaluated_cutOf_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (n
   rw [Evaluated, nameEmbedding_apply, visited_cutOf_iff c hvalid]
 
 theorem evaluated_hh_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
-    (b : Fin 3) (j : Fin 20) : Evaluated (cutOf c) (.hh b j) ↔ j ∈ (c b).1 := by
+    (b : Fin 3) (j : Fin 35) : Evaluated (cutOf c) (.hh b j) ↔ j ∈ (c b).1 := by
   rw [evaluated_cutOf_iff c hvalid]
   exact ⟨fun h => h.1, fun h => ⟨h, not_mem_cutOf_of_len (by simp [Name.len])⟩⟩
 
@@ -616,8 +616,8 @@ theorem evaluated_cost_eq_charge (c : Choice) (hvalid : ∀ b, ShapeValid (c b).
 
 abbrev NameSum :=
   (Fin 3 × Fin 14) ⊕ (Fin 3 × Fin 14 × Fin 18) ⊕ (Fin 3 × Fin 14 × Fin 18) ⊕
-    (Fin 3 × Fin 14 × Fin 18) ⊕ (Fin 3 × Fin 20) ⊕ (Fin 3 × Fin 20) ⊕
-      (Fin 3 × Fin 20) ⊕ Unit ⊕ Unit
+    (Fin 3 × Fin 14 × Fin 18) ⊕ (Fin 3 × Fin 35) ⊕ (Fin 3 × Fin 35) ⊕
+      (Fin 3 × Fin 35) ⊕ Unit ⊕ Unit
 
 def Name.ofSum : NameSum → Name
   | .inl (b, k) => .src b k
@@ -688,7 +688,7 @@ theorem sum_charge (c : Choice) : ∑ n, charge c n = reconstructionCost c := by
       · simp [hk]
     simp only [hinner, localChainCost]
     rw [Finset.sum_ite_mem, Finset.univ_inter]
-  have hhash : ∀ b, (∑ j : Fin 20, (if j ∈ (c b).1 then 1 else 0)) = (c b).1.card := by
+  have hhash : ∀ b, (∑ j : Fin 35, (if j ∈ (c b).1 then 1 else 0)) = (c b).1.card := by
     intro b
     rw [Finset.sum_boole]
     simp
@@ -714,7 +714,7 @@ theorem reconstructCost_cutOf_eq (c : Choice) (hvalid : ∀ b, ShapeValid (c b).
   exact Finset.sum_congr rfl fun n _ => evaluated_cost_eq_charge c hvalid n
 
 theorem reconstructCost_supported {c : Choice} (hc : c ∈ supportedChoices) :
-    graph.reconstructCost (fins (cutOf c)) = 87 :=
+    graph.reconstructCost (fins (cutOf c)) = 86 :=
   (reconstructCost_cutOf_eq c (shapeValid_of_supported hc)).trans (reconstructionCost_eq hc)
 
 /-! ## Disclosure size -/
@@ -829,12 +829,12 @@ theorem family_no_hidden_source {A : Finset Name} (hA : A ∈ family) :
   exact hvA ((mem_fins_fin _ _).2 ((isCut_of_mem_family hA).src_mem_of_visited hv))
 
 theorem family_reconstructCost_eq {A : Finset Name} (hA : A ∈ family) :
-    graph.reconstructCost (fins A) = 87 := by
+    graph.reconstructCost (fins A) = 86 := by
   obtain ⟨c, hc, rfl⟩ := exists_choice_of_mem_family hA
   exact reconstructCost_supported hc
 
 theorem family_reconstructCost {A : Finset Name} (hA : A ∈ family) :
-    graph.reconstructCost (fins A) ≤ 87 :=
+    graph.reconstructCost (fins A) ≤ 86 :=
   (family_reconstructCost_eq hA).le
 
 theorem family_disclosure_and_nonce {A : Finset Name} (hA : A ∈ family) :
@@ -860,7 +860,7 @@ theorem family_revealBits_pos {A : Finset Name} (hA : A ∈ family) :
 /-- Binding rule: the exclusive (last-slot) kid of every unexpanded hash node
 is outside the needed set, hence neither visited nor disclosed. -/
 theorem binding_rule (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (b : Fin 3)
-    (j : Fin 20) (hj : j ∉ (c b).1) :
+    (j : Fin 35) (hj : j ∉ (c b).1) :
     ¬ graph.Visited (fins (cutOf c)) ((kid j 2).name b).fin ∧
       (kid j 2).name b ∉ cutOf c := by
   have hnv : ¬ graph.Visited (fins (cutOf c)) ((kid j 2).name b).fin := by

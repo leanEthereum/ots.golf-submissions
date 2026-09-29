@@ -2,7 +2,7 @@ import Submissions.UpperCompressions.LongChain91Scheme
 import Submissions.UpperCompressions.ProofBundle05
 
 /-!
-# Authentication bridge for the cost-88 shared-DAG construction
+# Authentication bridge for the cost-87 shared-DAG construction
 
 This module identifies the concrete key-generation oracle points of the
 shared-DAG graph, splits them into exposed and hidden points after signing,

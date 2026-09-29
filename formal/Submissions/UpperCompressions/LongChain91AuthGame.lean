@@ -2,7 +2,7 @@ import Submissions.UpperCompressions.LongChain91CachedRow
 import Submissions.UpperCompressions.LongChain91Auth
 
 /-!
-# Authentication-event closure for the cost-88 shared-DAG graph
+# Authentication-event closure for the cost-87 shared-DAG graph
 
 An accepting reconstruction is followed downward from the public root along
 reconstructed nodes.  At each hash node the forged input either differs from

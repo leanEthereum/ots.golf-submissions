@@ -1,22 +1,22 @@
 import Submissions.UpperCompressions.ProofBundle00
 
 /-!
-# Cost-87 fused shared-DAG geometry
+# Cost-86 fused shared-DAG geometry
 
 Three identical blocks feed a fifteen-input root.  A block has fourteen
-length-18 chains and twenty ternary hash nodes; hubs are shared by several hash
+length-18 chains and 35 ternary hash nodes; hubs are shared by several hash
 nodes, five nodes are block tops read only by the root, and every hash node has
 an exclusive kid in its last input slot.  A cut chooses, per block, the expanded
 hash nodes `E` and one disclosure position on each needed chain.
 
-The family count never enumerates the `2^20` subsets of a block.  A top-down
+The family count never enumerates the `2^35` subsets of a block.  A top-down
 recursion `dfs` over the hash nodes sums a product weight over the valid
 shapes; `dfs_eq` identifies it with the sum over all subsets.  The kernel
 evaluates `dfs` through `stRun`, a forward pass over weighted states that prunes
 unread bits and merges equal states.  The cost generating number `blockGen`
 of one block is cubed, which is the three-fold convolution by
 `Finset.prod_univ_sum`, and a base-`B` digit of the cube counts the cut triples
-of graph cost 87.
+of graph cost 86.
 -/
 
 open scoped BigOperators
@@ -32,37 +32,50 @@ namespace OptimalOTS.WeightedConstruction.LongChain91
 /-- An input of a block hash node: the top of a chain or another hash value. -/
 inductive Kid where
   | c (k : Fin 14)
-  | h (j : Fin 20)
+  | h (j : Fin 35)
   deriving DecidableEq
 
-/-- Local chains `0..13` are the design's nodes
-`0 1 2 3 5 7 9 12 15 17 22 26 29 31`; local hash nodes `0..19` are
-`4 6 8 10 11 13 14 16 18 19 20 21 23 24 25 27 28 30 32 33`.  Slot `2` holds
-the exclusive kid of each hash node. -/
-def kid : Fin 20 → Fin 3 → Kid := ![
-  ![.c 2, .c 3, .c 1],
-  ![.c 0, .c 4, .h 0],
-  ![.c 0, .h 1, .c 5],
-  ![.c 0, .c 4, .c 6],
-  ![.c 3, .h 1, .h 3],
-  ![.c 2, .c 0, .c 7],
-  ![.h 2, .h 5, .h 4],
-  ![.h 5, .c 2, .c 8],
-  ![.c 3, .h 5, .c 9],
-  ![.h 5, .c 4, .h 8],
-  ![.c 4, .h 9, .h 7],
-  ![.c 3, .h 1, .h 10],
-  ![.h 5, .c 3, .c 10],
-  ![.h 1, .c 2, .h 12],
-  ![.h 11, .h 9, .h 13],
-  ![.h 5, .h 9, .c 11],
-  ![.h 11, .h 2, .h 15],
-  ![.h 2, .h 9, .c 12],
-  ![.h 9, .h 11, .c 13],
-  ![.c 2, .c 4, .h 18]]
+/-- Fourteen length-18 chains and the searched ternary DAG.
+Slot `2` holds the exclusive kid of each hash node. -/
+def kid : Fin 35 → Fin 3 → Kid := ![
+  ![.c 2, .c 3, .c 8],
+  ![.c 4, .c 0, .h 0],
+  ![.c 0, .c 2, .c 1],
+  ![.c 3, .h 1, .h 2],
+  ![.c 3, .c 0, .c 7],
+  ![.c 0, .h 1, .c 6],
+  ![.c 4, .c 3, .h 5],
+  ![.c 2, .h 1, .c 13],
+  ![.c 2, .c 0, .h 7],
+  ![.c 0, .c 3, .c 9],
+  ![.c 3, .c 0, .c 10],
+  ![.h 1, .c 3, .h 10],
+  ![.c 4, .c 2, .h 11],
+  ![.h 6, .c 2, .c 12],
+  ![.c 4, .h 1, .h 13],
+  ![.c 0, .c 3, .h 14],
+  ![.h 6, .h 15, .h 12],
+  ![.h 15, .c 3, .h 8],
+  ![.c 4, .h 6, .h 17],
+  ![.h 16, .h 18, .h 9],
+  ![.h 6, .h 1, .h 19],
+  ![.h 15, .c 2, .h 20],
+  ![.c 0, .c 3, .c 11],
+  ![.h 1, .c 2, .h 22],
+  ![.h 6, .h 15, .h 4],
+  ![.h 18, .h 16, .h 24],
+  ![.c 2, .h 1, .h 25],
+  ![.h 6, .c 4, .c 5],
+  ![.h 15, .c 2, .h 27],
+  ![.h 1, .c 0, .h 28],
+  ![.h 16, .h 18, .h 29],
+  ![.h 15, .h 6, .h 3],
+  ![.h 18, .h 16, .h 31],
+  ![.h 6, .h 15, .h 23],
+  ![.h 18, .h 16, .h 33]]
 
 /-- The five block tops, in root-slot order. -/
-def top : Fin 5 → Fin 20 := ![6, 14, 16, 17, 19]
+def top : Fin 5 → Fin 35 := ![32, 21, 30, 34, 26]
 
 theorem top_injective : Function.Injective top := by
   decide
@@ -76,15 +89,15 @@ inductive Name where
   | ci (b : Fin 3) (k : Fin 14) (t : Fin 18)
   | ch (b : Fin 3) (k : Fin 14) (t : Fin 18)
   | cv (b : Fin 3) (k : Fin 14) (t : Fin 18)
-  | hc (b : Fin 3) (j : Fin 20)
-  | hh (b : Fin 3) (j : Fin 20)
-  | hv (b : Fin 3) (j : Fin 20)
+  | hc (b : Fin 3) (j : Fin 35)
+  | hh (b : Fin 3) (j : Fin 35)
+  | hv (b : Fin 3) (j : Fin 35)
   | rc
   | rh
   deriving DecidableEq, Fintype
 
 /-- Number of graph nodes. -/
-def nodeCount : ℕ := 2492
+def nodeCount : ℕ := 2627
 
 namespace Name
 
@@ -94,11 +107,11 @@ def idx : Name → ℕ
   | ci b k t => 42 + 126 * t + 14 * b + k
   | ch b k t => 84 + 126 * t + 14 * b + k
   | cv b k t => 126 + 126 * t + 14 * b + k
-  | hc b j => 2310 + 60 * b + 3 * j
-  | hh b j => 2311 + 60 * b + 3 * j
-  | hv b j => 2312 + 60 * b + 3 * j
-  | rc => 2490
-  | rh => 2491
+  | hc b j => 2310 + 105 * b + 3 * j
+  | hh b j => 2311 + 105 * b + 3 * j
+  | hv b j => 2312 + 105 * b + 3 * j
+  | rc => 2625
+  | rh => 2626
 
 theorem idx_lt (n : Name) : n.idx < nodeCount := by
   cases n <;> simp only [idx, nodeCount] <;> omega
@@ -165,7 +178,7 @@ theorem chainNode_pair_injective {b b' : Fin 3} {k k' : Fin 14} {p p' : Fin 19}
     simp only at this
     exact ⟨hb, hk, Fin.ext (by omega)⟩
 
-theorem hc_len_ne (b : Fin 3) (j : Fin 20) : (Name.hc b j).len ≠ 129 := by
+theorem hc_len_ne (b : Fin 3) (j : Fin 35) : (Name.hc b j).len ≠ 129 := by
   simp only [Name.len]
   omega
 
@@ -189,9 +202,9 @@ theorem rootIn_injective : Function.Injective rootIn := by
   exact Fin.ext (by omega)
 
 /-- Static key-generation cost. -/
-def keygenCost : ℕ := 3 * (14 * 18 + 20) + 4
+def keygenCost : ℕ := 3 * (14 * 18 + 35) + 4
 
-theorem keygenCost_eq : keygenCost = 820 := by norm_num [keygenCost]
+theorem keygenCost_eq : keygenCost = 865 := by norm_num [keygenCost]
 
 theorem sum_name_cost : (∑ n : Name, n.cost) = keygenCost := by decide +kernel
 
@@ -202,32 +215,32 @@ def Kid.name (b : Fin 3) : Kid → Name
   | .c k => .cv b k 17
   | .h j => .hv b j
 
-theorem kid_h_lt {j j' : Fin 20} {i : Fin 3} (h : kid j i = .h j') : j' < j := by
+theorem kid_h_lt {j j' : Fin 35} {i : Fin 3} (h : kid j i = .h j') : j' < j := by
   revert j j' i
   decide +kernel
 
 /-- The exclusive kid has exactly one user slot. -/
-theorem kid_eq_kid_excl_iff (e j : Fin 20) (i : Fin 3) :
+theorem kid_eq_kid_excl_iff (e j : Fin 35) (i : Fin 3) :
     kid e i = kid j 2 ↔ e = j ∧ i = 2 := by
   revert e j i
   decide +kernel
 
 /-- Block tops are read only by the root. -/
-theorem kid_ne_top (j : Fin 20) (i : Fin 3) (s : Fin 5) : kid j i ≠ .h (top s) := by
+theorem kid_ne_top (j : Fin 35) (i : Fin 3) (s : Fin 5) : kid j i ≠ .h (top s) := by
   revert j i s
   decide +kernel
 
 /-- A kid is needed when it is a block top or an input of an expanded node. -/
-def Needed (E : Finset (Fin 20)) (x : Kid) : Prop :=
+def Needed (E : Finset (Fin 35)) (x : Kid) : Prop :=
   (∃ s, x = .h (top s)) ∨ ∃ e ∈ E, ∃ i, kid e i = x
 
-theorem needed_kid {E : Finset (Fin 20)} {e : Fin 20} (he : e ∈ E) (i : Fin 3) :
+theorem needed_kid {E : Finset (Fin 35)} {e : Fin 35} (he : e ∈ E) (i : Fin 3) :
     Needed E (kid e i) :=
   Or.inr ⟨e, he, i, rfl⟩
 
 /-- Binding rule: the exclusive kid of `j` is needed exactly when `j` is
 expanded. -/
-theorem needed_kid_excl_iff (E : Finset (Fin 20)) (j : Fin 20) :
+theorem needed_kid_excl_iff (E : Finset (Fin 35)) (j : Fin 35) :
     Needed E (kid j 2) ↔ j ∈ E := by
   constructor
   · rintro (⟨s, h⟩ | ⟨e, he, i, hi⟩)
@@ -237,39 +250,37 @@ theorem needed_kid_excl_iff (E : Finset (Fin 20)) (j : Fin 20) :
   · intro h
     exact needed_kid h _
 
-def topSet : Finset (Fin 20) := {6, 14, 16, 17, 19}
+def topSet : Finset (Fin 35) := {21, 26, 30, 32, 34}
 
-theorem mem_topSet (j : Fin 20) : j ∈ topSet ↔ ∃ s, top s = j := by
+theorem mem_topSet (j : Fin 35) : j ∈ topSet ↔ ∃ s, top s = j := by
   revert j
   decide
 
 /-- Hash kids of each node, as literal finsets for cheap kernel evaluation. -/
-def kidsH : Fin 20 → Finset (Fin 20) := ![
-  ∅, {0}, {1}, ∅, {1, 3}, ∅, {2, 4, 5}, {5}, {5}, {5, 8}, {7, 9}, {1, 10}, {5},
-  {1, 12}, {9, 11, 13}, {5, 9}, {2, 11, 15}, {2, 9}, {9, 11}, {18}]
+def kidsH : Fin 35 → Finset (Fin 35) := ![
+  ∅, {0}, ∅, {1, 2}, ∅, {1}, {5}, {1}, {7}, ∅, ∅, {1, 10}, {11}, {6}, {1, 13}, {14}, {6, 12, 15}, {8, 15}, {6, 17}, {9, 16, 18}, {1, 6, 19}, {15, 20}, ∅, {1, 22}, {4, 6, 15}, {16, 18, 24}, {1, 25}, {6}, {15, 27}, {1, 28}, {16, 18, 29}, {3, 6, 15}, {16, 18, 31}, {6, 15, 23}, {16, 18, 33}]
 
 /-- Chain kids of each node. -/
-def kidsC : Fin 20 → Finset (Fin 14) := ![
-  {1, 2, 3}, {0, 4}, {0, 5}, {0, 4, 6}, {3}, {0, 2, 7}, ∅, {2, 8}, {3, 9}, {4}, {4},
-  {3}, {3, 10}, {2}, ∅, {11}, ∅, {12}, {13}, {2, 4}]
+def kidsC : Fin 35 → Finset (Fin 14) := ![
+  {2, 3, 8}, {0, 4}, {0, 1, 2}, {3}, {0, 3, 7}, {0, 6}, {3, 4}, {2, 13}, {0, 2}, {0, 3, 9}, {0, 3, 10}, {3}, {2, 4}, {2, 12}, {4}, {0, 3}, ∅, {3}, {4}, ∅, ∅, {2}, {0, 3, 11}, {2}, ∅, ∅, {2}, {4, 5}, {2}, {0}, ∅, ∅, ∅, ∅, ∅]
 
-theorem mem_kidsH (e j : Fin 20) : j ∈ kidsH e ↔ ∃ i, kid e i = .h j := by
+theorem mem_kidsH (e j : Fin 35) : j ∈ kidsH e ↔ ∃ i, kid e i = .h j := by
   revert e j
   decide +kernel
 
-theorem mem_kidsC (e : Fin 20) (k : Fin 14) : k ∈ kidsC e ↔ ∃ i, kid e i = .c k := by
+theorem mem_kidsC (e : Fin 35) (k : Fin 14) : k ∈ kidsC e ↔ ∃ i, kid e i = .c k := by
   revert e k
   decide +kernel
 
-theorem kidsH_lt (e j : Fin 20) (h : j ∈ kidsH e) : j < e := by
+theorem kidsH_lt (e j : Fin 35) (h : j ∈ kidsH e) : j < e := by
   obtain ⟨i, hi⟩ := (mem_kidsH e j).1 h
   exact kid_h_lt hi
 
-def neededH (E : Finset (Fin 20)) : Finset (Fin 20) := topSet ∪ E.biUnion kidsH
+def neededH (E : Finset (Fin 35)) : Finset (Fin 35) := topSet ∪ E.biUnion kidsH
 
-def neededC (E : Finset (Fin 20)) : Finset (Fin 14) := E.biUnion kidsC
+def neededC (E : Finset (Fin 35)) : Finset (Fin 14) := E.biUnion kidsC
 
-@[simp] theorem mem_neededH (E : Finset (Fin 20)) (j : Fin 20) :
+@[simp] theorem mem_neededH (E : Finset (Fin 35)) (j : Fin 35) :
     j ∈ neededH E ↔ Needed E (.h j) := by
   simp only [neededH, Finset.mem_union, mem_topSet, Finset.mem_biUnion, mem_kidsH, Needed,
     Kid.h.injEq]
@@ -281,33 +292,33 @@ def neededC (E : Finset (Fin 20)) : Finset (Fin 14) := E.biUnion kidsC
     · exact Or.inl ⟨s, rfl⟩
     · exact Or.inr h
 
-@[simp] theorem mem_neededC (E : Finset (Fin 20)) (k : Fin 14) :
+@[simp] theorem mem_neededC (E : Finset (Fin 35)) (k : Fin 14) :
     k ∈ neededC E ↔ Needed E (.c k) := by
   simp only [neededC, Finset.mem_biUnion, mem_kidsC, Needed, reduceCtorEq, exists_false,
     false_or]
 
-theorem top_mem_neededH (E : Finset (Fin 20)) (s : Fin 5) : top s ∈ neededH E :=
+theorem top_mem_neededH (E : Finset (Fin 35)) (s : Fin 5) : top s ∈ neededH E :=
   (mem_neededH E _).2 (Or.inl ⟨s, rfl⟩)
 
 /-- Every expanded node is needed. -/
-def ShapeValid (E : Finset (Fin 20)) : Prop := E ⊆ neededH E
+def ShapeValid (E : Finset (Fin 35)) : Prop := E ⊆ neededH E
 
 instance : DecidablePred ShapeValid := by
   intro E
   unfold ShapeValid
   infer_instance
 
-def validShapes : Finset (Finset (Fin 20)) := Finset.univ.filter ShapeValid
+def validShapes : Finset (Finset (Fin 35)) := Finset.univ.filter ShapeValid
 
 attribute [irreducible] validShapes
 
-theorem mem_validShapes (E : Finset (Fin 20)) : E ∈ validShapes ↔ ShapeValid E := by
+theorem mem_validShapes (E : Finset (Fin 35)) : E ∈ validShapes ↔ ShapeValid E := by
   rw [validShapes, Finset.mem_filter]
   exact and_iff_right (Finset.mem_univ _)
 
 /-- Disclosed words of a block shape: needed unexpanded hash values plus one
 value per needed chain. -/
-def shapeWords (E : Finset (Fin 20)) : ℕ := (neededH E \ E).card + (neededC E).card
+def shapeWords (E : Finset (Fin 35)) : ℕ := (neededH E \ E).card + (neededC E).card
 
 /-! ## Top-down shape recursion
 
@@ -318,42 +329,137 @@ the bottom each needed chain gets weight `g`.  Kids have smaller indices, so a
 node's neededness is fixed once the nodes above it are decided. -/
 
 def khMask : ℕ → ℕ
-  | 0 => 0 | 1 => 1 | 2 => 2 | 3 => 0 | 4 => 10 | 5 => 0 | 6 => 52 | 7 => 32
-  | 8 => 32 | 9 => 288 | 10 => 640 | 11 => 1026 | 12 => 32 | 13 => 4098
-  | 14 => 10752 | 15 => 544 | 16 => 34820 | 17 => 516 | 18 => 2560 | 19 => 262144
+  | 0 => 0
+  | 1 => 1
+  | 2 => 0
+  | 3 => 6
+  | 4 => 0
+  | 5 => 2
+  | 6 => 32
+  | 7 => 2
+  | 8 => 128
+  | 9 => 0
+  | 10 => 0
+  | 11 => 1026
+  | 12 => 2048
+  | 13 => 64
+  | 14 => 8194
+  | 15 => 16384
+  | 16 => 36928
+  | 17 => 33024
+  | 18 => 131136
+  | 19 => 328192
+  | 20 => 524354
+  | 21 => 1081344
+  | 22 => 0
+  | 23 => 4194306
+  | 24 => 32848
+  | 25 => 17104896
+  | 26 => 33554434
+  | 27 => 64
+  | 28 => 134250496
+  | 29 => 268435458
+  | 30 => 537198592
+  | 31 => 32840
+  | 32 => 2147811328
+  | 33 => 8421440
+  | 34 => 8590262272
   | _ => 0
 
 def kcMask : ℕ → ℕ
-  | 0 => 14 | 1 => 17 | 2 => 33 | 3 => 81 | 4 => 8 | 5 => 133 | 6 => 0 | 7 => 260
-  | 8 => 520 | 9 => 16 | 10 => 16 | 11 => 8 | 12 => 1032 | 13 => 4 | 14 => 0
-  | 15 => 2048 | 16 => 0 | 17 => 4096 | 18 => 8192 | 19 => 20
+  | 0 => 268
+  | 1 => 17
+  | 2 => 7
+  | 3 => 8
+  | 4 => 137
+  | 5 => 65
+  | 6 => 24
+  | 7 => 8196
+  | 8 => 5
+  | 9 => 521
+  | 10 => 1033
+  | 11 => 8
+  | 12 => 20
+  | 13 => 4100
+  | 14 => 16
+  | 15 => 9
+  | 16 => 0
+  | 17 => 8
+  | 18 => 16
+  | 19 => 0
+  | 20 => 0
+  | 21 => 4
+  | 22 => 2057
+  | 23 => 4
+  | 24 => 0
+  | 25 => 0
+  | 26 => 4
+  | 27 => 48
+  | 28 => 4
+  | 29 => 1
+  | 30 => 0
+  | 31 => 0
+  | 32 => 0
+  | 33 => 0
+  | 34 => 0
   | _ => 0
 
-/-- Bits `6 14 16 17 19`: the block tops. -/
-def topMask : ℕ := 737344
+/-- Bit mask of the five block tops. -/
+def topMask : ℕ := 22617784320
 
-theorem testBit_khMask (e j : Fin 20) : (khMask e).testBit j = true ↔ j ∈ kidsH e := by
+theorem testBit_khMask (e j : Fin 35) : (khMask e).testBit j = true ↔ j ∈ kidsH e := by
   revert e j
   decide +kernel
 
-theorem testBit_kcMask (e : Fin 20) (k : Fin 14) :
+theorem testBit_kcMask (e : Fin 35) (k : Fin 14) :
     (kcMask e).testBit k = true ↔ k ∈ kidsC e := by
   revert e k
   decide +kernel
 
-theorem testBit_topMask (j : Fin 20) : topMask.testBit j = true ↔ j ∈ topSet := by
+theorem testBit_topMask (j : Fin 35) : topMask.testBit j = true ↔ j ∈ topSet := by
   revert j
   decide +kernel
 
 /-- Chain kids of each node as bit lists, in increasing order. -/
 def kcList : ℕ → List (Fin 14)
-  | 0 => [1, 2, 3] | 1 => [0, 4] | 2 => [0, 5] | 3 => [0, 4, 6] | 4 => [3]
-  | 5 => [0, 2, 7] | 6 => [] | 7 => [2, 8] | 8 => [3, 9] | 9 => [4] | 10 => [4]
-  | 11 => [3] | 12 => [3, 10] | 13 => [2] | 14 => [] | 15 => [11] | 16 => []
-  | 17 => [12] | 18 => [13] | 19 => [2, 4]
+  | 0 => [2, 3, 8]
+  | 1 => [0, 4]
+  | 2 => [0, 1, 2]
+  | 3 => [3]
+  | 4 => [0, 3, 7]
+  | 5 => [0, 6]
+  | 6 => [3, 4]
+  | 7 => [2, 13]
+  | 8 => [0, 2]
+  | 9 => [0, 3, 9]
+  | 10 => [0, 3, 10]
+  | 11 => [3]
+  | 12 => [2, 4]
+  | 13 => [2, 12]
+  | 14 => [4]
+  | 15 => [0, 3]
+  | 16 => []
+  | 17 => [3]
+  | 18 => [4]
+  | 19 => []
+  | 20 => []
+  | 21 => [2]
+  | 22 => [0, 3, 11]
+  | 23 => [2]
+  | 24 => []
+  | 25 => []
+  | 26 => [2]
+  | 27 => [4, 5]
+  | 28 => [2]
+  | 29 => [0]
+  | 30 => []
+  | 31 => []
+  | 32 => []
+  | 33 => []
+  | 34 => []
   | _ => []
 
-theorem kcList_eq (j : Fin 20) :
+theorem kcList_eq (j : Fin 35) :
     kcList j = (List.finRange 14).filter fun k : Fin 14 => (kcMask j).testBit k.val := by
   revert j
   decide +kernel
@@ -369,7 +475,7 @@ theorem list_prod_map_filter {α : Type*} (l : List α) (p : α → Bool) (f : �
   | cons x l ih =>
       by_cases h : p x = true <;> simp [h, ih]
 
-theorem newW_eq (g needC : ℕ) (j : Fin 20) :
+theorem newW_eq (g needC : ℕ) (j : Fin 35) :
     newW g needC j =
       ∏ k : Fin 14, if k ∈ kidsC j ∧ needC.testBit k = false then g else 1 := by
   rw [newW, kcList_eq, list_prod_map_filter, Fin.prod_univ_def]
@@ -392,28 +498,28 @@ def dfs (a u g : ℕ) : ℕ → ℕ → ℕ → ℕ
 attribute [irreducible] dfs
 
 /-- Neededness of a hash node under an initial mask and an expanded set. -/
-def NdH (need : ℕ) (E : Finset (Fin 20)) (j : Fin 20) : Prop :=
+def NdH (need : ℕ) (E : Finset (Fin 35)) (j : Fin 35) : Prop :=
   need.testBit j = true ∨ ∃ e ∈ E, j ∈ kidsH e
 
-def NdC (needC : ℕ) (E : Finset (Fin 20)) (k : Fin 14) : Prop :=
+def NdC (needC : ℕ) (E : Finset (Fin 35)) (k : Fin 14) : Prop :=
   needC.testBit k = true ∨ ∃ e ∈ E, k ∈ kidsC e
 
-instance (need : ℕ) (E : Finset (Fin 20)) (j : Fin 20) : Decidable (NdH need E j) :=
+instance (need : ℕ) (E : Finset (Fin 35)) (j : Fin 35) : Decidable (NdH need E j) :=
   inferInstanceAs (Decidable (_ ∨ _))
 
-instance (needC : ℕ) (E : Finset (Fin 20)) (k : Fin 14) : Decidable (NdC needC E k) :=
+instance (needC : ℕ) (E : Finset (Fin 35)) (k : Fin 14) : Decidable (NdC needC E k) :=
   inferInstanceAs (Decidable (_ ∨ _))
 
-def low (n : ℕ) : Finset (Fin 20) := Finset.univ.filter fun j => j.val < n
+def low (n : ℕ) : Finset (Fin 35) := Finset.univ.filter fun j => j.val < n
 
 /-- Product weight of an expanded set among the nodes below `n`; zero when an
 expanded node is not needed. -/
-def wt (a u g need needC n : ℕ) (E : Finset (Fin 20)) : ℕ :=
+def wt (a u g need needC n : ℕ) (E : Finset (Fin 35)) : ℕ :=
   (∏ j ∈ low n, if j ∈ E then (if NdH need E j then a else 0)
     else (if NdH need E j then u else 1)) *
   ∏ k : Fin 14, if NdC needC E k ∧ needC.testBit k = false then g else 1
 
-theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 20 → ∀ need needC,
+theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 35 → ∀ need needC,
     dfs a u g n need needC = ∑ E ∈ (low n).powerset, wt a u g need needC n E
   | 0, _, need, needC => by
       have hlow : low 0 = ∅ := by
@@ -429,7 +535,7 @@ theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 20 → ∀ need needC,
       · exact absurd he (Finset.notMem_empty e)
   | n + 1, hn, need, needC => by
       have ih := dfs_eq a u g n (by omega)
-      let jn : Fin 20 := ⟨n, by omega⟩
+      let jn : Fin 35 := ⟨n, by omega⟩
       have hlow : low (n + 1) = insert jn (low n) := by
         ext j
         simp only [low, Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_insert,
@@ -470,7 +576,7 @@ theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 20 → ∀ need needC,
               · exact absurd hk hself
               · exact absurd hk (hbelow E hE e he)
           · exact Or.inl
-        have hndj : ∀ j : Fin 20,
+        have hndj : ∀ j : Fin 35,
             NdH need (insert jn E) j ↔ NdH (need ||| khMask n) E j := by
           intro j
           have hk := testBit_khMask jn j
@@ -511,12 +617,12 @@ theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 20 → ∀ need needC,
         ← ih (need ||| khMask n) (needC ||| kcMask n), dfs]
       by_cases h : need.testBit n = true <;> simp [h]
 
-theorem low_20 : low 20 = Finset.univ := by
+theorem low_35 : low 35 = Finset.univ := by
   ext j
   simp [low]
 
-theorem wt_top (a u g : ℕ) (E : Finset (Fin 20)) :
-    wt a u g topMask 0 20 E = if ShapeValid E then
+theorem wt_top (a u g : ℕ) (E : Finset (Fin 35)) :
+    wt a u g topMask 0 35 E = if ShapeValid E then
       a ^ E.card * u ^ (neededH E \ E).card * g ^ (neededC E).card else 0 := by
   have hH : ∀ j, NdH topMask E j ↔ j ∈ neededH E := by
     intro j
@@ -525,7 +631,7 @@ theorem wt_top (a u g : ℕ) (E : Finset (Fin 20)) :
     intro k
     simp [NdC, neededC]
   unfold wt
-  simp only [hH, hC, low_20]
+  simp only [hH, hC, low_35]
   rw [Finset.prod_ite, Finset.prod_ite_mem, Finset.prod_ite_mem, Finset.univ_inter,
     Finset.prod_const, Finset.prod_const]
   have hsd : (Finset.univ.filter fun j => j ∉ E) ∩ neededH E = neededH E \ E := by
@@ -544,8 +650,8 @@ theorem wt_top (a u g : ℕ) (E : Finset (Fin 20)) :
 
 theorem sum_validShapes_eq_dfs (a u g : ℕ) :
     ∑ E ∈ validShapes, a ^ E.card * u ^ (neededH E \ E).card * g ^ (neededC E).card =
-      dfs a u g 20 topMask 0 := by
-  rw [dfs_eq a u g 20 le_rfl, low_20, Finset.powerset_univ, validShapes, Finset.sum_filter]
+      dfs a u g 35 topMask 0 := by
+  rw [dfs_eq a u g 35 le_rfl, low_35, Finset.powerset_univ, validShapes, Finset.sum_filter]
   exact Finset.sum_congr rfl fun E _ => (wt_top a u g E).symm
 
 /-! ## Merged-state evaluation of `dfs`
@@ -553,7 +659,7 @@ theorem sum_validShapes_eq_dfs (a u g : ℕ) :
 `dfs` depends only on the bits of `need` below the current level and on the
 chain bits that nodes below the level can still read (`chainMask n`).  A
 forward pass keeps a list of weighted states, prunes those bits, and merges
-equal states; the tree of 93092 calls collapses to at most 52 states per
+equal states; the recursion collapses to at most 255 states per
 level. -/
 
 /-- Chain bits read by the nodes below level `n`. -/
@@ -561,7 +667,7 @@ def chainMask : ℕ → ℕ
   | 0 => 0
   | n + 1 => chainMask n ||| kcMask n
 
-theorem newW_congr (g y y' n : ℕ) (hn : n < 20)
+theorem newW_congr (g y y' n : ℕ) (hn : n < 35)
     (h : ∀ k, (kcMask n).testBit k = true → y.testBit k = y'.testBit k) :
     newW g y n = newW g y' n := by
   have e1 : newW g y n = _ := newW_eq g y ⟨n, hn⟩
@@ -572,7 +678,7 @@ theorem newW_congr (g y y' n : ℕ) (hn : n < 20)
   · rw [h k ((testBit_kcMask ⟨n, hn⟩ k).2 hk)]
   · simp [hk]
 
-theorem dfs_congr (a u g : ℕ) : ∀ n, n ≤ 20 → ∀ x x' y y' : ℕ,
+theorem dfs_congr (a u g : ℕ) : ∀ n, n ≤ 35 → ∀ x x' y y' : ℕ,
     (∀ k < n, x.testBit k = x'.testBit k) →
     (∀ k, (chainMask n).testBit k = true → y.testBit k = y'.testBit k) →
     dfs a u g n x y = dfs a u g n x' y'
@@ -655,7 +761,7 @@ theorem stVal_merge (a u g n : ℕ) (L : List DfsState) :
 def stPrune (n : ℕ) (L : List DfsState) : List DfsState :=
   L.map fun s => (s.1 % 2 ^ n, s.2.1 &&& chainMask n, s.2.2)
 
-theorem stVal_prune (a u g n : ℕ) (hn : n ≤ 20) (L : List DfsState) :
+theorem stVal_prune (a u g n : ℕ) (hn : n ≤ 35) (L : List DfsState) :
     stVal a u g n (stPrune n L) = stVal a u g n L := by
   simp only [stVal, stPrune, List.map_map]
   congr 1
@@ -671,7 +777,7 @@ def stRun (a u g : ℕ) : ℕ → List DfsState → List DfsState
 
 attribute [irreducible] stRun
 
-theorem stVal_run (a u g : ℕ) : ∀ n, n ≤ 20 → ∀ L : List DfsState,
+theorem stVal_run (a u g : ℕ) : ∀ n, n ≤ 35 → ∀ L : List DfsState,
     stVal a u g n L = stVal a u g 0 (stRun a u g n L)
   | 0, _, _ => by rw [stRun]
   | n + 1, hn, L => by
@@ -685,30 +791,30 @@ theorem stVal_zero (a u g : ℕ) (L : List DfsState) :
   | cons s L ih => rw [stVal_cons, ih, dfs, mul_one, List.map_cons, List.sum_cons]
 
 theorem dfs_top_eq_run (a u g : ℕ) :
-    dfs a u g 20 topMask 0 = ((stRun a u g 20 [(topMask, 0, 1)]).map fun s => s.2.2).sum := by
-  rw [← stVal_zero, ← stVal_run a u g 20 le_rfl, stVal_cons]
+    dfs a u g 35 topMask 0 = ((stRun a u g 35 [(topMask, 0, 1)]).map fun s => s.2.2).sum := by
+  rw [← stVal_zero, ← stVal_run a u g 35 le_rfl, stVal_cons]
   simp [stVal]
 
 /-! ## Word bounds -/
 
-/-- Word generating number of one block in base `2^21 > 2^20`. -/
-def wordBase : ℕ := 2 ^ 21
+/-- Word generating number of one block in base `2^36 > 2^35`. -/
+def wordBase : ℕ := 2 ^ 36
 
 attribute [irreducible] wordBase
 
 theorem sum_wordBase_pow :
-    ∑ E ∈ validShapes, wordBase ^ shapeWords E = dfs 1 wordBase wordBase 20 topMask 0 := by
+    ∑ E ∈ validShapes, wordBase ^ shapeWords E = dfs 1 wordBase wordBase 35 topMask 0 := by
   rw [← sum_validShapes_eq_dfs]
   refine Finset.sum_congr rfl fun E _ => ?_
   rw [shapeWords, pow_add, one_pow, one_mul]
 
 set_option maxRecDepth 100000 in
-theorem wordGen_eq : dfs 1 wordBase wordBase 20 topMask 0 =
-    998625127903259986094751421567190047656046377328348565556435884202316053289330471088070590464 := by
+theorem wordGen_eq : dfs 1 wordBase wordBase 35 topMask 0 =
+    144952282898879017642119193614117816954462347956927548864030621830297769812344640280348892496403055764114737001788161034479514159018465199420301844554100768768 := by
   rw [dfs_top_eq_run]
   decide +kernel
 
-theorem wordGen_lt : dfs 1 wordBase wordBase 20 topMask 0 < wordBase ^ 15 := by
+theorem wordGen_lt : dfs 1 wordBase wordBase 35 topMask 0 < wordBase ^ 15 := by
   rw [wordGen_eq, wordBase]
   norm_num
 
@@ -784,7 +890,7 @@ theorem shapeWords_pos : ∀ E ∈ validShapes, 1 ≤ shapeWords E := by
   intro E _
   unfold shapeWords
   rcases E.eq_empty_or_nonempty with rfl | hne
-  · have h : (6 : Fin 20) ∈ neededH ∅ \ ∅ := by simp [neededH, topSet]
+  · have h : (32 : Fin 35) ∈ neededH ∅ \ ∅ := by simp [neededH, topSet]
     have := Finset.card_pos.2 ⟨_, h⟩
     omega
   · have he : E.min' hne ∈ E := E.min'_mem hne
@@ -803,7 +909,7 @@ theorem shapeWords_pos : ∀ E ∈ validShapes, 1 ≤ shapeWords E := by
 /-! ## Per-block and full choices -/
 
 /-- A block choice: expanded hash nodes and one position per local chain. -/
-abbrev Local := Finset (Fin 20) × (Fin 14 → Fin 19)
+abbrev Local := Finset (Fin 35) × (Fin 14 → Fin 19)
 
 def localWords (v : Local) : ℕ := shapeWords v.1
 
@@ -814,7 +920,7 @@ the walked chain suffixes. -/
 def localCost (v : Local) : ℕ := v.1.card + localChainCost v
 
 /-- Allowed positions: free on needed chains, fixed to `18` elsewhere. -/
-def posSet (E : Finset (Fin 20)) (k : Fin 14) : Finset (Fin 19) :=
+def posSet (E : Finset (Fin 35)) (k : Fin 14) : Finset (Fin 19) :=
   if k ∈ neededC E then Finset.univ else {18}
 
 def localSet : Finset Local :=
@@ -857,14 +963,14 @@ def choiceTuples : Finset Choice := Fintype.piFinset fun _ : Fin 3 => localSet
 theorem mem_choiceTuples (c : Choice) : c ∈ choiceTuples ↔ ∀ b, c b ∈ localSet := by
   rw [choiceTuples, Fintype.mem_piFinset]
 
-/-- The supported layer: valid blocks and graph cost exactly 87. -/
+/-- The supported layer: valid blocks and graph cost exactly 86. -/
 def supportedChoices : Finset Choice :=
-  choiceTuples.filter fun c => choiceCost c = 83
+  choiceTuples.filter fun c => choiceCost c = 82
 
 attribute [irreducible] supportedChoices
 
 theorem mem_supportedChoices (c : Choice) : c ∈ supportedChoices ↔
-    (∀ b, c b ∈ localSet) ∧ choiceCost c = 83 := by
+    (∀ b, c b ∈ localSet) ∧ choiceCost c = 82 := by
   rw [supportedChoices, Finset.mem_filter, mem_choiceTuples]
 
 theorem shapeValid_of_supported {c : Choice} (hc : c ∈ supportedChoices) (b : Fin 3) :
@@ -876,7 +982,7 @@ theorem canonical_of_supported {c : Choice} (hc : c ∈ supportedChoices) (b : F
   ((mem_localSet _).1 (((mem_supportedChoices c).1 hc).1 b)).2 k hk
 
 theorem reconstructionCost_eq {c : Choice} (hc : c ∈ supportedChoices) :
-    reconstructionCost c = 87 := by
+    reconstructionCost c = 86 := by
   rw [reconstructionCost, ((mem_supportedChoices c).1 hc).2]
 
 theorem choiceWords_le {c : Choice} (hc : c ∈ supportedChoices) : choiceWords c ≤ 42 := by
@@ -887,8 +993,8 @@ theorem choiceWords_le {c : Choice} (hc : c ∈ supportedChoices) : choiceWords 
 
 /-! ## Cost generating number -/
 
-/-- Digit base: every digit counts at most `(2^20 * 19^14)^3 < 2^240` tuples. -/
-def digitBase : ℕ := 2 ^ 240
+/-- Digit base: every digit counts at most `(2^35 * 19^14)^3 < 2^320` tuples. -/
+def digitBase : ℕ := 2 ^ 320
 
 attribute [irreducible] digitBase
 
@@ -899,7 +1005,7 @@ attribute [irreducible] blockGen
 /-- Generating number of one needed chain: positions `18 - t` steps deep. -/
 def chainGen : ℕ := ∑ t : Fin 19, digitBase ^ (18 - t.val)
 
-theorem blockGen_eq : blockGen = dfs digitBase 1 chainGen 20 topMask 0 := by
+theorem blockGen_eq : blockGen = dfs digitBase 1 chainGen 35 topMask 0 := by
   rw [← sum_validShapes_eq_dfs]
   unfold blockGen localSet
   rw [Finset.sum_map, Finset.sum_sigma]
@@ -924,7 +1030,7 @@ theorem blockGen_eq : blockGen = dfs digitBase 1 chainGen 20 topMask 0 := by
   · simp [posSet, hk, chainGen]
   · simp [posSet, hk]
 
-theorem card_localSet_le : localSet.card ≤ 2 ^ 20 * 19 ^ 14 := by
+theorem card_localSet_le : localSet.card ≤ 2 ^ 35 * 19 ^ 14 := by
   have h := Finset.card_le_univ localSet
   simpa [Fintype.card_prod, Fintype.card_finset, Fintype.card_fun] using h
 
@@ -932,10 +1038,10 @@ theorem card_choiceTuples_lt : choiceTuples.card < digitBase := by
   have h : choiceTuples.card = localSet.card ^ 3 := by
     rw [choiceTuples, Fintype.card_piFinset, Finset.prod_const, Finset.card_univ,
       Fintype.card_fin]
-  have h2 : (2 ^ 20 * 19 ^ 14) ^ 3 < digitBase := by
+  have h2 : (2 ^ 35 * 19 ^ 14) ^ 3 < digitBase := by
     rw [digitBase]
-    norm_num
-  have h3 : localSet.card ^ 3 ≤ (2 ^ 20 * 19 ^ 14) ^ 3 :=
+    decide +kernel
+  have h3 : localSet.card ^ 3 ≤ (2 ^ 35 * 19 ^ 14) ^ 3 :=
     pow_le_pow_left₀ (Nat.zero_le _) card_localSet_le 3
   rw [h]
   exact lt_of_le_of_lt h3 h2
@@ -946,18 +1052,18 @@ theorem blockGen_pow :
   exact Finset.sum_congr rfl fun c _ => Finset.prod_pow_eq_pow_sum _ _ _
 
 theorem card_supportedChoices_eq_digit :
-    supportedChoices.card = blockGen ^ 3 / digitBase ^ 83 % digitBase := by
+    supportedChoices.card = blockGen ^ 3 / digitBase ^ 82 % digitBase := by
   rw [blockGen_pow, digit_sum_pow _ _ _ card_choiceTuples_lt, supportedChoices]
 
 set_option maxRecDepth 100000 in
 theorem blockGen_digit_exact :
-    (dfs digitBase 1 chainGen 20 topMask 0) ^ 3 / digitBase ^ 83 % digitBase =
-      688066614596935136894097107917056 := by
+    (dfs digitBase 1 chainGen 35 topMask 0) ^ 3 / digitBase ^ 82 % digitBase =
+      678547358015097091041046109088624 := by
   rw [dfs_top_eq_run]
   decide +kernel
 
 theorem card_supportedChoices :
-    supportedChoices.card = 688066614596935136894097107917056 := by
+    supportedChoices.card = 678547358015097091041046109088624 := by
   rw [card_supportedChoices_eq_digit, blockGen_eq, blockGen_digit_exact]
 
 /-- The record's schedule class count. -/
@@ -991,12 +1097,12 @@ theorem mem_cutOf (c : Choice) (n : Name) : n ∈ cutOf c ↔
     · exact ⟨b, Or.inl ⟨j, ⟨hj, hjE⟩, rfl⟩⟩
     · exact ⟨b, Or.inr ⟨k, hk, rfl⟩⟩
 
-theorem hv_ne_chainNode (b b' : Fin 3) (j : Fin 20) (k : Fin 14) (p : Fin 19) :
+theorem hv_ne_chainNode (b b' : Fin 3) (j : Fin 35) (k : Fin 14) (p : Fin 19) :
     Name.hv b j ≠ chainNode b' k p := by
   unfold chainNode
   split_ifs <;> simp
 
-@[simp] theorem hv_mem_cutOf (c : Choice) (b : Fin 3) (j : Fin 20) :
+@[simp] theorem hv_mem_cutOf (c : Choice) (b : Fin 3) (j : Fin 35) :
     Name.hv b j ∈ cutOf c ↔ j ∈ neededH (c b).1 ∧ j ∉ (c b).1 := by
   rw [mem_cutOf]
   constructor
