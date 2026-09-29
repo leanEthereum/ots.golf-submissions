@@ -65,10 +65,10 @@ theorem bodyCode_weight (T : Tab) (a q : K) (f x : ℕ) :
 
 /-- Each of the fourteen dispatches now costs one instruction. -/
 def pathCost (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  26 + ∑ f ∈ Finset.range 14, (1 + lcost (bodyCode T (base T) f (xs f)))
+  25 + ∑ f ∈ Finset.range 14, (1 + lcost (bodyCode T (base T) f (xs f)))
 
 def pathSteps (T : Tab) (xs : ℕ → ℕ) : ℕ :=
-  17 + ∑ f ∈ Finset.range 14, (1 + (bodyCode T (base T) f (xs f)).length)
+  16 + ∑ f ∈ Finset.range 14, (1 + (bodyCode T (base T) f (xs f)).length)
 
 theorem ordinary_body_sum :
     ∑ f ∈ Finset.range 14, (gcuF f - 2) = 74 := by decide
@@ -82,7 +82,7 @@ theorem hash_body_sum (T : Tab) (xs : ℕ → ℕ) :
   congr 1
 
 theorem pathCost_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 85) : pathCost T xs = 974 := by
+    (hLayer : xs 0 + gsum T xs = 85) : pathCost T xs = 973 := by
   unfold pathCost
   simp only [bodyCode_lcost]
   have he : ∀ f ∈ Finset.range 14, lcost (bodyF T f (xs f)) =
@@ -95,7 +95,7 @@ theorem pathCost_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
   norm_num
 
 theorem pathSteps_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 85) : pathSteps T xs = 191 := by
+    (hLayer : xs 0 + gsum T xs = 85) : pathSteps T xs = 190 := by
   unfold pathSteps
   simp only [bodyCode_length]
   have he : ∀ f ∈ Finset.range 14, (bodyF T f (xs f)).length =
@@ -110,7 +110,7 @@ theorem pathSteps_eq {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
 theorem boundary_eq : LeanIsa.boundaryCycles = 120 := by decide
 
 theorem path_with_boundary {T : Tab} (hT : T.Hyp) {xs : ℕ → ℕ} (hV : Valid xs)
-    (hLayer : xs 0 + gsum T xs = 85) : LeanIsa.boundaryCycles + pathCost T xs = 1094 := by
+    (hLayer : xs 0 + gsum T xs = 85) : LeanIsa.boundaryCycles + pathCost T xs = 1093 := by
   rw [pathCost_eq hT hV hLayer]
   rw [boundary_eq]
 

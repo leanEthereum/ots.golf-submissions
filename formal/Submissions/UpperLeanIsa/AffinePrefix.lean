@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.AffineStraight
 
 /-! The setup pins the powers before the length assertion. A completing run
-then traverses the complete sixteen-instruction prologue in frame one. -/
+then traverses the complete fifteen-instruction prologue in frame one. -/
 
 namespace OptimalOTS.AffineVM
 
@@ -12,7 +12,7 @@ open scoped Classical
 set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
-theorem raw_initial_facts (T : Tab) (a : K) {s : ℕ} (hs : s < 17) :
+theorem raw_initial_facts (T : Tab) (a : K) {s : ℕ} (hs : s < 16) :
     (raw T a (.initial s)).Bounded ∧ raw T a (.initial s) ≠ .pad ∧
       ∀ j, raw T a (.initial s) ≠ .entry j := by
   interval_cases s <;>
@@ -20,11 +20,11 @@ theorem raw_initial_facts (T : Tab) (a : K) {s : ℕ} (hs : s < 17) :
       pkCell,idxCell,hCell,h1Cell] <;>
     exact ⟨(by intro h; cases h),(by intro j h; cases h)⟩
 
-theorem raw_initial_straight (T : Tab) (a : K) {s : ℕ} (hs : s < 16) :
+theorem raw_initial_straight (T : Tab) (a : K) {s : ℕ} (hs : s < 15) :
     (raw T a (.initial s)).straight = true := by
   interval_cases s <;> norm_num [raw,CInstr.straight]
 
-theorem instrAt_initial (T : Tab) (s : AffineFrames.Slot) (hs : s.val < 17) :
+theorem instrAt_initial (T : Tab) (s : AffineFrames.Slot) (hs : s.val < 16) :
     instrAt T s = compile 1 (raw T (base T) (.initial s.val)) := by
   have hp : place s.val = .initial s.val := by unfold place; rw [if_pos (by omega)]
   obtain ⟨hb,hn,he⟩ := raw_initial_facts T 1 hs
@@ -49,7 +49,7 @@ theorem prefixCode_mem (T : Tab) {n i : ℕ} (hi : i < n) :
   List.mem_map.mpr ⟨i,List.mem_range.mpr hi,rfl⟩
 
 theorem run_prefix {κ : ℕ} (T : Tab) (M : MemImage κ) (Sm : Sem) (B : BlakeRel)
-    {k : ℕ} (hk : k ≤ 16)
+    {k : ℕ} (hk : k ≤ 15)
     (hbridge : ∀ i < k, ∀ pc x,
       x ∈ Sm.S (LeanIsa.execute M ⟨pc,1⟩ (compile 1 (raw T (base T) (.initial i)))) →
         x = none ∨ (x = some ⟨g*pc,1⟩ ∧ (raw T (base T) (.initial i)).RelB B (Lx M)))
@@ -76,7 +76,7 @@ theorem initConstants_of_completion {κ : ℕ} (T : Tab) (h16 : 16 ≤ κ) (hκ 
     (M : MemImage κ) (Sm : Sem) {n c : ℕ}
     (h : some c ∈ Sm.S (LeanIsa.runCost (program T) M n ⟨gpow 0,1⟩)) :
     InitConstants T (Lx M) := by
-  have hh := run_prefix T M Sm trueRel (k:=13) (by decide) (fun i hi pc x hx => by
+  have hh := run_prefix T M Sm trueRel (k:=12) (by decide) (fun i hi pc x hx => by
     have hb : (CInstr.setc (cCell (i+1)) (ofK (base T^(i+1)))).Bounded := by
       simp only [CInstr.Bounded,cCell]
       split_ifs <;> omega
@@ -86,21 +86,21 @@ theorem initConstants_of_completion {κ : ℕ} (T : Tab) (h16 : 16 ≤ κ) (hκ 
     · exact Or.inr ⟨hx,hr⟩
     · exact Or.inl hx) h
   intro k hk hk4
-  have hr := hh.1 _ (prefixCode_mem T (i:=k-1) (by omega : k-1 < 13))
-  simpa only [raw,if_pos (show k-1 < 13 by omega),Nat.sub_add_cancel hk,CInstr.RelB] using hr
+  have hr := hh.1 _ (prefixCode_mem T (i:=k-1) (by omega : k-1 < 12))
+  simpa only [raw,if_pos (show k-1 < 12 by omega),Nat.sub_add_cancel hk,CInstr.RelB] using hr
 
-theorem prologue_cost (T : Tab) : lcost (prefixCode T 16) = 25 := by
+theorem prologue_cost (T : Tab) : lcost (prefixCode T 15) = 24 := by
   norm_num [prefixCode,lcost,List.range_succ,raw,CInstr.cost]
 
 theorem run_prologue {κ : ℕ} (T : Tab) (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
     (hd : LengthDomain (Lx M)) {n c : ℕ}
     (h : some c ∈ Sm.S (LeanIsa.runCost (program T) M n ⟨gpow 0,1⟩)) :
-    (∀ ci ∈ prefixCode T 16, ci.RelB B (Lx M)) ∧
-      ∃ n' c', n = n'+16 ∧ c = 25+c' ∧
-        some c' ∈ Sm.S (LeanIsa.runCost (program T) M n' ⟨gpow 16,1⟩) := by
+    (∀ ci ∈ prefixCode T 15, ci.RelB B (Lx M)) ∧
+      ∃ n' c', n = n'+15 ∧ c = 24+c' ∧
+        some c' ∈ Sm.S (LeanIsa.runCost (program T) M n' ⟨gpow 15,1⟩) := by
   have hp := initConstants_of_completion T h16 hκ M Sm h
-  have hh := run_prefix T M Sm B (k:=16) le_rfl (fun i hi pc x hx =>
+  have hh := run_prefix T M Sm B (k:=15) le_rfl (fun i hi pc x hx =>
     straight_of_sem h16 hκ M T Sm B hHash hd pc 1 one_ne_zero _
       (raw_initial_facts T _ (by omega)).1 (raw_initial_straight T _ hi)
       (fun _ => ⟨rfl,hp⟩) x hx) h

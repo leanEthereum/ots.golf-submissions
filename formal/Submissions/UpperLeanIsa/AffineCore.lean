@@ -75,7 +75,7 @@ theorem PathFacts.pk_copy (hp : PathFacts T B v xs) : (copy (stCell 0) pkCell).R
 
 theorem PathFacts.index (hp : PathFacts T B v xs) :
     (CInstr.blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11)).RelB B v :=
-  hp.pro _ (prefixCode_mem T (i:=14) (by decide : 14 < 16))
+  hp.pro _ (prefixCode_mem T (i:=13) (by decide : 13 < 15))
 
 end Path
 end

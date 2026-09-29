@@ -1,5 +1,5 @@
 import Submissions.UpperLeanIsa.AffineSelect
-import Submissions.UpperLeanIsa.FixedFrameGuard
+import Submissions.UpperLeanIsa.LengthFrameGuard
 
 /-! The selected affine frames guard actual reads in the pinned machine.
 The constants depend only on the fixed program layout. -/
@@ -9,17 +9,21 @@ namespace OptimalOTS.AffineFrames
 open Polynomial LeanerVM.Parameters LeanerVM.Semantics
 noncomputable section
 
+set_option maxRecDepth 10000
 set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
-def bias (L : Layout) (u : Stage) : K := safeBase L ^ stageExponent u.val
+def bias (L : Layout) (u : Stage) : K := stageBias (safeBase L) u.val
 
 theorem bias_fixed (L : Layout) (u : Stage) (hu : u.val = 13) : bias L u = 1 := by
-  simp [bias, stageExponent, hu]
+  simp [bias, stageBias, isFixed, fixedBias, hu]
 
-theorem bias_positive (L : Layout) (u : Stage) (hu : u.val ≠ 13) :
+theorem bias_length (L : Layout) (u : Stage) (hu : u.val = 12) : bias L u = lengthK := by
+  simp [bias, stageBias, isFixed, fixedBias, hu]
+
+theorem bias_positive (L : Layout) (u : Stage) (hu : u.val < 12) :
     bias L u = safeBase L ^ (u.val + 1) := by
-  simp [bias, stageExponent, hu]
+  simp [bias, stageBias, isFixed, show ¬12 ≤ u.val by omega]
 
 def frame (L : Layout) (u : Stage) (s : Slot) : K :=
   bias L u + gpow s.val
@@ -32,7 +36,12 @@ theorem frame_ne_zero (L : Layout) (u : Stage) (s : Slot)
   by_cases hu : u.val = 13
   · simpa only [frame, bias_fixed L u hu, add_comm] using
       FixedFrameChecks.fixed_frame_ne_zero (hpos hu) s.isLt
-  · simpa only [frame, bias_positive L u hu] using safeBase_frame_ne_zero L u s
+  · by_cases h12 : u.val = 12
+    · simpa only [frame, bias_length L u h12, lengthK, LengthFrameChecks.lengthBias,
+        show (2 ^ 18 - 1 : Nat) = 262143 from rfl, add_comm] using
+        LengthFrameChecks.length_frame_ne_zero s.isLt
+    · have hp : u.val < 12 := by have := u.isLt; omega
+      simpa only [frame, bias_positive L u hp] using safeBase_frame_ne_zero L u s
 
 /-- The fixed free-stage frame at target zero is zero; its read fails instead
 of being covered by a false nonzero-frame assertion. -/
@@ -62,23 +71,34 @@ theorem frame_halt_ne_one (L : Layout) (u : Stage) :
   · simpa only [frame, bias_fixed L u hu, show (2 ^ 18 - 1 : ℕ) = 262143 by decide,
       add_comm] using
       FixedFrameChecks.fixed_halt_ne_one
-  · have h := safeBase_avoids L (.inr (.inr (.inl u)))
-    simpa only [constraints, initialPoly, framePoly, Polynomial.eval_sub,
-      Polynomial.eval_C_mul, Polynomial.eval_add, Polynomial.eval_X_pow,
-      Polynomial.eval_C, gpow, pow_zero, one_mul, sub_ne_zero, frame,
-      bias_positive L u hu] using h
+  · by_cases h12 : u.val = 12
+    · simpa only [frame, bias_length L u h12, lengthK, LengthFrameChecks.lengthBias,
+        show (2 ^ 18 - 1 : Nat) = 262143 from rfl, add_comm] using
+        LengthFrameChecks.length_halt_ne_one
+    · have hp : u.val < 12 := by have := u.isLt; omega
+      have h := safeBase_avoids L (.inr (.inr (.inl u)))
+      simpa only [constraints, initialPoly, framePoly, Polynomial.eval_sub,
+        Polynomial.eval_C_mul, Polynomial.eval_add, Polynomial.eval_X_pow,
+        Polynomial.eval_C, gpow, pow_zero, one_mul, sub_ne_zero, frame,
+        bias_positive L u hp] using h
 
 theorem initial_address_ne (L : Layout) (hL : FixedHyp L)
     (u : Stage) (s : Slot) (c : Cell) (hshape : L s = .initial c) (j : MaxCell) :
     frame L u s * gpow c.val ≠ gpow j.val := by
   by_cases hu : u.val = 13
   · simpa only [frame, bias_fixed L u hu, add_comm] using
-      FixedFrameChecks.fixed_initial_address_ne (hL.initial_range s c hshape) c.isLt j.isLt
-  · have h := safeBase_avoids L (.inl (u,s,j))
-    simp only [constraints, landingPoly, hshape, if_neg hu, initialPoly, framePoly,
-      Polynomial.eval_sub, Polynomial.eval_C_mul, Polynomial.eval_add,
-      Polynomial.eval_X_pow, Polynomial.eval_C, sub_ne_zero] at h
-    simpa only [frame, bias_positive L u hu, mul_comm] using h
+      LengthFrameChecks.one_initial_address_ne (hL.initial_range s c hshape) c.isLt j.isLt
+  · by_cases h12 : u.val = 12
+    · simpa only [frame, bias_length L u h12, lengthK, LengthFrameChecks.lengthBias,
+        show (2 ^ 18 - 1 : Nat) = 262143 from rfl, add_comm] using
+        LengthFrameChecks.length_initial_address_ne (hL.initial_range s c hshape) c.isLt j.isLt
+    · have hp : u.val < 12 := by have := u.isLt; omega
+      have hn : ¬isFixed u.val := by unfold isFixed; omega
+      have h := safeBase_avoids L (.inl (u,s,j))
+      simp only [constraints, landingPoly, hshape, if_neg hn, initialPoly, framePoly,
+        Polynomial.eval_sub, Polynomial.eval_C_mul, Polynomial.eval_add,
+        Polynomial.eval_X_pow, Polynomial.eval_C, sub_ne_zero] at h
+      simpa only [frame, bias_positive L u hp, mul_comm] using h
 
 theorem declared_entry_positive (L : Layout) (hL : FixedHyp L)
     (s : Slot) (d : BodyDescriptor) (hshape : L s = .body d)
@@ -91,20 +111,69 @@ theorem body_address_ne (L : Layout) (hL : FixedHyp L)
     (hshape : L s = .body d) (hwrong : ¬(u = d.stage ∧ s = d.entry)) (j : MaxCell) :
     frame L u s * operand L d d.firstCell.val ≠ gpow j.val := by
   have hdpos := declared_entry_positive L hL s d hshape
-  by_cases hfixed : u.val = 13 ∧ d.stage.val = 13
-  · obtain ⟨hlo, hhi, he⟩ := hL.fixed_body s d hshape hfixed.2
-    have hne : s.val ≠ 255615 + 68 * ((s.val - 255615) / 68) := by
-      intro hs
-      exact hwrong ⟨Fin.ext (hfixed.1.trans hfixed.2.symm), Fin.ext (hs.trans he.symm)⟩
-    obtain ⟨delta, hcheck⟩ := FixedFrameData.all_free_wrong hlo hhi hne
-    rw [← he] at hcheck
-    have hn := FixedFrameChecks.fixed_frame_ne_zero (hdpos hfixed.2) d.entry.isLt
-    simpa only [frame, operand, bias_fixed L u hfixed.1,
-      bias_fixed L d.stage hfixed.2, add_comm] using
-      FixedFrameChecks.fixed_body_address_ne hcheck d.firstCell.isLt j.isLt hn
+  by_cases hfixed : isFixed u.val ∧ isFixed d.stage.val
+  · have hui : u.val = 12 ∨ u.val = 13 := by
+      have := u.isLt; unfold isFixed at hfixed; omega
+    have hdj : d.stage.val = 12 ∨ d.stage.val = 13 := by
+      have := d.stage.isLt; unfold isFixed at hfixed; omega
+    let incoming : Nat := if u.val = 12 then 5504 else 1
+    have hb : incoming = 1 ∨ incoming = 5504 := by unfold incoming; split_ifs <;> simp
+    have hub : bias L u = (BitVec.ofNat 64 incoming : K) := by
+      rcases hui with hu | hu
+      · rw [bias_length L u hu]; simp only [incoming,hu,ite_true]; rfl
+      · rw [bias_fixed L u hu]; simp only [incoming,hu,show (13:Nat) ≠ 12 by decide,ite_false]; rfl
+    rcases hdj with hd12 | hd13
+    · obtain ⟨x,i,hx,hi,hs,he⟩ := hL.length_body s d hshape hd12
+      have hx' : x < 1024 := hx
+      have hce : LengthFrameChecks.certEntry x = d.entry.val := by
+        simp only [LengthFrameChecks.certEntry,if_pos hx',he]
+      have hcl : LengthFrameChecks.certLength x = OptimalOTS.HLFour.SL 12 x := if_pos hx'
+      have hcb : LengthFrameChecks.certBias x = 5504 := if_pos hx'
+      have hslot : LengthFrameChecks.certEntry x + i = s.val := by rw [hce,he,hs]
+      have hw : ¬(LengthFrameChecks.certEntry x+i = LengthFrameChecks.certEntry x ∧
+          incoming = LengthFrameChecks.certBias x) := by
+        rw [hslot,hce,hcb]
+        intro ⟨hse,hinc⟩
+        have hu12 : u.val = 12 := by unfold incoming at hinc; split_ifs at hinc <;> omega
+        exact hwrong ⟨Fin.ext (hu12.trans hd12.symm),Fin.ext hse⟩
+      have hh := LengthFrameChecks.block_address_ne (by omega : x < 1088)
+        (by rwa [hcl]) hb hw
+        (by rw [hce,hcb]; exact LengthFrameChecks.length_frame_ne_zero d.entry.isLt)
+        d.firstCell.isLt j.isLt
+      rw [hslot,hce,hcb] at hh
+      unfold operand frame
+      rw [hub,bias_length L d.stage hd12]
+      simpa only [lengthK,add_comm] using hh
+    · obtain ⟨hlo,hhi,he⟩ := hL.fixed_body s d hshape hd13
+      let x := 1024 + (s.val-255615)/68
+      let i := (s.val-255615)%68
+      have hx : x < 1088 := by dsimp [x]; omega
+      have hx0 : ¬x < 1024 := by dsimp [x]; omega
+      have hce : LengthFrameChecks.certEntry x = d.entry.val := by
+        simp only [LengthFrameChecks.certEntry,if_neg hx0,x,Nat.add_sub_cancel_left,
+          OptimalOTS.HLFour.entF,OptimalOTS.HLFour.baseF,he]
+      have hcb : LengthFrameChecks.certBias x = 1 := if_neg hx0
+      have hi : i < LengthFrameChecks.certLength x := by
+        rw [LengthFrameChecks.certLength,if_neg hx0]; dsimp [i]; omega
+      have hslot : LengthFrameChecks.certEntry x+i = s.val := by rw [hce,he]; dsimp [i]; omega
+      have hw : ¬(LengthFrameChecks.certEntry x+i = LengthFrameChecks.certEntry x ∧
+          incoming = LengthFrameChecks.certBias x) := by
+        rw [hslot,hce,hcb]
+        intro ⟨hse,hinc⟩
+        have hu13 : u.val = 13 := by
+          unfold incoming at hinc; split_ifs at hinc <;> rcases hui with h | h <;> omega
+        exact hwrong ⟨Fin.ext (hu13.trans hd13.symm),Fin.ext hse⟩
+      have hh := LengthFrameChecks.block_address_ne hx hi hb hw
+        (by rw [hce,hcb]; exact FixedFrameChecks.fixed_frame_ne_zero (hdpos hd13) d.entry.isLt)
+        d.firstCell.isLt j.isLt
+      rw [hslot,hce,hcb] at hh
+      unfold operand frame
+      rw [hub,bias_fixed L d.stage hd13]
+      simpa only [
+        show (BitVec.ofNat 64 1 : K) = 1 from rfl,add_comm] using hh
   · have h := safeBase_avoids L (.inl (u,s,j))
     simp only [constraints, landingPoly, hshape, if_neg (not_or.mpr ⟨hwrong, hfixed⟩),
-      collision_eval, sub_ne_zero] at h
+      stageCollision_eval, sub_ne_zero] at h
     intro he
     apply h
     change gpow d.firstCell.val * frame L u s =

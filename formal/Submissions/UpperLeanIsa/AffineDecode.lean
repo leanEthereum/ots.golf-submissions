@@ -98,6 +98,23 @@ theorem layout_fixed (T : Tab) : AffineFrames.FixedHyp (layout T) := by
       simpa only [ent,ite_true,entF,baseF] using
         And.intro (show 255615 ≤ s.val by unfold baseF at hb; omega)
           (And.intro (show s.val < 259967 by unfold baseF at hfree; omega) he)
+  · intro s d h hd
+    obtain ⟨f,x,i,hp,hf,hs,he⟩ := body_descriptor T s d h
+    have hf13 : f = 13 := by
+      rw [hs] at hd
+      unfold stageIndex at hd
+      split_ifs at hd <;> omega
+    subst f
+    unfold place at hp
+    split_ifs at hp with h27 hg hb hfree <;> try contradiction
+    · have hh := dec_spec (by omega : 27 ≤ s.val) hg
+      injection hp with hf' hx' hi'
+      have hu : (dec s.val).1 = 12 := by omega
+      rw [hu] at hh
+      refine ⟨(dec s.val).2.1,(dec s.val).2.2,hh.2.1,hh.2.2.1,hh.2.2.2,?_⟩
+      simpa only [ent,show (13:Nat) ≠ 0 by decide,ite_false,show 13-1=12 from rfl,← hx'] using he
+    · injection hp with hf'
+      omega
 
 /-- The compiler's declared first cells agree with the constants it actually chose. -/
 theorem body_first (T : Tab) (s : AffineFrames.Slot) (d : AffineFrames.BodyDescriptor)

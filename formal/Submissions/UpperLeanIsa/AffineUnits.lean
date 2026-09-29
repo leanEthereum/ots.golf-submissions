@@ -66,7 +66,7 @@ theorem bodyCode_ne_init (T : Tab) (a : K) (f x : ℕ) :
     exact init_not_body _ _ _ _ hi
 
 def Hint (T : Tab) (v : ℕ → E) (f : ℕ) : Prop :=
-  v (h1Cell f) = v (hCell f) + ofK (base T ^ AffineFrames.stageExponent (stageIndex f))
+  v (h1Cell f) = v (hCell f) + ofK (AffineFrames.stageBias (base T) (stageIndex f))
 
 theorem run_dispatch {κ : ℕ} (T : Tab) (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel)

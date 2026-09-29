@@ -127,7 +127,7 @@ theorem execute_nonentry {κ : ℕ} (hκ : κ ≤ 32) (M : MemImage κ) (T : Tab
     (congrArg Fin.val he.1).symm (congrArg Fin.val he.2))
 
 theorem biasCell_bound {c : ℕ} (hc : c < 2 ^ 16) : biasCell (c-h1Cell 0) < 2 ^ 16 := by
-  unfold biasCell cCell h1Cell oneCell
+  unfold biasCell cCell h1Cell oneCell lenCell
   split_ifs <;> omega
 
 theorem rehint_bounded {ci : CInstr} (h : ci.Bounded) : (rehint ci).Bounded := by
@@ -197,7 +197,7 @@ theorem bodyCode_slot_lt {T : Tab} (hT : T.Hyp) (a : K) {f x i : ℕ}
     omega
 
 def blockFrame (T : Tab) (f x : ℕ) : K :=
-  base T ^ AffineFrames.stageExponent (stageIndex f) + gpow (ent f x)
+  AffineFrames.stageBias (base T) (stageIndex f) + gpow (ent f x)
 
 theorem blockFrame_ne_zero (T : Tab) {f x : ℕ} (hf : f < 14) (hx : x < Wf f) :
     blockFrame T f x ≠ 0 := by

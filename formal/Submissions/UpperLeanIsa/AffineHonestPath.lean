@@ -6,7 +6,7 @@ import Submissions.UpperLeanIsa.AffineReplay
 
 Every op of every block on the honest path holds on the loaded honest image (`honest_blk`), so
 the relations along the path of `hxs T I` hold (`honest_path`), and the machine completes in
-`191` instructions at cost `974` (`honest_run`).
+`190` instructions at cost `973` (`honest_run`).
 -/
 
 set_option maxRecDepth 4000
@@ -69,7 +69,7 @@ theorem honest_free : ∀ y ∈ bodyCode T (base T) 0 (XF P T f pk m bits 0), y.
     · rw [if_neg hs0]
       show hv P T f pk m bits tfCell = hv P T f pk m bits tfCell * hv P T f pk m bits oneCell
       rw [hv_one,mul_oneV]
-  · exact honest_hxor (by omega)
+  · exact honest_hxor hlen (by omega)
 
 /-- **The honest tie.** -/
 theorem honest_tie {u : ℕ} (hu : u < 13) :
@@ -263,7 +263,7 @@ theorem honest_rootIns {u : ℕ} (hu : u < 13) :
     simpa only [rootMsg, hU, zU] using h
   · simp at hy
 
-include hT hC hacc hroot in
+include hT hC hlen hacc hroot in
 /-- **The honest next op.** -/
 theorem honest_next {u : ℕ} (hu : u < 13) : (rehint (nextOp u)).Rel f (hv P T f pk m bits) := by
   unfold nextOp
@@ -272,7 +272,7 @@ theorem honest_next {u : ℕ} (hu : u < 13) : (rehint (nextOp u)).Rel f (hv P T 
     simp only [rehint,h1Cell]
     rw [if_pos ⟨True.intro, by unfold hCell; omega⟩]
     rw [show 180+(u+2)-180 = u+2 by omega]
-    exact honest_hxor (r:=u+2) (by omega)
+    exact honest_hxor hlen (r:=u+2) (by omega)
   · rw [if_neg h12,rehint_copy]
     show hv P T f pk m bits pkCell = hv P T f pk m bits (stCell 0) * hv P T f pk m bits oneCell
     rw [hv_one, mul_oneV, (hv_st (by omega)).1, show pkCell = 0 from rfl,
@@ -321,7 +321,7 @@ theorem honest_blk : ∀ r < 14, ∀ y ∈ bodyCode T (base T) r (XF P T f pk m 
       show hv P T f pk m bits oneCell = hv P T f pk m bits oneCell * hv P T f pk m bits oneCell
       rw [hv_one,mul_oneV]
     · subst ci
-      exact honest_next hT hC hacc hroot hu
+      exact honest_next hT hC hlen hacc hroot hu
 
 include hT hC hlen hacc hroot in
 /-- **The honest path.** Every op on the path of the honest index vector holds on the loaded
@@ -333,11 +333,11 @@ theorem honest_path : PathFacts T (oracleRel f) (hv P T f pk m bits) (XF P T f p
 
 include hT hC hlen hacc hroot in
 /-- **Honest run.** When the verifier accepts under the table, the honest image completes in
-`191` instructions. -/
+`190` instructions. -/
 theorem honest_run :
     simulateQ (unifFwdAnswerImpl f)
-      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 191
-        Regs.initial) = pure (some 974) := by
+      (LeanIsa.runCost (program T) (LeanIsa.loadInput pk m bits (imageF P T f pk m bits)) 190
+        Regs.initial) = pure (some 973) := by
   have hV := hxs_valid T _ (hlive hC hacc)
   have hP := honest_path hT hC hlen hacc hroot
   have hL : Landing (hv P T f pk m bits) (XF P T f pk m bits) := fun r hr => hv_h hr

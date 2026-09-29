@@ -13,7 +13,7 @@ set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
 structure PathFacts (T : Tab) (B : BlakeRel) (v : ℕ → E) (xs : ℕ → ℕ) : Prop where
-  pro : ∀ ci ∈ prefixCode T 16, ci.RelB B v
+  pro : ∀ ci ∈ prefixCode T 15, ci.RelB B v
   disp : ∀ f < 14, (CInstr.dispatch f).RelB B v
   blk : ∀ f < 14, ∀ ci ∈ bodyCode T (base T) f (xs f), ci.RelB B v
   exit : CInstr.exit.RelB B v

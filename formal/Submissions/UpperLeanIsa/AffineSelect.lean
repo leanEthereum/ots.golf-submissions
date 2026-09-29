@@ -1,4 +1,5 @@
-import Submissions.UpperLeanIsa.AffineFrames
+import Submissions.UpperLeanIsa.FixedBiasPolys
+import Submissions.UpperLeanIsa.FourMachineLayout
 
 /-! Choose one field element that guards every potential jump in a fixed layout.
 The selection is independent of the input, oracle and committed memory. -/
@@ -40,6 +41,11 @@ structure FixedHyp (L : Layout) : Prop where
     255615 ≤ s.val ∧ s.val < 259967 ∧
       d.entry.val = 255615 + 68 * ((s.val - 255615) / 68)
 
+  length_body : ∀ s d, L s = .body d → d.stage.val = 12 →
+    ∃ x i, x < OptimalOTS.HLFour.VF 12 ∧ i < OptimalOTS.HLFour.SL 12 x ∧
+      s.val = OptimalOTS.HLFour.entryOf 12 x + i ∧
+      d.entry.val = OptimalOTS.HLFour.entryOf 12 x
+
 def initialPoly (u s c j : ℕ) : K[X] :=
   C (gpow c) * framePoly u s - C (gpow j)
 
@@ -66,9 +72,9 @@ theorem initialPoly_degree {u s c j D : ℕ} (hu : u ≤ D) :
 def landingPoly (L : Layout) (u : Stage) (s : Slot) (j : MaxCell) : K[X] :=
   match L s with
   | .trap => 1
-  | .initial c => if u.val = 13 then 1 else initialPoly (u.val + 1) s.val c.val j.val
-  | .body d => if (u = d.stage ∧ s = d.entry) ∨ (u.val = 13 ∧ d.stage.val = 13) then 1
-      else collisionPoly (stageExponent u.val) (stageExponent d.stage.val)
+  | .initial c => if isFixed u.val then 1 else initialPoly (u.val + 1) s.val c.val j.val
+  | .body d => if (u = d.stage ∧ s = d.entry) ∨ (isFixed u.val ∧ isFixed d.stage.val) then 1
+      else stageCollision u.val d.stage.val
         s.val d.entry.val d.firstCell.val j.val
 
 theorem landingPoly_ne_zero (L : Layout) (u : Stage) (s : Slot) (j : MaxCell) :
@@ -83,14 +89,14 @@ theorem landingPoly_ne_zero (L : Layout) (u : Stage) (s : Slot) (j : MaxCell) :
     split
     · exact one_ne_zero
     · rename_i hwrong
-      by_cases hu : u.val = 13
-      · have hv : d.stage.val ≠ 13 := fun hv => hwrong (Or.inr ⟨hu, hv⟩)
-        simp only [stageExponent, if_pos hu, if_neg hv]
-        exact fixed_positive_collision_ne_zero (Nat.succ_pos _)
-      · by_cases hv : d.stage.val = 13
-        · simp only [stageExponent, if_neg hu, if_pos hv]
-          exact positive_fixed_collision_ne_zero (Nat.succ_pos _)
-        · simp only [stageExponent, if_neg hu, if_neg hv]
+      by_cases hu : isFixed u.val
+      · have hv : ¬isFixed d.stage.val := fun hv => hwrong (Or.inr ⟨hu, hv⟩)
+        simp only [stageCollision, stagePoly, if_pos hu, if_neg hv]
+        exact constant_positive_collision _ (Nat.succ_pos _)
+      · by_cases hv : isFixed d.stage.val
+        · simp only [stageCollision, stagePoly, if_neg hu, if_pos hv]
+          exact positive_constant_collision _ (Nat.succ_pos _)
+        · simp only [stageCollision, stagePoly, if_neg hu, if_neg hv]
           apply collision_ne_zero (Nat.succ_pos _) (Nat.succ_pos _)
           · have := s.isLt; omega
           · have := d.entry.isLt; omega
@@ -112,12 +118,10 @@ theorem landingPoly_degree (L : Layout) (u : Stage) (s : Slot) (j : MaxCell) :
   · split
     · simp
     · exact initialPoly_degree (by have := u.isLt; omega)
-  · rename_i d hd
-    split
+  · split
     · simp
-    · apply collision_degree
-      · unfold stageExponent; split <;> have := u.isLt <;> omega
-      · unfold stageExponent; split <;> have := d.stage.isLt <;> omega
+    · exact stageCollision_degree u.isLt ‹BodyDescriptor›.stage.isLt
+
 
 def powerPoly (i j : Fin 301) : K[X] := if i = j then 1 else X ^ i.val - X ^ j.val
 

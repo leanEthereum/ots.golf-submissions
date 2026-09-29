@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.AffineMachine
 
-/-! The 1094-cycle leanISA submission. Split alias multiplicities and mixed
+/-! The 1093-cycle leanISA submission. Split alias multiplicities and mixed
 four- and five-child packets implement a layer-85 scheme with four internal children.
 The certificate covers security, the honest prover, all committed images, and
 the complete execution cost including the public-boundary charge. -/
@@ -15,8 +15,8 @@ noncomputable def submission : LeanIsa.Submission := AffineVM.affineMachine
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1094` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1094 := AffineVM.affine_certificate
+`1093` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1093 := AffineVM.affine_certificate
 
 /-- The bytecode slots and memory cells the prover must seed and finalize, together fewer than
 `LeanIsa.maxSeededRows`. -/

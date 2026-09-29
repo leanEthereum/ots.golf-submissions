@@ -4,7 +4,7 @@ import Submissions.UpperLeanIsa.FourMachineDecode
 /-! The fixed affine-frame bytecode. Each block starts with its first
 useful instruction; packed group blocks reserve exactly one control slot.
 `AffineMachine` combines the domain-separated codec and this machine in the
-1094-cycle certificate. -/
+1093-cycle certificate. -/
 
 namespace OptimalOTS.AffineVM
 
@@ -18,8 +18,8 @@ open scoped Classical
 set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
-/-- The free stage uses ONE; the thirteen charged stages use their cost powers. -/
-def biasCell (f : ℕ) : ℕ := if f = 0 then oneCell else cCell f
+/-- The free stage uses ONE, the last group uses length, and other groups use powers. -/
+def biasCell (f : ℕ) : ℕ := if f = 0 then oneCell else if f = 13 then lenCell else cCell f
 
 def stageIndex (f : ℕ) : ℕ := if f = 0 then 13 else f-1
 
@@ -66,11 +66,11 @@ depend on `a`, so choosing the base cannot change the layout. -/
 def raw (T : Tab) (a : K) : Place → CInstr
   | .trap => .pad
   | .initial s =>
-      if s < 13 then .setc (cCell (s+1)) (ofK (a ^ (s+1)))
-      else if s = 13 then .init
-      else if s = 14 then .blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11)
-      else if s = 15 then .xor (hCell 0) oneCell (h1Cell 0)
-      else if s = 16 then .dispatch 0
+      if s < 12 then .setc (cCell (s+1)) (ofK (a ^ (s+1)))
+      else if s = 12 then .init
+      else if s = 13 then .blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11)
+      else if s = 14 then .xor (hCell 0) oneCell (h1Cell 0)
+      else if s = 15 then .dispatch 0
       else .pad
   | .body f x i =>
       if f = 0 then
@@ -90,11 +90,11 @@ theorem raw_cell0 (T : Tab) (a b : K) (p : Place) : (raw T a p).cell0 = (raw T b
   cases p with
   | trap => rfl
   | initial s =>
-    by_cases h : s < 13
+    by_cases h : s < 12
     · simp only [raw,if_pos h,CInstr.cell0]
-    · by_cases h13 : s = 13
+    · by_cases h13 : s = 12
       · simp only [raw,if_neg h,if_pos h13]
-      · by_cases h14 : s = 14
+      · by_cases h14 : s = 13
         · simp only [raw,if_neg h,if_neg h13,if_pos h14,CInstr.cell0]
         · simp only [raw,if_neg h,if_neg h13,if_neg h14]
   | body f x i =>

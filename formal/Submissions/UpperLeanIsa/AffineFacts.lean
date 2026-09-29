@@ -38,34 +38,43 @@ private theorem checksum_embed_div (a b : K) (hb : b ≠ 0) :
 section Prologue
 
 variable {T : Tab} {B : BlakeRel} {v : ℕ → E}
-  (hp : ∀ ci ∈ prefixCode T 16, ci.RelB B v)
+  (hp : ∀ ci ∈ prefixCode T 15, ci.RelB B v)
 include hp
 
 theorem pro_one : v oneCell = oneV := by
-  have h := hp _ (prefixCode_mem T (i:=13) (by decide : 13 < 16))
+  have h := hp _ (prefixCode_mem T (i:=12) (by decide : 12 < 15))
   exact h.1
 
 theorem pro_length : v lenCell = natV 5504 := by
-  have h := hp _ (prefixCode_mem T (i:=13) (by decide : 13 < 16))
+  have h := hp _ (prefixCode_mem T (i:=12) (by decide : 12 < 15))
   exact h.2
 
-theorem pro_c {c : ℕ} (hc : c ≤ 13) : v (cCell c) = ofK (base T ^ c) := by
+theorem pro_c {c : ℕ} (hc : c ≤ 12) : v (cCell c) = ofK (base T ^ c) := by
   rcases Nat.eq_zero_or_pos c with rfl | hc0
   · simpa only [cCell,ite_true,pow_zero,oneV,oneCell] using pro_one hp
-  · have h := hp _ (prefixCode_mem T (i:=c-1) (by omega : c-1 < 16))
-    simpa only [raw,if_pos (show c-1 < 13 by omega),Nat.sub_add_cancel hc0,CInstr.RelB] using h
+  · have h := hp _ (prefixCode_mem T (i:=c-1) (by omega : c-1 < 15))
+    simpa only [raw,if_pos (show c-1 < 12 by omega),Nat.sub_add_cancel hc0,CInstr.RelB] using h
 
 theorem pro_bias {f : ℕ} (hf : f < 14) :
-    v (biasCell f) = ofK (base T ^ AffineFrames.stageExponent (stageIndex f)) := by
+    v (biasCell f) = ofK (AffineFrames.stageBias (base T) (stageIndex f)) := by
   by_cases h0 : f = 0
   · subst f
-    simpa only [biasCell,stageIndex,AffineFrames.stageExponent,ite_true,pow_zero,oneV] using pro_one hp
-  · simp only [biasCell,stageIndex,if_neg h0,AffineFrames.stageExponent,
-      if_neg (show f-1 ≠ 13 by omega),Nat.sub_add_cancel (show 1 ≤ f by omega)]
-    exact pro_c hp (by omega)
+    simpa [biasCell,stageIndex,AffineFrames.stageBias,AffineFrames.isFixed,
+      AffineFrames.fixedBias,oneV] using pro_one hp
+  · by_cases h13 : f = 13
+    · subst f
+      have hl := pro_length hp
+      rw [OptimalOTS.HLG3.LengthGate128.natV_ofK (by decide : 5504 ≤ 5505)] at hl
+      simpa [biasCell,stageIndex,AffineFrames.stageBias,AffineFrames.isFixed,
+        AffineFrames.fixedBias,AffineFrames.lengthK] using hl
+    · have hf12 : f ≤ 12 := by omega
+      simp only [biasCell,stageIndex,if_neg h0,if_neg h13,AffineFrames.stageBias,
+        AffineFrames.isFixed,if_neg (show ¬12 ≤ f-1 by omega),
+        Nat.sub_add_cancel (show 1 ≤ f by omega)]
+      exact pro_c hp hf12
 
 theorem pro_hint_zero : Hint T v 0 := by
-  have h := hp _ (prefixCode_mem T (i:=15) (by decide : 15 < 16))
+  have h := hp _ (prefixCode_mem T (i:=14) (by decide : 14 < 15))
   change v (h1Cell 0) = v (hCell 0)+v oneCell at h
   rw [pro_one hp] at h
   change v (h1Cell 0) = v (hCell 0)+ofK (1 : K)
@@ -90,7 +99,7 @@ theorem nextHint_mem (T : Tab) (a : K) {f x : ℕ} (hf : f < 13) :
     rw [if_pos ⟨trivial, by unfold hCell; omega⟩]
 
 theorem next_hint {T : Tab} {B : BlakeRel} {v : ℕ → E}
-    (hp : ∀ ci ∈ prefixCode T 16, ci.RelB B v) {f x : ℕ} (hf : f < 13)
+    (hp : ∀ ci ∈ prefixCode T 15, ci.RelB B v) {f x : ℕ} (hf : f < 13)
     (hb : ∀ ci ∈ bodyCode T (base T) f x, ci.RelB B v) : Hint T v (f+1) := by
   have h := hb _ (nextHint_mem T (base T) hf)
   change v (h1Cell (f+1)) = v (hCell (f+1))+v (biasCell (f+1)) at h
@@ -129,7 +138,7 @@ theorem prodOps_mem {T : Tab} {u x : ℕ} {ci : CInstr}
 
 /-- The actual checksum instruction enforces the centered step for either sign. -/
 theorem prod_step {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E}
-    (hp : ∀ ci ∈ prefixCode T 16, ci.RelB B v) {u x : ℕ}
+    (hp : ∀ ci ∈ prefixCode T 15, ci.RelB B v) {u x : ℕ}
     (hu : u < 13) (hx : x < VF u)
     (hb : ∀ ci ∈ bodyCode T (base T) (u+1) x, ci.RelB B v) :
     CenteredChecksum.Step (ofK (base T)) (chargedCost T u x)
@@ -146,7 +155,7 @@ theorem prod_step {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E}
 
 /-- The centered equation expressed using only natural powers. -/
 theorem prod_relation {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E}
-    (hp : ∀ ci ∈ prefixCode T 16, ci.RelB B v) {u x : ℕ}
+    (hp : ∀ ci ∈ prefixCode T 15, ci.RelB B v) {u x : ℕ}
     (hu : u < 13) (hx : x < VF u)
     (hb : ∀ ci ∈ bodyCode T (base T) (u+1) x, ci.RelB B v) :
     v (gpCell (u+1)) * ofK (base T ^ 6) =
@@ -158,7 +167,7 @@ theorem prod_relation {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E}
 
 /-- Clearing the center-six denominator yields the exact prefix-product invariant. -/
 theorem prod_invariant {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E} {xs : ℕ → ℕ}
-    (hV : Valid xs) (hp : ∀ ci ∈ prefixCode T 16, ci.RelB B v)
+    (hV : Valid xs) (hp : ∀ ci ∈ prefixCode T 15, ci.RelB B v)
     (hb : ∀ f < 14, ∀ ci ∈ bodyCode T (base T) f (xs f), ci.RelB B v) :
     ∀ u ≤ 13, v (gpCell u) * ofK (base T ^ (6*u)) =
       ofK (seedProduct (base T) (xs 0) *
@@ -188,7 +197,7 @@ theorem prod_invariant {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E} {xs
 
 /-- The exact free seed and preceding charged costs, divided by the center offset. -/
 theorem prod_eq {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E} {xs : ℕ → ℕ}
-    (hV : Valid xs) (hp : ∀ ci ∈ prefixCode T 16, ci.RelB B v)
+    (hV : Valid xs) (hp : ∀ ci ∈ prefixCode T 15, ci.RelB B v)
     (hb : ∀ f < 14, ∀ ci ∈ bodyCode T (base T) f (xs f), ci.RelB B v) :
     ∀ u ≤ 13, v (gpCell u) = ofK (seedProduct (base T) (xs 0) *
       base T ^ (∑ w ∈ Finset.range u, chargedCost T w (xs (w+1))) / base T ^ (6*u)) := by
@@ -198,7 +207,7 @@ theorem prod_eq {T : Tab} (hT : T.Hyp) {B : BlakeRel} {v : ℕ → E} {xs : ℕ 
   exact prod_invariant hT hV hp hb u hu
 
 def ctlSlot (T : Tab) (xs : ℕ → ℕ) (f : ℕ) : ℕ :=
-  if f = 0 then 16 else ent (f-1) (xs (f-1))+(bodyCode T (base T) (f-1) (xs (f-1))).length
+  if f = 0 then 15 else ent (f-1) (xs (f-1))+(bodyCode T (base T) (f-1) (xs (f-1))).length
 
 def ctlFrame (T : Tab) (xs : ℕ → ℕ) (f : ℕ) : K :=
   if f = 0 then 1 else blockFrame T (f-1) (xs (f-1))
@@ -217,9 +226,9 @@ theorem ctl_geometry {T : Tab} (hT : T.Hyp) (xs : ℕ → ℕ) {f : ℕ} (hf : f
       ∀ s : AffineFrames.Slot, s.val = ctlSlot T xs f →
         instrAt T s = compile (ctlFrame T xs f) (if f < 14 then .dispatch f else .exit) := by
   rcases Nat.eq_zero_or_pos f with rfl | hf0
-  · refine ⟨by change 16 < sentinel; decide,one_ne_zero,?_⟩
+  · refine ⟨by change 15 < sentinel; decide,one_ne_zero,?_⟩
     intro s hs
-    change s.val = 16 at hs
+    change s.val = 15 at hs
     rw [instrAt_initial T s (by omega),hs]
     rfl
   · obtain ⟨j,rfl⟩ : ∃ j, f = j+1 := ⟨f-1,by omega⟩

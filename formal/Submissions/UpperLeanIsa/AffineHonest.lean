@@ -306,20 +306,31 @@ theorem honest_dispatch {r : ℕ} (hr : r < 14) :
   · rw [hv_h1 hF]; exact isInK_ofK _
   · rw [hv_h hF, XFr_frU hr, limb_ofK_zero]
 
+include hlen in
 /-- The affine hint asserts the destination plus its stage bias. -/
 theorem honest_hxor {r : ℕ} (hr : r < 14) :
     (CInstr.xor (hCell r) (biasCell r) (h1Cell r)).Rel f (hv P T f pk m bits) := by
   have hb : hv P T f pk m bits (biasCell r) =
-      cV T (AffineFrames.stageExponent (stageIndex r)) := by
+      ofK (AffineFrames.stageBias (base T) (stageIndex r)) := by
     by_cases h0 : r = 0
     · subst r
-      simpa [biasCell, stageIndex, AffineFrames.stageExponent, cV, oneV] using
+      simpa [biasCell, stageIndex, AffineFrames.stageBias, AffineFrames.isFixed,
+        AffineFrames.fixedBias, oneV] using
         (hv_one (P:=P) (T:=T) (f:=f) (pk:=pk) (m:=m) (bits:=bits))
-    · simp only [biasCell,stageIndex,if_neg h0,AffineFrames.stageExponent,
-        if_neg (show r-1 ≠ 13 by omega),Nat.sub_add_cancel (show 1 ≤ r by omega)]
-      exact hv_cc (by omega)
+    · by_cases h13 : r = 13
+      · subst r
+        have hl : hv P T f pk m bits lenCell = natV 5504 := by
+          rw [hv_lt P T f pk m bits (by decide)]
+          exact inputWord_len_of pk m bits hlen
+        rw [OptimalOTS.HLG3.LengthGate128.natV_ofK (by decide : 5504 ≤ 5505)] at hl
+        simpa [biasCell,stageIndex,AffineFrames.stageBias,AffineFrames.isFixed,
+          AffineFrames.fixedBias,AffineFrames.lengthK] using hl
+      · simp only [biasCell,stageIndex,if_neg h0,if_neg h13,AffineFrames.stageBias,
+          AffineFrames.isFixed,if_neg (show ¬12 ≤ r-1 by omega),
+          Nat.sub_add_cancel (show 1 ≤ r by omega)]
+        exact hv_cc (by omega)
   show hv P T f pk m bits (h1Cell r) = hv P T f pk m bits (hCell r)+hv P T f pk m bits (biasCell r)
-  rw [hv_h1 hr,hv_h hr,hb,cV,← ofK_add,blockFrame,add_comm]
+  rw [hv_h1 hr,hv_h hr,hb,← ofK_add,blockFrame,add_comm]
 
 include hC hlen in
 /-- The index query of the honest image. -/
@@ -366,9 +377,9 @@ theorem honest_gp13 : hv P T f pk m bits (gpCell 13) = ofK (gpow sentinel) := by
 
 include hC hlen hacc in
 /-- **The honest prologue.** -/
-theorem honest_pro : ∀ y ∈ prefixCode T 16, y.Rel f (hv P T f pk m bits) := by
+theorem honest_pro : ∀ y ∈ prefixCode T 15, y.Rel f (hv P T f pk m bits) := by
   intro y hy
-  have he : prefixCode T 16 = ((List.range 13).map (fun c => CInstr.setc (cCell (c+1)) (cV T (c+1)))) ++
+  have he : prefixCode T 15 = ((List.range 12).map (fun c => CInstr.setc (cCell (c+1)) (cV T (c+1)))) ++
       [.init,.blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11),
         .xor (hCell 0) oneCell (h1Cell 0)] := by rfl
   rw [he] at hy
@@ -394,7 +405,7 @@ theorem honest_pro : ∀ y ∈ prefixCode T 16, y.Rel f (hv P T f pk m bits) := 
     · rw [show cCell 1 + 1 = cCell 2 from rfl, hv_cc (c:=2) (by decide)]; exact canon_ofK _
     · rw [hv_cc (c:=11) (by decide)]; exact canon_ofK _
     · rw [honest_idx_query hC hlen]; rfl
-  · subst h; exact honest_hxor (by omega)
+  · subst h; exact honest_hxor hlen (by omega)
 
 end Accepted
 end Honest

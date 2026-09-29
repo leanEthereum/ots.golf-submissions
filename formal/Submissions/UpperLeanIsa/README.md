@@ -1,22 +1,23 @@
-# 1094-cycle leanISA construction
+# 1093-cycle leanISA construction
 
-This construction combines two independent one-cycle savings from the 1096 machine:
-our centered checksum removes a constant initialization; Luc's unit-11 landing-hint
-tie removes an index-pattern initialization. The proved score is
-`104 + 87 × 10 + 120 = 1094` cycles, with 191 instructions and 327680 seeded rows.
+This revision removes one more constant initialization from the proved 1094
+construction. The final group uses the already validated 5504-bit length as its
+frame bias; the free stage uses ONE. All other groups retain distinct powers.
+The proved bound is `103 + 87 × 10 + 120 = 1093` cycles, with 190 executed instructions
+and 327680 seeded rows.
 
-A bijective index unmasking preserves the exact 440 security tiers. The signature
-remains 5504 bits, including the full 128-bit nonce. The competition's security,
-memory-size and resource requirements are unchanged.
+The index classes, 440 security tiers, signing schedule, 5504-bit signature and
+full 128-bit nonce are unchanged. Domain labels are relabeled to use powers
+through twelve. The full arbitrary-memory guard includes exact field checks for
+both fixed biases and every possible first operand below 2^16.
 
-`Solution.lean` exports the full `Submission.Certificate 1094` and seeded-row bound.
-It covers admissibility, strong security, bytecode validity, honest-prover
-equivalence, arbitrary committed images and all completing executions.
-Clean build, exact challenge comparison, allowed-axiom checking, six arithmetic
-regressions and fresh Lean kernel replay all pass. The measured build/export/check
-stages total 524.759 seconds locally. The official runner fails closed here
-because Landlock is unavailable; hosted verification remains pending.
-No optimality claim is made. See [NOTES.md](NOTES.md) for details and full credits.
+`Solution.lean` exports `Submission.Certificate 1093` and the seeded-row bound.
+Clean build, exact challenge comparison, permitted-axiom audit, twelve arithmetic
+regression tests, and fresh Lean kernel replay pass locally. The measured
+build/export/check stages total 907.680 seconds, with peak sampled process-tree
+PSS of 12.383 GiB. Hosted verification remains pending: the official local
+runner fails closed because Landlock is unavailable.
+See [NOTES.md](NOTES.md) for the proof structure, attribution and further research.
 
 Build with the pinned dependencies:
 

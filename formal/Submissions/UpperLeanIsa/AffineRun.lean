@@ -13,7 +13,7 @@ set_option backward.isDefEq.respectTransparency false
 set_option backward.isDefEq.respectTransparency.types false
 
 def incomingFrame (T : Tab) (f : ℕ) (target : K) : K :=
-  base T ^ AffineFrames.stageExponent (stageIndex f) + target
+  AffineFrames.stageBias (base T) (stageIndex f) + target
 
 theorem finalPc_eq (T : Tab) : (program T).finalPc = gpow sentinel := by
   show gpow (2 ^ 18 - 1) = gpow 262143
