@@ -22,7 +22,7 @@ that order. Full class-count/security integration remains to be done.
 `FreeLastBlocks`, `FreeLastLayout`, `FreeLastLayoutData`, `FreeLastProgram`,
 `FreeLastCompile` and `FreeLastPathCost` define the actual candidate instruction
 lists, balanced layout decoder and complete bytecode parameterized by its field
-base. They prove block budgets, contiguous layout coverage, special hint entry
+base. `FreeLastBase.program` fixes this parameter using weighted root avoidance. They prove block budgets, contiguous layout coverage, special hint entry
 checks, bytecode/seeded-row validity, compiler weights and the intended-path
 counts. The layout has 14820 normal group blocks, 512 Z twins and 63 positive
 free blocks; groups 11 and 12 retain their old addresses. The compact free tail
@@ -35,20 +35,34 @@ last group's raw-code tie is injective and the N-to-Z checksum contradiction.
 group. `FreeLastResearch` proves the centered product invariant, a weighted
 nonroot lemma, and the arithmetic root bound
 `11006439705738751537 < 2^64`. That arithmetic is not yet connected to complete
-polynomial families or a selected safe base. `FreeLastChecks` imports the new
+polynomial families; the later selected-base proof instead uses the larger
+conservative exponent interval described next. `FreeLastChecks` imports the new
 component proofs for auditing; it is separate from the submission exports.
 
-The 21 selected component theorems pass trusted primitive comparison and the
-dependency-axiom audit, using only `propext`, `Classical.choice` and `Quot.sound`.
-Fresh kernel replay of their 30806 exported declarations passes in 177.112
-seconds. An initial audit caught a native-solver axiom from `bv_decide`; all
-seven uses were replaced by ordinary BitVec lemmas before the passing replay.
-This is a component audit, not an exact 1089 challenge comparison or a hosted
-submission verdict.
+`FreeLastPolys`, `FreeLastSelect` and `FreeLastBase` now construct a fixed base
+for the candidate decoder. Laurent collision degrees use the span of the two
+signed exponents and zero. The interval `[-77,131]` uses the existing charged
+cost bound 16, and the formal weighted family has total degree bound
+`14637193990199924808 < 2^64`. A nonconstant polynomial identity forces matching
+exponents and coefficients; constant identities use the finite certificates.
+The layout checks now include the group/free physical partition. The selected
+bytecode is valid, satisfies the seeded-row cap, and every declared group/free
+frame is nonzero. Matching first-cell descriptors to actual reads and applying
+all landing guards remain part of the control-flow integration.
 
-Remaining work: instantiate/prove the signed-frame and exit-landing families;
-prove exact entry inversion and every completing path, including re-entry and
-N/Z switching; connect the new accumulator/codec to the scheme; port the honest
+The initial 21 component theorems passed primitive/axiom comparison and fresh
+kernel replay (30806 declarations in 177.112 seconds). An initial audit caught
+a native-solver axiom from `bv_decide`; all seven uses were replaced by ordinary
+BitVec lemmas before the passing replay. The expanded audit passes for 35 component
+theorems, including signed-family selection and concrete frame nonzeroness.
+Fresh kernel replay of 31118 declarations passes in 192.365 seconds; the complete
+parse/comparison/audit/replay stage takes 225.894 seconds and 7.440 GiB peak PSS.
+Its receipt is in `leanisa-sub1090-evidence/RESULT.md`. A component audit
+is not an exact 1089 challenge comparison or a hosted submission verdict.
+
+Remaining work: finish actual-read and fixed-frame guard integration; prove
+exact entry inversion and every completing path, including re-entry and N/Z
+switching; connect the new accumulator/codec to the scheme; port the honest
 image, faithful and arbitrary-memory soundness proofs. Only then can the claim
 change to 1089 and undergo full challenge comparison and replay. The imported
 old `IndexBits` helpers must be factored before installing the new decoder, to

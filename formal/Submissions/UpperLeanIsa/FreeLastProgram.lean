@@ -84,7 +84,7 @@ theorem body_fits {r : Row} (h : Good r) : (body r).length + 1 ≤ r.length := b
     omega
   | free s =>
     simp only [hr] at hb
-    simp only [body, hr, free_length, hb.2.2, le_refl]
+    simp only [body, hr, free_length, hb.2.2.1, le_refl]
   | group u v z =>
     simp only [hr] at hb
     obtain ⟨hu,hv,hz,hfit,_,_⟩ := hb

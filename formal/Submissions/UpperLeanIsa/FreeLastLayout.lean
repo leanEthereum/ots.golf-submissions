@@ -29,11 +29,12 @@ def hintAt (u v e : Nat) : Bool :=
 def Good (r : Row) : Prop :=
   0 < r.length ∧ match r.body with
   | .trap => True
-  | .free s => 1 ≤ s ∧ s ≤ 63 ∧ r.length = s+1
+  | .free s => 1 ≤ s ∧ s ≤ 63 ∧ r.length = s+1 ∧
+      260064 ≤ r.entry ∧ r.entry+r.length ≤ 262143
   | .group u v z => u < 13 ∧ v < VF u ∧ (z = true → u = 1) ∧
       budget u + band u v + hm u + (if z then 1 else 0) ≤ r.length ∧
       (u = 11 ∨ u = 12 → r.entry = entryOf u v ∧ r.length = SL u v) ∧
-      (hinted u v = true → hintAt u v r.entry = true)
+      (hinted u v = true → hintAt u v r.entry = true) ∧ r.entry+r.length ≤ 260064
 
 instance (r : Row) : Decidable (Good r) := by unfold Good; cases r.body <;> infer_instance
 
