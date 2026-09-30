@@ -1,4 +1,4 @@
-import Submissions.UpperLeanIsa.ConstraintMath
+import Submissions.UpperLeanIsa.PrefixCache
 import Submissions.UpperLeanIsa.FieldRescale
 import Submissions.UpperLeanIsa.SplitDomains
 import Submissions.UpperLeanIsa.LengthGate128
@@ -124,13 +124,47 @@ def nb (u : ℕ) : ℕ := (prof u).length
 def pn (u c : ℕ) : ℕ := (prof u).getD c 0
 
 /-- Field values of cost below `c`: the band of cost `c` is `[A u c, A u (c + 1))`. -/
-def A (u c : ℕ) : ℕ := psum (pn u) c
+def AData : Nat := 506149843973522142453347945260130287915383522612230616111530840661092694018934183712544955297996543346929909637307603759281677350342436442452483588313577405440741868144262676320815198753012718296641545254132438886169357630789378764857254808890970559124472963137174662750181595880161245359894680573253571227697662522215983827499472956419669369574357636061018082350625016301316681557879212685431885770232052663850368387350809948311044353346369194699183934023495270889805696154618273633827459808766276566492850823383656435545774729394880045077915247719717597922348145208848853778599644073107099120770654641439457128196842985568827597313675173334311632847443805852470889737885418294321003202904912322683467955316268284227568500139510418133201703171847342364423786918205824520686822612415338344494323005543439210322193407746776385095659772475075816231742129941096214638615481601905513121840220716306291353348753674798499503031927383993203772780275113029717967422225383424
+def ATable (u c : Nat) : Nat :=
+  CheckedPrefix.read AData 13 (Nat.add (Nat.mul 19 u) c)
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem ATable_checked : ((List.range 13).all fun u =>
+    CheckedPrefix.check (pn u) (ATable u) 18) = true := rfl
+
+def A (u c : Nat) : Nat :=
+  if u < 13 ∧ c ≤ 18 then ATable u c else psum (pn u) c
+
+theorem A_eq (u c : Nat) : A u c = psum (pn u) c := by
+  unfold A
+  split_ifs with h
+  · have ht := List.all_eq_true.mp ATable_checked u (List.mem_range.mpr h.1)
+    exact CheckedPrefix.correct _ _ ht h.2
+  · rfl
 
 /-- Block length of cost `c` in group `u`. -/
 def L (u c : ℕ) : ℕ := gcu u - 1 + c + hm u
 
 /-- Slot offset of cost band `c` in group `u`'s region. -/
-def OFF (u c : ℕ) : ℕ := psum (fun c => pn u c * L u c) c
+def OFFData : Nat := 151251319425940665430510452696292670042774305425433601484092358207100703339653194736634786021202444195389552502265511324915331249301722711449480149201018733701425976778133300148607712986118005514196718594530114623754056123899469671341465114209703211280191822192442974312952157640306658086314038637173867773331883233174747424068237723119499167823473767439368378762191824321802510473024782603483279311347575244977360175003022096676170078790782720896302894160080906319157924704976336981183037536246233678669920864270811745861479606609009800753341932934508422947802074233110210788401492238577649980762911684871239292264833528518069827705139230679488795572827028144451622124731663741758795209671555384824689836118513753106864607367963366651099209467719309644539566368761952727428758222877656890534641011617063397409556018057462102804073840961943907817294822102353963682261838913761126138534767973524261272140899470357955437958361660763747131592658226556253295772615449527259046336089523966871150633150976677929776417904895379953081627169197609299285964211923893922388626269247543719119224791759367958310108718331422833120884889849179982554189759364380112533089138310469061449810178704236855508209272571860262839819056084155921885873110056717675917687740139077882873230575866055267148254618083231510427863667264377024961290279810481318256443392
+def OFFTable (u c : Nat) : Nat :=
+  CheckedPrefix.read OFFData 18 (Nat.add (Nat.mul 19 u) c)
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem OFFTable_checked : ((List.range 13).all fun u =>
+    CheckedPrefix.check (fun c => pn u c * L u c) (OFFTable u) 18) = true := rfl
+
+def OFF (u c : Nat) : Nat :=
+  if u < 13 ∧ c ≤ 18 then OFFTable u c else psum (fun c => pn u c * L u c) c
+
+theorem OFF_eq (u c : Nat) : OFF u c = psum (fun c => pn u c * L u c) c := by
+  unfold OFF
+  split_ifs with h
+  · have ht := List.all_eq_true.mp OFFTable_checked u (List.mem_range.mpr h.1)
+    exact CheckedPrefix.correct _ _ ht h.2
+  · rfl
 
 /-- Unit 11 packs its blocks in slot order `j`: block `j` holds field value `ord11 j` and
 spans `gap11 j` slots. Each block starts at a slot `e` whose `g ^ e` has field value in bits
@@ -145,15 +179,58 @@ def ord11 (j : ℕ) : ℕ := ord11N / 2 ^ (9 * j) % 2 ^ 9
 def pos11 (v : ℕ) : ℕ := pos11N / 2 ^ (9 * v) % 2 ^ 9
 
 /-- Offset of unit 11's block `j` in its region. -/
-def bd11 : ℕ → ℕ
+def bd11Slow : ℕ → ℕ
   | 0 => 0
-  | j + 1 => bd11 j + gap11 j
+  | j + 1 => bd11Slow j + gap11 j
+
+/-- Certified prefix sums avoid expanding the 512-step sum at every use. -/
+def bd11Data : Nat := 58172551204888282068535570465046820928700157792647547775807243257903951871729436202079866020332182428518185971405539029581728550818763241991917267789787039741303831898740672475490636817956102449772042727218371489237332018169101097131436588580980675545642144192440711144805174260519079373091163515452362363104407175650013955810389072436219100541191571883964782706414627160553994081893619619953821640302799971042851434819743755030562633170056694066011339932099974593194865744120086506286728287859799743418964668540587203888309548063279169763271043757574905029537588583963011433979441516435449800654924074620139519180415365366781113525796837244094355428651694296215944052052900544455728278240899963511966885117139040490204416254367048976084888508946257187687999356362360656850759914562659201442461557657760409544925895992780344007528198741169068453300549014778890518807223756740382271014572902243318008817065367145249824499883227129204118182679738418940024569718245828392129425580899123321346612018798374397735508879757967433294993381830855241944556472755865612706206401843489296968794342611406059423520744180531793764562063408142546388196574265781666537516415321963627318040748126698817291673514852065132737311820152898374796485180962939803278158928138238637836131053753550042741502118061474996482209695403125706165141247861966061304402614888047352517474593071407188132240583291786492316940226452080041365562943707464303797178528553689606032376308715898192198853381063857028117686939410782069829140479888431518068819161391594290702802730717781241505766308257059060325566742944643245302715797596836496237188905454181938286264838343895766328283712720885391297107438405701587073863540143208372798844036821842974874348875398107737942187721755261718686596160320478065782926669187694175217475854674789635822929156676375936343162449149706001568075088189480116197542183622502203732323583954823332400966880017754860776866667767044571011892423868606200999548684150954836825292154247454171711120399912943734196104384244379859159100926348799139667181280497137743094597934636459501978275595048977018097394104685483910524339084640682152288819508662407154656923297479098571702272
+def bd11Table (j : Nat) : Nat :=
+  Nat.land (Nat.shiftRight bd11Data (Nat.mul 14 j)) 16383
+
+theorem bd11Table_zero : bd11Table 0 = 0 := rfl
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+set_option exponentiation.threshold 10000 in
+theorem bd11Table_checked : ((List.range 512).all fun j =>
+    Nat.beq (bd11Table (j+1)) (Nat.add (bd11Table j) (gap11 j))) = true := rfl
+
+theorem bd11Table_correct : ∀ j, j ≤ 512 → bd11Table j = bd11Slow j
+  | 0, _ => bd11Table_zero
+  | j+1, hj => by
+    have h := List.all_eq_true.mp bd11Table_checked j (List.mem_range.mpr (by omega))
+    have he := Nat.beq_eq.mp h
+    rw [bd11Table_correct j (by omega)] at he
+    exact he
+
+def bd11 (j : Nat) : Nat := if j ≤ 512 then bd11Table j else bd11Slow j
+
+theorem bd11_eq_slow (j : Nat) : bd11 j = bd11Slow j := by
+  unfold bd11
+  split_ifs with h
+  · exact bd11Table_correct j h
+  · rfl
 
 /-- Size of group `u`'s region. -/
 def RS (u : ℕ) : ℕ := if u = 11 then bd11 512 else OFF u (nb u)
 
 /-- First slot of group `u`'s region (the prologue is slots `0 … 26`). -/
-def BASE (u : ℕ) : ℕ := 27 + psum RS u
+def BASEData : Nat := 6960960534179540073037407049646618157417555934039760335288653128278682894336
+def BASETable (u : Nat) : Nat := CheckedPrefix.read BASEData 18 u
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem BASETable_checked : CheckedPrefix.check RS BASETable 13 = true := rfl
+
+def BASE (u : Nat) : Nat := 27 + if u ≤ 13 then BASETable u else psum RS u
+
+theorem BASE_eq (u : Nat) : BASE u = 27 + psum RS u := by
+  unfold BASE
+  split_ifs with h
+  · rw [CheckedPrefix.correct _ _ BASETable_checked h]
+    rfl
+  · rfl
 
 /-- End of the group regions. -/
 def gEnd : ℕ := 252171
@@ -183,14 +260,17 @@ def entF (s : ℕ) : ℕ := baseF + 68 * s
 
 theorem baseF_add : baseF + 68 * 96 = sentinel := rfl
 
-theorem A_mono (u : ℕ) : Monotone (A u) := psum_mono _
-theorem OFF_mono (u : ℕ) : Monotone (OFF u) := psum_mono _
-theorem BASE_mono : Monotone BASE := fun _ _ h => Nat.add_le_add_left (psum_mono RS h) 27
+theorem A_mono (u : ℕ) : Monotone (A u) := fun a b h => by
+  simpa only [A_eq] using psum_mono (pn u) h
+theorem OFF_mono (u : ℕ) : Monotone (OFF u) := fun a b h => by
+  simpa only [OFF_eq] using psum_mono (fun c => pn u c * L u c) h
+theorem BASE_mono : Monotone BASE := fun a b h => by
+  simpa only [BASE_eq] using Nat.add_le_add_left (psum_mono RS h) 27
 
 theorem BASE_zero : BASE 0 = 27 := rfl
 
 theorem BASE_succ (u : ℕ) : BASE (u + 1) = BASE u + RS u := by
-  unfold BASE; rw [psum_succ]; ring
+  rw [BASE_eq, BASE_eq, psum_succ]; ring
 
 theorem BASE_13 : BASE 13 = gEnd := by decide +kernel
 
@@ -214,9 +294,11 @@ theorem L_pos (u c : ℕ) : 5 ≤ L u c := by
   unfold L
   omega
 
-theorem OFF_succ (u c : ℕ) : OFF u (c + 1) = OFF u c + pn u c * L u c := psum_succ _ c
+theorem OFF_succ (u c : ℕ) : OFF u (c + 1) = OFF u c + pn u c * L u c := by
+  rw [OFF_eq, OFF_eq]; exact psum_succ _ c
 
-theorem A_succ (u c : ℕ) : A u (c + 1) = A u c + pn u c := psum_succ _ c
+theorem A_succ (u c : ℕ) : A u (c + 1) = A u c + pn u c := by
+  rw [A_eq, A_eq]; exact psum_succ _ c
 
 theorem gb_le : ∀ u < 13, gb u ≤ 12 := by decide
 
@@ -231,14 +313,16 @@ theorem gk_ge (u : ℕ) : 3 ≤ gk u := by unfold gk; split_ifs <;> omega
 /-- The band of a field value and its position inside the band. -/
 theorem band_spec {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
     band u v < nb u ∧ A u (band u v) ≤ v ∧ v < A u (band u v + 1) := by
-  have h := bandIdx_spec (A_mono u) (N := nb u) (o := v) (Nat.zero_le _)
+  have h := bandIdx_spec (A_mono u) (N := nb u) (o := v) (by rw [A_eq]; exact Nat.zero_le _)
     (by rw [A_full u hu]; exact hv)
   exact h
 
 theorem band_lt_17 {u v : ℕ} (hu : u < 13) (hv : v < VF u) : band u v < 18 := by
   have := (band_spec hu hv).1; have := nb_le u hu; omega
 
-theorem bd11_succ (j : ℕ) : bd11 (j + 1) = bd11 j + gap11 j := rfl
+theorem bd11_succ (j : ℕ) : bd11 (j + 1) = bd11 j + gap11 j := by
+  rw [bd11_eq_slow, bd11_eq_slow]
+  rfl
 
 theorem bd11_mono : Monotone bd11 := monotone_nat_of_le_succ fun j => by rw [bd11_succ]; omega
 
@@ -384,7 +468,7 @@ theorem dec_spec {s : ℕ} (h1 : 27 ≤ s) (h2 : s < gEnd) :
   have hRS : s - BASE u < OFF u (nb u) := by
     have := BASE_succ u; simp only [RS, if_neg h11] at this; omega
   obtain ⟨hc, hc1, hc2⟩ := bandIdx_spec (OFF_mono u) (N := nb u) (o := s - BASE u)
-    (Nat.zero_le _) hRS
+    (by rw [OFF_eq]; exact Nat.zero_le _) hRS
   set c := bandIdx (OFF u) (nb u) (s - BASE u) with hcdef
   set q := s - BASE u - OFF u c with hqdef
   have hLp := L_pos u c

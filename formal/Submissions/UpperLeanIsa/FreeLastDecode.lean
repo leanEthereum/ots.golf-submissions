@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.FreeLastBase
 import Submissions.UpperLeanIsa.FreeLastCompile
-import Submissions.UpperLeanIsa.AffineUnits
+import Submissions.UpperLeanIsa.FrameSemantics
 
 /-! Concrete decoder intervals, operand bounds and the first actual read. -/
 namespace OptimalOTS.FreeLastDecode

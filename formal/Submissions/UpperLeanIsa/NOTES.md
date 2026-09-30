@@ -62,8 +62,7 @@ changes reduce proof-checking work without changing the bytecode or score.
 The two partial-hint budget lemmas check each table entry and its alias interval
 directly; `selected_spec` then transfers those checks to every raw code. This
 avoids repeating a linear table search for every alias. The independent guard
-chunks use bounded parallel import chains to keep build time and memory within
-the submission limits.
+chunks use bounded parallel import chains to bound concurrent guard builds.
 
 A separate exact integer/field search found a fourth landing-hint layout by
 rescaling the low index limb by `g^(-196608)` and redistributing aliases
@@ -72,3 +71,34 @@ independent numerical audit, but the encoding and machine proof remain to be
 ported. Combining that direction with this initialization saving is the next
 candidate to test. Earlier fixed-alias coexistence searches failed to pack;
 that is a limit of those tested configurations, not an impossibility proof.
+
+## Verification runtime revision
+
+The original 1088 head `2f766e4aef713d2bb1df9dea99ce3515c049ac06`
+compiled successfully on the hosted runner but timed out during the full
+verification pipeline (submission `68ccb309658a1e50b03004991cf277b1`, PR #67).
+Its 1102-second local check provided insufficient runtime margin.
+
+This revision keeps the 1088-cycle construction and extracts the shared
+instruction lemmas into `FrameSemantics`. It removes the obsolete affine
+machine dependency chain and its unused 64-block free-frame certificate.
+The active proof imports 175 Lean files.
+
+`FourMachineLayout.bd11Table` stores the 513 prefix sums of the stage-11
+block lengths. The kernel checks the initial value and all 512 recurrence
+steps. Induction proves equality with the original recursive sum, including
+an unchanged fallback for larger arguments. This avoids recomputing that sum
+inside every use of the region boundaries and block offsets.
+
+`CheckedPrefix.correct` also certifies cumulative field counts (`A`), cost-band
+slot offsets (`OFF`), and region starts (`BASE`). Their packed tables contain
+247, 247, and 14 values respectively. Each cached helper is proved equal to
+its original finite sum for all natural inputs; arguments outside the cached
+range use the original definition. These equalities preserve the layout
+lemmas and all concrete offsets.
+
+Wider field windows, alternative multiplication code, batched guard checks,
+and extra intermediate-product witnesses were benchmarked but are not used
+in this revision. Their measured benefits did not justify their added cost.
+Fresh validation of this revised source is recorded in the PR description;
+no hosted pass is claimed. Submission remains manual.

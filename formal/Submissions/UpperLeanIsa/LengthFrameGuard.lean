@@ -38,18 +38,6 @@ theorem one_initial_address_ne {s c j : Nat}
     simpa only [gpow,pow_zero,show (BitVec.ofNat 64 0 : K) = 0 from rfl,
       show (BitVec.ofNat 64 1 : K) = 1 from rfl,add_zero,div_one] using hh
 
-theorem block_address_ne {x i incoming c j : Nat}
-    (hx : x < 1088) (hi : i < certLength x)
-    (hb : incoming = 1 ∨ incoming = 5504)
-    (hw : ¬(certEntry x+i = certEntry x ∧ incoming = certBias x))
-    (hne : gpow (certEntry x) + (BitVec.ofNat 64 (certBias x) : K) ≠ 0)
-    (hc : c < 2^16) (hj : j < 2^32) :
-    (gpow (certEntry x+i) + (BitVec.ofNat 64 incoming : K)) *
-      (gpow c / (gpow (certEntry x) + (BitVec.ofNat 64 (certBias x) : K))) ≠ gpow j := by
-  obtain ⟨r, hr, hcheck⟩ := all_blocks hx
-  obtain ⟨delta, hd⟩ := scan_sound _ _ r _ hcheck i (by omega) incoming hb hw
-  exact frameCheck_address_ne bytePow bytePow_correct hd hne hc hj
-
 theorem length_block_address_ne {x i incoming c j : Nat}
     (hx : x < 1024) (hi : i < certLength x)
     (hb : incoming = 1 ∨ incoming = 5504)

@@ -1,6 +1,7 @@
 import Submissions.UpperLeanIsa.FreeLastDecode
 import Submissions.UpperLeanIsa.FreeLastExitData
 import Submissions.UpperLeanIsa.OneFrame11
+import Submissions.UpperLeanIsa.LengthFrameGuard
 
 /-! Read guards for the concrete free-last bytecode, including all admitted
 committed-memory sizes. -/

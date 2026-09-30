@@ -1,13 +1,46 @@
-import Submissions.UpperLeanIsa.AffineDecode
-import Submissions.UpperLeanIsa.AffineExit
+import Submissions.UpperLeanIsa.FreeLastCompile
 import Submissions.UpperLeanIsa.PackedSupport
 
-/-! Exact execution of the compiled cell instructions in any nonzero frame. -/
+/-! Shared instruction semantics without the obsolete affine machine's layout,
+finite guard certificates or whole-program execution proofs. -/
+namespace OptimalOTS.AffineFrames
+open LeanerVM.Parameters LeanerVM.Semantics
+def firstOperand : Instr → K
+  | .xor a _ _ => a
+  | .mulNative a _ _ => a
+  | .setConstant a _ => a
+  | .deref a _ _ _ => a
+  | .jump a _ _ => a
+  | .blake2s m _ _ _ => m 0
+
+theorem execute_none_of_first {κ : ℕ} (M : MemImage κ) (r : Regs K) (i : Instr)
+    (h : M.read (r.fp * firstOperand i) = none) :
+    LeanIsa.execute M r i = pure none := by
+  cases i <;> simp only [firstOperand] at h <;>
+    simp [LeanIsa.execute, LeanerVM.Semantics.execute, h]
+
+end OptimalOTS.AffineFrames
 
 namespace OptimalOTS.AffineVM
-
 open LeanerVM.Parameters LeanerVM.Semantics OracleComp OptimalOTS.HLFour
+open OptimalOTS.HLG3 (HashTable fixed_hash)
 noncomputable section
+open scoped Classical
+set_option backward.isDefEq.respectTransparency false
+set_option backward.isDefEq.respectTransparency.types false
+
+def compile (q : K) : CInstr → Instr
+  | .init => .deref (gpow lenCell / q) OptimalOTS.HLG3.LengthGate128.scale (gpow lenCell / q) .fp
+  | .xor a b c => .xor (gpow a / q) (gpow b / q) (gpow c / q)
+  | .mul a b c => .mulNative (gpow a / q) (gpow b / q) (gpow c / q)
+  | .setc a v => .setConstant (gpow a / q) v
+  | .blake m0 m1 m2 m3 cv out md =>
+      .blake2s ![gpow m0 / q,gpow m1 / q,gpow m2 / q,gpow m3 / q]
+        (gpow cv / q) (gpow out / q) (gpow md / q)
+  | .dispatch f => .jump (gpow oneCell / q) (gpow (hCell f) / q) (gpow (h1Cell f) / q)
+  | .exit => .jump (gpow oneCell / q) (gpow (gpCell 13) / q) (gpow oneCell / q)
+  | .entry _ => .xor (gpow 0 / q) 0 0
+  | .pad => .xor 0 0 0
 
 section Normal
 
@@ -75,60 +108,53 @@ theorem exec_blake {m0 m1 m2 m3 cv out md : ℕ}
     read_relative h16 hκ M q hq c6,Option.bind_eq_bind,Option.bind_some,Option.pure_def]
   rfl
 
-theorem exec_dispatch {f : ℕ} (hf : f < 14) (hOne : Lx M oneCell = oneV) :
-    LeanIsa.execute M ⟨pc,q⟩ (compile q (.dispatch f)) =
-      pure (if IsInK (Lx M (hCell f)) ∧ IsInK (Lx M (h1Cell f))
-        then some ⟨(Lx M (hCell f)).limb 0,(Lx M (h1Cell f)).limb 0⟩ else none) := by
-  show pure (LeanerVM.Semantics.execute M ⟨pc,q⟩
-    (.jump (gpow oneCell/q) (gpow (hCell f)/q) (gpow (h1Cell f)/q))) = _
-  congr 1
-  simp only [LeanerVM.Semantics.execute,
-    read_relative h16 hκ M q hq (show oneCell < 2 ^ 16 by decide),
-    read_relative h16 hκ M q hq (show hCell f < 2 ^ 16 by unfold hCell; omega),
-    read_relative h16 hκ M q hq (show h1Cell f < 2 ^ 16 by unfold h1Cell; omega),
-    Option.bind_eq_bind,Option.bind_some,hOne]
-  by_cases hh : IsInK (Lx M (hCell f)) ∧ IsInK (Lx M (h1Cell f))
-  · have hin : IsInK oneV ∧ IsInK (Lx M (hCell f)) ∧ IsInK (Lx M (h1Cell f)) :=
-      ⟨isInK_ofK 1,hh⟩
-    rw [show (guard (IsInK oneV ∧ IsInK (Lx M (hCell f)) ∧ IsInK (Lx M (h1Cell f))) : Option Unit) =
-      some () from if_pos hin,if_pos hh]
-    simp only [Option.bind_some,oneV,if_neg ofK_one_ne_zero]
-    rfl
-  · rw [show (guard (IsInK oneV ∧ IsInK (Lx M (hCell f)) ∧ IsInK (Lx M (h1Cell f))) : Option Unit) =
-      none from if_neg (fun h => hh h.2),if_neg hh]
-    rfl
-
-theorem exec_exit (hOne : Lx M oneCell = oneV) :
-    LeanIsa.execute M ⟨pc,q⟩ (compile q .exit) =
-      pure (if IsInK (Lx M (gpCell 13)) then some ⟨(Lx M (gpCell 13)).limb 0,1⟩ else none) := by
-  show pure (LeanerVM.Semantics.execute M ⟨pc,q⟩
-    (.jump (gpow oneCell/q) (gpow (gpCell 13)/q) (gpow oneCell/q))) = _
-  congr 1
-  simp only [LeanerVM.Semantics.execute,
-    read_relative h16 hκ M q hq (show oneCell < 2 ^ 16 by decide),
-    read_relative h16 hκ M q hq (show gpCell 13 < 2 ^ 16 by decide),
-    Option.bind_eq_bind,Option.bind_some,hOne]
-  by_cases hh : IsInK (Lx M (gpCell 13))
-  · have hin : IsInK oneV ∧ IsInK (Lx M (gpCell 13)) ∧ IsInK oneV :=
-      ⟨isInK_ofK 1,hh,isInK_ofK 1⟩
-    rw [show (guard (IsInK oneV ∧ IsInK (Lx M (gpCell 13)) ∧ IsInK oneV) : Option Unit) =
-      some () from if_pos hin,if_pos hh]
-    simp only [Option.bind_some,oneV,if_neg ofK_one_ne_zero,limb_ofK_zero]
-    rfl
-  · rw [show (guard (IsInK oneV ∧ IsInK (Lx M (gpCell 13)) ∧ IsInK oneV) : Option Unit) =
-      none from if_neg (fun h => hh h.2.1),if_neg hh]
-    rfl
-
 end Normal
 
-/-- The preceding XOR forces the new fp to contain the actual destination. -/
-theorem hint_frame (T : Tab) (v : ℕ → E) {f : ℕ} (hf : f < 14) (s : AffineFrames.Slot)
-    (hHint : v (h1Cell f) = v (hCell f) + ofK (AffineFrames.stageBias (base T) (stageIndex f)))
-    (hTarget : (v (hCell f)).limb 0 = gpow s.val) :
-    (v (h1Cell f)).limb 0 =
-      AffineFrames.frame (layout T) ⟨stageIndex f,stageIndex_lt hf⟩ s := by
-  rw [hHint,limb_add,hTarget,limb_ofK_zero]
-  exact add_comm _ _
+def HashSound (Sm : Sem) (B : BlakeRel) : Prop :=
+  ∀ m cv0 cv1 o0 o1 md ans,
+    ans ∈ Sm.S (hash (LeanIsa.blake2sQuery m cv0 cv1 md)) →
+    LeanIsa.OracleCompressCells m cv0 cv1 o0 o1 md ans → B m cv0 cv1 o0 o1 md
+
+theorem hashSound_sim (f : HashTable) : HashSound (simSem f) (oracleRel f) := by
+  intro m cv0 cv1 o0 o1 md ans ha hr
+  change ans ∈ support (simulateQ (unifFwdAnswerImpl f) _) at ha
+  rw [fixed_hash,mem_support_pure_iff] at ha
+  subst ans
+  exact hr
+
+theorem hashSound_supp : HashSound suppSem trueRel := by
+  intro m cv0 cv1 o0 o1 md ans ha hr
+  trivial
+
+theorem chainOp_ne_init (readTop : ℕ → ℕ) (k d t dst : ℕ) : chainOp readTop k d t dst ≠ .init := by
+  unfold chainOp
+  split_ifs <;> intro h <;> cases h
+
+theorem init_not_chainOps (readTop : ℕ → ℕ) (k d dst : ℕ) : CInstr.init ∉ chainOps readTop k d dst := by
+  intro h
+  obtain ⟨t,ht,he⟩ := mem_chainOps.mp h
+  exact chainOp_ne_init readTop k d t dst he.symm
+
+theorem init_not_body (T : Tab) (u x : ℕ) (z : Bool) : CInstr.init ∉ body T u x z := by
+  intro hi
+  unfold body at hi
+  simp only [List.mem_append,List.mem_singleton,List.mem_replicate] at hi
+  rcases hi with ((((hi | hi) | hi) | hi) | hi) | hi
+  · unfold tie at hi
+    split_ifs at hi <;> simp [copy] at hi
+  · unfold prodOps prodOp at hi
+    split_ifs at hi <;> simp [NOP] at hi
+  · obtain ⟨i,hi,hseg⟩ := mem_segs.mp hi
+    unfold seg at hseg
+    split_ifs at hseg
+    · simp [copy] at hseg
+    · exact init_not_chainOps _ _ _ _ hseg
+    · exact init_not_chainOps _ _ _ _ hseg
+  · unfold rootIns at hi
+    split_ifs at hi <;> simp at hi
+  · cases hi.2
+  · unfold nextOp at hi
+    split_ifs at hi <;> cases hi
 
 end
 end OptimalOTS.AffineVM
