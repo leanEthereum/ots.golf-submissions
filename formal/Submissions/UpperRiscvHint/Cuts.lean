@@ -30,7 +30,7 @@ open Name
 
 /-- The first level of chain `k` the verifier hashes when the chain is revealed at position `p`;
 `32` means none. -/
-def firstEval (k : Chain) (p : Fin 32) : ℕ := if k.val < 13 ∨ 31 ≤ k.val then p.val + 1 else p.val
+def firstEval (k : Chain) (p : Fin 32) : ℕ := if k.val < 14 ∨ 31 ≤ k.val then p.val + 1 else p.val
 
 theorem firstEval_le (k : Chain) (p : Fin 32) : firstEval k p ≤ 32 := by
   unfold firstEval; split_ifs <;> omega
@@ -53,14 +53,28 @@ def cutOf (c : Choice) : Finset Name := Finset.univ.image fun k => chainNode k (
 /-! ### Membership in a disclosure set -/
 
 theorem cap_of_firstEval {k : Chain} {p : Fin 32} (h : ¬ firstEval k p < 32) :
-    k.val < 13 ∨ 31 ≤ k.val := by
+    k.val < 14 ∨ 31 ≤ k.val := by
   unfold firstEval at h; split_ifs at h with hk <;> omega
 
-theorem chainNode_len (k : Chain) (p : Fin 32) : (chainNode k p).len = chainBits k := by
-  unfold chainNode
-  split_ifs with h
-  · rfl
-  · exact topBits_of_cap (cap_of_firstEval h)
+def revealWidth (k : Chain) (p : Fin 32) : ℕ :=
+  if k.val = 32 ∧ p.val = 31 then 144 else chainBits k
+
+theorem chainNode_len (k : Chain) (p : Fin 32) : (chainNode k p).len = revealWidth k p := by
+  have hp := p.isLt
+  have hk := k.isLt
+  unfold chainNode revealWidth firstEval
+  split_ifs <;> simp only [Name.len, topBits, chainBits] <;> split_ifs <;> omega
+
+theorem chainNode_len_le (k : Chain) (p : Fin 32) :
+    (chainNode k p).len ≤ chainBits k + if k.val = 32 then 3 else 0 := by
+  rw [chainNode_len]
+  unfold revealWidth chainBits
+  split_ifs <;> omega
+
+theorem revealWidth_eq (k : Chain) (p : Fin 32) :
+    revealWidth k p = chainBits k + if k.val = 32 ∧ p.val = 31 then 3 else 0 := by
+  unfold revealWidth chainBits
+  split_ifs <;> omega
 
 theorem revealable_chainNode (k : Chain) (p : Fin 32) : Revealable (chainNode k p) := by
   unfold chainNode
@@ -249,13 +263,37 @@ theorem sum_fin32_ge (v : ℕ) : ∑ t : Fin 32, (if v ≤ t.val then 1 else 0) 
     omega
   rw [this, Nat.card_Ico]
 
-/-- Every cut reveals thirteen 192-bit and twenty 144-bit states. -/
-theorem reveal_cutOf (c : Choice) : ∑ n ∈ cutOf c, n.len = 5376 := by
+/-- Fourteen wide chains, nineteen narrow chains, and at most three extra top bits. -/
+theorem reveal_cutOf (c : Choice) : ∑ n ∈ cutOf c, n.len ≤ 5370 := by
   unfold cutOf
   rw [Finset.sum_image]
-  · simp only [chainNode_len]
-    change ∑ k : Chain, chainBits k = 5376
-    decide +kernel
+  · calc
+      ∑ k : Chain, (chainNode k (c k)).len
+          ≤ ∑ k : Chain, (chainBits k + if k.val = 32 then 3 else 0) :=
+        Finset.sum_le_sum (fun k _ => chainNode_len_le k (c k))
+      _ = 5370 := by decide +kernel
+  · intro a _ b _ h
+    exact chainNode_injective c h
+
+set_option maxHeartbeats 2000000 in
+/-- Only a zero-step bottom chain reveals the three additional top bits. -/
+theorem reveal_cutOf_exact (c : Choice) :
+    ∑ n ∈ cutOf c, n.len = 5367 + if (c 32).val = 31 then 3 else 0 := by
+  unfold cutOf
+  rw [Finset.sum_image]
+  · simp only [chainNode_len, revealWidth_eq, Finset.sum_add_distrib]
+    have fixed : (∑ k : Chain, chainBits k) = 5367 := by decide +kernel
+    rw [fixed]
+    apply congrArg (fun n : ℕ => 5367 + n)
+    have pointwise (k : Chain) :
+        (if k.val = 32 ∧ (c k).val = 31 then 3 else 0) =
+          if k = 32 then (if (c 32).val = 31 then 3 else 0) else 0 := by
+      by_cases hk : k = 32
+      · subst k; simp
+      · have hval : k.val ≠ 32 := fun h => hk (Fin.ext h)
+        simp [hk, hval]
+    simp_rw [pointwise]
+    simp
   · intro a _ b _ h
     exact chainNode_injective c h
 

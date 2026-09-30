@@ -298,7 +298,8 @@ theorem sum_w_ind_not_distinctRec_le : ∑ ξ : Rec, w * ind (¬ DistinctRec ξ)
   unfold ind
   split_ifs <;> simp
 
-theorem main_bound {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) (hB' : B ≤ 2 ^ 127) :
+theorem main_bound_with_keygen_slack {B : ℕ}
+    (hB : CostAtMost (GScheme.experiment forestScheme A) B) (hB' : B - 1070 ≤ 2 ^ 127) :
     probTrue (GScheme.experiment forestScheme A) ≤ κ * ((B - 1070 : ℕ) : ℝ≥0∞) + 2 * δ := by
   obtain ⟨h1070, hrest⟩ := costAtMost_rest_forest A hB
   rw [probTrue_eq]
@@ -344,7 +345,7 @@ theorem main_bound {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A
         rw [mem_fiberA_asm hξ]
     _ ≤ δ + ∑ pk, κ * sumW (fiberA pk) * ((B - 1070 : ℕ) : ℝ≥0∞) := by
         refine add_le_add le_rfl (Finset.sum_le_sum fun pk _ => ?_)
-        refine stageA_master A pk (B - 1070) ((Nat.sub_le B 1070).trans hB') fun ξ hξ => ?_
+        refine stageA_master A pk (B - 1070) hB' fun ξ hξ => ?_
         have h := hrest ξ
         rw [mem_fiberA_asm hξ] at h
         unfold rest at h
@@ -352,6 +353,10 @@ theorem main_bound {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A
         exact h
     _ = κ * ((B - 1070 : ℕ) : ℝ≥0∞) + δ := by
         rw [← Finset.sum_mul, ← Finset.mul_sum, sum_sumW_fiberA, mul_one, add_comm]
+
+theorem main_bound {B : ℕ} (hB : CostAtMost (GScheme.experiment forestScheme A) B) (hB' : B ≤ 2 ^ 127) :
+    probTrue (GScheme.experiment forestScheme A) ≤ κ * ((B - 1070 : ℕ) : ℝ≥0∞) + 2 * δ :=
+  main_bound_with_keygen_slack A hB ((Nat.sub_le B 1070).trans hB')
 
 end Forest
 

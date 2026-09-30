@@ -2,27 +2,28 @@ import OptimalOTS.RiscvHint
 import Submissions.UpperRiscvHint.MixedIndexLanes
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open RiscvZkvm.Rv64
 open Riscv2Program (W Code laneBase hashBase)
 open OptimalOTS.Dag
 
 /-- The free dispatch, after the index phase. -/
-def freeStart : ℕ := 4096 + 4*32
+def freeStart : ℕ := 4096 + 4*31
 def laneGroup (q : ℕ) : ℕ := q/4
 def laneIdx (q : ℕ) : ℕ := q%4
 def laneAddr (q : ℕ) : ℕ := laneBase+2*q
-def coarseDigit (index : RawIdx) (q : ℕ) : ℕ := digit index.val (2*q+1)
-def dispatch (index : RawIdx) (q : ℕ) : ℕ :=
+def coarseDigit (index : ChainIndex) (q : ℕ) : ℕ := digit index.val (2*q+1)
+def dispatch (index : ChainIndex) (q : ℕ) : ℕ :=
   4*digit index.val (2*q) + 1024*coarseDigit index q
 
-theorem coarseDigit_lt (index : RawIdx) (q : ℕ) : coarseDigit index q < 16 := by
+theorem coarseDigit_lt (index : ChainIndex) (q : ℕ) : coarseDigit index q < 16 := by
   have h := digit_lt index.val (2*q+1)
   have : 2 ^ wid (2*q+1) ≤ 16 := by
     unfold wid
     split_ifs <;> norm_num
   unfold coarseDigit; omega
 
-theorem dispatch_le (index : RawIdx) (q : ℕ) : dispatch index q ≤ 15420 := by
+theorem dispatch_le (index : ChainIndex) (q : ℕ) : dispatch index q ≤ 15420 := by
   unfold dispatch
   have hf := digit_lt index.val (2*q)
   have hw : 2 ^ wid (2*q) ≤ 16 := by unfold wid; split_ifs <;> norm_num
@@ -30,7 +31,7 @@ theorem dispatch_le (index : RawIdx) (q : ℕ) : dispatch index q ≤ 15420 := b
   omega
 
 /-- Register and dispatch facts shared by all chain phases. -/
-structure Ctx (s : MachineState) (index : RawIdx) (view : List Bool) (pk : PublicKey) : Prop where
+structure Ctx {credit : Word} (s : MachineState) (index : ChainIndex) (view : List Bool) (pk : PublicKey) : Prop where
   pk0 : s.getReg .x30 = pk.extractLsb' 0 64
   pk1 : s.getReg .x31 = pk.extractLsb' 64 64
   call : s.getReg .x5 = Riscv.hashCall
@@ -47,5 +48,7 @@ structure Ctx (s : MachineState) (index : RawIdx) (view : List Bool) (pk : Publi
   /-- No code at address 0: the decision's `JALR x0 x0 0` traps. -/
   null : s.code 0 = none
   code : Riscv.CodeAt s (W 4096) verifier
+  modulus : s.getReg .x2 = W 257
+  checksum : s.getReg .x27 = credit
 
 end OptimalOTS.RiscvMixedProgram

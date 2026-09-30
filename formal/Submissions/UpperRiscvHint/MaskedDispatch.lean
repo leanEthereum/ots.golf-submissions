@@ -69,7 +69,7 @@ theorem guard_refines (s : MachineState) (global : Riscv.CodeAt s (W 4096) verif
   exact Riscv.Refines.branch fetch admitted (fun h => nomatch h) transition stop
 
 theorem smallBank_outside : ∀ bank : Fin 3, ∀ c : Fin 32,
-    260838 ≤ ((dispatchTarget (2048*bank.val+4*(31-c.val)) - W 4096).toNat / 4) := by
+    260854 ≤ ((dispatchTarget (2048*bank.val+4*(31-c.val)) - W 4096).toNat / 4) := by
   decide +kernel
 
 theorem smallBank_refines (pk : PublicKey) (m : Message) (view : List Bool)

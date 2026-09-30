@@ -16,7 +16,7 @@ def tops (x : graph.Assignment) (k : Chain) : BitVec (topBits k) :=
 def lastOut (x : graph.Assignment) (k : Chain) : BitVec 256 :=
   (x (cv k 31).fin).cast (lenF_fin _)
 
-variable (index : RawIdx) (payload : List Bool)
+variable (index : ChainIndex) (payload : List Bool)
 
 theorem fin_ne_of_ne {m n : Name} (h : m ≠ n) : m.fin ≠ n.fin :=
   fun e => h (Name.fin_injective e)

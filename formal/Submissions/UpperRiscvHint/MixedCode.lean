@@ -44,6 +44,15 @@ theorem mem_addGuards (a : ℕ × Code) (banks : List ℕ) (parts : List (ℕ ×
     simp only [List.mem_cons, exists_eq_or_imp]
     tauto
 
+theorem mem_addHelpers (a : ℕ × Code) (helpers parts : List (ℕ × Code)) :
+    a ∈ addHelpers helpers parts ↔ a ∈ parts ∨ a ∈ helpers := by
+  induction helpers with
+  | nil => simp [addHelpers]
+  | cons p rest ih =>
+    rw [addHelpers, mem_insertFragment, ih]
+    simp only [List.mem_cons]
+    tauto
+
 /-- Generic placement proof: checking the small fragment metadata is enough; do not
 reduce the whole image once for every copy. -/
 theorem assemble_located (s : MachineState) (base : ℕ) (parts : List (ℕ × Code)) :
@@ -85,8 +94,8 @@ theorem copy_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifi
   rw [show (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).length = copiesIndex by decide,
     W_add] at ht
   have mem : (groupOffset (group q)+256*(15-d.val)+slotOffset q, copyCode q d) ∈ fragments :=
-    (mem_addGuards _ _ _).mpr (Or.inl ((mem_addStubs _ _).mpr (Or.inl
-      (List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩))))
+    (mem_addHelpers _ _ _).mpr (Or.inl ((mem_addGuards _ _ _).mpr (Or.inl ((mem_addStubs _ _).mpr (Or.inl
+      (List.mem_map.mpr ⟨(q.val,d.val), keys_complete q d, rfl⟩))))))
   have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
   exact h
 
@@ -97,7 +106,7 @@ theorem rejectStub_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) 
   rw [show (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).length = copiesIndex by decide,
     W_add] at ht
   have mem : (ip-copiesIndex,reject) ∈ fragments :=
-    (mem_addGuards _ _ _).mpr (Or.inl ((mem_addStubs _ _).mpr (Or.inr ⟨ip,hi,rfl⟩)))
+    (mem_addHelpers _ _ _).mpr (Or.inl ((mem_addGuards _ _ _).mpr (Or.inl ((mem_addStubs _ _).mpr (Or.inr ⟨ip,hi,rfl⟩)))))
   have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
   have hb : copiesIndex ≤ ip := by
     obtain ⟨bank, hbank, rfl⟩ := List.mem_map.mp hi
@@ -119,11 +128,31 @@ theorem guard_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verif
     apply List.mem_map.mpr
     exact ⟨bank-4, List.mem_range.mpr (by omega), by omega⟩
   have mem : (guardStart bank-copiesIndex,guardCode) ∈ fragments :=
-    (mem_addGuards _ _ _).mpr (Or.inr ⟨bank,member,rfl⟩)
+    (mem_addHelpers _ _ _).mpr (Or.inl ((mem_addGuards _ _ _).mpr (Or.inr ⟨bank,member,rfl⟩)))
   have h := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
   have he : copiesStart+4*(guardStart bank-copiesIndex) = 4096+4*guardStart bank := by
     unfold copiesStart copiesIndex guardStart
     omega
   simpa only [he] using h
+
+theorem helper_located (s : MachineState) (global : Riscv.CodeAt s (W 4096) verifier)
+    (q : Fin 16) (a b x y : ℕ) (h : ((a,b),(x,y)) ∈ WeightedPairs.swapsOf (capPair q.val))
+    (hb : copiesIndex ≤ helperStart q a b) :
+    Riscv.CodeAt s (W (4096+4*helperStart q a b)) (helperCode q a b x y) := by
+  have ht := global.append_right (first := indexPhase ++ freeDispatch ++ freeRow ++ prologue 0)
+    (last := tables)
+  rw [show (indexPhase ++ freeDispatch ++ freeRow ++ prologue 0).length = copiesIndex by decide,
+    W_add] at ht
+  have mem : (helperStart q a b-copiesIndex, helperCode q a b x y) ∈ fragments := by
+    apply (mem_addHelpers _ _ _).mpr
+    right
+    apply List.mem_flatMap.mpr
+    refine ⟨q.val, List.mem_range.mpr q.isLt, ?_⟩
+    exact List.mem_map.mpr ⟨((a,b),(x,y)), h, rfl⟩
+  have located := assemble_located s copiesStart fragments 0 fragments_placed ht _ _ mem
+  have he : copiesStart+4*(helperStart q a b-copiesIndex) = 4096+4*helperStart q a b := by
+    unfold copiesStart
+    omega
+  simpa only [he] using located
 
 end OptimalOTS.RiscvMixedProgram

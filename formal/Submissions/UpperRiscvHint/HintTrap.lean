@@ -59,7 +59,8 @@ theorem certificate (q : PublicKey → Message → View → OracleComp Spec (Opt
       ∀ view ∈ support (layout pk m σ), compress view = σ)
     (raw_compress : ∀ σ, compress (raw σ) = σ)
     (sound : ∀ pk m view c₀ c₁, Riscv.cachedPaths.Path (q pk m view) (some true) c₀ c₁ →
-      Riscv.cachedPaths.Path (S.verify pk m (compress view)) true c₀ c₁)
+      ∀ c₂, Subcache c₁ c₂ → ∀ b c₃,
+        Riscv.cachedPaths.Path (S.verify pk m (compress view)) b c₂ c₃ → b = true)
     (raw_rejects : ∀ pk m σ, ∀ o ∈ support (q pk m (raw σ)), o = some false)
     (accepts : ∀ pk m σ c₀ c₁, Riscv.cachedPaths.Path (S.verify pk m σ) true c₀ c₁ →
       ∀ view c₂, Riscv.cachedPaths.Path (layout pk m σ) view c₁ c₂ →
@@ -155,14 +156,8 @@ theorem certificate (q : PublicKey → Message → View → OracleComp Spec (Opt
     have hmono := Riscv.execute_fuel_mono Riscv.cachedPaths n (max n fuel) _ _ _ _ ho
       (le_max_left _ _)
     obtain ⟨c'', hq, hsub⟩ := observe_path pk m view _ _ ∅ c₁ (le_max_right _ _) hmono
-    have hver := sound pk m view ∅ c'' hq
-    have hreplay := replay_deterministic _ (admissible.verifyDeterministic pk m _) ∅ c'' c₁ true
-      hver hsub
-    change (acc, c₂) ∈ support ((simulateQ oracleImpl (S.verify pk m (compress view))).run c₁)
-      at hacc
-    rw [hreplay] at hacc
-    simp only [support_pure, Set.mem_singleton_iff, Prod.mk.injEq] at hacc
-    rw [hacc.1] at hrej
+    have accepted := sound pk m view ∅ c'' hq c₁ hsub acc c₂ hacc
+    rw [accepted] at hrej
     cases hrej
   · -- CyclesAtMost
     intro pk m view n cycles hmem
