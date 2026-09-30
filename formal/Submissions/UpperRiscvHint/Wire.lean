@@ -42,7 +42,9 @@ theorem reveal_positive (i : Idx) :
     exact ⟨0, rfl⟩
   have bound := Finset.single_le_sum (s := Forest.setsName i)
     (f := fun n => n.len) (fun _ _ => Nat.zero_le _) present
-  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 192 := Forest.chainNode_len _ _
+  have len : (Forest.chainNode 0 (Forest.fixedChoice i 0)).len = 192 := by
+    rw [Forest.chainNode_len]
+    simp [Forest.revealWidth, Forest.chainBits]
   rw [len] at bound
   omega
 
@@ -73,8 +75,11 @@ def scheme : OracleAlgorithm.Scheme := WireAdapter.scheme RiscvUpperForest.schem
 theorem secure : scheme.Secure :=
   WireAdapter.secure RiscvUpperForest.scheme decode decode_encode canonical RiscvUpperForest.secure
 
+theorem cost : scheme.VerifyCostAtMost 180 :=
+  WireAdapter.verifyCost RiscvUpperForest.scheme decode 180 RiscvUpperForest.cost
+
 theorem admissible : scheme.Admissible :=
   WireAdapter.admissible RiscvUpperForest.scheme decode decode_encode canonical
-    RiscvUpperForest.admissible 178 RiscvUpperForest.cost (by decide)
+    RiscvUpperForest.admissible 180 RiscvUpperForest.cost (by decide)
 
 end OptimalOTS.RiscvUpperForest.Wire

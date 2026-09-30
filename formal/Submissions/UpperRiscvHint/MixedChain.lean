@@ -3,22 +3,23 @@ import Submissions.UpperRiscvHint.MixedChainFrame
 import Submissions.UpperRiscvHint.MixedCode
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name OracleComp
 open Riscv2Program
 
 /-- The pointer move from chain `2q + 1` to chain `k = 2q + 2` preserves every value and slice. -/
-theorem move_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+theorem move_refines (index : ChainIndex) (wire : List Bool) (pk : PublicKey)
     (q : Fin 16) (k : Chain) (hk : k.val = 2*q.val+2)
     (s : MachineState) (x : graph.Assignment) (tail : Code)
-    (ctx : Ctx s index wire pk) (input : s.getReg .x10 = W (prevInput k))
+    (ctx : Ctx (credit := credit) s index wire pk) (input : s.getReg .x10 = W (prevInput k))
     (out : s.getReg .x12 = W (outAddr (2*q.val+1)))
     (len : s.getReg .x11 = W (chainBits k)) (payload : PayloadFrom s wire k)
     (done : Completed s (tops x) k)
     (located : Riscv.CodeAt s s.pc (enter k (prevInput k) ++ tail))
     (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : 2 ≤ fuel)
-    (continuation : ∀ u, HashInv index wire pk u x k (work k) →
-      MemBits u (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k))) →
+    (continuation : ∀ u, HashInv (credit := credit) index wire pk u x k (work k) →
+      MemBits u (W (work k)) (ofBits (wireBits k) (wire.drop (wireOffset k))) →
       Riscv.CodeAt u u.pc tail → Riscv.Refines (fuel-2) u Q c) :
     Riscv.Refines fuel s Q (2+c) := by
   have E := enter_effect s k input
@@ -26,14 +27,14 @@ theorem move_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
   let u := (enter k (prevInput k)).foldl execInstrBr s
   have prev : prevInput k = work (2*q.val+1) := by
     unfold prevInput; rw [if_neg (by omega)]; congr 1; omega
-  have uctx : Ctx u index wire pk :=
+  have uctx : Ctx (credit := credit) u index wire pk :=
     ctx.enter q (input.trans (by rw [prev])) out (E.input.trans (by rw [hk]))
       (E.out.trans (by rw [hk])) E.regs E.mem E.code
   have urange : 32 ≤ work k ∧ work k+24 ≤ 0x78000000 := by
     have h := wireOffset_contained k
     unfold honestViewBits at h
     rw [work_eq_view]; omega
-  have inv : HashInv index wire pk u x k (work k) := by
+  have inv : HashInv (credit := credit) index wire pk u x k (work k) := by
     refine ⟨uctx, E.input, urange, ?_, E.out, ?_, ?_⟩
     · rw [E.regs .x11 (by decide) (by decide)]; exact len
     · intro j hj; exact memBits_of_mem_eq E.mem (payload j (by omega))
@@ -48,6 +49,7 @@ theorem move_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
 end OptimalOTS.RiscvMixedProgram
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
 open Riscv2Program
@@ -58,27 +60,31 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 /-- The hashes of chain `k`: its digit for the free chain and a cap, its digit plus one for a
 normal chain. -/
-def remaining (index : RawIdx) (k : Chain) : ℕ := 32-firstAt index k
+def remaining (index : ChainIndex) (k : Chain) : ℕ := 32-firstAt index k
 
-theorem steps_eq_digit (index : RawIdx) (k : Chain) :
-    remaining index k = chainDigit index.val k + 1 - if k.val < 13 ∨ 31 ≤ k.val then 1 else 0 := by
-  have h := chainDigit_lt_32 index.val k
+theorem steps_eq_digit (index : ChainIndex) (k : Chain) :
+    remaining index k = chainDigit index k + 1 - if k.val < 14 ∨ 31 ≤ k.val then 1 else 0 := by
+  have h := chainDigit_lt_32 index k
   unfold remaining firstAt firstEval
   rw [fixedPositions_val]
   split_ifs <;> omega
 
-theorem lead_pair (q : ℕ) (j : ℕ) (hj : j < 2) :
-    (if 2*q+1+j < 13 ∨ 31 ≤ 2*q+1+j then 1 else 0) = lead q := by
+theorem lead_left (q : ℕ) :
+    (if 2*q+1 < 14 ∨ 31 ≤ 2*q+1 then 1 else 0) = lead q := by
   unfold lead; split_ifs <;> omega
 
-theorem fineDigit_lt (index : RawIdx) (q : ℕ) (hq : q < 16) :
+theorem lead_right (q : ℕ) :
+    (if 2*q+2 < 14 ∨ 31 ≤ 2*q+2 then 1 else 0) = tailLead q := by
+  unfold tailLead; split_ifs <;> omega
+
+theorem fineDigit_lt (index : ChainIndex) (q : ℕ) (hq : q < 16) :
     digit index.val (2*q) < 2^fineWidth q := by
   have h := digit_lt index.val (2*q)
   have he : wid (2*q) = fineWidth q := by
     simp [wid, fineWidth, show 2*q < 32 by omega]
   rw [he] at h; exact h
 
-theorem coarseDigit_lt_copies (index : RawIdx) (q : ℕ) (hq : q < 16) :
+theorem coarseDigit_lt_copies (index : ChainIndex) (q : ℕ) (hq : q < 16) :
     coarseDigit index q < copies q := by
   have h := digit_lt index.val (2*q+1)
   have he : 2^wid (2*q+1) = copies q := by
@@ -87,7 +93,7 @@ theorem coarseDigit_lt_copies (index : RawIdx) (q : ℕ) (hq : q < 16) :
 
 /-- The packed subtraction selects the coarse copy and the fine table entry, one row later for a
 cap pair. -/
-theorem pair_landing (index : RawIdx) (q : ℕ) (hq : q < 16) :
+theorem pair_landing (index : ChainIndex) (q : ℕ) (hq : q < 16) :
     landing0 q+4*lead q-dispatch index q = copyStart q (coarseDigit index q) +
       4*(2^fineWidth q-1-digit index.val (2*q)+lead q) := by
   have hc := coarseDigit_lt_copies index q hq
@@ -102,6 +108,7 @@ theorem pair_landing (index : RawIdx) (q : ℕ) (hq : q < 16) :
 end OptimalOTS.RiscvMixedProgram
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
 open Riscv2Program
@@ -110,33 +117,32 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+variable (index : ChainIndex) (wire : List Bool) (pk : PublicKey)
 
 /-- A chain about to hash its value in place. -/
 structure Prepared (s : MachineState) (x : graph.Assignment) (k : Chain) : Prop where
-  inv : HashInv index wire pk s x k (work k)
-  ready : MemBits s (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k)))
+  inv : HashInv (credit := credit) index wire pk s x k (work k)
+  ready : MemBits s (W (work k)) (ofBits (wireBits k) (wire.drop (wireOffset k)))
 
 /-- A fully hidden cap or free chain: its view value is its top, and no hash runs. -/
 theorem hidden_refines (k : Chain) (hidden : 32 ≤ firstAt index k)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c : ℕ)
-    (continuation : ∀ z : graph.Assignment, ChainsInv index wire pk s z (k.val+1) →
-      Riscv.Refines fuel s (K (z,cursor k+chainBits k)) c)
-    (prep : Prepared index wire pk s x k) :
+    (continuation : ∀ z : graph.Assignment, ChainsInv (credit := credit) index wire pk s z (k.val+1) →
+      Riscv.Refines fuel s (K (z,cursorAt index (k.val+1))) c)
+    (prep : Prepared (credit := credit) index wire pk s x k) :
     Riscv.Refines fuel s
       (runNodes' index (viewPayload wire) (chainNodes k) x (cursor k) >>= K) c := by
-  have cap : k.val < 13 ∨ 31 ≤ k.val := by
+  have cap : k.val < 14 ∨ 31 ≤ k.val := by
     by_contra h
     have : firstAt index k ≤ 31 := by
       unfold firstAt firstEval; rw [if_neg h]; exact pos_le index k
     omega
-  have hb : topBits k = chainBits k := topBits_of_cap cap
+  have hb : topBits k = wireBits k := topBits_hidden index k hidden
   obtain ⟨x', run, frame⟩ := prefix_run index (viewPayload wire) k 32 hidden x (cursor k)
   rw [chain_split_hidden, runNodes'_append, run, pure_bind,
     top_run_read index (viewPayload wire) k hidden, pure_bind]
-  have hc : cursor k + topBits k = cursor k + chainBits k := by rw [hb]
-  rw [hc]
+  rw [← cursorAt_next_hidden index k hidden]
   apply continuation
   refine ⟨prep.inv.ctx, ?_, ?_, ?_, prep.inv.payload, ?_⟩
   · rw [prep.inv.input]
@@ -152,16 +158,16 @@ theorem hidden_refines (k : Chain) (hidden : 32 ≤ firstAt index k)
       rw [tops_update_top]
       apply (memBits_cast _ _ _ _).mpr
       rw [ofBits_take]
-      have hw : graph.len (top k).fin = chainBits k := by rw [graph_len_fin]; exact hb
+      have hw : graph.len (top k).fin = wireBits k := by rw [graph_len_fin]; exact hb
       have e : work k = topAddr k := by
         rw [work_eq' k]
         unfold topAddr
         rw [topOff_cap cap]
-      have key : ∀ n, n = chainBits k →
+      have key : ∀ n, n = wireBits k →
           MemBits s (W (topAddr k)) (ofBits n ((viewPayload wire).drop (cursor k))) := by
         intro n hn
         subst hn
-        rw [viewPayload_read wire k, ← e]
+        rw [viewPayload_read_width wire k _ le_rfl, ← e]
         exact prep.ready
       exact key _ hw
     · rw [tops_update_top_other _ _ _ he, frame]
@@ -172,10 +178,10 @@ top. -/
 theorem table_refines (k : Chain) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ) (P : Word)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      ChainsInv index wire pk u z (k.val+1) → Riscv.CodeAt u u.pc tail → u.pc = P →
-      ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursor k+chainBits k)) c)
+      ChainsInv (credit := credit) index wire pk u z (k.val+1) → Riscv.CodeAt u u.pc tail → u.pc = P →
+      ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursorAt index (k.val+1))) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (prep : Prepared index wire pk s x k)
+    (prep : Prepared (credit := credit) index wire pk s x k)
     (located : Riscv.CodeAt s s.pc (List.replicate (remaining index k) .ECALL ++ tail))
     (hP : s.pc + W (4 * remaining index k) = P)
     (bound : remaining index k+rest ≤ fuel) :
@@ -192,12 +198,13 @@ theorem table_refines (k : Chain) (tail : Code)
       (fun z inv => continuation s z inv located hpc fuel bound) prep
   have hp32 : p < 32 := by omega
   have finish : ∀ (u : MachineState) (z : graph.Assignment),
-      HashInv index wire pk u z k (work k) → MemBits u (W (outAddr k)) (lastOut z k) →
+      HashInv (credit := credit) index wire pk u z k (work k) → MemBits u (W (outAddr k)) (lastOut z k) →
       Riscv.CodeAt u u.pc tail → u.pc = P → ∀ left, rest ≤ left →
       Riscv.Refines left u
         (runNodes' index (viewPayload wire) [top k] z (cursor k+chainBits k) >>= K) c := by
     intro u z invU lastU locatedU upc left hleft
     rw [top_run_eval index (viewPayload wire) k hp32, pure_bind]
+    rw [← cursorAt_next_eval index k hp32]
     apply continuation u _ _ locatedU upc left hleft
     refine HashInv.complete index wire pk ⟨invU.ctx, invU.input, invU.inputRange, invU.length,
       invU.out, invU.payload, ?_⟩ ?_
@@ -216,7 +223,7 @@ theorem table_refines (k : Chain) (tail : Code)
   apply read_prefix_refines index wire pk k hp32 (List.replicate (32-(p+1)) .ECALL ++ tail)
     (fun r => runNodes' index (viewPayload wire) (suffixNodes index k) r.1 r.2 >>= fun r' =>
       runNodes' index (viewPayload wire) [top k] r'.1 r'.2 >>= K)
-    (32-(p+1)+c) (32-(p+1)+rest) (s.pc + W 4) ?_ s x fuel prep.inv prep.ready located rfl
+    (32-(p+1)+c) (32-(p+1)+rest) (s.pc + W 4) ?_ s x fuel prep.inv (memBits_input k wire prep.ready) located rfl
     (by omega)
   intro u z invU heldU locatedU upc left hleft
   refine steps_refines index wire pk k tail

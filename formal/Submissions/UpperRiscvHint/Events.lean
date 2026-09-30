@@ -78,8 +78,8 @@ theorem slotCat_inj {a b : (k : Chain) → BitVec (topBits k)} :
 
 /-- The root slot of chain `k`. -/
 def slotOf (k : Chain) : ℕ :=
-  if k.val = 32 then 0 else if 13 ≤ k.val ∧ k.val < 25 then 2 * (k.val - 13) + 2
-  else if k.val < 13 then 2 * k.val + 1 else k.val + 1
+  if k.val = 32 then 0 else if 14 ≤ k.val ∧ k.val < 28 then 2 * (k.val - 14) + 2
+  else if k.val < 14 then 2 * k.val + 1 else k.val + 1
 
 theorem slotChain_slotOf (k : Chain) : slotChain (slotOf k) = k := by
   have := k.isLt
@@ -186,7 +186,7 @@ theorem yv_hash_ch (hy : graph.ReconEqs d (fins A) given y) {k : Chain} {t : Fin
   exact ⟨w, hd, hw⟩
 
 theorem yv_hash_rh (hy : graph.ReconEqs d (fins A) given y) (he : Evaluated A rh) :
-    ∃ w : BitVec 256, d ⟨7072, yv y rc⟩ = some w ∧ yv y rh = w := by
+    ∃ w : BitVec 256, d ⟨7133, yv y rc⟩ = some w ∧ yv y rh = w := by
   obtain ⟨w, hd, hw⟩ := yv_hash hy (h := rh) (p := rc) rfl he
   exact ⟨w, hd, hw⟩
 
@@ -359,7 +359,7 @@ theorem events_none {A' : Finset Name} (hA' : IsCut A') {ξ : Rec} {d : Cache}
   obtain ⟨w, hd, -⟩ := yv_hash_rh hy hrE
   by_cases hne : yv y rc = val ξ rc
   · right
-    refine ⟨⟨7072, yv y rc⟩, ?_, by rw [hd]; rfl⟩
+    refine ⟨⟨7133, yv y rc⟩, ?_, by rw [hd]; rfl⟩
     rw [kc_isSome_iff]
     exact ⟨rh, rc, rfl, by rw [hne]; rfl⟩
   · left
@@ -386,13 +386,13 @@ theorem hit_or_spr {A A' : Finset Name} {ξ : Rec} {d : Cache} {given y : graph.
   · left
     exact ⟨ch k t, ci k t, rfl, yv y (ci k t), hpne, w, hd, hsim⟩
 
-/-- The forgery uses a different disclosure set of the same cost. -/
+/-- A cross-cut witness exposes either a second preimage or a hidden query. -/
 theorem events_ne {A A' : Finset Name} (hA : IsCut A) (hA' : IsCut A')
-    (hcost : ∑ n ∈ evaluatedSet A, n.cost = ∑ n ∈ evaluatedSet A', n.cost) (hne : A ≠ A')
+    (cross : ∃ v ∈ A, Evaluated A' v)
     {ξ : Rec} {d : Cache} {given y : graph.Assignment}
     (hy : graph.ReconEqs d (fins A') given y) (hacc : flipHi (trunc128 (yv y rh)) = pkOf ξ) :
     Spr d ξ ∨ Cache.Hits d (fHid (some A) ξ) := by
-  obtain ⟨v, hvA, hvE⟩ := exists_mem_evaluated_of_ne hA hA' hcost hne
+  obtain ⟨v, hvA, hvE⟩ := cross
   have hrev := hA.values v hvA
   by_cases hvne : yv y v = val ξ v
   swap

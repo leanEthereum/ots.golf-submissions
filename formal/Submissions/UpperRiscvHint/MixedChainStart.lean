@@ -1,6 +1,7 @@
 import Submissions.UpperRiscvHint.MixedChainSteps
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
 open Riscv2Program
@@ -9,7 +10,7 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+variable (index : ChainIndex) (wire : List Bool) (pk : PublicKey)
 
 def readNodes (k : Chain) : List Name :=
   src k :: (List.range (firstAt index k+1)).flatMap (tripleN k)
@@ -35,12 +36,12 @@ theorem ofBits_take (payload : List Bool) (c n : ℕ) :
 theorem read_prefix_refines (k : Chain) (h32 : firstAt index k < 32) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest : ℕ) (P : Word)
     (continuation : ∀ (u : MachineState) (z : graph.Assignment),
-      HashInv index wire pk u z k (work k) →
+      HashInv (credit := credit) index wire pk u z k (work k) →
       HoldsAt u z k (firstAt index k+1) →
       Riscv.CodeAt u u.pc tail → u.pc = P → ∀ left, rest ≤ left →
       Riscv.Refines left u (K (z,cursor k+chainBits k)) c)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
-    (inv : HashInv index wire pk s x k (work k))
+    (inv : HashInv (credit := credit) index wire pk s x k (work k))
     (held : MemBits s (W (work k)) (ofBits (chainBits k) (wire.drop (wireOffset k))))
     (located : Riscv.CodeAt s s.pc (.ECALL::tail)) (hP : s.pc + W 4 = P) (bound : 1+rest ≤ fuel) :
     Riscv.Refines fuel s
@@ -53,7 +54,7 @@ theorem read_prefix_refines (k : Chain) (h32 : firstAt index k < 32) (tail : Cod
     rw [← hp, List.range_succ, List.flatMap_append, List.flatMap_singleton, List.cons_append]
     simp [tripleN, h32]
   rw [nodes, runNodes'_append, run, pure_bind]
-  have inv' : HashInv index wire pk s x' k (work k) :=
+  have inv' : HashInv (credit := credit) index wire pk s x' k (work k) :=
     ⟨inv.ctx, inv.input, inv.inputRange, inv.length, inv.out, inv.payload, frame ▸ inv.done⟩
   have held' : MemBits s (W (work k))
       (ofBits (graph.len (ci k ⟨p,h32⟩).fin)

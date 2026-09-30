@@ -63,7 +63,10 @@ end OptimalOTS.RiscvMixedProgram
 # The arithmetic of the index check
 
 The four dispatch words sum with exactly three 64-bit wraps. Adding four times the
-complemented free count (31-c), the sum's residue modulo 255 checks that the digit sum plus the count is 145 modulo 255. Each stored lane holds `base − (4 · dA + 1024 · dB)` (`lane_halfword`).
+complemented free count (31-c) and all helper corrections makes residue 1 exactly
+when the shifted weighted sum plus the count is 147 modulo 257 (each cap pair's weight
+exceeds its raw lane sum by one, hence the extra 6). Each stored lane holds
+`base − (4 · dA + 1024 · dB)` (`lane_halfword`).
 -/
 
 namespace OptimalOTS.RiscvMixedProgram
@@ -258,35 +261,118 @@ theorem addressSum_toNat (a : MachineState) (hm : MasksLoaded a)
     decide +kernel
   rw [BitVec.toNat_sub_of_le, eb]
   rw [BitVec.le_def, eb]
-  have en : baseWord 0 = 18445833920962121929 := by decide +kernel
+  have en : baseWord 0 = 18445832168569065596 := by decide +kernel
   rw [en]
+  omega
+
+def rawDigitSum (i : ℕ) : ℕ := ∑ k ∈ Finset.range 32,
+  (if k % 2 = 0 then digit i k else 15 - digit i k)
+
+theorem rawDigitSum_pairs (i : ℕ) : rawDigitSum i =
+    ∑ q : Fin 16, (digit i (2*q.val) + (15-digit i (2*q.val+1))) := by
+  rw [rawDigitSum, show 32=2*16 from rfl, sum_digit_pairs, ← Fin.sum_univ_eq_sum_range]
+  simp
+
+theorem weighted_le_raw (i : ℕ) : digitSum i ≤ rawDigitSum i + 6 := by
+  rw [digitSum, rawDigitSum_pairs, ← kind_count, ← Finset.sum_add_distrib]
+  apply Finset.sum_le_sum
+  intro q _
+  have h := WeightedPairs.weight_le_raw (PairCode.kind q.val) (PairCode.complement (rawPair i q.val))
+  have hs : 16-(digit i (2*q.val+1)+1) = 15-digit i (2*q.val+1) := by omega
+  simpa only [PairCode.weight, PairCode.complement, rawPair, Fin.val_rev, hs] using h
+
+theorem rawDigitSum_pack (answer : BitVec hashBits) :
+    rawDigitSum (pack answer) = ∑ k ∈ Finset.range 32,
+      (if k % 2 = 0 then fieldDigit answer k else 15 - fieldDigit answer k) := by
+  unfold rawDigitSum
+  apply Finset.sum_congr rfl
+  intro k hk
+  rw [digit_pack answer (Finset.mem_range.mp hk)]
+
+theorem fieldDigit_le (answer : BitVec hashBits) (k : ℕ) (hk : k < 32) :
+    fieldDigit answer k ≤ 15 := by
+  have h := fieldDigit_lt answer k
+  simp only [wid, if_pos hk, Nat.reducePow] at h
+  omega
+
+theorem field_sum_reflect (answer : BitVec hashBits) :
+    (∑ l ∈ Finset.range 4, fineTotal (fun g => (wordOf answer g).toNat) l) + 240 =
+      rawDigitSum (pack answer) +
+      ∑ l ∈ Finset.range 4, coarseTotal (fun g => (wordOf answer g).toNat) l := by
+  rw [rawDigitSum_pack]
+  simp only [fineTotal, coarseTotal, Finset.sum_range_succ, Finset.sum_range_zero]
+  rw [fine_word answer 0 0 (by norm_num) (by norm_num)]
+  rw [fine_word answer 0 1 (by norm_num) (by norm_num)]
+  rw [fine_word answer 0 2 (by norm_num) (by norm_num)]
+  rw [fine_word answer 0 3 (by norm_num) (by norm_num)]
+  rw [fine_word answer 1 0 (by norm_num) (by norm_num)]
+  rw [fine_word answer 1 1 (by norm_num) (by norm_num)]
+  rw [fine_word answer 1 2 (by norm_num) (by norm_num)]
+  rw [fine_word answer 1 3 (by norm_num) (by norm_num)]
+  rw [fine_word answer 2 0 (by norm_num) (by norm_num)]
+  rw [fine_word answer 2 1 (by norm_num) (by norm_num)]
+  rw [fine_word answer 2 2 (by norm_num) (by norm_num)]
+  rw [fine_word answer 2 3 (by norm_num) (by norm_num)]
+  rw [fine_word answer 3 0 (by norm_num) (by norm_num)]
+  rw [fine_word answer 3 1 (by norm_num) (by norm_num)]
+  rw [fine_word answer 3 2 (by norm_num) (by norm_num)]
+  rw [fine_word answer 3 3 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 0 0 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 0 1 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 0 2 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 0 3 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 1 0 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 1 1 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 1 2 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 1 3 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 2 0 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 2 1 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 2 2 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 2 3 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 3 0 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 3 1 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 3 2 (by norm_num) (by norm_num)]
+  rw [coarse_word answer 3 3 (by norm_num) (by norm_num)]
+  norm_num only [fineChain, coarseChain, Nat.reduceMul, Nat.reduceAdd, Nat.reduceMod, Nat.reduceEqDiff, if_true, if_false]
+  have h1 := fieldDigit_le answer 1 (by omega)
+  have h3 := fieldDigit_le answer 3 (by omega)
+  have h5 := fieldDigit_le answer 5 (by omega)
+  have h7 := fieldDigit_le answer 7 (by omega)
+  have h9 := fieldDigit_le answer 9 (by omega)
+  have h11 := fieldDigit_le answer 11 (by omega)
+  have h13 := fieldDigit_le answer 13 (by omega)
+  have h15 := fieldDigit_le answer 15 (by omega)
+  have h17 := fieldDigit_le answer 17 (by omega)
+  have h19 := fieldDigit_le answer 19 (by omega)
+  have h21 := fieldDigit_le answer 21 (by omega)
+  have h23 := fieldDigit_le answer 23 (by omega)
+  have h25 := fieldDigit_le answer 25 (by omega)
+  have h27 := fieldDigit_le answer 27 (by omega)
+  have h29 := fieldDigit_le answer 29 (by omega)
+  have h31 := fieldDigit_le answer 31 (by omega)
   omega
 
 theorem raw_sum_mod (a : MachineState) (hm : MasksLoaded a) (answer : BitVec hashBits)
     (hw : WordsLoaded a answer) :
-    (laneSum a 4).toNat % 255 =
-      (4 * ∑ k ∈ Finset.range 32, fieldDigit answer k) % 255 := by
+    ((laneSum a 4).toNat + 960) % 257 = (4 * rawDigitSum (pack answer)) % 257 := by
   rw [laneSum_toNat a hm 4 le_rfl]
   have he : (∑ g ∈ Finset.range 4, laneNat (a.getReg (wordReg g)).toNat g) =
       ∑ g ∈ Finset.range 4, laneNat (wordOf answer g).toNat g := by
     apply Finset.sum_congr rfl
     intro g hg
     rw [hw g (Finset.mem_range.mp hg)]
-  rw [he, laneSum_lanes, ← field_sum answer]
-  simp only [preFold, Finset.sum_range_succ, Finset.sum_range_zero]
+  rw [he, laneSum_lanes]
+  have hs := field_sum_reflect answer
+  simp only [preFold, Finset.sum_range_succ, Finset.sum_range_zero] at hs ⊢
   omega
 
-theorem digitSum_pack (answer : BitVec hashBits) :
-    digitSum (pack answer) = ∑ k ∈ Finset.range 32, fieldDigit answer k := by
-  unfold digitSum
-  exact Finset.sum_congr rfl fun k hk => digit_pack answer (Finset.mem_range.mp hk)
-
 /-- The address sum plus four times the complemented count has residue 1 exactly when the count is the
-index's free digit, that is when the digit sum plus the count is 145 modulo 255. -/
+index's free digit, that is when the shifted digit sum plus the count is 147 modulo 257. -/
 theorem free_remainder_iff (a : MachineState) (hm : MasksLoaded a)
     (answer : BitVec hashBits) (hw : WordsLoaded a answer)
     (hb : ∀ g, g < 4 → a.getReg (baseReg g) = W (baseWord g)) (c : ℕ) (hc : c < 32) :
-    (addressSum a 4 + W (6144 + 4 * (31-c))).toNat % 255 = 1 ↔ freeDigit (pack answer) = c := by
+    (addressSum a 4 + W (6144 + 4 * (31-c)) +
+      W (4*(rawDigitSum (pack answer)+6-digitSum (pack answer)))).toNat % 257 = 1 ↔ freeDigit (pack answer) = c := by
   have congruence := raw_sum_mod a hm answer hw
   have bound : (laneSum a 4).toNat ≤ 4 * 4340410370284600380 := by
     rw [laneSum_toNat a hm 4 le_rfl]
@@ -294,23 +380,62 @@ theorem free_remainder_iff (a : MachineState) (hm : MasksLoaded a)
       (fun g _ => laneNat_le (a.getReg (wordReg g)).toNat g)
     norm_num at h ⊢
     exact h
-  have total : (∑ k ∈ Finset.range 32, fieldDigit answer k) ≤ 480 := by
+  have total : rawDigitSum (pack answer) ≤ 480 := by
+    rw [rawDigitSum_pack]
     calc
       _ ≤ ∑ _k ∈ Finset.range 32, 15 := by
         apply Finset.sum_le_sum
         intro k hk
-        have h := fieldDigit_lt answer k
-        have hk' := Finset.mem_range.mp hk
-        simp only [wid, if_pos hk', Nat.reducePow] at h
-        omega
+        have h := fieldDigit_le answer k (Finset.mem_range.mp hk)
+        split_ifs <;> omega
       _ = 480 := by norm_num
+  have weighted := weighted_le_raw (pack answer)
   have hs := addressSum_toNat a hm hb
-  have en : baseWord 0 = 18445833920962121929 := by decide +kernel
+  have en : baseWord 0 = 18445832168569065596 := by decide +kernel
   rw [en] at hs
   have hc' : (W (6144 + 4 * (31-c))).toNat = 6144 + 4 * (31-c) := W_toNat _ (by omega)
-  rw [BitVec.toNat_add, hc', hs, Nat.mod_eq_of_lt (show
-    4 * 18445833920962121929 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) < 2^64 by omega),
-    freeDigit, digitSum_pack]
-  omega
+  have hdelta : (W (4*(rawDigitSum (pack answer)+6-digitSum (pack answer)))).toNat =
+      4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) := W_toNat _ (by omega)
+  rw [BitVec.toNat_add, BitVec.toNat_add, hc', hdelta, hs,
+    Nat.mod_eq_of_lt (show
+      4 * 18445832168569065596 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) < 2^64 by omega),
+    Nat.mod_eq_of_lt (show
+      4 * 18445832168569065596 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) +
+        4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) < 2^64 by omega), freeDigit]
+  let d := 661 - digitSum (pack answer) - c
+  have hd : d + c = 661 - digitSum (pack answer) := by dsimp [d]; omega
+  have hleft :
+      (4 * 18445832168569065596 - 3 * 2 ^ 64 - (laneSum a 4).toNat +
+        (6144 + 4 * (31-c)) + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer))) + ((laneSum a 4).toNat + 960) + 4*c =
+      4 * 18445832168569065596 - 3 * 2 ^ 64 + 7228 + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) := by omega
+  have hright : (1 + 4*d) + 4 * rawDigitSum (pack answer) + 4*c =
+      2621 + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) := by
+    dsimp [d]
+    omega
+  have shifted : Nat.ModEq 257
+      (4 * 18445832168569065596 - 3 * 2 ^ 64 - (laneSum a 4).toNat +
+        (6144 + 4 * (31-c)) + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer))) (1 + 4*d) := by
+    apply Nat.ModEq.add_right_cancel congruence
+    apply Nat.ModEq.add_right_cancel' (4*c)
+    rw [hleft, hright]
+    exact (show Nat.ModEq 257
+      (4*18445832168569065596-3*2^64+7228) 2621 by decide +kernel).add_right _
+  have hc257 : c % 257 = c := Nat.mod_eq_of_lt (by omega)
+  constructor
+  · intro h
+    have h' : Nat.ModEq 257 (1 + 4*d) (1 + 0) := shifted.symm.trans h
+    have hzero := Nat.ModEq.add_left_cancel' 1 h'
+    have hinv : Nat.ModEq 257 (193 * 4) 1 := by decide +kernel
+    have hd0 : Nat.ModEq 257 d 0 := by
+      calc
+        d ≡ (193 * 4) * d [MOD 257] := by simpa using (hinv.mul_right d).symm
+        _ ≡ 0 [MOD 257] := by simpa only [Nat.mul_assoc, Nat.mul_zero] using hzero.mul_left 193
+    have hfree := hd0.add_right c
+    simpa only [hd, Nat.zero_add, Nat.ModEq, hc257] using hfree
+  · intro h
+    have hfree : Nat.ModEq 257 (d + c) (0 + c) := by
+      simpa only [hd, Nat.zero_add, Nat.ModEq, hc257] using h
+    have hzero := (Nat.ModEq.add_right_cancel' c hfree).mul_left 4
+    exact shifted.trans (by simpa only [Nat.mul_zero, Nat.add_zero] using hzero.add_left 1)
 
 end OptimalOTS.RiscvMixedProgram
