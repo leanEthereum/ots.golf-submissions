@@ -153,7 +153,7 @@ attribute [local irreducible] stagedRank
 def stagedVerify (pk : PublicKey) (m : Message) (bits : List Bool) : OracleComp Spec Bool := do
   let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits (bits.take 128)))
   let index : ChainIndex := ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩
-  if stagedRank index.val ∧ bits.length = 5504 then
+  if stagedRank index.val ∧ bits.length = fullSignatureBits index then
     freeBlocks index (bits.drop 128) pk (fun _ => 0)
   else pure false
 
@@ -308,7 +308,7 @@ theorem stagedVerify_deterministic (pk : PublicKey) (m : Message) (bits : List B
   apply Deterministic.bind (Deterministic.hash _)
   intro answer
   dsimp only
-  exact deterministic_ite (stagedRank (pack answer) ∧ bits.length = 5504)
+  exact deterministic_ite (stagedRank (pack answer) ∧ bits.length = fullSignatureBits (ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩))
     (freeBlocks (ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩) (bits.drop 128) pk (fun _ => 0))
     (pure false)
     (freeBlocks_deterministic (ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩) (bits.drop 128) pk (fun _ => 0))
@@ -322,7 +322,7 @@ theorem stagedVerify_cost (pk : PublicKey) (m : Message) (bits : List Bool) :
     (AlgorithmCosts.costAtMost_hash _ (b := 1) (by decide)) (b₂ := 1070)
   · intro answer
     dsimp only
-    exact cost_ite (stagedRank (pack answer) ∧ bits.length = 5504)
+    exact cost_ite (stagedRank (pack answer) ∧ bits.length = fullSignatureBits (ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩))
       (freeBlocks (ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩) (bits.drop 128) pk (fun _ => 0))
       (pure false) 1070
       (freeBlocks_cost (ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩) (bits.drop 128) pk (fun _ => 0))
@@ -367,9 +367,10 @@ theorem directVerify_prunes_stagedVerify (pk : PublicKey) (m : Message) (bits : 
   dsimp only
   by_cases hi : pack answer ∈ validSet
   · rw [dif_pos hi]
+    dsimp +instances only [Idx.toRaw]
     have acc := mem_validSet_accepted hi
     have rank : stagedRank (pack answer) := (stagedRank_and_caps_iff _).mpr acc |>.1
-    by_cases hlen : bits.length = 5504
+    by_cases hlen : bits.length = fullSignatureBits (ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩)
     · rw [if_pos hlen, if_pos ⟨rank, hlen⟩]
       have he := stagedBlocks_eq_direct (⟨pack answer, hi⟩ : Idx)
         (bits.drop 128) pk

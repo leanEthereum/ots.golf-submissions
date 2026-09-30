@@ -4,8 +4,8 @@ import Submissions.UpperRiscvHint.GScheme
 /-!
 # The bare-chain forest
 
-A family of cuts indexed by the accepted indices, with thirteen 192-bit and twenty 144-bit
-values. Verification costs 177 compressions.
+A family of cuts indexed by the accepted indices, with fourteen 192-bit and nineteen 141-bit
+values. A revealed bottom top adds three bits. Verification uses at most 180 compressions.
 -/
 
 open OracleSpec OracleComp ENNReal
@@ -40,7 +40,7 @@ def forestScheme : GScheme where
     show graph.revealBits (fins (setsName i)) ≤ 5376
     rw [revealBits_eq]
     change ∑ n ∈ cutOf (fixedChoice i), n.len ≤ 5376
-    rw [reveal_cutOf]
+    exact (reveal_cutOf _).trans (by decide)
   keygen_le := by
     show graph.keygenCost ≤ 2 ^ 20
     rw [graph_keygenCost]

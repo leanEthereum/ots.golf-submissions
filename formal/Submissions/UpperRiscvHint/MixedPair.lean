@@ -19,7 +19,7 @@ variable (index : ChainIndex) (wire : List Bool) (pk : PublicKey)
 a redirect, whose correction already ran); otherwise the pointer pair and its hashes. -/
 def rightCost (q : Fin 16) : ℕ :=
   if skipFlag index q then (if PairCode.helper q (rawPair index.val q) = 0 then 1 else 0)
-  else 2 + remaining index (rightChain q)
+  else (between q).length + remaining index (rightChain q)
 
 /-- Length setup, prologue, both chains' hashes and the pointer move between them. -/
 def pairCost (q : Fin 16) : ℕ := (lengthSetup q).length + 4 +
@@ -32,14 +32,14 @@ structure LengthEffect (s u : MachineState) (q : Fin 16) : Prop where
   code : u.code=s.code
 
 theorem lengthSetup_ready (s : MachineState) (q : ℕ) : Riscv.LinearReady s (lengthSetup q) := by
-  unfold lengthSetup
-  split_ifs <;> simp [Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
+  simp [lengthSetup, Riscv.LinearReady]
 
-theorem prevBits_left (q : Fin 16) (h8 : q.val ≠ 6) :
+theorem prevBits_left (q : Fin 16) :
     prevBits (leftChain q) = chainBits (leftChain q) := by
   revert q; decide
 
-theorem prevBits_right (q : Fin 16) : prevBits (rightChain q) = chainBits (rightChain q) := by
+theorem prevBits_right (q : Fin 16) (h : q.val ≠ 6) :
+    prevBits (rightChain q) = chainBits (rightChain q) := by
   revert q; decide
 
 /-- After a skipped cap pair the width is unchanged: chains up to 13 are 192-bit. -/
@@ -50,16 +50,75 @@ theorem prevBits_skip (q : Fin 16) (h : q.val < 6) :
 theorem lengthSetup_effect (s : MachineState) (q : Fin 16)
     (h : s.getReg .x11 = W (prevBits (leftChain q))) :
     LengthEffect s ((lengthSetup q).foldl execInstrBr s) q := by
-  by_cases hq : q.val=6
-  · have he : q=6 := Fin.ext hq
+  exact ⟨h.trans (congrArg W (prevBits_left q)), fun _ _ => rfl, rfl, rfl⟩
+
+def betweenSetup (q : ℕ) : Code := if q = 6 then [.ADDI .x11 .x0 141] else []
+
+theorem between_parts (q : Fin 16) :
+    between q = betweenSetup q ++ enter (rightChain q) (prevInput (rightChain q)) := by
+  rw [right_previous]
+  rfl
+
+theorem between_length (q : ℕ) : (between q).length = 2 + if q = 6 then 1 else 0 := by
+  unfold between enter
+  split_ifs <;> rfl
+
+structure BetweenEffect (s u : MachineState) (q : Fin 16) : Prop where
+  length : u.getReg .x11 = W (chainBits (rightChain q))
+  regs : ∀ r, r ≠ .x11 → u.getReg r = s.getReg r
+  mem : u.mem = s.mem
+  code : u.code = s.code
+
+theorem betweenSetup_effect (s : MachineState) (q : Fin 16)
+    (h : s.getReg .x11 = W (prevBits (rightChain q))) :
+    BetweenEffect s ((betweenSetup q).foldl execInstrBr s) q := by
+  by_cases hq : q.val = 6
+  · have he : q = 6 := Fin.ext hq
     subst q
     refine ⟨?_, ?_, rfl, rfl⟩
-    · simp [lengthSetup, execInstrBr, getReg_setReg_ite, chainBits, leftChain, W, getReg_x0']
+    · simp [betweenSetup, execInstrBr, getReg_setReg_ite, chainBits, rightChain, W, getReg_x0']
       decide
-    · intro r hr; simp [lengthSetup, execInstrBr, getReg_setReg_ite, hr]
-  · have hw := prevBits_left q hq
-    simp only [lengthSetup, if_neg hq, List.foldl_nil]
-    exact ⟨h.trans (congrArg W hw), fun _ _ => rfl, rfl, rfl⟩
+    · intro r hr; simp [betweenSetup, execInstrBr, getReg_setReg_ite, hr]
+  · simp only [betweenSetup, if_neg hq, List.foldl_nil]
+    exact ⟨h.trans (congrArg W (prevBits_right q hq)), fun _ _ => rfl, rfl, rfl⟩
+
+/-- Pair six sets the narrow input width immediately before its second chain. -/
+theorem between_refines (q : Fin 16) (s : MachineState) (x : graph.Assignment) (tail : Code)
+    (inv : ChainsInv (credit := credit) index wire pk s x (rightChain q))
+    (located : Riscv.CodeAt s s.pc (between q ++ tail))
+    (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : (between q).length ≤ fuel)
+    (continuation : ∀ u, Prepared (credit := credit) index wire pk u x (rightChain q) →
+      Riscv.CodeAt u u.pc tail → Riscv.Refines (fuel-(between q).length) u Q c) :
+    Riscv.Refines fuel s Q ((between q).length+c) := by
+  let lin := betweenSetup q
+  let t := lin.foldl execInstrBr s
+  have E := betweenSetup_effect s q inv.length
+  have ready : Riscv.LinearReady s lin := by
+    unfold lin betweenSetup
+    split_ifs <;> simp [Riscv.LinearReady, Riscv.linearInstruction, Riscv.memoryReady]
+  have ctx : Ctx (credit := credit) t index wire pk := inv.ctx.frame (fun r hr => by
+    rcases hr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> exact E.regs _ (by decide)) E.mem E.code
+  have inp : t.getReg .x10 = W (prevInput (rightChain q)) := by
+    rw [E.regs .x10 (by decide)]; exact inv.input
+  have out : t.getReg .x12 = W (outAddr (2*q.val+1)) := by
+    rw [E.regs .x12 (by decide)]
+    exact inv.out (by simp [rightChain])
+  rw [between_parts, List.append_assoc] at located
+  have next : Riscv.CodeAt t t.pc (enter (rightChain q) (prevInput (rightChain q)) ++ tail) := by
+    rw [show t.pc = s.pc + W (4*lin.length) from Riscv.linear_fold_pc s lin ready]
+    exact located.append_right.code_eq E.code
+  have size : (between q).length = lin.length+2 := by
+    rw [between_parts, List.length_append]; rfl
+  rw [size] at hf ⊢
+  rw [show fuel = lin.length + (fuel-lin.length) by omega, Nat.add_assoc]
+  apply Riscv.Refines.linear lin located.append_left ready
+  apply move_refines index wire pk q (rightChain q) rfl t x tail ctx inp out E.length
+    (fun j hj => memBits_of_mem_eq E.mem (inv.payload j hj))
+    (fun j hj => memBits_of_mem_eq E.mem (inv.done j hj)) next Q c (fuel-lin.length) (by omega)
+  intro u hu held loc
+  have hc := continuation u ⟨hu,held⟩ loc
+  rw [size] at hc
+  convert hc using 1 <;> omega
 
 /-- Where `x10` starts a pair: the previous chain's state, or after a skipped right chain the
 state of the chain before it. -/
@@ -78,13 +137,21 @@ structure EntryInv (sk : Bool) (s : MachineState) (x : graph.Assignment) (k : �
 
 theorem ChainsInv.entry {s : MachineState} {x : graph.Assignment} {k : ℕ}
     (inv : ChainsInv (credit := credit) index wire pk s x k) :
-    EntryInv (credit := credit) index wire pk false s x k :=
-  ⟨inv.ctx, inv.input, fun h => inv.out (by omega), inv.length, inv.payload, inv.done⟩
+    EntryInv (credit := credit) index wire pk false s x k := by
+  refine ⟨inv.ctx, ?_, ?_, inv.length, inv.payload, inv.done⟩
+  · simpa only [entryBase, Bool.false_eq_true, if_false] using inv.input
+  · intro h
+    simpa only [entryOut, Bool.false_eq_true, if_false] using
+      inv.out (Nat.le_trans (by decide : 1 ≤ 2) h)
 
 theorem EntryInv.chains {s : MachineState} {x : graph.Assignment} {k : ℕ}
     (inv : EntryInv (credit := credit) index wire pk false s x k) (hk : k ≠ 1) :
     ChainsInv (credit := credit) index wire pk s x k := by
-  refine ⟨inv.ctx, inv.input, fun h => inv.out (by omega), inv.length, inv.payload, inv.done⟩
+  refine ⟨inv.ctx, ?_, ?_, inv.length, inv.payload, inv.done⟩
+  · simpa only [entryBase, Bool.false_eq_true, if_false] using inv.input
+  · intro h
+    have h2 : 2 ≤ k := lt_of_le_of_ne h (Ne.symm hk)
+    simpa only [entryOut, Bool.false_eq_true, if_false] using inv.out h2
 
 /-- The code a pair starts at, and the code after it. -/
 def entryCode (sk : Bool) (q : ℕ) : Code := if sk then skipPrologue q else prologue q
@@ -98,10 +165,12 @@ theorem entryCode_parts (sk : Bool) (q : Fin 16) (hsk : sk = true → 1 ≤ q.va
   · simp only [entryCode, entryBase, if_true]
     rw [skipPrologue_parts]
     have h := hsk rfl
-    congr 2
+    apply congrArg (fun b => lengthSetup q ++ dispatchCode q b)
     unfold prevInput leftChain
     rw [if_neg (by simp; omega)]
-    congr 1 <;> (try simp) <;> omega
+    apply congrArg work
+    change 2*q.val-1 = (2*q.val+1-1)-1
+    omega
 
 theorem entryBase_front (sk : Bool) (q : Fin 16) (hsk : sk = true → 1 ≤ q.val ∧ q.val ≤ 6) :
     FrontBase q (entryBase sk (leftChain q)) := by
@@ -133,27 +202,23 @@ theorem ChainsInv.recredit {s t : MachineState} {x : graph.Assignment} {k : ℕ}
 
 /-- A skipped right chain: its view value is its top, no instruction runs, and the pointers
 stay one chain back. -/
-theorem skipped_refines (k : Chain) (hidden : 32 ≤ firstAt index k) (hk : 2 ≤ k.val)
+theorem skipped_refines (k : Chain) (hidden : 32 ≤ firstAt index k) (hk : 2 ≤ k.val) (hsmall : k.val < 13)
     (hbits : prevBits k = prevBits (k.val+1))
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c : ℕ)
     (continuation : ∀ z : graph.Assignment,
       EntryInv (credit := credit) index wire pk true s z (k.val+1) →
-      Riscv.Refines fuel s (K (z,cursor k+chainBits k)) c)
+      Riscv.Refines fuel s (K (z,cursorAt index (k.val+1))) c)
     (inv : ChainsInv (credit := credit) index wire pk s x k) :
     Riscv.Refines fuel s
       (runNodes' index (viewPayload wire) (chainNodes k) x (cursor k) >>= K) c := by
-  have cap : k.val < 13 ∨ 31 ≤ k.val := by
-    by_contra h
-    have : firstAt index k ≤ 31 := by
-      unfold firstAt firstEval; rw [if_neg h]; exact pos_le index k
-    omega
-  have hb : topBits k = chainBits k := topBits_of_cap cap
+  have cap : k.val < 14 ∨ 31 ≤ k.val := Or.inl (by omega)
+  have hb : topBits k = chainBits k := by
+    simpa only [if_neg (show k.val ≠ 32 by omega)] using topBits_of_cap cap
   obtain ⟨x', run, frame⟩ := prefix_run index (viewPayload wire) k 32 hidden x (cursor k)
   rw [chain_split_hidden, runNodes'_append, run, pure_bind,
     top_run_read index (viewPayload wire) k hidden, pure_bind]
-  have hc : cursor k + topBits k = cursor k + chainBits k := by rw [hb]
-  rw [hc]
+  rw [← cursorAt_next_hidden index k hidden]
   apply continuation
   refine ⟨inv.ctx, ?_, ?_, ?_, fun j hj => inv.payload j (by omega), ?_⟩
   · rw [inv.input]; unfold entryBase; simp
@@ -176,7 +241,7 @@ theorem skipped_refines (k : Chain) (hidden : 32 ≤ firstAt index k) (hk : 2 �
         intro n hn
         subst hn
         rw [viewPayload_read wire k, ← e]
-        exact inv.payload k le_rfl
+        exact memBits_input k wire (inv.payload k le_rfl)
       exact key _ hw
     · rw [tops_update_top_other _ _ _ he, frame]
       exact inv.done j (by have hne : j.val ≠ k.val := fun h => he (Fin.ext h); omega)
@@ -227,7 +292,7 @@ theorem pair_refines (q : Fin 16)
       EntryInv (credit := credit + W (pairCorrection index q)) index wire pk (skipFlag index q) u z
         (2*q.val+3) →
       (∃ junk, Riscv.CodeAt u u.pc (exitCode index q ++ junk)) →
-      ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursor (2*q.val+3))) c)
+      ∀ left, rest ≤ left → Riscv.Refines left u (K (z,cursorAt index (2*q.val+3))) c)
     (sk : Bool) (hsk : sk = true → 1 ≤ q.val ∧ q.val ≤ 6)
     (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
     (inv : EntryInv (credit := credit) index wire pk sk s x (leftChain q))
@@ -289,7 +354,7 @@ theorem pair_refines (q : Fin 16)
     sH x leftH prepH locH rfl (by omega)
   intro s4 x4 inv4 loc4 _ left4 hleft4
   dsimp only
-  rw [← cursor_step A]
+  rw [show A.val+1 = B.val from by dsimp [A,B,leftChain,rightChain], cursorAt_chain index B]
   change Riscv.Refines left4 s4
     (runNodes' index (viewPayload wire) (chainNodes B) x4 (cursor B) >>= K) (T+c)
   have endIndex : B.val+1 = 2*q.val+3 := by dsimp [B,rightChain]
@@ -301,6 +366,7 @@ theorem pair_refines (q : Fin 16)
     have hbits : prevBits B = prevBits (B.val+1) := by
       rw [endIndex]; exact prevBits_skip q hcap
     have hB2 : 2 ≤ B.val := by dsimp [B,rightChain]; omega
+    have hBsmall : B.val < 13 := by dsimp [B,rightChain]; omega
     have exitEq : exitCode index q = skipNext q := by unfold exitCode; rw [if_pos hskip]
     have inv4' : ChainsInv (credit := credit + W (landCorrection index q)) index wire pk s4 x4 B := by
       simpa only [A, leftChain, B, rightChain] using inv4
@@ -332,9 +398,9 @@ theorem pair_refines (q : Fin 16)
       rw [hT, show left4 = lin.length + (left4-1) by rw [hl1]; have : rightCost index q = 1 := hT; omega,
         show 1+c = lin.length + c by rw [hl1]]
       apply Riscv.Refines.linear _ loc4'.append_left lready
-      apply skipped_refines index wire pk B hidden hB2 hbits u x4 (left4-1) K c _ invU
+      apply skipped_refines index wire pk B hidden hB2 hBsmall hbits u x4 (left4-1) K c _ invU
       intro z invZ
-      rw [← cursor_step B, endIndex]
+      rw [endIndex]
       rw [endIndex] at invZ
       apply continuation u z (by rw [hskip]; exact invZ) ⟨[], by rw [exitEq]; simpa using uloc⟩
       have : rightCost index q = T := rfl
@@ -348,9 +414,9 @@ theorem pair_refines (q : Fin 16)
         rw [← e]; exact loc4
       rw [hT, Nat.zero_add]
       rw [land] at inv4'
-      apply skipped_refines index wire pk B hidden hB2 hbits s4 x4 left4 K c _ inv4'
+      apply skipped_refines index wire pk B hidden hB2 hBsmall hbits s4 x4 left4 K c _ inv4'
       intro z invZ
-      rw [← cursor_step B, endIndex]
+      rw [endIndex]
       rw [endIndex] at invZ
       apply continuation s4 z (by rw [hskip]; exact invZ) ⟨[], by rw [exitEq]; simpa using loc4'⟩
       have : rightCost index q = T := rfl
@@ -358,30 +424,26 @@ theorem pair_refines (q : Fin 16)
   · -- the ordinary right chain
     have hflag : skipFlag index q = false := by simpa using hskip
     let NB := remaining index B
-    have hT : T = 2 + NB := by dsimp [T,NB]; unfold rightCost; rw [if_neg hskip]
+    have hT : T = (between q).length + NB := by dsimp [T,NB]; unfold rightCost; rw [if_neg hskip]
     have exitEq : exitCode index q = nextCode q := by unfold exitCode; rw [if_neg hskip]
     have land := landCorrection_plain index q hflag
     have loc4' : Riscv.CodeAt s4 s4.pc
-        (enter B (prevInput B) ++ (List.replicate NB .ECALL ++ nextCode q)) := by
-      have e : afterLeft index q = enter B (prevInput B) ++ (List.replicate NB .ECALL ++ nextCode q) := by
+        (between q ++ (List.replicate NB .ECALL ++ nextCode q)) := by
+      have e : afterLeft index q = between q ++ (List.replicate NB .ECALL ++ nextCode q) := by
         unfold afterLeft; rw [if_neg hskip, List.append_assoc]
       rw [← e]; exact loc4
     rw [land] at inv4
     rw [hT] at hleft4 ⊢
-    have lenB : s4.getReg .x11 = W (chainBits B) := by
-      rw [inv4.length]
-      congr 1
-      exact prevBits_right q
-    have out4 : s4.getReg .x12 = W (outAddr (2*q.val+1)) := inv4.out (by omega)
-    rw [show 2+NB+c = 2+(NB+c) by omega]
-    apply move_refines index wire pk q B rfl s4 x4 (List.replicate NB .ECALL ++ nextCode q)
-      inv4.ctx inv4.input out4 lenB inv4.payload inv4.done loc4' _ (NB+c) left4 (by omega)
-    intro s5 inv5 held5 loc5
+    have invB : ChainsInv (credit := credit + W (pairCorrection index q)) index wire pk s4 x4 B := inv4
+    rw [show (between q).length+NB+c = (between q).length+(NB+c) by omega]
+    apply between_refines index wire pk q s4 x4 (List.replicate NB .ECALL ++ nextCode q)
+      invB loc4' _ (NB+c) left4 (by omega)
+    intro s5 prep5 loc5
     apply table_refines index wire pk B (nextCode q) K c rest (s5.pc + W (4 * remaining index B)) ?_
-      s5 x4 (left4-2) ⟨inv5, held5⟩ loc5 rfl (by omega)
+      s5 x4 (left4-(between q).length) prep5 loc5 rfl (by omega)
     intro s6 x6 inv6 loc6 _ left6 hleft6
     rw [endIndex] at inv6
-    rw [← cursor_step B, endIndex]
+    rw [endIndex]
     exact continuation s6 x6 (by rw [hflag]; exact inv6.entry index wire pk)
       ⟨[], by rw [exitEq]; simpa only [List.append_nil] using loc6⟩ left6 hleft6
 

@@ -64,10 +64,10 @@ theorem free_sum (index : ChainIndex) (c : ℕ) (hc : c < 19) (rank : freeDigit 
 
 set_option maxRecDepth 100000 in
 /-- Every execution on every view refines `trapVerify`, and every accepting path costs at most
-311 cycles. -/
+310 cycles. -/
 theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n : ℕ)
     (hn : 1337 ≤ n) :
-    Riscv.Refines n (RiscvHint.loadView image pk m view) (trapVerify pk m view) 311 := by
+    Riscv.Refines n (RiscvHint.loadView image pk m view) (trapVerify pk m view) 310 := by
   have initial := Riscv.CodeAt.initial image pk m view image_valid
   rw [image_code] at initial
   have global : Riscv.CodeAt (S0 pk m view) (W 4096) verifier :=
@@ -78,7 +78,7 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
     rw [pc0]
     simpa only [verifier, List.append_assoc] using global
   unfold trapVerify
-  rw [show (311 : ℕ) = 280 + 31 from rfl]
+  rw [show (310 : ℕ) = 279 + 31 from rfl]
   apply indexPhase_refines pk m view _ (n - 31) n _ _ located (by rw [indexPhase_length]; omega)
   intro answer left hleft
   set index := executionIndex answer view
@@ -96,7 +96,7 @@ theorem image_refines_trap (pk : PublicKey) (m : Message) (view : List Bool) (n 
   have c32 : c < 32 := viewDigit_lt view
   have c64 : c < 64 := by omega
   dsimp only
-  apply freeDispatch_refines s _ (viewTag view) x10 x6 sloc _ 277 left (by omega)
+  apply freeDispatch_refines s _ (viewTag view) x10 x6 sloc _ 276 left (by omega)
   intro t tpc t10 t12 tregs tmem tcode
   have tglobal : Riscv.CodeAt t (W 4096) verifier := sglobal.code_eq tcode
   by_cases low : viewBank view < 3

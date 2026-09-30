@@ -7,8 +7,7 @@ open Riscv2Program
 
 def leftChain (q : Fin 16) : Chain := ⟨2*q.val+1, by have := q.isLt; omega⟩
 def rightChain (q : Fin 16) : Chain := ⟨2*q.val+2, by have := q.isLt; omega⟩
-def lengthSetup (q : ℕ) : Code :=
-  if q=6 then [.ADDI .x11 .x0 144] else []
+def lengthSetup (_q : ℕ) : Code := []
 
 theorem hashRow_length (q d : ℕ) : (hashRow q d).length = 2^fineWidth q := by
   simp [hashRow]
@@ -37,13 +36,13 @@ theorem right_previous (q : Fin 16) : prevInput (rightChain q) = work (leftChain
 
 theorem remaining_left (index : ChainIndex) (q : Fin 16) :
     remaining index (leftChain q) = (PairCode.recode q (rawPair index.val q)).1 + 1 - lead q := by
-  rw [steps_eq_digit, ← lead_pair q.val 0 (by omega)]
+  rw [steps_eq_digit, ← lead_left q.val]
   simp only [leftChain, Nat.add_zero, chainDigit_succ, stepDigit_even]
   rfl
 
 theorem remaining_right (index : ChainIndex) (q : Fin 16) :
-    remaining index (rightChain q) = (PairCode.recode q (rawPair index.val q)).2 + 1 - lead q := by
-  rw [steps_eq_digit, ← lead_pair q.val 1 (by omega)]
+    remaining index (rightChain q) = (PairCode.recode q (rawPair index.val q)).2 + 1 - tailLead q := by
+  rw [steps_eq_digit, ← lead_right q.val]
   simp only [rightChain, show 2*q.val+2 = (2*q.val+1)+1 by omega, chainDigit_succ, stepDigit_odd]
 
 def pairCorrection (index : ChainIndex) (q : ℕ) : ℕ :=
@@ -91,7 +90,7 @@ theorem skipFlag_right (index : ChainIndex) (q : Fin 16) (h : skipFlag index q =
   unfold skipFlag isSkip at h
   simp only [Bool.and_eq_true, beq_iff_eq] at h
   rw [remaining_right, h.2]
-  unfold lead; rw [if_pos (Or.inl hc)]
+  unfold tailLead; rw [if_pos (Or.inl hc)]
 
 /-- What follows the left chain's hashes: the right chain's pointer pair, hashes and the next
 prologue; or, after a skip, the rebased prologue (preceded by the skip row's checksum unit when
@@ -100,7 +99,7 @@ def afterLeft (index : ChainIndex) (q : Fin 16) : Code :=
   if skipFlag index q then
     (if PairCode.helper q (rawPair index.val q) = 0 then [.ADDI .x27 .x27 (imm12 4)] else []) ++
       skipNext q
-  else enter (rightChain q) (prevInput (rightChain q)) ++
+  else between q ++
     List.replicate (remaining index (rightChain q)) .ECALL ++ nextCode q
 
 /-- The correction added before the left chain (by a redirect), and after it (by a skip row). -/
@@ -129,7 +128,7 @@ theorem landing_located (index : ChainIndex) (s : MachineState)
       (digit index.val (2*q.val),15-coarseDigit index q) := (mappedPair_rawPair index q).symm.trans good
   have hRemain : digit index.val (2*q.val)+1-lead q = remaining index (leftChain q) := by
     rw [remaining_left, mapped]
-  have hSecond : 15-d+1-lead q = remaining index (rightChain q) := by
+  have hSecond : 15-d+1-tailLead q = remaining index (rightChain q) := by
     rw [remaining_right, mapped]
   have located := copy_located s global q ⟨d,hd⟩
   have h := CodeAt.drop located off
@@ -157,7 +156,7 @@ theorem landing_located (index : ChainIndex) (s : MachineState)
   · rw [if_pos hs] at h ⊢
     simpa only [List.nil_append, List.singleton_append, List.cons_append] using h
   · rw [if_neg hs] at h ⊢
-    rw [right_previous q, ← hSecond]
+    rw [← hSecond]
     simpa only [nextCode, rightChain, leftChain, List.append_assoc] using h
 
 end OptimalOTS.RiscvMixedProgram

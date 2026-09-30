@@ -261,7 +261,7 @@ theorem addressSum_toNat (a : MachineState) (hm : MasksLoaded a)
     decide +kernel
   rw [BitVec.toNat_sub_of_le, eb]
   rw [BitVec.le_def, eb]
-  have en : baseWord 0 = 18434572877438406699 := by decide +kernel
+  have en : baseWord 0 = 18445832168569065596 := by decide +kernel
   rw [en]
   omega
 
@@ -391,35 +391,35 @@ theorem free_remainder_iff (a : MachineState) (hm : MasksLoaded a)
       _ = 480 := by norm_num
   have weighted := weighted_le_raw (pack answer)
   have hs := addressSum_toNat a hm hb
-  have en : baseWord 0 = 18434572877438406699 := by decide +kernel
+  have en : baseWord 0 = 18445832168569065596 := by decide +kernel
   rw [en] at hs
   have hc' : (W (6144 + 4 * (31-c))).toNat = 6144 + 4 * (31-c) := W_toNat _ (by omega)
   have hdelta : (W (4*(rawDigitSum (pack answer)+6-digitSum (pack answer)))).toNat =
       4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) := W_toNat _ (by omega)
   rw [BitVec.toNat_add, BitVec.toNat_add, hc', hdelta, hs,
     Nat.mod_eq_of_lt (show
-      4 * 18434572877438406699 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) < 2^64 by omega),
+      4 * 18445832168569065596 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) < 2^64 by omega),
     Nat.mod_eq_of_lt (show
-      4 * 18434572877438406699 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) +
+      4 * 18445832168569065596 - 3 * 2 ^ 64 - (laneSum a 4).toNat + (6144 + 4 * (31-c)) +
         4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) < 2^64 by omega), freeDigit]
   let d := 661 - digitSum (pack answer) - c
   have hd : d + c = 661 - digitSum (pack answer) := by dsimp [d]; omega
   have hleft :
-      (4 * 18434572877438406699 - 3 * 2 ^ 64 - (laneSum a 4).toNat +
+      (4 * 18445832168569065596 - 3 * 2 ^ 64 - (laneSum a 4).toNat +
         (6144 + 4 * (31-c)) + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer))) + ((laneSum a 4).toNat + 960) + 4*c =
-      4 * 18434572877438406699 - 3 * 2 ^ 64 + 7228 + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) := by omega
+      4 * 18445832168569065596 - 3 * 2 ^ 64 + 7228 + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) := by omega
   have hright : (1 + 4*d) + 4 * rawDigitSum (pack answer) + 4*c =
       2621 + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer)) := by
     dsimp [d]
     omega
   have shifted : Nat.ModEq 257
-      (4 * 18434572877438406699 - 3 * 2 ^ 64 - (laneSum a 4).toNat +
+      (4 * 18445832168569065596 - 3 * 2 ^ 64 - (laneSum a 4).toNat +
         (6144 + 4 * (31-c)) + 4*(rawDigitSum (pack answer)+6-digitSum (pack answer))) (1 + 4*d) := by
     apply Nat.ModEq.add_right_cancel congruence
     apply Nat.ModEq.add_right_cancel' (4*c)
     rw [hleft, hright]
     exact (show Nat.ModEq 257
-      (4*18434572877438406699-3*2^64+7228) 2621 by decide +kernel).add_right _
+      (4*18445832168569065596-3*2^64+7228) 2621 by decide +kernel).add_right _
   have hc257 : c % 257 = c := Nat.mod_eq_of_lt (by omega)
   constructor
   · intro h

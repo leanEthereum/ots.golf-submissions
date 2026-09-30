@@ -51,6 +51,8 @@ theorem out_to_work' : ∀ q : Fin 16,
 theorem lane_access' : ∀ q : Fin 16, isValidHalfwordAccess (W (laneAddr q)) = true := by
   decide +kernel
 
+attribute [local irreducible] work outAddr prevInput
+
 /-- The effect of the pointer move and the halfword load. -/
 structure FrontEffect (index : ChainIndex) (q : Fin 16) (s a : MachineState) : Prop where
   pc : a.pc = s.pc + 8

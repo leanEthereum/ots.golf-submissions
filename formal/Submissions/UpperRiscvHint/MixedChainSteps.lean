@@ -18,8 +18,8 @@ theorem afterIndex_payloadFrom (pk : PublicKey) (m : Message) (view : List Bool)
   have hc := wireOffset_contained j
   unfold honestViewBits at hc
   have ha := wireOffset_aligned j
-  have hw := chainBits_le j
-  have h := memBits_extract (start := wireOffset j) (len := chainBits j) h0 ha (by omega)
+  have hw := wireBits_le j
+  have h := memBits_extract (start := wireOffset j) (len := wireBits j) h0 ha (by omega)
   rw [ofBits_extract _ (by omega)] at h
   have e : Riscv.signatureBase + BitVec.ofNat 64 (wireOffset j / 8) = W (work j) := by
     rw [show Riscv.signatureBase = W 0x400030 from rfl, W_add, work_eq_view]

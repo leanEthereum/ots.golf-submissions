@@ -12,8 +12,8 @@ attribute [local irreducible] OptimalOTS.RiscvMixedProgram.tables OptimalOTS.Ris
 namespace OptimalOTS.CappedCost
 
 /-- Ordinary instructions of pair `q` beyond its weight: cap pairs 5 (the shifted weight carries
-the sixth), pair 15 six, normal pairs eight, and pair 6's width switch. -/
-def overhead (q : ℕ) : ℕ := (if q < 6 then 5 else if 15 ≤ q then 6 else 8) + if q = 6 then 1 else 0
+the sixth), pair 15 six, normal pairs eight (pair 6 trades a mandatory hash for its width switch). -/
+def overhead (q : ℕ) : ℕ := if q < 6 then 5 else if 15 ≤ q then 6 else 8
 
 def cost (w : ℕ → ℕ) : (n q : ℕ) → ℕ
   | 0, _ => 21
@@ -30,7 +30,7 @@ theorem cost_le (w : ℕ → ℕ) (hw : ∀ q, overhead q + w q ≤ 32) : ∀ n 
     rw [cost]
     omega
 
-theorem cost_allowed (w : ℕ → ℕ) : cost w 16 0 = 130 + ∑ q ∈ Finset.range 16, w q := by
+theorem cost_allowed (w : ℕ → ℕ) : cost w 16 0 = 129 + ∑ q ∈ Finset.range 16, w q := by
   simp only [cost,overhead,Finset.sum_range_succ,Finset.sum_range_zero]
   norm_num
   omega
@@ -59,15 +59,16 @@ theorem skip_save' : ∀ q : Fin 16, ∀ p : PairCode.Pair,
     PairCode.skip q p = 1 → PairCode.skipSave q p = 1 + PairCode.helper q p := by decide +kernel
 
 theorem overhead_facts : ∀ q : Fin 16,
-    (lengthSetup q).length + 8 = CappedCost.overhead q.val + 2 * lead q +
+    (lengthSetup q).length + 6 + (between q).length = CappedCost.overhead q.val + lead q + tailLead q +
       (if PairCode.kind q.val then 1 else 0) ∧
-    (PairCode.kind q.val = true → lead q = 1) := by
+    (PairCode.kind q.val = true → lead q = 1 ∧ tailLead q = 1 ∧ (between q).length = 2) := by
   decide +kernel
 
 theorem pairCost_overhead (index : ChainIndex) (q : Fin 16) :
     pairCost index q = CappedCost.overhead q.val + pairWeight index q.val := by
   obtain ⟨hov, hlead⟩ := overhead_facts q
   have hl := lead_le q
+  have ht : tailLead q ≤ 1 := by unfold tailLead; split_ifs <;> omega
   have hdec := PairCode.decoder_cost_exact q.val (rawPair index.val q)
   have hh := helper_le' q (rawPair index.val q)
   rw [pairCost_eq, remaining_left]
@@ -77,7 +78,9 @@ theorem pairCost_overhead (index : ChainIndex) (q : Fin 16) :
     obtain ⟨hy, hk⟩ := skip_recode' q _ hs1
     have hss := skip_save' q _ hs1
     rw [hk] at hov hdec
-    rw [hlead hk] at hov ⊢
+    obtain ⟨hle, hte, hbe⟩ := hlead hk
+    rw [hle, hte, hbe] at hov
+    rw [hle]
     rw [if_pos hs]
     simp only [if_true] at hov hdec
     split_ifs <;> omega
@@ -107,7 +110,7 @@ theorem stagedCost_le (index : ChainIndex) : stagedCost index 16 0 ≤ 533 := by
     split_ifs <;> omega
 
 theorem stagedCost_allowed (index : ChainIndex) :
-    stagedCost index 16 0 = 130 + digitSum index.val := by
+    stagedCost index 16 0 = 129 + digitSum index.val := by
   rw [stagedCost_eq index 16 0 (by decide),CappedCost.cost_allowed,← Fin.sum_univ_eq_sum_range]
   rfl
 
@@ -181,7 +184,7 @@ theorem checkedRun_refines (index : ChainIndex) (wire : List Bool) (pk : PublicK
       (∃ junk, Riscv.CodeAt s s.pc (blockCodeAt index q ++ junk)) →
       stagedCost index n q ≤ fuel →
       Riscv.Refines fuel s
-        (checkedRun index (viewPayload wire) pk ok n q x (cursor (2*q+1)))
+        (checkedRun index (viewPayload wire) pk ok n q x (cursorAt index (2*q+1)))
         (stagedCost index n q) := by
   intro n
   induction n with
@@ -198,7 +201,7 @@ theorem checkedRun_refines (index : ChainIndex) (wire : List Bool) (pk : PublicK
     rw [checkedRun,check]
     by_cases valid : rv64_remu (creditAt index base 16) (W 257) = Riscv.hashCall
     · rw [decide_eq_true valid,if_pos rfl]
-      exact rootDecision_refines index (viewPayload wire) wire pk s x fuel valid
+      exact rootDecision_refines index (viewPayload wire) wire pk s x fuel (cursorAt index 33) valid
         (final_root index wire pk inv) located.append_left (by omega)
     · rw [decide_eq_false valid,if_neg Bool.false_ne_true]
       exact rootReject_refines index wire pk s x fuel valid
@@ -207,7 +210,7 @@ theorem checkedRun_refines (index : ChainIndex) (wire : List Bool) (pk : PublicK
     intro q hq hq' s x fuel inv start located bound
     have hq16 : q<16 := by omega
     let Q : Fin 16 := ⟨q,hq16⟩
-    rw [checkedRun,dif_pos hq16]
+    rw [show cursorAt index (2*q+1) = cursor (2*q+1) from cursorAt_chain index ⟨2*q+1,by omega⟩, checkedRun,dif_pos hq16]
     rw [stagedCost,dif_pos hq16] at bound ⊢
     unfold blockCodeAt at located
     rw [if_pos hq16] at located
@@ -263,11 +266,11 @@ theorem freeLanding_located (s : MachineState) (global : Riscv.CodeAt s (W 4096)
     (c : ℕ) (hc : c ≤ 63) :
     Riscv.CodeAt s (W (freeLanding - 4*c)) (freeRow.drop (64 - c) ++ (prologue 0 ++ tables)) := by
   have h := (front_located s global).append_right
-  rw [show (freeDispatch.length) = 134 from rfl, W_add] at h
+  rw [show (freeDispatch.length) = 150 from rfl, W_add] at h
   have h' := CodeAt.drop h (64 - c)
   rw [List.drop_append_of_le_length (by simp only [freeRow, List.length_append, List.length_cons, List.length_nil, List.length_map, List.length_range]; omega),
     W_add] at h'
-  have e : 4096 + 4*31 + 4*134 + 4*(64 - c) = freeLanding - 4*c := by unfold freeLanding; omega
+  have e : 4096 + 4*31 + 4*150 + 4*(64 - c) = freeLanding - 4*c := by unfold freeLanding; omega
   rwa [e] at h'
 
 set_option maxRecDepth 100000 in
@@ -277,12 +280,12 @@ theorem freeRow_hashes : ∀ c : Fin 19,
 
 set_option maxRecDepth 100000 in
 theorem free_reject_facts : ∀ c : Fin 64, 19 ≤ c.val →
-    freeRow.drop (64 - c.val) = rejectJump (229 - c.val) :: freeRow.drop (65 - c.val) ∧
-    stubFor (229 - c.val) ∈ rejectStubs ∧
-    Riscv.admittedInstruction (rejectJump (229 - c.val)) = true ∧
+    freeRow.drop (64 - c.val) = rejectJump (245 - c.val) :: freeRow.drop (65 - c.val) ∧
+    stubFor (245 - c.val) ∈ rejectStubs ∧
+    Riscv.admittedInstruction (rejectJump (245 - c.val)) = true ∧
     W (freeLanding - 4*c.val) +
-        signExtend13 (BitVec.ofInt 13 (4*((stubFor (229 - c.val) : ℤ) - (229 - c.val : ℕ)))) =
-      W (4096 + 4*stubFor (229 - c.val)) := by
+        signExtend13 (BitVec.ofInt 13 (4*((stubFor (245 - c.val) : ℤ) - (245 - c.val : ℕ)))) =
+      W (4096 + 4*stubFor (245 - c.val)) := by
   decide +kernel
 
 /-- A free count of at least 19 lands on a jump to a rejection stub. -/
@@ -295,13 +298,13 @@ theorem free_reject_refines (s : MachineState) (global : Riscv.CodeAt s (W 4096)
   dsimp only at hdrop hstub hadmit htarget
   rw [hdrop, List.cons_append, ← pc] at loc
   have fetch := loc.head
-  have transition : step s = some (s.setPC (W (4096+4*stubFor (229 - c)))) := by
+  have transition : step s = some (s.setPC (W (4096+4*stubFor (245 - c)))) := by
     rw [RiscvZkvm.Rv64.step, fetch]
     simp only [rejectJump, execInstrBr, if_true]
     rw [pc]
     exact congrArg (fun p => some (s.setPC p)) htarget
-  have locReject : Riscv.CodeAt (s.setPC (W (4096+4*stubFor (229 - c))))
-      (W (4096+4*stubFor (229 - c))) reject :=
+  have locReject : Riscv.CodeAt (s.setPC (W (4096+4*stubFor (245 - c))))
+      (W (4096+4*stubFor (245 - c))) reject :=
     (rejectStub_located s global _ hstub).code_eq rfl
   have stop := reject_refines _ (fuel-1) locReject (by omega)
   rw [show fuel=(fuel-1)+1 by omega, show (4 : ℕ)=3+1 by omega]
@@ -377,7 +380,7 @@ theorem freeDispatch_refines (s : MachineState) (tail : Code) (tag : ℕ)
     Riscv.Refines fuel s Q (3 + cost) := by
   let lin : Code := enter 0 hashBase
   let jump : Instr := .JALR .x0 .x6 (imm12 ((freeLanding : ℤ) - freeBase - 124))
-  have code : Riscv.CodeAt s s.pc (lin ++ ([jump] ++ (List.replicate 131 nop ++ tail))) := by
+  have code : Riscv.CodeAt s s.pc (lin ++ ([jump] ++ (List.replicate 147 nop ++ tail))) := by
     simpa only [freeDispatch, lin, jump, List.append_assoc, List.cons_append, List.nil_append]
       using located
   have E : EntryEffect s (lin.foldl execInstrBr s) 0 :=
@@ -392,7 +395,7 @@ theorem freeDispatch_refines (s : MachineState) (tail : Code) (tag : ℕ)
     intro r h10 h12 _
     exact E.regs r h10 h12
   have u6 : u.getReg .x6 = W tag := by rw [E.regs .x6 (by decide) (by decide), x6]
-  have uloc : Riscv.CodeAt u u.pc ([jump] ++ (List.replicate 131 nop ++ tail)) := by
+  have uloc : Riscv.CodeAt u u.pc ([jump] ++ (List.replicate 147 nop ++ tail)) := by
     rw [upc]; exact code.append_right.code_eq ucode
   generalize htarget : dispatchTarget tag = target at continuation
   let t := u.setPC target
@@ -420,7 +423,7 @@ theorem dispatchTarget_honest (view : List Bool) (bank : viewBank view = 3) :
 
 theorem remaining_free (index : ChainIndex) : remaining index 0 = index.free.val := by
   rw [steps_eq_digit]
-  simp only [chainDigit,Fin.val_zero,if_true,show (0:ℕ)<13 by omega,true_or]
+  simp only [chainDigit,Fin.val_zero,if_true,show (0:ℕ)<14 by omega,true_or]
   omega
 
 /-- Any admitted view count runs its chosen free chain before the delayed checksum. -/
@@ -450,9 +453,7 @@ theorem free_refines (index : ChainIndex) (view : List Bool) (pk : PublicKey) (c
     (fun r => checkedRun index (viewPayload view) pk ok 16 0 r.1 r.2)
     (stagedCost index 16 0) (stagedCost index 16 0) (W freeLanding) ?_ t (fun _ => 0) fuel prep loc hP bound
   intro u z inv locU upc left hleft
-  have e : cursor ((0 : Chain).val)+chainBits 0 = cursor (2*0+1) := by decide
   dsimp only
-  rw [e]
   apply checkedRun_refines index view pk credit ok check 16 0 rfl (by omega) u z left
     (by simpa only [creditAt_zero,Fin.val_zero,Nat.mul_zero,Nat.zero_add,entrySkip,if_true]
       using inv.entry index view pk) (fun _ => upc)

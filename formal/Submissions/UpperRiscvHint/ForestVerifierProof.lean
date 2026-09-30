@@ -152,7 +152,7 @@ def directVerify (pk : PublicKey) (m : Message) (bits : List Bool) :
     OracleComp Spec Bool := do
   let i ← packIndex (emsg m pk) (ofBits 128 (bits.take 128))
   if hi : i ∈ validSet then
-    if bits.length = 5504 then
+    if bits.length = Forest.fullSignatureBits (⟨i, hi⟩ : Idx) then
       let y ← directReconstruct ⟨i, hi⟩ (bits.drop 128)
       return decide (flipHi ((y rh.fin).setWidth 128) = pk)
     else return false
@@ -169,7 +169,8 @@ theorem directVerify_eq (pk : PublicKey) (m : Message) (bits : List Bool) :
   · rw [dif_pos hi, dif_pos hi]
     have hlen := Wire.payload_length_iff bits ⟨i, hi⟩
     simp only [Wire.decode] at hlen
-    change (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) ↔ bits.length = 5504 at hlen
+    change (bits.drop 128).length = graph.revealBits (fins (setsName ⟨i, hi⟩)) ↔
+      bits.length = Forest.fullSignatureBits (⟨i, hi⟩ : Idx) at hlen
     simp only [hlen, directReconstruct_eq]
   · rw [dif_neg hi, dif_neg hi]
 

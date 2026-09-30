@@ -168,9 +168,9 @@ theorem child_hashParent {h p : Name} (hp : hashParent h = some p) : child p = s
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   all_goals rfl
 
-/-- The input of a hash node has length 144, 192 (chains) or 7072 (root). -/
+/-- The input of a hash node has length 141, 192 (chains) or 7133 (root). -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 144 ∨ p.len = 192 ∨ p.len = 7072 := by
+    p.len = 141 ∨ p.len = 192 ∨ p.len = 7133 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · rename_i k t
     rcases chainBits_cases k with hk | hk <;> simp [Name.len, hk]
@@ -187,7 +187,7 @@ theorem len_hashParent_ne_enc {h p : Name} (hp : hashParent h = some p) :
 is not written next to the input (the oracle has no labels, the scheme no headers). -/
 def pointOf (ξ : Rec) (_h p : Name) : Query := ⟨p.len, val ξ p⟩
 
-/-- A keygen point is not an index query: its length is 144, 192 or 7072, never 512. -/
+/-- A keygen point is not an index query: its length is 141, 192 or 7133, never 512. -/
 theorem pointOf_ne_encQuery {h p : Name} (hp : hashParent h = some p) (ξ : Rec)
     (u : EncInput) : pointOf ξ h p ≠ encQuery u :=
   ne_encQuery_of_length_ne (len_hashParent_ne_enc hp) u
@@ -422,7 +422,7 @@ theorem sim_rh_iff (ξ : Rec) (w : BitVec 256) : sim ξ rh w ↔ trunc128 w = tr
 honest input of `h`, simulates the honest output of `h`. Without labels a string of length
 `p.len` is a candidate preimage for every hash node with that input length, so the event is a
 union over the hash nodes; the charge per fresh query stays below `ε` because a chain node is
-simulated on at least 144 bits (`spr_charge`). -/
+simulated on at least 141 bits (`spr_charge`). -/
 def Spr (c : Cache) (ξ : Rec) : Prop :=
   ∃ h p, hashParent h = some p ∧ ∃ u : BitVec p.len, u ≠ val ξ p ∧
     ∃ w, c ⟨p.len, u⟩ = some w ∧ sim ξ h w
@@ -557,10 +557,10 @@ theorem card_filter_extract_le (o c : ℕ) (hoc : o + c ≤ 256) (a : BitVec c) 
   rw [Finset.card_univ, Fintype.card_bitVec, he] at key
   exact key
 
-/-- Fixing a chain's state slice (at least 144 bits, at bit `truncOff k`) leaves at most 112
+/-- Fixing a chain's state slice (at least 141 bits, at bit `truncOff k`) leaves at most 115
 unconstrained bits. -/
 theorem card_filter_trunc_le' (k : Chain) (a : BitVec (chainBits k)) :
-    (Finset.univ.filter fun w : BitVec 256 => trunc k w = a).card ≤ 2 ^ 112 := by
+    (Finset.univ.filter fun w : BitVec 256 => trunc k w = a).card ≤ 2 ^ 115 := by
   refine le_trans (Finset.card_le_card fun w hw => ?_)
     ((card_filter_extract_le (truncOff k) (chainBits k) (truncOff_add_le k) a).trans
       (Nat.pow_le_pow_right (by norm_num) (by have := chainBits_ge k; omega)))
@@ -569,12 +569,12 @@ theorem card_filter_trunc_le' (k : Chain) (a : BitVec (chainBits k)) :
 
 /-- A top pins at least 192 of the 256 bits of the last answer. -/
 theorem card_filter_topOf_le (k : Chain) (a : BitVec (topBits k)) :
-    (Finset.univ.filter fun w : BitVec 256 => topOf k w = a).card ≤ 2 ^ 112 :=
+    (Finset.univ.filter fun w : BitVec 256 => topOf k w = a).card ≤ 2 ^ 115 :=
   (card_filter_extract_le (topOff k) (topBits k) (topOff_add_le k) a).trans
     (Nat.pow_le_pow_right (by norm_num) (by have := topBits_ge k; omega))
 
 theorem card_filter_sim_le' (ξ : Rec) (h : Name) (hh : h ≠ rh) :
-    (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 112 := by
+    (Finset.univ.filter fun w : BitVec 256 => sim ξ h w).card ≤ 2 ^ 115 := by
   cases h with
   | ch k t =>
     by_cases ht : t.val = 31
@@ -601,7 +601,7 @@ theorem mem_hashNodes {h : Name} : h ∈ hashNodes ↔ (hashParent h).isSome := 
 
 attribute [irreducible] hashNodes
 
-theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 7072) :
+theorem eq_rh_of_hashParent_len {h p : Name} (hp : hashParent h = some p) (hl : p.len = 7133) :
     h = rh := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;> subst hp
   · simp [Name.len, chainBits] at hl
@@ -614,7 +614,7 @@ def simSet (ξ : Rec) (n : ℕ) : Finset (BitVec 256) :=
 
 /-- At most `2 ^ 128` answers simulate some hash node of a given input length. -/
 theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := by
-  by_cases hn : n = 7072
+  by_cases hn : n = 7133
   · subst hn
     refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_trunc128_le (trunc128 (ξ.2 rh.fin)))
     rw [simSet, Finset.mem_filter] at hw
@@ -635,7 +635,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
       exact hn hl.symm
     refine (Finset.card_le_card hsub).trans ((Finset.card_biUnion_le).trans ?_)
     calc ∑ h ∈ hashNodes, (Finset.univ.filter fun w : BitVec 256 => sim ξ h w ∧ h ≠ rh).card
-        ≤ ∑ _h ∈ hashNodes, 2 ^ 112 := by
+        ≤ ∑ _h ∈ hashNodes, 2 ^ 115 := by
           refine Finset.sum_le_sum fun h _ => ?_
           by_cases hh : h = rh
           · subst hh
@@ -646,7 +646,7 @@ theorem card_simSet_le (ξ : Rec) (n : ℕ) : (simSet ξ n).card ≤ 2 ^ 128 := 
           · refine le_trans (Finset.card_le_card fun w hw => ?_) (card_filter_sim_le' ξ h hh)
             rw [Finset.mem_filter] at hw ⊢
             exact ⟨hw.1, hw.2.1⟩
-      _ = 1057 * 2 ^ 112 := by rw [Finset.sum_const, card_hashNodes, smul_eq_mul]
+      _ = 1057 * 2 ^ 115 := by rw [Finset.sum_const, card_hashNodes, smul_eq_mul]
       _ ≤ 2 ^ 128 := by norm_num
 
 theorem inv_card_bitVec_mul_two_pow : (Fintype.card (BitVec 256) : ℝ≥0∞)⁻¹ * ((2 ^ 128 : ℕ) : ℝ≥0∞) = ε := by
@@ -860,9 +860,9 @@ theorem low_rootCat (c : (k : Chain) → BitVec (topBits k)) :
 /-- Resampling the last answer of chain `32` moves the root input through its lowest slot. -/
 theorem card_updHash_rc_le (ξ : Rec) (u : BitVec rc.len) :
     (Finset.univ.filter fun b : BitVec 256 => val (updHash ξ (coordOf rh) b) rc = u).card ≤
-      2 ^ 112 := by
+      2 ^ 115 := by
   refine le_trans (Finset.card_le_card fun b hb => Finset.mem_filter.2 ⟨Finset.mem_univ _, ?_⟩)
-    (card_filter_extract_le (topOff 32) (topBits 32) (topOff_add_le 32) (u.setWidth (topBits 32)))
+    (card_filter_topOf_le 32 (u.setWidth (topBits 32)))
   have e := congrArg (fun x : BitVec rc.len => x.setWidth (topBits 32)) (Finset.mem_filter.1 hb).2
   rw [val_rc] at e
   have l := low_rootCat (fun k => topOf k ((updHash ξ (coordOf rh) b).2 (ch k 31).fin))

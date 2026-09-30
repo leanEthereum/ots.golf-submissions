@@ -76,7 +76,7 @@ theorem afterLeft_redirected (index : ChainIndex) (q : Fin 16)
   rw [hs]
   split_ifs
   · rfl
-  · rw [remaining_right, right_previous]; rfl
+  · rw [remaining_right]
 
 /-- Both entry forms reach the same recoded hash block. Redirects execute exactly JAL + ADDI. -/
 theorem landing_refines (index : ChainIndex) (view : List Bool) (pk : PublicKey) (q : Fin 16)

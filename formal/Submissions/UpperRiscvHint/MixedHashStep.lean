@@ -3,6 +3,8 @@ import Submissions.UpperRiscvHint.MixedMemory
 import Submissions.UpperRiscvHint.MixedDispatchArith
 import Submissions.UpperRiscvHint.MixedContext
 
+set_option maxRecDepth 100000
+
 namespace OptimalOTS.RiscvMixedProgram
 variable {credit : BitVec 64}
 open RiscvZkvm.Rv64
@@ -103,6 +105,8 @@ theorem prevInput_bounds' : ∀ k : Chain, prevInput k < 2^62 := by
   decide +kernel
 
 theorem prevInput_bounds (k : Chain) : prevInput k < 2^62 := prevInput_bounds' k
+
+attribute [local irreducible] work outAddr prevInput
 
 theorem input_step (s : MachineState) (k : Chain) (hp : s.getReg .x10 = W (prevInput k)) :
     s.getReg .x10 + signExtend12 (imm12 ((work k : ℤ)-prevInput k)) = W (work k) := by

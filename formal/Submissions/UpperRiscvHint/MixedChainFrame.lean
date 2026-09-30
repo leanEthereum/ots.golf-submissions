@@ -8,7 +8,7 @@ open RiscvZkvm.Rv64
 open Riscv2Program
 open Forest
 
-theorem slotWidth_aligned : ∀ s : Fin 33, slotWidth s % 8 = 0 := by decide
+theorem slotWidth_aligned : ∀ s : Fin 32, slotWidth s % 8 = 0 := by decide
 
 /-- Root slot `s + 1` starts where slots `0 … s` end. -/
 theorem slot_address : ∀ s : Fin 32, topAddr (slotChain (s.val + 1)) = regionAddr + slotWidth s / 8 := by
@@ -34,7 +34,7 @@ theorem completed_slotCat (s : MachineState) (c : (k : Chain) → BitVec (topBit
     rw [e, ← W_add] at h
     exact h
 
-/-- The completed tops form exactly the graph's 7072-bit root input. -/
+/-- The completed tops form exactly the graph's 7133-bit root input. -/
 theorem completed_root (s : MachineState) (c : (k : Chain) → BitVec (topBits k))
     (done : Completed s c 33) : MemBits s (W regionAddr) (rootCat c) := by
   unfold rootCat
@@ -147,7 +147,7 @@ theorem Ctx.prologue {s t : MachineState} {index : ChainIndex} {view : List Bool
 variable (index : ChainIndex) (wire : List Bool) (pk : PublicKey)
 
 /-- Hash-input width in `x11` at the boundary before chain `k`: the previous chain's width. -/
-def prevBits (k : ℕ) : ℕ := if k ≤ 13 then 192 else 144
+def prevBits (k : ℕ) : ℕ := if k ≤ 14 then 192 else 141
 
 /-- State at a boundary between complete chains. -/
 structure ChainsInv (s : MachineState) (x : graph.Assignment) (k : ℕ) : Prop where

@@ -190,10 +190,10 @@ theorem loadView_word (image : Riscv.Image) (pk : PublicKey) (m : Message) (view
       norm_num [Riscv.bytesOfBits, RiscvHint.maxViewBits, BitVec.toNat_add] at hb ⊢
       omega
 
-/-- The first 7296 view bits, a whole number of words covering the nonce and every chain value. -/
+/-- The first 7360 view bits, a whole number of words covering the nonce and every chain value. -/
 theorem loadView_memBits (image : Riscv.Image) (pk : PublicKey) (m : Message) (view : List Bool)
     (hdata : image.data.length ≤ 1048576) :
-    MemBits (RiscvHint.loadView image pk m view) Riscv.signatureBase (ofBits 7296 view) := by
+    MemBits (RiscvHint.loadView image pk m view) Riscv.signatureBase (ofBits 7360 view) := by
   apply memBits_of_words _ _ _ (by decide +kernel)
   intro j hj
   rw [loadView_word image pk m view hdata j (by omega), ofBits_extract _ (by omega),

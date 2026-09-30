@@ -3,10 +3,10 @@ import Submissions.UpperRiscvHint.MixedHashStep
 /-!
 # The root and the decision
 
-The 884 bytes from the last chain's state are the 7072-bit root input (`rootCat`), so `x10`
+The 892 bytes from the last chain's state are the 7133-bit root input (`rootCat`), so `x10`
 already points at it. Its hash, charged fourteen cycles, is written into the last chain's answer
 buffer, and the low 128 bits of the answer are compared with the public key saved in `x30`/`x31`,
-whose high word has bit 0 flipped. The root length is pair 0's link in `x1` plus 2044. The decision
+whose high word has bit 0 flipped. The root length is pair 0's link in `x1` plus 2041. The decision
 costs five cycles on every completed path.
 -/
 
@@ -24,7 +24,7 @@ attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
 variable (index : ChainIndex) (payload : List Bool) (view : List Bool) (pk : PublicKey)
 
-def rootLin : Code := sumCheck ++ [.ADDI .x11 .x1 (imm12 (7072 - (rootBase : ℤ)))]
+def rootLin : Code := sumCheck ++ [.ADDI .x11 .x1 (imm12 (7133 - (rootBase : ℤ)))]
 
 /-- Where the root answer is written: the answer buffer of the last chain. -/
 def rootOut : ℕ := outAddr 32
@@ -151,11 +151,11 @@ theorem root_memBits (s : MachineState) (x : graph.Assignment)
     (inv : RootInv (credit := credit) index view pk s x) : MemBits s (W regionAddr) (rootCat (tops x)) := inv.root
 
 /-- The root hash over the region and the decision, at 21 cycles. -/
-theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : ℕ)
+theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel cursor : ℕ)
     (check : rv64_remu credit (W 257) = Riscv.hashCall)
     (inv : RootInv (credit := credit) index view pk s x)
     (located : Riscv.CodeAt s s.pc (root ++ decision)) (bound : 9 ≤ fuel) :
-    Riscv.Refines fuel s (runNodes' index payload [rc, rh] x 5376 >>= fun r =>
+    Riscv.Refines fuel s (runNodes' index payload [rc, rh] x cursor >>= fun r =>
         pure (decisionOutcome ((r.1 rh.fin).setWidth 128) pk)) 21 := by
   have hd : 32 ≤ rootOut ∧ rootOut + 32 ≤ 0x78000000 ∧ rootOut % 8 = 0 := by
     norm_num [rootOut, outAddr]
@@ -179,7 +179,7 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
   have w10 : w.getReg .x10 = W regionAddr := by
     rw [wRegs .x10 (by decide) (by decide), inv.input]
     rfl
-  have w11 : w.getReg .x11 = 7072 := by
+  have w11 : w.getReg .x11 = 7133 := by
     rw [hw]
     simp only [rootLin, sumCheck, List.cons_append, List.nil_append, List.foldl_cons, List.foldl_nil, execInstrBr, MachineState.getReg_setPC,
       getReg_setReg_ite]
@@ -203,11 +203,11 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
       List.foldl_nil, execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite]
     simp [inv.ctx.modulus, inv.ctx.checksum, check]
   have wValid : Riscv.hashArgumentsValid w = true := by
-    have r1 : isValidOutputRange (W regionAddr) 884 = true :=
+    have r1 : isValidOutputRange (W regionAddr) 892 = true :=
       range_ok _ _ (by norm_num [regionAddr]) (by norm_num [regionAddr]) (by norm_num)
         (by norm_num)
     have r2 := hashOutput_ok rootOut hd.1 hd.2.1 hd.2.2
-    have e : ((7072 : Word).toNat + 7) / 8 = 884 := rfl
+    have e : ((7133 : Word).toNat + 7) / 8 = 892 := rfl
     unfold Riscv.hashArgumentsValid
     rw [w10, w11, w12, e, r1, Bool.true_and]
     exact r2
@@ -220,7 +220,7 @@ theorem rootDecision_refines (s : MachineState) (x : graph.Assignment) (fuel : �
     apply (memBits_cast _ _ _ _).mpr
     exact wValue
   have blocks : blockCost (graph.len rc.fin) = 14 := by
-    rw [graph_len_fin]; show blockCost 7072 = 14; decide
+    rw [graph_len_fin]; show blockCost 7133 = 14; decide
   rw [show (21 : ℕ) = rootLin.length + (14 + 5) by rfl,
     show fuel = rootLin.length + ((fuel - rootLin.length - 1) + 1) by simp [rootLin, sumCheck]; omega]
   apply Riscv.Refines.linear _ located.append_left ready

@@ -1,51 +1,165 @@
-# Hinted RISC-V: skipped pointer pairs, 311
+# Hinted RISC-V: combined pointer skips and variable disclosure, 310
 
-30 September 2026. The six cap pairs (chains 1–12, both of which may hash zero
-times) get their own alphabet. When the right chain of such a pair hashes zero
-times its pointer pair `ADDI x10; ADDI x12` has no effect, so that row omits it:
+This combines the certified local 311 pointer-skip construction at `1cbee19`
+with the locally certified variable-disclosure 311 construction. Both parents
+remain preserved. The combined image passes independent machine and completion
+tests. The complete Lean 4.33.1 certificate compiles and passes exact-statement
+comparison, the permitted-axiom audit and fresh kernel replay of all
+23,094 exported declarations.
+Only `propext`, `Quot.sound` and `Classical.choice` are used.
 
-* The square row with right digit 0 runs one `ADDI x27, x27, 4` instead of the two
-  pointer writes (net −1), and its tail is `skipPrologue (q+1)`: the next
-  prologue's first `ADDI x12, x10` is measured from `work (2q+1)`, where `x10`
-  still points. Every other instruction of the next prologue is unchanged, so
-  the states agree again after its `ADDI x10`.
-* A redirect to a point `(x ≥ 16, 0)` drops the pointer pair and folds the unit
-  into its existing correction (net −2 against the redirect fee of 2).
+## Combined construction
 
-Weights. Cap pairs use `pairWeight true x 0 = x + [16 ≤ x]` and
-`pairWeight true x y = φ x + φ y + 1` for `y ≠ 0` (the executed cost, shifted by
-one so it stays a natural number; the unshifted weight of `(x, 0)` is `x - 1`
-or `x - 2`). Normal pairs keep `φ x + φ y`. Each pair weight is strictly
-increasing in both coordinates (`WeightedPairs.pairWeight_lt`), so equal rank
-still gives a crossing coordinate (`WeightedPairs.equal_rank_crossing`) and the
-existing forest reduction applies unchanged.
+Keep the skip-aware alphabets: pairs 0–5 use 32 redirects each, and pairs 6–15
+use the previous 30 redirects each. The shifted rank target is 147 and the free
+count is 0–18. The accepted set has exactly
+29392495299674139897463880312407816 indices, greater than 89 times 2^108.
+The maximum pair rank is 374; adding the largest free count gives 392, below
+the next modulo-257 alias at 404.
 
-Alphabet and count. `WeightedPairs.capSwaps` redirects 32 cap-pair points (the
-256 cheapest under the skip-aware weight); normal pairs keep the 30 swaps of the
-312. Accept shifted sums 129 through 147 (`target = 147`, free digit 0–18).
-`WeightedPairs.window_count` counts exactly 29392495299674139897463880312407816
-accepted indices, 1.0177 × 89·2^108. The maximum shifted rank is 374, so
-`374 + 18 < 147 + 257` excludes the checksum alias. The verifier's hash budget
-rises from 176 to 179 compressions (`FixedChoice.fixedCut_cost`); the security
-inequalities do not depend on it.
+A right chain with zero hashes in pairs 0–5 needs no pointer update. Ordinary
+skip rows replace the two pointer instructions with one checksum correction;
+redirected skip rows fold that correction into their existing helper. The next
+prologue measures its pointer from the left chain's retained state. These six
+pairs operate on chains 1–12, all still 192 bits wide.
 
-Checksum. The machine still sums raw lanes; corrections add
-`4 · (a + b + [cap] − weight)` per pair, in total `4 · (raw + 6 − S)`. The lane
-bias becomes 75 (`baseWord 0 = 18434572877438406699`), and
-`free_remainder_iff` gives residue 1 exactly when `S + c = 147`.
+Chain 13 also becomes a 192-bit optional-hash cap. The other nineteen states
+are 141 bits; chain 32 commits a 144-bit top. The full signature has 5495 or
+5498 bits, and a pure projection retains exactly 5495. The algorithmic verifier
+tries the short signature and its eight three-bit extensions, then re-verifies
+the selected full signature. The generic security transfer preserves the
+whole-experiment query budget. A conservative bound is 1800 verification
+compressions, within 2^20. Minimum state width 141 still satisfies the concrete
+127-bit strong-security inequalities.
 
-Machine proof. `dispatchFront`/`dispatchCode` take the base of `x10`
-(`FrontBase`); `MixedPair.EntryInv` is `ChainsInv` with `x10`/`x12` one chain
-back after a skip; `skipped_refines` completes a zero-hash right chain without
-executing anything; `pair_refines` threads the skip flag, and
-`checkedRun_refines` composes all sixteen pairs with `entrySkip`. Pair costs are
-`overhead + weight` with cap-pair overhead 5 (`pairCost_overhead`), so the staged
-cost is `130 + S` and every accepting path costs `31 + 3 + c + 130 + S = 311`.
-The image has 492 helpers and is still 1,043,408 bytes.
+## Machine and proof composition
 
-Where the idea stops. Only cap pairs can skip: normal chains always hash, and
-skipping chain 32's pointers in pair 15 would move the root's `x10` (+1). With
-12 skip-capable pairs the target would reach 140, but only 6 cap pairs exist.
+The width change occurs inside pair 6, after chain 13 and before chain 14.
+This permits a skip in pair 5 immediately before the newly optional cap.
+`EntryInv` tracks the skipped pointers; `between_refines` handles the width
+change; `cursorAt` accounts for the bottom chain's variable disclosure.
+
+The combined pair and root overhead is 129. Thus every accepting execution
+costs 31 index + 3 dispatch + 129 overhead + 147 rank = 310 cycles.
+Equivalently, for h redirects and s saved pointer instructions, compression
+cycles are 173 - 2h + s and ordinary cycles are 137 + 2h - s.
+
+The root is 7133 bits, still fourteen compression blocks. Sixteen unreachable
+padding instructions put the root length within immediate reach of pair 0's
+link: 5092 + 2041 = 7133. The image has 260854 instructions and 56 data bytes,
+1043472 bytes total, leaving 5104 bytes below the strict 1 MiB limit. There are
+492 helpers. The new lane bias is 92.
+
+## Validation
+
+The independent suite covers every pair landing and free count, checksum
+boundaries, both bottom-chain disclosure cases, individual view-bit mutations,
+unexpected length banks and every honest-bank length. Additional tests exercise
+all skip rows, simultaneous skips and the pair 5 to pair 6 width boundary.
+Completion tests cover sixteen keys, all eight omitted-bit values under coherent
+alternative-root oracle answers, and signature mutations.
+
+Reproduction scripts and audit results are in the workspace evidence directory
+`riscv-innovation-evidence/combined310`. The production verifier uses the unchanged
+contract `8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c` and Lean 4.33.1. The host's lack
+of Landlock prevents official sandbox verification; no hosted verdict is claimed.
+
+## Next steps
+
+The two one-cycle savings compose because the skipped pairs stop at chain 12.
+Further gains need another executed-instruction reduction, or a new graph and
+encoding whose availability count and strong-security bounds still close.
+Simply lowering target 147 is not justified by the existing count.
+
+## Historical variable-disclosure parent
+
+The following notes describe the earlier 311 construction and its own audit.
+
+# Hinted RISC-V: variable-disclosure 311 implementation
+
+The complete `Solution.certificate : submission.Certificate 311` compiles with
+Lean 4.33.1. Exact-statement comparison, the permitted-axiom audit and fresh
+kernel replay of all 22,928 exported declarations pass. The certificate
+depends only on `propext`, `Quot.sound` and `Classical.choice`.
+
+## Construction
+
+The weighted pair alphabet and rank target 142 are unchanged from the 312
+construction. Converting chain 13 to a zero-step-capable 192-bit chain removes
+one mandatory compression. All nineteen later chain states shrink to 141 bits,
+so the state disclosures total 5367 payload bits. The bottom chain still needs
+a byte-aligned 144-bit committed top: it discloses 144 bits when no hash remains,
+and 141 bits otherwise. Full forest signatures therefore have 5498 or 5495 bits.
+
+`Completion.project` always keeps the first 5495 bits. It is pure and does not
+consult the index oracle. The verifier tries the short signature and its eight
+three-bit extensions, keeps an accepted full signature, checks its projection,
+and verifies it once more. This last verification makes `ProjectionTransfer`
+preserve the whole-experiment query budget exactly in the strong-security
+reduction. The verifier costs at most 1770 compressions, below the fixed 2^20
+budget. `CompletionCorrect` proves perfect correctness, and `Completion` proves
+the remaining admission requirements and 127-bit strong security.
+
+The graph security proof uses minimum state width 141 and fiber bound 2^115.
+The original concrete inequality still closes; no new axiom or cryptographic
+assumption is introduced. The key generator uses 1070 compressions.
+
+## Machine proof
+
+The root is 7133 bits, still fourteen compression blocks. Its first slot is
+the bottom chain's 144-bit top; its last slot is the other boundary chain's
+141-bit top. Fourteen wide caps interleave with mandatory chains. The sole
+width switch moves inside pair 6, between chains 13 and 14. Sixteen skipped
+padding instructions put pair zero's link within signed-immediate reach of
+the root length. The program has 260854 instructions and 56 data bytes:
+1043472 bytes, strictly below 1 MiB.
+
+Every accepting path has 137 + 2h ordinary cycles and 174 - 2h compression
+cycles, where h is its number of redirected pairs. Equivalently:
+31 index + 3 dispatch + c + 135 + weighted sum = 311,
+because c + weighted sum = 142. `MixedVerifier.image_refines_trap` proves the
+bound for every view and every sufficiently fueled run. Fuel monotonicity in
+`HintTrap` covers every fuel in the exported contract.
+
+Views retain the three omitted bottom bits. `HintView.trap_full` extracts a
+full accepted signature from every accepting view. Completion remains accepting
+after the machine cache grows, which supplies soundness even though the
+algorithmic verifier performs more queries than the machine. Honest expansion
+recovers a full signature, pads it to 5498 bits and lays out its disclosures.
+Its view length is 7424 + 4*(31-c), with c from 0 through 18. Cached replay proves
+faithfulness. The raw marker encoding still handles all rejecting signatures.
+
+## Validation and reproduction
+
+The independent VM suite passes 37810 executions, including 4418 primary
+accepting fixtures with exact oracle transcripts, all at 311 cycles. These
+cover all 4096 pair landings, every free count, zero and positive bottom counts,
+all honest-bank lengths, malformed banks and individual view-bit flips.
+Completion tests additionally cover sixteen independent keys and all eight
+bottom-bit completions, including coherent alternative-root oracle answers.
+The Lean image exactly matches the tested image. Canonical JSON SHA-256:
+`b5faed53ed9501592890654aedc157515ae0fb21e291b255e6bae6b416e9610e`.
+
+Scripts, reports and independent image artifacts are in the project workspace
+at `riscv-innovation-evidence/variable311`. The original 312 checkout remains
+unchanged. The contract pin is `8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c`.
+
+## Why the earlier obstacle is avoidable
+
+A fixed 141-bit disclosure cannot directly represent a 144-bit zero-step top.
+Discarding those bits without recovery breaks soundness. Variable full
+signatures plus a fixed pure projection and exhaustive three-bit completion
+remove that obstacle while preserving the exact security budget. The 192-bit
+caps and fixed-width disclosure assumptions in earlier restricted-family
+floors therefore do not constitute a global 312 lower bound.
+
+Further gains could come from dispatch cost or another graph layout with a
+smaller mandatory-hash count. Any larger omitted suffix must still meet the
+algorithmic verifier budget and preserve strong security at the same B.
+
+## Historical baseline notes
+
+The sections below describe earlier images and their own validation results.
 
 # Hinted RISC-V: weighted-pair 312 implementation
 

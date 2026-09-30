@@ -132,18 +132,18 @@ theorem fixedPositions_val (i : ChainIndex) (k : Chain) :
   simp [fixedPositions, fixedDigits, Fin.val_rev]
 
 theorem fixedPositions_sum (i : Idx) :
-    ∑ k, (32 - firstEval k (fixedPositions i k)) ≤ target + 18 := by
+    ∑ k, (32 - firstEval k (fixedPositions i k)) ≤ target + 17 := by
   have : ∑ k : Chain, (32 - firstEval k (fixedPositions i k)) =
-      ∑ k : Chain, ((fixedDigits i k).val + if k.val < 13 ∨ 31 ≤ k.val then 0 else 1) := by
+      ∑ k : Chain, ((fixedDigits i k).val + if k.val < 14 ∨ 31 ≤ k.val then 0 else 1) := by
     refine Finset.sum_congr rfl fun k _ => ?_
     simp only [firstEval, fixedPositions, Fin.val_rev]
     have := (fixedDigits i k).isLt
     split_ifs <;> omega
   rw [this, Finset.sum_add_distrib]
-  have hn : (∑ k : Chain, if k.val < 13 ∨ 31 ≤ k.val then 0 else 1) = 18 := by
+  have hn : (∑ k : Chain, if k.val < 14 ∨ 31 ≤ k.val then 0 else 1) = 17 := by
     decide +kernel
   rw [hn]
-  exact Nat.add_le_add_right (fixedDigits_sum_le i) 18
+  exact Nat.add_le_add_right (fixedDigits_sum_le i) 17
 
 /-- The disclosure set of an index. -/
 def fixedChoice (i : ChainIndex) : Choice := fixedPositions i
