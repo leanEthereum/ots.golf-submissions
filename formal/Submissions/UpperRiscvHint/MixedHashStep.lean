@@ -4,6 +4,7 @@ import Submissions.UpperRiscvHint.MixedDispatchArith
 import Submissions.UpperRiscvHint.MixedContext
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open RiscvZkvm.Rv64
 open Riscv2Program
 open OptimalOTS.Dag
@@ -42,7 +43,7 @@ theorem lead_le (q : ℕ) : lead q ≤ 1 := by unfold lead; split_ifs <;> omega
 
 /-- The computed jump lands on `landing0 q`, one row later for a cap pair, less the dispatch
 value. -/
-theorem jump_target (index : RawIdx) (q : ℕ) (hq : q < 16) (v : Word)
+theorem jump_target (index : ChainIndex) (q : ℕ) (hq : q < 16) (v : Word)
     (hv : v.toNat = baseLane q - dispatch index q) :
     (v + signExtend12 (imm12 (jumpImm q))) &&& ~~~(1#64) =
       W (landing0 q + 4 * lead q - dispatch index q) := by
@@ -77,6 +78,7 @@ theorem jalr_transition (s : MachineState) (rd : Reg) (i : BitVec 12)
 end OptimalOTS.RiscvMixedProgram
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open RiscvZkvm.Rv64
 open Riscv2Program
 open Forest
@@ -145,18 +147,19 @@ theorem enter_ready (s : MachineState) (k previous : ℕ) :
 end OptimalOTS.RiscvMixedProgram
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64
 open Riscv2Program
 open Forest Forest.Name OracleComp
 
 /-- A chain hash preserves the dispatch table and all fixed registers. -/
-theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {view : List Bool} {pk : PublicKey}
-    (ctx : Ctx s index view pk) (k : Chain) (y : BitVec hashBits)
-    (ho : s.getReg .x12 = W (outAddr k)) : Ctx (Riscv.writeHash s y) index view pk := by
+theorem Ctx.writeHash {s : MachineState} {index : ChainIndex} {view : List Bool} {pk : PublicKey}
+    (ctx : Ctx (credit := credit) s index view pk) (k : Chain) (y : BitVec hashBits)
+    (ho : s.getReg .x12 = W (outAddr k)) : Ctx (credit := credit) (Riscv.writeHash s y) index view pk := by
   have b := output_bounds k
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, by rw [writeHash_code]; exact ctx.null,
-    ctx.code.code_eq (writeHash_code s y)⟩
+    ctx.code.code_eq (writeHash_code s y), ?_, ?_⟩
   · rw [writeHash_regs]; exact ctx.pk0
   · rw [writeHash_regs]; exact ctx.pk1
   · rw [writeHash_regs]; exact ctx.call
@@ -174,6 +177,8 @@ theorem Ctx.writeHash {s : MachineState} {index : RawIdx} {view : List Bool} {pk
     rw [he]; exact ctx.lanes q
   · simp only [writeHash_regs]; exact ctx.row
   · simp only [writeHash_regs]; exact ctx.base
+  · rw [writeHash_regs]; exact ctx.modulus
+  · rw [writeHash_regs]; exact ctx.checksum
 
 /-- Each admitted chain input costs one oracle compression, at either state width. -/
 theorem chain_blockCost (k : Chain) : blockCost (chainBits k) = 1 := by

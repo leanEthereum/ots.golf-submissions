@@ -18,7 +18,7 @@ attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.setsName Forest.fixedChoice Forest.fixedPositions Forest.fixedDigits
 
 /-- The bits consumed by earlier disclosures in a list of named nodes. -/
-def precedingBits (i : RawIdx) (nodes : List Name) (n : Name) : ℕ :=
+def precedingBits (i : ChainIndex) (nodes : List Name) (n : Name) : ℕ :=
   ((nodes.filter fun w => disclosed (fixedPositions i) w && decide (w.idx < n.idx)).map Name.len).sum
 
 /-- Sequential disclosure offsets agree with the graph's bit-string encoding. -/
@@ -37,11 +37,11 @@ theorem precedingBits_eq (i : Idx) (n : Name) :
   exact (lenF_fin x).symm
 
 /-- Number of signature bits consumed at a named node. -/
-def consumedBits (i : RawIdx) (n : Name) : ℕ :=
+def consumedBits (i : ChainIndex) (n : Name) : ℕ :=
   if disclosed (fixedPositions i) n then n.len else 0
 
 /-- A machine step with a running signature cursor measured in bits. -/
-def cursorStep (i : RawIdx) (payload : List Bool)
+def cursorStep (i : ChainIndex) (payload : List Bool)
     (x : graph.Assignment) (cursor : ℕ) (n : Name) :
     OracleComp Spec (graph.Assignment × ℕ) :=
   if disclosed (fixedPositions i) n then
@@ -76,14 +76,14 @@ theorem cursorStep_eq (i : Idx) (payload : List Bool)
     split_ifs <;> simp only [map_pure, Functor.map_map]
 
 /-- Execute the node sequence, consuming signature values in topological order. -/
-def runNodes (i : RawIdx) (payload : List Bool) :
+def runNodes (i : ChainIndex) (payload : List Bool) :
     List Name → graph.Assignment → ℕ → OracleComp Spec graph.Assignment
   | [], x, _ => pure x
   | n :: ns, x, cursor => do
       let (y, next) ← cursorStep i payload x cursor n
       runNodes i payload ns y next
 
-private theorem precedingBits_head (i : RawIdx) (n : Name) (nodes : List Name)
+private theorem precedingBits_head (i : ChainIndex) (n : Name) (nodes : List Name)
     (hs : (n :: nodes).Pairwise (fun a b => a.idx < b.idx)) :
     precedingBits i (n :: nodes) n = 0 := by
   have hn := (List.pairwise_cons.mp hs).1
@@ -96,7 +96,7 @@ private theorem precedingBits_head (i : RawIdx) (n : Name) (nodes : List Name)
   simp only [precedingBits, Nat.lt_irrefl, decide_false, Bool.and_false,
     List.filter_cons_of_neg, Bool.false_eq_true, not_false_eq_true, hf, List.map_nil, List.sum_nil]
 
-private theorem precedingBits_cons (i : RawIdx) (n m : Name) (nodes : List Name)
+private theorem precedingBits_cons (i : ChainIndex) (n m : Name) (nodes : List Name)
     (hnm : n.idx < m.idx) :
     precedingBits i (n :: nodes) m = consumedBits i n + precedingBits i nodes m := by
   simp only [precedingBits, hnm, decide_true, Bool.and_true, List.filter_cons]

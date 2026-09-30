@@ -386,13 +386,13 @@ theorem hit_or_spr {A A' : Finset Name} {ξ : Rec} {d : Cache} {given y : graph.
   · left
     exact ⟨ch k t, ci k t, rfl, yv y (ci k t), hpne, w, hd, hsim⟩
 
-/-- The forgery uses a different disclosure set of the same cost. -/
+/-- A cross-cut witness exposes either a second preimage or a hidden query. -/
 theorem events_ne {A A' : Finset Name} (hA : IsCut A) (hA' : IsCut A')
-    (hcost : ∑ n ∈ evaluatedSet A, n.cost = ∑ n ∈ evaluatedSet A', n.cost) (hne : A ≠ A')
+    (cross : ∃ v ∈ A, Evaluated A' v)
     {ξ : Rec} {d : Cache} {given y : graph.Assignment}
     (hy : graph.ReconEqs d (fins A') given y) (hacc : flipHi (trunc128 (yv y rh)) = pkOf ξ) :
     Spr d ξ ∨ Cache.Hits d (fHid (some A) ξ) := by
-  obtain ⟨v, hvA, hvE⟩ := exists_mem_evaluated_of_ne hA hA' hcost hne
+  obtain ⟨v, hvA, hvE⟩ := cross
   have hrev := hA.values v hvA
   by_cases hvne : yv y v = val ξ v
   swap

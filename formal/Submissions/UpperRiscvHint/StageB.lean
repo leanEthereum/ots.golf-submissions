@@ -237,7 +237,7 @@ theorem events_stB (ξ : Rec) (pk : PublicKey) (hpk : pkOf ξ = pk) (r : Option 
     · -- the forgery uses a different disclosure set of the same cost
       have hne' : setsName i ≠ setsName ⟨_, hi⟩ := fun h => hji (setsName_injective h).symm
       rcases events_ne (isCut_setsName i) (isCut_setsName ⟨_, hi⟩)
-          ((cost_setsName i).trans (cost_setsName _).symm) hne' hy hacc with hs | hh
+          (fixedCut_witness i ⟨_, hi⟩ (fun h => hne' (congrArg setsName h))) hy hacc with hs | hh
       · exact Or.inr (Or.inl hs)
       · left
         exact hh

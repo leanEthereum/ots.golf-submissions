@@ -5,7 +5,7 @@ import Submissions.UpperRiscvHint.Assembly
 
 `forestScheme_secure`: the bare-chain forest satisfies `GScheme.Secure`, the
 127-bit strong unforgeability requirement of `OptimalOTS.Dag`, and every signature verifies
-in `178` compressions (`forestScheme_verifyCost`).
+in `180` compressions (`forestScheme_verifyCost`).
 
 For a budget `B ≤ 2 ^ 127` the bound `probTrue ≤ 2 ε (B - 1070) + 2 δ` of `Forest.main_bound`
 applies, and `2 δ = 4 · 1057² · 2⁻¹⁴⁴ < 1070 · 2⁻¹²⁷` makes it smaller than `B / 2 ^ 127`; for larger

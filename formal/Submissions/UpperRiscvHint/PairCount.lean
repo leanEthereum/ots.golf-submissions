@@ -1,131 +1,83 @@
-import Mathlib
+import Submissions.UpperRiscvHint.WeightedPairs
 
-/-! Exact counting for the pair alphabet with every pair sum at most 24. -/
+/-! The raw nibble-pair alphabet, with the coarse nibble complemented before
+ the weighted recoding. Counting is transported through that involution. -/
+
+set_option maxRecDepth 100000
+set_option maxHeartbeats 5000000
+
 namespace OptimalOTS.PairCode
 
-theorem sum_map_range (f : ℕ → ℕ) (m : ℕ) :
-    ((List.range m).map f).sum = ∑ v ∈ Finset.range m, f v := by
-  induction m with
-  | zero => simp
-  | succ m ih =>
-    rw [List.range_succ, List.map_append, List.sum_append, Finset.sum_range_succ, ih]
-    simp
+abbrev Pair := WeightedPairs.Pair
 
+def complement (p : Pair) : Pair := (p.1, Fin.rev p.2)
+
+@[simp] theorem complement_complement (p : Pair) : complement (complement p) = p := by
+  simp [complement]
+
+theorem complement_injective : Function.Injective complement := by
+  intro p q h
+  simpa only [complement_complement] using congrArg complement h
+
+def kind (q : ℕ) : Bool := WeightedPairs.capPos q
+def recode (q : ℕ) (p : Pair) : ℕ × ℕ := WeightedPairs.recode (kind q) (complement p)
+def weight (q : ℕ) (p : Pair) : ℕ := WeightedPairs.weight (kind q) (complement p)
+def helper (q : ℕ) (p : Pair) : ℕ := WeightedPairs.helper (kind q) (complement p)
+def skip (q : ℕ) (p : Pair) : ℕ := WeightedPairs.skip (kind q) (complement p)
+def skipSave (q : ℕ) (p : Pair) : ℕ := WeightedPairs.skipSave (kind q) (complement p)
 def cap (_q : ℕ) : ℕ := 24
 
-abbrev Pair := Fin 16 × Fin 16
+theorem recode_injective (q : ℕ) : Function.Injective (recode q) :=
+  (WeightedPairs.recode_injective _).comp complement_injective
 
-def weight (p : Pair) : ℕ := p.1.val + p.2.val
+theorem recode_bounds (q : ℕ) (p : Pair) : (recode q p).1 ≤ 22 ∧ (recode q p).2 ≤ 20 :=
+  WeightedPairs.recode_bounds _ (complement p)
 
-def multiplicity (s : ℕ) : ℕ := if s < 16 then s + 1 else 31 - s
+theorem weight_le (q : ℕ) (p : Pair) : weight q p ≤ 24 := WeightedPairs.weight_le _ (complement p)
 
-theorem weight_lt (p : Pair) : weight p < 31 := by
-  have ha := p.1.isLt
-  have hb := p.2.isLt
-  unfold weight
-  omega
+theorem weight_recode (q : ℕ) (p : Pair) : weight q p =
+    WeightedPairs.pairWeight (kind q) (recode q p).1 (recode q p).2 := rfl
 
-theorem multiplicity_eq : ∀ s : Fin 31,
-    ((Finset.univ : Finset Pair).filter (fun p => weight p = s.val)).card =
-      multiplicity s.val := by
-  decide +kernel
+theorem decoder_cost_exact (q : ℕ) (p : Pair) :
+    weight q p + skipSave q p =
+      (recode q p).1 + (recode q p).2 + 2 * helper q p + (if kind q then 1 else 0) :=
+  WeightedPairs.decoder_cost_exact _ (complement p)
 
-theorem sum_weight (f : ℕ → ℕ) :
-    (∑ p : Pair, f (weight p)) = ∑ s ∈ Finset.range 31, multiplicity s * f s := by
-  have regroup := Finset.sum_fiberwise_of_maps_to
-    (s := (Finset.univ : Finset Pair)) (t := Finset.range 31)
-    (g := weight) (f := fun p => f (weight p))
-    (fun p _ => Finset.mem_range.mpr (weight_lt p))
-  rw [← regroup]
-  refine Finset.sum_congr rfl fun s hs => ?_
-  have eqf : ∀ p ∈ Finset.univ.filter (fun p : Pair => weight p = s),
-      f (weight p) = f s := by
-    intro p hp
-    rw [(Finset.mem_filter.mp hp).2]
-  rw [Finset.sum_congr rfl eqf, Finset.sum_const, nsmul_eq_mul,
-    multiplicity_eq ⟨s, Finset.mem_range.mp hs⟩]
-  rfl
-
-def Allowed {n : ℕ} (c : Fin n → Pair) : Prop := ∀ q, weight (c q) ≤ cap q.val
-
-instance {n : ℕ} : DecidablePred (@Allowed n) := fun _ => by unfold Allowed; infer_instance
+theorem skipSave_le (q : ℕ) (p : Pair) :
+    skipSave q p ≤ (if kind q then 1 else 0) + helper q p :=
+  WeightedPairs.skipSave_le _ (complement p)
 
 def tuples (n s : ℕ) : Finset (Fin n → Pair) :=
-  Finset.univ.filter fun c => Allowed c ∧ ∑ q, weight (c q) = s
+  Finset.univ.filter fun c => ∑ q, weight q.val (c q) = s
 
-def count : ℕ → ℕ → ℕ
-  | 0, s => if s = 0 then 1 else 0
-  | n+1, s => ∑ v ∈ Finset.range 31,
-      multiplicity v * if v ≤ cap n ∧ v ≤ s then count n (s-v) else 0
+abbrev count := WeightedPairs.count
 
 theorem tuples_card (n s : ℕ) : (tuples n s).card = count n s := by
-  induction n generalizing s with
-  | zero =>
-    by_cases hs : s = 0
-    · subst s; simp [tuples, Allowed, count]
-    · simp [tuples, Allowed, count, hs, Ne.symm hs]
-  | succ n ih =>
-    rw [count, ← sum_weight]
-    simp only [tuples, Finset.card_filter] at ih ⊢
-    rw [← (Fin.snocEquiv fun _ : Fin (n+1) => Pair).sum_comp, Fintype.sum_prod_type]
-    refine Finset.sum_congr rfl fun p _ => ?_
-    simp only [Fin.snocEquiv_apply, Allowed, Fin.forall_fin_succ', Fin.sum_univ_castSucc,
-      Fin.snoc_castSucc, Fin.snoc_last]
-    split_ifs with hp
-    · rw [← ih]
-      refine Finset.sum_congr rfl fun c _ => ?_
-      apply if_congr _ rfl rfl
-      constructor
-      · rintro ⟨⟨hc, _⟩, hs⟩
-        exact ⟨hc, by omega⟩
-      · rintro ⟨hc, hs⟩
-        exact ⟨⟨hc, hp.1⟩, by omega⟩
-    · refine Finset.sum_eq_zero fun c _ => ?_
-      rw [if_neg]
-      rintro ⟨⟨_, hcap⟩, hsum⟩
-      apply hp
-      exact ⟨hcap, by omega⟩
+  change (tuples n s).card = WeightedPairs.count n s
+  rw [← WeightedPairs.tuples_card]
+  refine Finset.card_bij' (fun c _ q => complement (c q))
+    (fun c _ q => complement (c q)) ?_ ?_ ?_ ?_
+  · intro c hc
+    have h : (∑ q, weight q.val (c q)) = s := (Finset.mem_filter.mp hc).2
+    exact Finset.mem_filter.mpr ⟨Finset.mem_univ _, h⟩
+  · intro c hc
+    have h : (∑ q, WeightedPairs.weight (WeightedPairs.capPos q.val) (c q)) = s :=
+      (Finset.mem_filter.mp hc).2
+    apply Finset.mem_filter.mpr
+    refine ⟨Finset.mem_univ _, ?_⟩
+    simpa only [weight, kind, complement_complement] using h
+  · intro c _; funext q; exact complement_complement (c q)
+  · intro c _; funext q; exact complement_complement (c q)
 
-def table (S : ℕ) : ℕ → List ℕ
-  | 0 => 1 :: List.replicate S 0
-  | n+1 => (List.range (S+1)).map fun s =>
-      ((List.range 31).map fun v => multiplicity v *
-        if v ≤ cap n ∧ v ≤ s then (table S n).getD (s-v) 0 else 0).sum
+theorem window_exact : ∑ s ∈ Finset.range 19, count 16 (129+s) =
+    29392495299674139897463880312407816 := WeightedPairs.window_count
 
-theorem table_getD (S n s : ℕ) (hs : s ≤ S) : (table S n).getD s 0 = count n s := by
-  induction n generalizing s with
-  | zero =>
-    rw [table, count]
-    cases s with
-    | zero => simp
-    | succ s =>
-      simp only [List.getD_eq_getElem?_getD, List.getElem?_cons_succ,
-        List.getElem?_replicate, Nat.succ_ne_zero, if_false]
-      split_ifs <;> rfl
-  | succ n ih =>
-    rw [table, count, List.getD_eq_getElem?_getD, List.getElem?_map,
-      List.getElem?_range (by omega), Option.map_some, Option.getD_some,
-      sum_map_range]
-    refine Finset.sum_congr rfl fun v _ => ?_
-    split_ifs with hv
-    · rw [ih (s-v) (by omega)]
-    · rfl
-
-set_option maxRecDepth 100000 in
-/-- The digit sums `130, …, 145` of sixteen capped pairs. -/
-theorem window_count :
-    ∑ s ∈ Finset.range 16, count 16 (130 + s) = 32887768277521427631995290068220650 := by
-  rw [Finset.sum_congr rfl fun s hs =>
-    (table_getD 145 16 (130 + s) (by rw [Finset.mem_range] at hs; omega)).symm,
-    ← sum_map_range]
-  decide +kernel
-
-theorem window_lower : 89 * 2^108 ≤ ∑ s ∈ Finset.range 16, count 16 (130 + s) := by
-  rw [window_count]
+theorem window_lower : 89*2^108 ≤ ∑ s ∈ Finset.range 19, count 16 (129+s) := by
+  rw [window_exact]
   norm_num
 
-theorem window_le_half : ∑ s ∈ Finset.range 16, count 16 (130 + s) ≤ 2 ^ 127 := by
-  rw [window_count]
+theorem window_le_half : (∑ s ∈ Finset.range 19, count 16 (129+s)) ≤ 2^127 := by
+  rw [window_exact]
   norm_num
 
 end OptimalOTS.PairCode

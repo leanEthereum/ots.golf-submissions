@@ -1,3 +1,206 @@
+# Hinted RISC-V: skipped pointer pairs, 311
+
+30 September 2026. The six cap pairs (chains 1–12, both of which may hash zero
+times) get their own alphabet. When the right chain of such a pair hashes zero
+times its pointer pair `ADDI x10; ADDI x12` has no effect, so that row omits it:
+
+* The square row with right digit 0 runs one `ADDI x27, x27, 4` instead of the two
+  pointer writes (net −1), and its tail is `skipPrologue (q+1)`: the next
+  prologue's first `ADDI x12, x10` is measured from `work (2q+1)`, where `x10`
+  still points. Every other instruction of the next prologue is unchanged, so
+  the states agree again after its `ADDI x10`.
+* A redirect to a point `(x ≥ 16, 0)` drops the pointer pair and folds the unit
+  into its existing correction (net −2 against the redirect fee of 2).
+
+Weights. Cap pairs use `pairWeight true x 0 = x + [16 ≤ x]` and
+`pairWeight true x y = φ x + φ y + 1` for `y ≠ 0` (the executed cost, shifted by
+one so it stays a natural number; the unshifted weight of `(x, 0)` is `x - 1`
+or `x - 2`). Normal pairs keep `φ x + φ y`. Each pair weight is strictly
+increasing in both coordinates (`WeightedPairs.pairWeight_lt`), so equal rank
+still gives a crossing coordinate (`WeightedPairs.equal_rank_crossing`) and the
+existing forest reduction applies unchanged.
+
+Alphabet and count. `WeightedPairs.capSwaps` redirects 32 cap-pair points (the
+256 cheapest under the skip-aware weight); normal pairs keep the 30 swaps of the
+312. Accept shifted sums 129 through 147 (`target = 147`, free digit 0–18).
+`WeightedPairs.window_count` counts exactly 29392495299674139897463880312407816
+accepted indices, 1.0177 × 89·2^108. The maximum shifted rank is 374, so
+`374 + 18 < 147 + 257` excludes the checksum alias. The verifier's hash budget
+rises from 176 to 179 compressions (`FixedChoice.fixedCut_cost`); the security
+inequalities do not depend on it.
+
+Checksum. The machine still sums raw lanes; corrections add
+`4 · (a + b + [cap] − weight)` per pair, in total `4 · (raw + 6 − S)`. The lane
+bias becomes 75 (`baseWord 0 = 18434572877438406699`), and
+`free_remainder_iff` gives residue 1 exactly when `S + c = 147`.
+
+Machine proof. `dispatchFront`/`dispatchCode` take the base of `x10`
+(`FrontBase`); `MixedPair.EntryInv` is `ChainsInv` with `x10`/`x12` one chain
+back after a skip; `skipped_refines` completes a zero-hash right chain without
+executing anything; `pair_refines` threads the skip flag, and
+`checkedRun_refines` composes all sixteen pairs with `entrySkip`. Pair costs are
+`overhead + weight` with cap-pair overhead 5 (`pairCost_overhead`), so the staged
+cost is `130 + S` and every accepting path costs `31 + 3 + c + 130 + S = 311`.
+The image has 492 helpers and is still 1,043,408 bytes.
+
+Where the idea stops. Only cap pairs can skip: normal chains always hash, and
+skipping chain 32's pointers in pair 15 would move the root's `x10` (+1). With
+12 skip-capable pairs the target would reach 140, but only 6 cap pairs exist.
+
+# Hinted RISC-V: weighted-pair 312 implementation
+
+30 September 2026. The complete claim-312 certificate compiles and passed
+local exact-statement comparison, permitted-axiom checks and fresh kernel
+replay of all 22,620 exported declarations. Official sandbox verification
+is unavailable on this host because it lacks Landlock.
+The graph, chain widths, 128-bit nonce and packed index, 5,504-bit signature,
+and 884-byte root remain those of the 315 record. This work changes the
+encoding and dispatch, not the security parameter of chain values.
+
+## Encoding and exact accepted count
+
+Complement the second raw nibble, then use `WeightedPairs.swaps` to redirect
+30 high-cost points of the 16-by-16 square into 30 points with one coordinate
+from 16 through 20. The remaining 226 points stay fixed. Define
+`phi(d) = d + 2*[16 <= d]` and sum it over the 32 nonfree digits. Accept sums
+124 through 142; the free digit is 142 minus that sum, from 0 through 18.
+
+`PairCount` transports counting through the coarse complement involution.
+The tuple-count recurrence is proved equal to the cardinality of actual
+accepted tuples, and `Valid.card_validAt` connects tuples to packed indices.
+The accepted set has exactly 29040465820198574112934315249983761 members,
+exceeding 89 * 2^108 = 28882151275599978683700885831286784.
+
+## Security proof
+
+`phi` is strictly increasing. Distinct vectors of equal weighted rank have
+a crossing coordinate, even when their unweighted hash costs differ.
+`FixedChoice.fixedCut_witness` supplies the disclosed/evaluated node used by
+`Events.events_ne` and `StageB`. The original same-index strong-unforgeability
+branch remains intact. The complete availability, correctness and 127-bit
+security proofs are connected to the actual recoded accepted set.
+
+## Machine proof and exact cost
+
+The image contains 480 helpers, one for each position and redirected pair.
+A redirect executes a `JAL`, then an `ADDI` adding four times the difference
+between the raw and weighted pair sums to `x27`. The existing `REMU` moves
+from the index phase to the root boundary. The lane bias becomes 76, and
+pairs 11 and 15 exchange row offsets. Image size stays 1,043,408 bytes.
+
+`ChainIndex` explicitly carries the free count read from an arbitrary view.
+`Ctx` tracks `x27` and the modulus register through hashes and pointer moves.
+`MixedHelpers.landing_refines` proves the ordinary and redirected entry paths,
+the two-instruction fee, and preservation of values and memory.
+`MixedFree.checkedRun_refines` accumulates all corrections.
+`MixedRoot.rootReject_refines` handles a wrong residue, including zero, before
+the root query. This covers malformed views that hash entire chains first.
+The maximum weighted sum is 368 and the maximum admitted free count is 18,
+so the next modulo-257 alias at 399 cannot pass.
+
+For `h` redirects, compression cycles are 175-2*h and ordinary instructions
+are 137+2*h. Equivalently, the accepting path costs
+31 index + 3 dispatch + c + 136 + weighted sum = 312.
+`MixedVerifier.image_refines_trap` proves this on every accepting execution.
+`HintView` supplies compression, expansion and cached-oracle replay;
+`Solution.certificate` assembles the complete hinted-track contract.
+
+The independent VM passes 30,428 executions, with 4,414 accepting fixtures
+at exactly 312 cycles and matching ordered oracle transcripts. The exact
+Lean-exported image JSON SHA-256 is
+`93f04e16b860e3f0195ea4697bb87123b4a5c16c5764086bc536195a70904aea`.
+Reproduction and final validation reports live in
+`golf/riscv-innovation-evidence/record312-port` in the project workspace.
+
+## Historical 314 and earlier notes
+
+The following section records the preceding construction. Its 314 claim,
+counts and validation results apply to that historical image only.
+
+# Hinted RISC-V: 314 cycles with a modulo-257 checksum
+
+This extends the 315-cycle image at `df3ac8e`. The sixteen index pairs keep their
+four-bit fields and machine lane mask. If their raw fields are `(a, b)`, their
+chain digits are `(a, 15-b)`. Since `256 = -1 (mod 257)`, the existing lane sum
+checks this interpretation with modulus 257 and a different constant bias.
+The second chain's code rows are reversed and repacked around the same guarded
+view-length banks. No additional executed instruction is needed.
+
+## Accepted indices and the excluded alias
+
+Write `S = sum(a + 15-b)`. The accepted window is `124 <= S <= 144`, and the
+free chain supplies `c = 144-S`, from 0 through 20. The first twelve pair sums
+are at most 24; the final four are at most 23. Thus `S <= 380`, and an admitted
+free count gives `S+c <= 400`. The next checksum alias is `144+257 = 401`, so
+it cannot pass all pair checks. Merely changing the modulus without these
+caps would be unsound.
+
+`PairCount.window_count` proves the exact accepted count:
+
+```
+28910611234910622126543565794415129
+  >= 89 * 2^108
+   = 28882151275599978683700885831286784.
+```
+
+This preserves the existing availability bound. Complementing each coarse
+field is an involution, so distinct packed indices still give distinct cuts.
+The 128-bit nonce and packed index, chain widths, root input, signature format,
+and strong-unforgeability argument retain the 315 construction's parameters.
+`FixedChoice.fixedDigits_injective` proves injectivity for the new interpretation.
+
+## Machine and cost
+
+The index phase loads 257 instead of 255; lane 0's bias is 78 instead of 233.
+The free row admits counts through 20 and rejects larger counts. Each second
+chain hashes according to `15-b`. The sixteen table offsets are:
+
+```
+0, 3705, 7327, 11261, 144, 3509, 7165, 11363,
+37, 4119, 7803, 11425, 81, 4181, 7741, 11298.
+```
+
+Exact accepting cost: **314 = 32 index + 3 free dispatch + 144 digit units +
+135 pair/root/decision overhead**. This is 177 hash-compression cycles and
+137 ordinary instructions. Signatures are 5504 bits; honest views range from
+7340 through 7420 bits. The 884-byte root still costs 14 compressions.
+The image has 260,838 instructions and 56 data bytes: **1,043,408 bytes**,
+5,168 bytes below the image limit.
+
+## Validation
+
+The complete `Certificate 314` and `image_size` compile with Lean 4.33.1.
+Exact challenge-statement and primitive comparison, the permitted-axiom check,
+and a fresh kernel replay of all 22,555 exported declarations pass. The replay
+takes 220.903 seconds, or 241.126 seconds including parsing and comparison.
+The certificate uses only `propext`, `Classical.choice`, and `Quot.sound`.
+Source-policy checks pass. The official verifier stops at its Landlock
+preflight on this host, before compilation; no hosted verdict is claimed.
+
+The exported machine image exactly matches the independently generated
+and tested image, with canonical JSON SHA-256
+`7de0c51c7b1cd52180b85a07038b79833a9250cd873c3a7021d88dc4b3901c2b`.
+
+The byte-memory interpreter passes 30,180 executions: 16 calibrations of the
+original 315 image; 4,375 candidate fixtures, including all 4,096 pair landings,
+all 21 free counts, random cuts and checksum boundaries; 16,353 out-of-bank
+cases; all 2,048 honest-bank lengths; and 7,388 individual view-bit flips.
+The 3,903 accepted candidate fixtures have exactly 314 cycles and match the
+abstract verifier's ordered oracle queries. All cuts use one fixed key and
+complete chain histories, and reconstruct the same root.
+
+## Follow-up
+
+The natural next targets are fewer dispatch instructions or another reduction
+in the accepted layer. Any further window change must satisfy both the exact
+availability count and the modular-alias exclusion. The tight margin above
+the availability threshold makes estimates inadequate here.
+
+The following sections retain the historical 315, 316, 317, 318 and 320 notes.
+Their counts, windows and constants describe those versions.
+
+---
+
 # Hinted RISC-V: 315 cycles with a linked root length
 
 In the 316-cycle image, `x1` held the constant 6144 only for the root length

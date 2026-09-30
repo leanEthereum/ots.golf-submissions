@@ -2,7 +2,7 @@ import Submissions.UpperRiscvHint.MixedVerifier
 import Submissions.UpperRiscvHint.HintTrap
 
 /-! Views for the free-chain signature scheme. The capped view length L determines
-the count 31 - (L % 128)/4. Counts below 16 use the fixed payload layout. Larger
+the count 31 - (L % 128)/4. Counts below 19 use the fixed payload layout. Larger
 counts select a raw encoding: the signature, one true marker, then zero padding
 to a multiple of 128 bits. The marker makes this encoding injective for arbitrary
 signature lengths. Both ordinary and oversized raw encodings have count 31 and
@@ -27,7 +27,7 @@ def rawDecode (view : List Bool) : List Bool :=
   ((view.reverse.dropWhile (! ·)).drop 1).reverse
 
 def viewCompress (view : List Bool) : List Bool :=
-  if 16 ≤ viewDigit view then rawDecode view
+  if 19 ≤ viewDigit view then rawDecode view
   else viewNonce view ++ viewPayload view
 
 /-- Raw signatures are marked then padded to at least 8192 bits and a multiple of 128 bits. The length count is 31,
@@ -42,7 +42,7 @@ def indexQuery (pk : PublicKey) (m : Message) (σ : List Bool) :=
 /-- The honest layout of a signature: its values in place, with its index's free count. -/
 def layoutView (pk : PublicKey) (m : Message) (σ : List Bool) : OracleComp Spec (List Bool) := do
   let answer ← hash (indexQuery pk m σ)
-  pure (honestView σ (freeDigit (pack answer) % 16))
+  pure (honestView σ (freeDigit (pack answer) % 19))
 
 theorem getLsbD_flipHi (pk : PublicKey) (i : ℕ) :
     (flipHi pk).getLsbD i = (pk.getLsbD i ^^ decide (i = 64)) := by
@@ -121,11 +121,11 @@ theorem viewDigit_rawView (σ : List Bool) : viewDigit (rawView σ) = 31 := by
   have h := Nat.mod_lt σ.length (show 0 < 128 by omega)
   omega
 
-theorem viewCompress_layout (σ : List Bool) (c : ℕ) (hc : c < 16) :
+theorem viewCompress_layout (σ : List Bool) (c : ℕ) (hc : c < 19) :
     viewCompress (honestView σ c) = viewNonce (honestView σ c) ++ viewPayload (honestView σ c) :=
   if_neg (by rw [viewDigit_honestView σ c (by omega)]; omega)
 
-theorem layout_compress (σ : List Bool) (len : σ.length = 5504) (c : ℕ) (hc : c < 16) :
+theorem layout_compress (σ : List Bool) (len : σ.length = 5504) (c : ℕ) (hc : c < 19) :
     viewCompress (honestView σ c) = σ := by
   rw [viewCompress_layout σ c hc, viewNonce_honestView c len, viewPayload_honestView c len,
     List.take_append_drop]
@@ -146,14 +146,14 @@ def viewCore (pk : PublicKey) (m : Message) (nonce payload : List Bool) :
     OracleComp Spec Bool := do
   let answer ← hash (swapHalves (emsg m pk ++ ofBits nonceBits nonce))
   if stagedRank (pack answer) then
-    freeBlocks ⟨pack answer, pack_lt answer⟩ payload pk (fun _ => 0)
+    freeBlocks (ChainIndex.ofRaw ⟨pack answer, pack_lt answer⟩) payload pk (fun _ => 0)
   else pure false
 
 theorem stagedVerify_eq_viewCore (pk : PublicKey) (m : Message) (σ : List Bool)
     (len : σ.length = 5504) :
     stagedVerify pk m σ = viewCore pk m (σ.take 128) (σ.drop 128) := by
   unfold stagedVerify viewCore
-  simp only [len, and_true]
+  simp only [len, and_true, ChainIndex.ofRaw_val]
 
 theorem stagedVerify_short (pk : PublicKey) (m : Message) (σ : List Bool)
     (len : σ.length ≠ 5504) : ∀ b ∈ support (stagedVerify pk m σ), b = false := by
@@ -170,7 +170,7 @@ theorem stagedVerify_length (pk : PublicKey) (m : Message) (σ : List Bool)
   exact absurd (stagedVerify_short pk m σ hl true h) (by simp)
 
 theorem stagedVerify_view (pk : PublicKey) (m : Message) (view : List Bool)
-    (short : viewDigit view < 16) :
+    (short : viewDigit view < 19) :
     stagedVerify pk m (viewCompress view) = viewCore pk m (viewNonce view) (viewPayload view) := by
   have hn := viewNonce_length view
   have hc : viewCompress view = viewNonce view ++ viewPayload view := if_neg (by omega)
@@ -199,7 +199,7 @@ theorem trap_raw (pk : PublicKey) (m : Message) (σ : List Bool) :
   exact ho
 
 /-- The verdict on a staged run accepts exactly when the verifier's decision does. -/
-theorem freeDecision_path (index : RawIdx) (payload : List Bool) (pk : PublicKey)
+theorem freeDecision_path (index : ChainIndex) (payload : List Bool) (pk : PublicKey)
     (c₀ c₁ : hashSpec.QueryCache)
     (h : Riscv.cachedPaths.Path (freeDecision index payload pk) (some true) c₀ c₁) :
     Riscv.cachedPaths.Path (freeBlocks index payload pk (fun _ => 0)) true c₀ c₁ := by
@@ -221,7 +221,7 @@ theorem trap_sound (pk : PublicKey) (m : Message) (view : List Bool)
   unfold trapVerify at h
   rw [Riscv.cachedPaths.path_bind] at h
   obtain ⟨answer, ca, ha, h⟩ := h
-  dsimp only [rawIdx] at h
+  dsimp only at h
   by_cases low : viewBank view < 3
   · rw [if_pos low, Riscv.cachedPaths.path_pure] at h
     exact absurd h.1 (by simp)
@@ -230,15 +230,18 @@ theorem trap_sound (pk : PublicKey) (m : Message) (view : List Bool)
   · rw [if_pos high, Riscv.cachedPaths.path_pure] at h
     exact absurd h.1 (by simp)
   rw [if_neg high] at h
-  by_cases big : 16 ≤ viewDigit view
+  by_cases big : 19 ≤ viewDigit view
   · rw [if_pos big, Riscv.cachedPaths.path_pure] at h
     exact absurd h.1 (by simp)
   rw [if_neg big] at h
-  by_cases rank : freeDigit (pack answer) = viewDigit view
+  by_cases rank : freeDigit (executionIndex answer view).val = viewDigit view
   swap
-  · rw [if_neg rank] at h
-    split_ifs at h <;> rw [Riscv.cachedPaths.path_pure] at h <;> exact absurd h.1 (by simp)
-  rw [if_pos rank] at h
+  · rw [decide_eq_false rank] at h
+    exact False.elim (checkedFreeDecision_false _ _ _
+      (mem_support_of_mem_support_run _ _ ca c₁ h))
+  have rank' : freeDigit (pack answer) = viewDigit view := by
+    simpa only [executionIndex_val] using rank
+  rw [decide_eq_true rank,checkedFreeDecision_true,executionIndex_canonical answer view rank'] at h
   rw [stagedVerify_view pk m view (by omega)]
   unfold viewCore
   rw [ofBits_viewNonce, Riscv.cachedPaths.path_bind]
@@ -285,9 +288,9 @@ theorem trap_accepts (pk : PublicKey) (m : Message) (σ : List Bool)
   rw [Riscv.cachedPaths.path_pure] at hl
   obtain ⟨rfl, hc12⟩ := hl
   rw [hc12] at h
-  have hc : freeDigit (pack a₁) % 16 = freeDigit (pack a₁) := by
+  have hc : freeDigit (pack a₁) % 19 = freeDigit (pack a₁) := by
     unfold stagedRank at hr; exact Nat.mod_eq_of_lt hr
-  generalize hcd : freeDigit (pack a₁) % 16 = c at h
+  generalize hcd : freeDigit (pack a₁) % 19 = c at h
   have hd := viewDigit_honestView σ c (by omega)
   -- the machine's index query replays it too
   unfold trapVerify at h
@@ -299,15 +302,22 @@ theorem trap_accepts (pk : PublicKey) (m : Message) (σ : List Bool)
   simp only [support_pure, Set.mem_singleton_iff, Prod.mk.injEq] at ha'
   obtain ⟨rfl, hcb⟩ := ha'
   rw [hcb] at h
-  dsimp only [rawIdx] at h
-  rw [viewBank_honestView σ c (by omega), if_neg (by omega), if_neg (by omega),
-    hd, if_neg (by omega), if_pos (by omega), viewPayload_honestView c len] at h
+  have rank' : freeDigit (pack a') = viewDigit (honestView σ c) := by rw [hd]; omega
+  have rankI : freeDigit (executionIndex a' (honestView σ c)).val = viewDigit (honestView σ c) := by
+    rw [executionIndex_val]
+    exact rank'
+  dsimp only at h
+  rw [decide_eq_true rankI,checkedFreeDecision_true,
+    executionIndex_canonical a' (honestView σ c) rank',
+    viewBank_honestView σ c (by omega),if_neg (by omega),if_neg (by omega),
+    hd,if_neg (by omega),viewPayload_honestView c len] at h
   unfold freeDecision at h
   rw [Riscv.cachedPaths.path_map] at h
   obtain ⟨o'', ho'', rfl⟩ := h
   have hrun := replay_deterministic _ (freeRun_deterministic _ _ _) ca cl cl (some r) ho'
     (Subcache.refl cl)
   change (o'', c₃) ∈ support ((simulateQ oracleImpl _).run cl) at ho''
+  dsimp only [rawIdx] at ho''
   rw [hrun] at ho''
   simp only [support_pure, Set.mem_singleton_iff, Prod.mk.injEq] at ho''
   obtain ⟨rfl, -⟩ := ho''

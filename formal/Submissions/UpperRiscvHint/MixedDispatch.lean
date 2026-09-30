@@ -1,27 +1,43 @@
 import Submissions.UpperRiscvHint.MixedChain
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name OracleComp
 open Riscv2Program
 
-/-- The prologue's first pointer move and its halfword load. -/
-def dispatchFront (q : ℕ) : Code :=
-  [.ADDI .x12 .x10 (imm12 ((outAddr (2*q+1) : ℤ) - prevInput (2*q+1))),
+/-- The prologue's first pointer move and its halfword load, from `x10 = prev`: the previous
+chain's state, or after a skipped right chain the left chain's state. -/
+def dispatchFront (q prev : ℕ) : Code :=
+  [.ADDI .x12 .x10 (imm12 ((outAddr (2*q+1) : ℤ) - prev)),
    .LHU .x28 .x12 (imm12 ((laneAddr q : ℤ) - outAddr (2*q+1)))]
 
 /-- The pointer moves and the jump of pair `q`, after its length setup. -/
-def dispatchCode (q : ℕ) : Code :=
-  dispatchFront q ++
+def dispatchCode (q prev : ℕ) : Code :=
+  dispatchFront q prev ++
   [.ADDI .x10 .x12 (imm12 ((work (2*q+1) : ℤ) - outAddr (2*q+1))),
    .JALR (linkReg q) .x28 (imm12 (jumpImm q))]
 
-theorem dispatchCode_length (q : ℕ) : (dispatchCode q).length = 4 := rfl
+theorem dispatchCode_length (q prev : ℕ) : (dispatchCode q prev).length = 4 := rfl
+
+/-- The two admissible bases: the previous chain, or (after a skipped cap pair) chain `2q - 1`. -/
+def FrontBase (q : Fin 16) (prev : ℕ) : Prop :=
+  W prev + signExtend12 (imm12 ((outAddr (2*q.val+1) : ℤ) - prev)) = W (outAddr (2*q.val+1))
 
 theorem pointer_to_out' : ∀ q : Fin 16,
     W (prevInput (2*q.val+1)) + signExtend12 (imm12 ((outAddr (2*q.val+1) : ℤ) - prevInput (2*q.val+1))) =
       W (outAddr (2*q.val+1)) := by
   decide +kernel
+
+theorem pointer_to_out_skip' : ∀ q : Fin 16, 1 ≤ q.val → q.val ≤ 6 →
+    W (work (2*q.val-1)) + signExtend12 (imm12 ((outAddr (2*q.val+1) : ℤ) - work (2*q.val-1))) =
+      W (outAddr (2*q.val+1)) := by
+  decide +kernel
+
+theorem frontBase_prev (q : Fin 16) : FrontBase q (prevInput (2*q.val+1)) := pointer_to_out' q
+
+theorem frontBase_skip (q : Fin 16) (h1 : 1 ≤ q.val) (h6 : q.val ≤ 6) :
+    FrontBase q (work (2*q.val-1)) := pointer_to_out_skip' q h1 h6
 
 theorem lane_offset' : ∀ q : Fin 16,
     W (outAddr (2*q+1)) + signExtend12 (imm12 ((laneAddr q : ℤ)-outAddr (2*q+1))) = W (laneAddr q) := by
@@ -36,7 +52,7 @@ theorem lane_access' : ∀ q : Fin 16, isValidHalfwordAccess (W (laneAddr q)) = 
   decide +kernel
 
 /-- The effect of the pointer move and the halfword load. -/
-structure FrontEffect (index : RawIdx) (q : Fin 16) (s a : MachineState) : Prop where
+structure FrontEffect (index : ChainIndex) (q : Fin 16) (s a : MachineState) : Prop where
   pc : a.pc = s.pc + 8
   code : a.code = s.code
   mem : a.mem = s.mem
@@ -44,15 +60,15 @@ structure FrontEffect (index : RawIdx) (q : Fin 16) (s a : MachineState) : Prop 
   x12 : a.getReg .x12 = W (outAddr (2*q.val+1))
   x28 : (a.getReg .x28).toNat = baseLane q - dispatch index q
 
-theorem dispatchFront_effect (index : RawIdx) (q : Fin 16) (s : MachineState)
-    (input : s.getReg .x10 = W (prevInput (2*q.val+1)))
+theorem dispatchFront_effect (index : ChainIndex) (q : Fin 16) (prev : ℕ) (hprev : FrontBase q prev)
+    (s : MachineState) (input : s.getReg .x10 = W prev)
     (lane : (s.getHalfword (W (laneAddr q))).toNat = baseLane q - dispatch index q) :
-    Riscv.LinearReady s (dispatchFront q) ∧
-      FrontEffect index q s ((dispatchFront q).foldl execInstrBr s) := by
-  have e1 : s.getReg .x10 + signExtend12 (imm12 ((outAddr (2*q.val+1) : ℤ) - prevInput (2*q.val+1))) =
+    Riscv.LinearReady s (dispatchFront q prev) ∧
+      FrontEffect index q s ((dispatchFront q prev).foldl execInstrBr s) := by
+  have e1 : s.getReg .x10 + signExtend12 (imm12 ((outAddr (2*q.val+1) : ℤ) - prev)) =
       W (outAddr (2*q.val+1)) := by
-    rw [input]; exact pointer_to_out' q
-  have ready : Riscv.LinearReady s (dispatchFront q) := by
+    rw [input]; exact hprev
+  have ready : Riscv.LinearReady s (dispatchFront q prev) := by
     simp only [dispatchFront, Riscv.LinearReady, Riscv.linearInstruction,
       Riscv.memoryReady, execInstrBr, MachineState.getReg_setPC, getReg_setReg_ite, true_and,
       and_true]
@@ -79,25 +95,26 @@ theorem dispatchFront_effect (index : RawIdx) (q : Fin 16) (s : MachineState)
 
 /-- The prologue's pointer moves, its halfword load, and the jump to the table entry. No hash and
 no trap occur on the way. Pair 0's jump links the address after it into `x1`. -/
-theorem dispatch_refines (index : RawIdx) (q : Fin 16) (s : MachineState) (tail : Code)
-    (input : s.getReg .x10 = W (prevInput (2*q.val+1)))
+theorem dispatch_refines (index : ChainIndex) (q : Fin 16) (prev : ℕ) (hprev : FrontBase q prev)
+    (s : MachineState) (tail : Code)
+    (input : s.getReg .x10 = W prev)
     (lane : (s.getHalfword (W (laneAddr q))).toNat = baseLane q - dispatch index q)
-    (located : Riscv.CodeAt s s.pc (dispatchCode q ++ tail))
-    (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : (dispatchCode q).length ≤ fuel)
+    (located : Riscv.CodeAt s s.pc (dispatchCode q prev ++ tail))
+    (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : (dispatchCode q prev).length ≤ fuel)
     (continuation : ∀ t : MachineState, t.pc = W (landing0 q + 4 * lead q - dispatch index q) →
       t.getReg .x10 = W (work (2*q.val+1)) → t.getReg .x12 = W (outAddr (2*q.val+1)) →
       (t.getReg .x28).toNat = baseLane q - dispatch index q →
       (∀ r, r ≠ .x10 → r ≠ .x12 → r ≠ .x28 → r ≠ .x1 → t.getReg r = s.getReg r) →
       t.getReg .x1 = (if q.val = 0 then s.pc + 16 else s.getReg .x1) →
       t.mem = s.mem → t.code = s.code →
-      Riscv.Refines (fuel - (dispatchCode q).length) t Q c) :
-    Riscv.Refines fuel s Q ((dispatchCode q).length + c) := by
+      Riscv.Refines (fuel - (dispatchCode q prev).length) t Q c) :
+    Riscv.Refines fuel s Q ((dispatchCode q prev).length + c) := by
   let move : Instr := .ADDI .x10 .x12 (imm12 ((work (2*q.val+1) : ℤ) - outAddr (2*q.val+1)))
   let jump : Instr := .JALR (linkReg q) .x28 (imm12 (jumpImm q))
-  have code : Riscv.CodeAt s s.pc (dispatchFront q ++ ([move] ++ ([jump] ++ tail))) := by
+  have code : Riscv.CodeAt s s.pc (dispatchFront q prev ++ ([move] ++ ([jump] ++ tail))) := by
     simpa only [dispatchCode, List.append_assoc, List.cons_append, List.nil_append] using located
-  obtain ⟨ready, A⟩ := dispatchFront_effect index q s input lane
-  set a := (dispatchFront q).foldl execInstrBr s with ha
+  obtain ⟨ready, A⟩ := dispatchFront_effect index q prev hprev s input lane
+  set a := (dispatchFront q prev).foldl execInstrBr s with ha
   have aloc : Riscv.CodeAt a a.pc ([move] ++ ([jump] ++ tail)) := by
     rw [A.pc]
     exact code.append_right.code_eq A.code
@@ -105,7 +122,7 @@ theorem dispatch_refines (index : RawIdx) (q : Fin 16) (s : MachineState) (tail 
   have finish : ∀ b : MachineState, b.code = s.code → b.mem = s.mem →
       (∀ r, b.getReg r = a.getReg r) → b.pc = s.pc + 8 →
       Riscv.CodeAt b b.pc ([move] ++ ([jump] ++ tail)) →
-      Riscv.Refines (fuel - (dispatchCode q).length + 2) b Q (2 + c) := by
+      Riscv.Refines (fuel - (dispatchCode q prev).length + 2) b Q (2 + c) := by
     intro b bcode bmem bregs bpc bloc
     have e2 : b.getReg .x12 + signExtend12 (imm12 ((work (2*q.val+1) : ℤ) - outAddr (2*q.val+1))) =
         W (work (2*q.val+1)) := by
@@ -157,49 +174,50 @@ theorem dispatch_refines (index : RawIdx) (q : Fin 16) (s : MachineState) (tail 
     have cont := continuation t rfl t10 t12 t28 tregs t1
       (by show (u.setReg (linkReg q) (u.pc + 4)).mem = _; rw [hm, umem, bmem])
       (by show (u.setReg (linkReg q) (u.pc + 4)).code = _; rw [MachineState.code_setReg, ucode, bcode])
-    rw [show fuel - (dispatchCode q).length + 2 =
-      [move].length + ((fuel - (dispatchCode q).length) + 1) by simp; omega,
+    rw [show fuel - (dispatchCode q prev).length + 2 =
+      [move].length + ((fuel - (dispatchCode q prev).length) + 1) by simp; omega,
       show 2 + c = [move].length + (c + 1) by simp; omega]
     apply Riscv.Refines.linear _ bloc.append_left bready
     rw [← hu]
     exact Riscv.Refines.branch uloc.head rfl (fun h => nomatch h) transition cont
-  have hlen := dispatchCode_length q
-  have flen : (dispatchFront q).length = 2 := rfl
+  have hlen := dispatchCode_length q prev
+  have flen : (dispatchFront q prev).length = 2 := rfl
   have rest := finish a A.code A.mem (fun _ => rfl) A.pc aloc
-  rw [show fuel = (dispatchFront q).length + (fuel - (dispatchCode q).length + 2) by omega,
-    show (dispatchCode q).length + c = (dispatchFront q).length + (2 + c) by omega]
+  rw [show fuel = (dispatchFront q prev).length + (fuel - (dispatchCode q prev).length + 2) by omega,
+    show (dispatchCode q prev).length + c = (dispatchFront q prev).length + (2 + c) by omega]
   apply Riscv.Refines.linear _ code.append_left ready
   rw [← ha]
   exact rest
 
 /-- The prologue points at chain `2q + 1`, loads the pair's halfword and jumps to its table entry;
 chain `2q + 1` is then ready to hash its view value. -/
-theorem prologue_refines (index : RawIdx) (wire : List Bool) (pk : PublicKey)
-    (q : Fin 16) (k : Chain) (hk : k.val = 2*q.val+1) (s : MachineState) (x : graph.Assignment)
-    (ctx : Ctx s index wire pk) (input : s.getReg .x10 = W (prevInput k))
+theorem prologue_refines (index : ChainIndex) (wire : List Bool) (pk : PublicKey)
+    (q : Fin 16) (k : Chain) (hk : k.val = 2*q.val+1) (prev : ℕ) (hprev : FrontBase q prev)
+    (s : MachineState) (x : graph.Assignment)
+    (ctx : Ctx (credit := credit) s index wire pk) (input : s.getReg .x10 = W prev)
     (len : s.getReg .x11 = W (chainBits k)) (payload : PayloadFrom s wire k)
     (done : Completed s (tops x) k) (tail : Code)
     (start : q.val = 0 → s.pc = W freeLanding)
     (link : q.val ≠ 0 → s.getReg .x1 = W rootBase)
-    (located : Riscv.CodeAt s s.pc (dispatchCode q ++ tail))
-    (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : (dispatchCode q).length ≤ fuel)
-    (continuation : ∀ u, Prepared index wire pk u x k →
+    (located : Riscv.CodeAt s s.pc (dispatchCode q prev ++ tail))
+    (Q : OracleComp Spec (Option Bool)) (c fuel : ℕ) (hf : (dispatchCode q prev).length ≤ fuel)
+    (continuation : ∀ u, Prepared (credit := credit) index wire pk u x k →
       u.pc = W (landing0 q + 4 * lead q - dispatch index q) →
-      Riscv.Refines (fuel - (dispatchCode q).length) u Q c) :
-    Riscv.Refines fuel s Q ((dispatchCode q).length + c) := by
-  apply dispatch_refines index q s tail (by rw [input, hk]) (ctx.lanes q) located Q c fuel hf
+      Riscv.Refines (fuel - (dispatchCode q prev).length) u Q c) :
+    Riscv.Refines fuel s Q ((dispatchCode q prev).length + c) := by
+  apply dispatch_refines index q prev hprev s tail input (ctx.lanes q) located Q c fuel hf
   · intro t tpc t10 t12 t28 tregs t1 tmem tcode
     have tlink : t.getReg .x1 = W rootBase := by
       rw [t1]
       by_cases h0 : q.val = 0
       · rw [if_pos h0, start h0]; unfold rootBase freeLanding; decide
       · rw [if_neg h0]; exact link h0
-    have tctx : Ctx t index wire pk := ctx.prologue q t10 t12 t28 tlink tregs tmem tcode
+    have tctx : Ctx (credit := credit) t index wire pk := ctx.prologue q t10 t12 t28 tlink tregs tmem tcode
     have urange : 32 ≤ work k ∧ work k+24 ≤ 0x78000000 := by
       have h := wireOffset_contained k
       unfold honestViewBits at h
       rw [work_eq_view]; omega
-    have prep : Prepared index wire pk t x k := by
+    have prep : Prepared (credit := credit) index wire pk t x k := by
       refine ⟨⟨tctx, ?_, urange, ?_, ?_, ?_, ?_⟩, ?_⟩
       · rw [t10, hk]
       · rw [tregs .x11 (by decide) (by decide) (by decide) (by decide)]; exact len

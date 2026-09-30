@@ -4,6 +4,7 @@ import Submissions.UpperRiscvHint.MixedIndexPhase
 import Submissions.UpperRiscvHint.ViewLayout
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64
 open Riscv2Program
@@ -32,6 +33,7 @@ theorem afterIndex_payloadFrom (pk : PublicKey) (m : Message) (view : List Bool)
 end OptimalOTS.RiscvMixedProgram
 
 namespace OptimalOTS.RiscvMixedProgram
+variable {credit : BitVec 64}
 open OptimalOTS.Dag
 open RiscvZkvm.Rv64 Forest Forest.Name RiscvUpperForest.ForestVerifier OracleComp
 open Riscv2Program
@@ -40,11 +42,11 @@ set_option allowUnsafeReducibility true
 attribute [local reducible] Forest.graph
 attribute [local irreducible] Forest.fixedPositions Forest.fixedDigits
 
-variable (index : RawIdx) (wire : List Bool) (pk : PublicKey)
+variable (index : ChainIndex) (wire : List Bool) (pk : PublicKey)
 
 /-- Invariant at a chain hash, with either its wire or expanded input address. -/
 structure HashInv (s : MachineState) (x : graph.Assignment) (k : Chain) (base : ℕ) : Prop where
-  ctx : Ctx s index wire pk
+  ctx : Ctx (credit := credit) s index wire pk
   input : s.getReg .x10 = W base
   inputRange : 32 ≤ base ∧ base+24 ≤ 0x78000000
   length : s.getReg .x11 = W (chainBits k)
@@ -53,9 +55,9 @@ structure HashInv (s : MachineState) (x : graph.Assignment) (k : Chain) (base : 
   done : Completed s (tops x) k
 
 theorem HashInv.writeHash {s : MachineState} {x : graph.Assignment} {k : Chain} {base : ℕ}
-    (inv : HashInv index wire pk s x k base) (t : Fin 32)
+    (inv : HashInv (credit := credit) index wire pk s x k base) (t : Fin 32)
     (v : BitVec (graph.len (ci k t).fin)) (y : BitVec hashBits) :
-    HashInv index wire pk (Riscv.writeHash s y) (tripleUpdate x k t v y) k base := by
+    HashInv (credit := credit) index wire pk (Riscv.writeHash s y) (tripleUpdate x k t v y) k base := by
   refine ⟨inv.ctx.writeHash k y inv.out, ?_, inv.inputRange, ?_, ?_,
     inv.payload.writeHash k y inv.out, ?_⟩
   · rw [writeHash_regs]; exact inv.input
@@ -71,10 +73,10 @@ theorem step_refines (k : Chain) (t : Fin 32) (base : ℕ)
     (v : BitVec (graph.len (ci k t).fin))
     (hrun : runNodes' index (viewPayload wire) [ci k t, ch k t, cv k t] x cursor =
       hash v >>= fun y => pure (tripleUpdate x k t v y, cursor'))
-    (inv : HashInv index wire pk s x k base) (held : MemBits s (W base) v)
+    (inv : HashInv (credit := credit) index wire pk s x k base) (held : MemBits s (W base) v)
     (located : Riscv.CodeAt s s.pc (.ECALL :: tail)) (bound : 1+budget ≤ fuel)
     (continuation : ∀ (u : MachineState) (y : BitVec hashBits),
-      HashInv index wire pk u (tripleUpdate x k t v y) k base →
+      HashInv (credit := credit) index wire pk u (tripleUpdate x k t v y) k base →
       MemBits u (W (outAddr k)) y → Riscv.CodeAt u u.pc tail → u.pc = s.pc + W 4 →
       ∀ left, budget ≤ left → Riscv.Refines left u (K (tripleUpdate x k t v y, cursor')) c) :
     Riscv.Refines fuel s
@@ -146,12 +148,12 @@ theorem holdsAt_succ {u : MachineState} {x : graph.Assignment} {k : Chain} {t : 
 theorem steps_refines (k : Chain) (tail : Code)
     (K : graph.Assignment × ℕ → OracleComp Spec (Option Bool)) (c rest' cursor : ℕ) (P : Word)
     (continuation : ∀ (u : MachineState) (y : graph.Assignment),
-      HashInv index wire pk u y k (work k) → MemBits u (W (outAddr k)) (lastOut y k) →
+      HashInv (credit := credit) index wire pk u y k (work k) → MemBits u (W (outAddr k)) (lastOut y k) →
       Riscv.CodeAt u u.pc tail → u.pc = P →
       ∀ left, rest' ≤ left → Riscv.Refines left u (K (y, cursor)) c) :
     ∀ (n t : ℕ), 32 - t = n → t ≤ 32 → firstAt index k < t →
     ∀ (s : MachineState) (x : graph.Assignment) (fuel : ℕ),
-      HashInv index wire pk s x k (work k) → HoldsAt s x k t →
+      HashInv (credit := credit) index wire pk s x k (work k) → HoldsAt s x k t →
       Riscv.CodeAt s s.pc (List.replicate (32 - t) .ECALL ++ tail) →
       s.pc + W (4 * (32 - t)) = P →
       (32 - t) + rest' ≤ fuel →
