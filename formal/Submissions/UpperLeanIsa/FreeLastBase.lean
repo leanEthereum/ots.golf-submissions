@@ -36,8 +36,8 @@ def groupTarget (s : FreeLastSelect.GroupSlot) : FreeLastSelect.Target :=
     let r := candidateTree.lookup s.val
     match r.body with
     | .group u _ _ =>
-        if u < 12 then ⟨(u+1 : Nat),gpow r.entry,bodyCell r s.val⟩
-        else ⟨0,gpow r.entry+AffineFrames.lengthK-1,bodyCell r s.val⟩
+        if u < 11 then ⟨(u+1 : Nat),gpow r.entry,bodyCell r s.val⟩
+        else ⟨0,if u = 12 then gpow r.entry+AffineFrames.lengthK-1 else gpow r.entry,bodyCell r s.val⟩
     | _ => defaultTarget
 
 def freeTarget (s : FreeLastSelect.FreeSlot) : FreeLastSelect.Target :=
@@ -87,7 +87,7 @@ theorem group_frame_nonzero {s u v : Nat} {z : Bool}
   simp only [hb] at hgood
   have hu : u < 13 := hgood.1
   have hentry : (candidateTree.lookup s).entry < 2^18 := by omega
-  by_cases hu12 : u < 12
+  by_cases hu12 : u < 11
   · let t : FreeLastSelect.TargetSlot := .inl ⟨s,by omega⟩
     have ht : layout.target t =
         ⟨(u+1 : Nat),gpow (candidateTree.lookup s).entry,bodyCell (candidateTree.lookup s) s⟩ := by
@@ -96,11 +96,21 @@ theorem group_frame_nonzero {s u v : Nat} {z : Bool}
     have hn : (layout.target t).exponent ≠ 0 := by rw [ht]; simp only; omega
     have h := FreeLastSelect.nonconstant_frame_nonzero layout t hn
     rw [ht] at h
-    simpa only [base, FreeLastProgram.frame, hb, show u ≠ 12 by omega, if_false,
+    simpa only [base, FreeLastProgram.frame, hb, show u ≠ 12 by omega,
+      show u ≠ 11 by omega, if_false,
       zpow_natCast, add_comm] using h
-  · have hu12' : u = 12 := by omega
-    simpa only [base, FreeLastProgram.frame, hb, hu12', if_true,
-      LengthFrameChecks.lengthBias] using LengthFrameChecks.length_frame_ne_zero hentry
+  · by_cases h12 : u = 12
+    · simpa only [base, FreeLastProgram.frame, hb, h12, if_true,
+        LengthFrameChecks.lengthBias] using LengthFrameChecks.length_frame_ne_zero hentry
+    · have h11 : u = 11 := by omega
+      subst u
+      have hv : v < 512 := hgood.2.1
+      have he := (hgood.2.2.2.2.1 (Or.inl rfl)).1
+      have hp : 0 < (candidateTree.lookup s).entry := by
+        rw [he]
+        exact (by decide : ∀ v < 512, 0 < entryOf 11 v) v hv
+      simpa only [FreeLastProgram.frame,hb,show ¬(11 : Nat) = 12 by decide,
+        if_false,if_true] using FixedFrameChecks.fixed_frame_ne_zero hp hentry
 
 theorem free_frame_nonzero_at (s : FreeLastSelect.FreeSlot) {n : Nat}
     (hb : (candidateTree.lookup (260064+s.val)).body = .free n) :

@@ -28,7 +28,7 @@ def body (r : Row) : List CInstr := match r.body with
   | .trap => []
 
 def frame (a : K) (r : Row) : K := gpow r.entry + match r.body with
-  | .group u _ _ => if u = 12 then BitVec.ofNat 64 5504 else a^(u+1)
+  | .group u _ _ => if u = 12 then BitVec.ofNat 64 5504 else if u = 11 then 1 else a^(u+1)
   | .free s => (a^s)⁻¹
   | .trap => 0
 

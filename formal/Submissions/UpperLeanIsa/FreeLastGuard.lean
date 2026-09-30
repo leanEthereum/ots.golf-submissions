@@ -1,5 +1,6 @@
 import Submissions.UpperLeanIsa.FreeLastDecode
 import Submissions.UpperLeanIsa.FreeLastExitData
+import Submissions.UpperLeanIsa.OneFrame11
 
 /-! Read guards for the concrete free-last bytecode, including all admitted
 committed-memory sizes. -/
@@ -23,15 +24,25 @@ def freeFlow (n : Fin 209) : Flow := .inr (.inl n)
 theorem incoming_exit (s : Nat) : incoming exitFlow s = 1 := by
   simp [incoming, exitFlow, FreeLastSelect.exponent, FreeLastSelect.constant]
 
+theorem incoming_stage_one (u : Fin 13) (hu : u.val = 11) (s : Nat) :
+    incoming (stageFlow u) s = gpow s+1 := by
+  simp [incoming,stageFlow,FreeLastSelect.exponent,FreeLastSelect.constant,hu,add_comm]
+
+theorem incoming_stage_length (u : Fin 13) (hu : u.val = 12) (s : Nat) :
+    incoming (stageFlow u) s = gpow s+LengthFrameChecks.lengthBias := by
+  simp only [incoming,stageFlow,FreeLastSelect.exponent,FreeLastSelect.constant,hu,
+    show ¬(12 : Nat) < 11 by decide,if_false,if_true,zpow_zero]
+  exact (add_comm _ _).trans ((sub_add_cancel _ _).trans (add_comm _ _))
+
 theorem group_descriptor {s u v : Nat} {z : Bool} (hs : 27 ≤ s) (hs' : s < 262143)
     (hb : (candidateTree.lookup s).body = .group u v z) :
     layout.target (.inl ⟨s,by omega⟩) =
-      ⟨if u < 12 then (u+1 : Nat) else 0,
-        if u < 12 then gpow (candidateTree.lookup s).entry
-        else gpow (candidateTree.lookup s).entry+AffineFrames.lengthK-1,
+      ⟨if u < 11 then (u+1 : Nat) else 0,
+        if u = 12 then gpow (candidateTree.lookup s).entry+AffineFrames.lengthK-1
+        else gpow (candidateTree.lookup s).entry,
         bodyCell (candidateTree.lookup s) s⟩ := by
   simp only [FreeLastSelect.Layout.target,layout,groupTarget,show ¬s < 27 by omega,if_false,hb]
-  split_ifs <;> rfl
+  split_ifs <;> first | rfl | omega
 
 theorem group_frame {s u v : Nat} {z : Bool} (hs : 27 ≤ s) (hs' : s < 262143)
     (hb : (candidateTree.lookup s).body = .group u v z) :
@@ -41,13 +52,16 @@ theorem group_frame {s u v : Nat} {z : Bool} (hs : 27 ≤ s) (hs' : s < 262143)
   have hu := (candidate_lookup_good hs hs').1.2
   simp only [hb] at hu
   rw [group_descriptor hs hs' hb]
-  by_cases hp : u < 12
-  · simp only [if_pos hp,zpow_natCast,FreeLastProgram.frame,hb,show u ≠ 12 by omega,
-      if_false,add_comm]
-  · have he : u = 12 := by omega
-    subst u
-    simp only [show ¬(12 : Nat) < 12 by decide,if_false,zpow_zero,FreeLastProgram.frame,hb,if_true,AffineFrames.lengthK]
-    exact (add_comm _ _).trans (sub_add_cancel _ _)
+  by_cases hp : u < 11
+  · simp only [if_pos hp,zpow_natCast,FreeLastProgram.frame,hb,
+      show u ≠ 12 by omega,show u ≠ 11 by omega,if_false,add_comm]
+  · have he : u = 11 ∨ u = 12 := by omega
+    rcases he with rfl | rfl
+    · simp [FreeLastProgram.frame,hb,add_comm]
+    · simp only [show ¬(12 : Nat) < 11 by decide,if_false,zpow_zero,
+        FreeLastProgram.frame,hb,if_true,AffineFrames.lengthK]
+      exact (add_comm _ _).trans (sub_add_cancel _ _)
+
 
 theorem free_descriptor {s n : Nat} (hs : 27 ≤ s) (hs' : s < 262143)
     (hb : (candidateTree.lookup s).body = .free n) :
@@ -89,13 +103,13 @@ theorem no_zero_read {f : Flow} {s j : Nat} : incoming f s * 0 ≠ gpow j := by
 theorem group_read_exact {f : Flow} {s u v : Nat} {z : Bool}
     (hs : 27 ≤ s) (hs' : s < 262143)
     (hb : (candidateTree.lookup s).body = .group u v z)
-    (hn : FreeLastSelect.exponent f ≠ 0 ∨ u < 12)
+    (hn : FreeLastSelect.exponent f ≠ 0 ∨ u < 11)
     (j : FreeLastSelect.MaxCell)
     (hr : incoming f s * AffineFrames.firstOperand (FreeLastProgram.instruction base s) = gpow j.val) :
-    FreeLastSelect.exponent f = (if u < 12 then ((u+1 : Nat) : Int) else 0) ∧
+    FreeLastSelect.exponent f = (if u < 11 then ((u+1 : Nat) : Int) else 0) ∧
       FreeLastSelect.constant f s =
-        (if u < 12 then gpow (candidateTree.lookup s).entry
-        else gpow (candidateTree.lookup s).entry+AffineFrames.lengthK-1) := by
+        (if u = 12 then gpow (candidateTree.lookup s).entry+AffineFrames.lengthK-1
+        else gpow (candidateTree.lookup s).entry) := by
   have hnt : (candidateTree.lookup s).body ≠ .trap := by rw [hb]; intro h; cases h
   rcases FreeLastDecode.instruction_first base hs hs' hnt with hz | hf
   · rw [hz] at hr
@@ -172,7 +186,7 @@ theorem trap_first {s : Nat} (hs : 27 ≤ s) (hs' : s < 262143)
     FreeLastProgram.body,hb,List.length_nil,Nat.not_lt_zero]
   split_ifs <;> simp only [FreeLastProgram.control,hb,AffineFrames.firstOperand]
 
-theorem initial_first {s : Nat} (hs : s < 17) :
+theorem initial_first {s : Nat} (hs : s < 16) :
     AffineFrames.firstOperand (FreeLastProgram.instruction base s) =
       gpow (groupTarget ⟨s,by omega⟩).firstCell := by
   simp only [FreeLastProgram.instruction,show s < 27 by omega,if_true,groupTarget]
@@ -181,17 +195,17 @@ theorem initial_first {s : Nat} (hs : s < 17) :
       AffineFrames.firstOperand,cell0]
   all_goals exact div_one _
 
-theorem initial_cell_bound {s : Nat} (hs : s < 17) :
+theorem initial_cell_bound {s : Nat} (hs : s < 16) :
     (groupTarget ⟨s,by omega⟩).firstCell < 2^16 := by
   simp only [groupTarget,show s < 27 by omega,if_true]
   interval_cases s <;> decide
 
-theorem initial_trap {s : Nat} (hs : 17 ≤ s) (hs' : s < 27) :
+theorem initial_trap {s : Nat} (hs : 16 ≤ s) (hs' : s < 27) :
     AffineFrames.firstOperand (FreeLastProgram.instruction base s) = 0 := by
   interval_cases s <;> rfl
 
 
-theorem initial_nonconstant {f : Flow} {s : Nat} (hs : s < 17)
+theorem initial_nonconstant {f : Flow} {s : Nat} (hs : s < 16)
     (hn : FreeLastSelect.exponent f ≠ 0) (j : FreeLastSelect.MaxCell)
     (hr : incoming f s * AffineFrames.firstOperand (FreeLastProgram.instruction base s) = gpow j.val) : False := by
   have hd : layout.target (.inl ⟨s,by omega⟩) =
@@ -213,7 +227,7 @@ theorem initial_nonconstant {f : Flow} {s : Nat} (hs : s < 17)
   rw [hd] at h
   exact hn h.1
 
-theorem initial_read {f : Flow} {s : Nat} (hs : s < 17) (j : FreeLastSelect.MaxCell)
+theorem initial_read {f : Flow} {s : Nat} (hs : s < 16) (j : FreeLastSelect.MaxCell)
     (hr : incoming f s * AffineFrames.firstOperand (FreeLastProgram.instruction base s) = gpow j.val) :
     f = exitFlow := by
   have hn : FreeLastSelect.exponent f = 0 := by
@@ -221,20 +235,22 @@ theorem initial_read {f : Flow} {s : Nat} (hs : s < 17) (j : FreeLastSelect.MaxC
   rw [initial_first hs] at hr
   have hc := initial_cell_bound hs
   rcases f with u | n | t
-  · by_cases hu : u.val < 12
+  · by_cases hu : u.val < 11
     · simp only [FreeLastSelect.exponent,if_pos hu] at hn; omega
-    · have he : incoming (.inl u) s = gpow s+LengthFrameChecks.lengthBias := by
-        simp only [incoming,FreeLastSelect.exponent,FreeLastSelect.constant,if_neg hu,zpow_zero]
-        change 1+(AffineFrames.lengthK+gpow s-1) = gpow s+AffineFrames.lengthK
-        rw [add_comm (1 : K),sub_add_cancel,add_comm]
-      rw [he] at hr
-      exact (LengthFrameChecks.length_initial_address_ne (by omega) hc j.isLt hr).elim
+    · have he : u.val = 11 ∨ u.val = 12 := by have := u.isLt; omega
+      change incoming (stageFlow u) s * gpow (groupTarget ⟨s,by omega⟩).firstCell = gpow j.val at hr
+      rcases he with h11 | h12
+      · rw [incoming_stage_one u h11] at hr
+        exact (LengthFrameChecks.one_initial_address_ne (by omega) hc j.isLt hr).elim
+      · rw [incoming_stage_length u h12] at hr
+        exact (LengthFrameChecks.length_initial_address_ne (by omega) hc j.isLt hr).elim
   · have he : incoming (.inr (.inl n)) s = gpow s+1 := by
       change base ^ FreeLastSelect.exponent (.inr (.inl n)) + gpow s = _
       rw [hn,zpow_zero,add_comm]
     rw [he] at hr
     exact (LengthFrameChecks.one_initial_address_ne (by omega) hc j.isLt hr).elim
   · cases t; rfl
+
 
 /-- The preserved group-12 intervals use the existing finite guard. -/
 theorem length_read {s v b : Nat} {z : Bool} (hs : 27 ≤ s) (hs' : s < 262143)
@@ -268,13 +284,44 @@ theorem length_read {s v b : Nat} {z : Bool} (hs : 27 ≤ s) (hs' : s < 262143)
     have hne : gpow (LengthFrameChecks.certEntry v)+(BitVec.ofNat 64 (LengthFrameChecks.certBias v) : K) ≠ 0 := by
       rw [hce,hcb]
       exact LengthFrameChecks.length_frame_ne_zero (by omega)
-    have hh := LengthFrameChecks.block_address_ne (by omega : v < 1088) hi hbias hwrong hne
+    have hh := LengthFrameChecks.length_block_address_ne (by omega : v < 1024) hi hbias hwrong hne
       (FreeLastDecode.bodyCell_bounded hs hs') j.isLt
     rw [hs0,hce,hcb] at hh
     apply hh
     rw [hf] at hr
     simp only [FreeLastProgram.frame,hb,if_true] at hr
     exact hr
+
+/-- The ONE stage has only its own valid entry, with incoming bias ONE. -/
+theorem one_read {s v b : Nat} {z : Bool} (hs : 27 ≤ s) (hs' : s < 262143)
+    (hb : (candidateTree.lookup s).body = .group 11 v z)
+    (hbias : b = 1 ∨ b = 5504) (j : FreeLastSelect.MaxCell)
+    (hr : (gpow s+(BitVec.ofNat 64 b : K)) *
+      AffineFrames.firstOperand (FreeLastProgram.instruction base s) = gpow j.val) :
+    s = (candidateTree.lookup s).entry ∧ b = 1 := by
+  obtain ⟨hg,he,hl⟩ := candidate_lookup_good hs hs'
+  have hgood := hg.2
+  simp only [hb] at hgood
+  have hv : v < 512 := hgood.2.1
+  obtain ⟨hre,hrl⟩ := hgood.2.2.2.2.1 (by simp)
+  have hnt : (candidateTree.lookup s).body ≠ .trap := by rw [hb]; intro h; cases h
+  rcases FreeLastDecode.instruction_first base hs hs' hnt with hz | hf
+  · rw [hz,mul_zero] at hr
+    exact ((pow_ne_zero _ g_ne_zero) hr.symm).elim
+  · by_contra hn
+    have hi : s-(candidateTree.lookup s).entry < SL 11 v := by rw [← hrl]; omega
+    have hs0 : entryOf 11 v+(s-(candidateTree.lookup s).entry) = s := by rw [← hre]; omega
+    have hwrong : ¬(entryOf 11 v+(s-(candidateTree.lookup s).entry) = entryOf 11 v ∧ b = 1) := by
+      rwa [hs0,← hre]
+    obtain ⟨hp,he'⟩ := OneFrame11.entry_bounds v hv
+    have hh := OneFrame11.block_address_ne hv hi hbias hwrong
+      (FixedFrameChecks.fixed_frame_ne_zero hp he')
+      (FreeLastDecode.bodyCell_bounded hs hs') j.isLt
+    rw [hs0,← hre] at hh
+    apply hh
+    rw [hf] at hr
+    simpa only [FreeLastProgram.frame,hb,show ¬(11 : Nat) = 12 by decide,
+      if_false,if_true] using hr
 
 theorem group_entry_of_constant {s : Nat} (hs : s < 262143)
     (h : gpow s = gpow (candidateTree.lookup s).entry)
@@ -287,7 +334,7 @@ theorem stage_read {s : Nat} (hs : s < 262143) (u : Fin 13) (j : FreeLastSelect.
     (hr : incoming (stageFlow u) s * AffineFrames.firstOperand (FreeLastProgram.instruction base s) = gpow j.val) :
     ∃ v z, (candidateTree.lookup s).body = .group u.val v z ∧
       s = (candidateTree.lookup s).entry := by
-  by_cases hi : s < 17
+  by_cases hi : s < 16
   · have h := initial_read hi j hr
     cases h
   by_cases hlo : s < 27
@@ -308,42 +355,48 @@ theorem stage_read {s : Nat} (hs : s < 262143) (u : Fin 13) (j : FreeLastSelect.
   | group w v z =>
     have hw := hg.2
     simp only [hb] at hw
-    by_cases hu : u.val < 12
+    by_cases hu : u.val < 11
     · have hn : FreeLastSelect.exponent (stageFlow u) ≠ 0 := by
         simp only [stageFlow,FreeLastSelect.exponent,if_pos hu]; omega
       obtain ⟨hx,hc⟩ := group_read_exact h27 hs hb (Or.inl hn) j hr
-      simp only [stageFlow,FreeLastSelect.exponent,if_pos hu,FreeLastSelect.constant] at hx hc
-      by_cases hw12 : w < 12
-      · rw [if_pos hw12] at hx hc
+      simp only [stageFlow,FreeLastSelect.exponent,if_pos hu,
+        FreeLastSelect.constant,show u.val ≠ 12 by omega,if_false] at hx hc
+      by_cases hw11 : w < 11
+      · rw [if_pos hw11] at hx
+        rw [if_neg (show w ≠ 12 by omega)] at hc
         have hew : u.val = w := by omega
-        rw [← hew] at hb
         exact ⟨v,z,by rw [hew],group_entry_of_constant hs hc h27⟩
-      · rw [if_neg hw12] at hx; omega
-    · have hu12 : u.val = 12 := by have := u.isLt; omega
-      by_cases hw12 : w < 12
-      · have hx := (group_read_exact h27 hs hb (Or.inr hw12) j hr).1
-        simp only [stageFlow,FreeLastSelect.exponent,if_neg hu,if_pos hw12] at hx
+      · rw [if_neg hw11] at hx; omega
+    · by_cases hw11 : w < 11
+      · have hx := (group_read_exact h27 hs hb (Or.inr hw11) j hr).1
+        simp only [stageFlow,FreeLastSelect.exponent,if_neg hu,if_pos hw11] at hx
         omega
-      · have hew : w = 12 := by omega
-        subst w
-        have hin : incoming (stageFlow u) s = gpow s+(BitVec.ofNat 64 5504 : K) := by
-          simp only [incoming,stageFlow,FreeLastSelect.exponent,FreeLastSelect.constant,if_neg hu,zpow_zero]
-          exact (add_comm _ _).trans ((sub_add_cancel _ _).trans (add_comm _ _))
-        rw [hin] at hr
-        have he := (length_read h27 hs hb (Or.inr rfl) j hr).1
-        rw [hu12]
-        exact ⟨v,z,rfl,he⟩
+      · have hus : u.val = 11 ∨ u.val = 12 := by have := u.isLt; omega
+        have hws : w = 11 ∨ w = 12 := by omega
+        rcases hus with hu11 | hu12 <;> rcases hws with rfl | rfl
+        · rw [incoming_stage_one u hu11] at hr
+          have hh := one_read h27 hs hb (Or.inl rfl) j hr
+          exact ⟨v,z,by rw [hu11],hh.1⟩
+        · rw [incoming_stage_one u hu11] at hr
+          have hh := (length_read h27 hs hb (Or.inl rfl) j hr).2
+          omega
+        · rw [incoming_stage_length u hu12] at hr
+          have hh := (one_read h27 hs hb (Or.inr rfl) j hr).2
+          omega
+        · rw [incoming_stage_length u hu12] at hr
+          have hh := length_read h27 hs hb (Or.inr rfl) j hr
+          exact ⟨v,z,by rw [hu12],hh.1⟩
 
 
 /-- A free dispatch has either its negative-exponent free entry or an entry
 of an earlier positive group. The path proof excludes the latter by no-return. -/
 theorem free_read {s : Nat} (hs : s < 262143) (n : Fin 209) (j : FreeLastSelect.MaxCell)
     (hr : incoming (freeFlow n) s * AffineFrames.firstOperand (FreeLastProgram.instruction base s) = gpow j.val) :
-    (∃ u v z, u < 12 ∧ (n.val : Int)-77 = (u+1 : Nat) ∧
+    (∃ u v z, u < 12 ∧ (n.val : Int)-77 = (if u < 11 then ((u+1 : Nat) : Int) else 0) ∧
       (candidateTree.lookup s).body = .group u v z ∧ s = (candidateTree.lookup s).entry) ∨
     (∃ k : Nat, (n.val : Int)-77 = -(k : Int) ∧
       (candidateTree.lookup s).body = .free k ∧ s = (candidateTree.lookup s).entry) := by
-  by_cases hi : s < 17
+  by_cases hi : s < 16
   · have h := initial_read hi j hr
     cases h
   by_cases hlo : s < 27
@@ -361,27 +414,30 @@ theorem free_read {s : Nat} (hs : s < 262143) (n : Fin 209) (j : FreeLastSelect.
   | group u v z =>
     have hu := hg.2
     simp only [hb] at hu
-    by_cases hpos : u < 12
+    by_cases hpos : u < 11
     · obtain ⟨hx,hc⟩ := group_read_exact h27 hs hb (Or.inr hpos) j hr
-      simp only [if_pos hpos] at hx hc
-      exact Or.inl ⟨u,v,z,hpos,hx,rfl,group_entry_of_constant hs hc h27⟩
-    · have hu12 : u = 12 := by omega
-      subst u
-      by_cases hn : FreeLastSelect.exponent (freeFlow n) = 0
+      rw [if_neg (show u ≠ 12 by omega)] at hc
+      exact Or.inl ⟨u,v,z,by omega,hx,rfl,group_entry_of_constant hs hc h27⟩
+    · by_cases hn : FreeLastSelect.exponent (freeFlow n) = 0
       · have hin : incoming (freeFlow n) s = gpow s+(BitVec.ofNat 64 1 : K) := by
           change base ^ FreeLastSelect.exponent (freeFlow n) + gpow s = _
           rw [hn,zpow_zero,add_comm]; rfl
         rw [hin] at hr
-        have hh := (length_read h27 hs hb (Or.inl rfl) j hr).2
-        omega
+        have hu' : u = 11 ∨ u = 12 := by omega
+        rcases hu' with rfl | rfl
+        · have hh := one_read h27 hs hb (Or.inl rfl) j hr
+          exact Or.inl ⟨11,v,z,by decide,hn,rfl,hh.1⟩
+        · have hh := (length_read h27 hs hb (Or.inl rfl) j hr).2
+          omega
       · have hx := (group_read_exact h27 hs hb (Or.inl hn) j hr).1
-        simp only [show ¬(12 : Nat) < 12 by decide,if_false] at hx
+        rw [if_neg hpos] at hx
         exact (hn hx).elim
+
 
 /-- Resetting fp to ONE can execute only in the initial prologue. -/
 theorem exit_read {s : Nat} (hs : s < 262143) (j : FreeLastSelect.MaxCell)
     (hr : incoming exitFlow s * AffineFrames.firstOperand (FreeLastProgram.instruction base s) = gpow j.val) :
-    s < 17 := by
+    s < 16 := by
   by_contra hi
   by_cases hlo : s < 27
   · rw [initial_trap (by omega) hlo] at hr
@@ -401,23 +457,28 @@ theorem exit_read {s : Nat} (hs : s < 262143) (j : FreeLastSelect.MaxCell)
   | group u v z =>
     have hu := hg.2
     simp only [hb] at hu
-    by_cases hpos : u < 12
+    by_cases hpos : u < 11
     · have hx := (group_read_exact h27 hs hb (Or.inr hpos) j hr).1
       simp only [exitFlow,FreeLastSelect.exponent,if_pos hpos] at hx
       omega
-    · have hu12 : u = 12 := by omega
-      subst u
-      have hv : v < 1024 := hu.2.1
-      have he0 := (hu.2.2.2.2.1 (by simp)).1
-      have hnt : (candidateTree.lookup s).body ≠ .trap := by rw [hb]; intro h; cases h
+    · have hnt : (candidateTree.lookup s).body ≠ .trap := by rw [hb]; intro h; cases h
       rcases FreeLastDecode.instruction_first base h27 hs hnt with hz | hf
       · rw [hz] at hr
         exact no_zero_read hr
       · rw [incoming_exit,hf,one_mul] at hr
-        simp only [FreeLastProgram.frame,hb,if_true] at hr
-        rw [he0] at hr
-        exact FreeLastExitData.exit_address_ne hv (by omega)
-          (FreeLastDecode.bodyCell_bounded h27 hs) j.isLt hr
+        have hu' : u = 11 ∨ u = 12 := by omega
+        rcases hu' with rfl | rfl
+        · have hv : v < 512 := hu.2.1
+          have he0 := (hu.2.2.2.2.1 (Or.inl rfl)).1
+          simp only [FreeLastProgram.frame,hb,show ¬(11 : Nat) = 12 by decide,
+            if_false,if_true,he0] at hr
+          exact OneFrame11.exit_address_ne hv (FreeLastDecode.bodyCell_bounded h27 hs) j.isLt hr
+        · have hv : v < 1024 := hu.2.1
+          have he0 := (hu.2.2.2.2.1 (Or.inr rfl)).1
+          simp only [FreeLastProgram.frame,hb,if_true,he0] at hr
+          exact FreeLastExitData.exit_address_ne hv (by omega)
+            (FreeLastDecode.bodyCell_bounded h27 hs) j.isLt hr
+
 
 theorem incoming_halt_nonconstant (f : Flow) (hn : FreeLastSelect.exponent f ≠ 0) :
     incoming f 262143 ≠ 1 := by
@@ -436,14 +497,16 @@ theorem incoming_halt_nonconstant (f : Flow) (hn : FreeLastSelect.exponent f ≠
     sub_self,zero_mul]
 
 theorem stage_halt (u : Fin 13) : incoming (stageFlow u) 262143 ≠ 1 := by
-  by_cases hu : u.val < 12
+  by_cases hu : u.val < 11
   · apply incoming_halt_nonconstant
     simp only [stageFlow,FreeLastSelect.exponent,if_pos hu]; omega
-  · have he : incoming (stageFlow u) 262143 = gpow 262143+LengthFrameChecks.lengthBias := by
-      simp only [incoming,stageFlow,FreeLastSelect.exponent,FreeLastSelect.constant,if_neg hu,zpow_zero]
-      exact (add_comm _ _).trans ((sub_add_cancel _ _).trans (add_comm _ _))
-    rw [he]
-    exact LengthFrameChecks.length_halt_ne_one
+  · have hu' : u.val = 11 ∨ u.val = 12 := by have := u.isLt; omega
+    rcases hu' with h11 | h12
+    · rw [incoming_stage_one u h11]
+      exact FixedFrameChecks.fixed_halt_ne_one
+    · rw [incoming_stage_length u h12]
+      exact LengthFrameChecks.length_halt_ne_one
+
 
 theorem free_halt (n : Fin 209) : incoming (freeFlow n) 262143 ≠ 1 := by
   by_cases hn : FreeLastSelect.exponent (freeFlow n) = 0

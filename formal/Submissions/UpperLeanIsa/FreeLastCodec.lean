@@ -47,6 +47,20 @@ theorem word_ne_length {i : ℕ} (hi : i ≤ 14) : word i ≠ lengthWord := by
 
 def domainWord (i : ℕ) : Word := if i = 17 then lengthWord else word i
 
+/-- Reuse the validated length as the thirteenth four-child packet tag. -/
+def tagWord (i : ℕ) : Word := if i = 12 then lengthWord else word i
+
+theorem tagWord_inj {i j : ℕ} (hi : i ≤ 12) (hj : j ≤ 12)
+    (h : tagWord i = tagWord j) : i = j := by
+  by_cases hi12 : i = 12 <;> by_cases hj12 : j = 12
+  · omega
+  · simp only [tagWord,if_pos hi12,if_neg hj12] at h
+    exact (word_ne_length (by omega) h.symm).elim
+  · simp only [tagWord,if_neg hi12,if_pos hj12] at h
+    exact (word_ne_length (by omega) h).elim
+  · simp only [tagWord,if_neg hi12,if_neg hj12] at h
+    exact word_inj (by omega) (by omega) h
+
 theorem domainWord_inj {i j : ℕ} (hi : i ≤ 14 ∨ i = 17) (hj : j ≤ 14 ∨ j = 17)
     (h : domainWord i = domainWord j) : i = j := by
   by_cases hi17 : i = 17
@@ -140,7 +154,7 @@ theorem codec_hyp : (codec ).Hyp where
 def params : FourFusion.Params where
   codec := codec
   fusedMd k := domainWord  (FourFusion.mdIndex k).val
-  fusedTag k := word  (FourFusion.tagIndex k).val
+  fusedTag k := tagWord (FourFusion.tagIndex k).val
   rootMd r := word  (FourFusion.rootIndex r).val
 
 theorem md_reserved : ∀ k, FourFusion.mdIndex k ≠ 0 ∧ FourFusion.mdIndex k ≠ 11 ∧
@@ -157,7 +171,9 @@ theorem params_hyp : (params ).Hyp where
   fused_inj := FourFusion.packet_location (params )
     (fun a b h => Fin.ext (domainWord_inj  (FourFusion.mdIndex_bounds a)
       (FourFusion.mdIndex_bounds b) h))
-    (fun a b h => word_fin_inj  h)
+    (fun a b h => Fin.ext (tagWord_inj
+      ((by decide : ∀ k : Fin 42, (FourFusion.tagIndex k).val ≤ 12) a)
+      ((by decide : ∀ k : Fin 42, (FourFusion.tagIndex k).val ≤ 12) b) h))
   fused_chain := by
     intro k h
     have hi := domainWord_inj  (FourFusion.mdIndex_bounds k) (Or.inl (by decide)) (j:=0) h

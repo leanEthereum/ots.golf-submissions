@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.FreeLastHonestPath
 
-/-! Honest execution, faithfulness, and the complete 1089-cycle certificate. -/
+/-! Honest execution, faithfulness, and the complete 1088-cycle certificate. -/
 namespace OptimalOTS.FreeLastVM
 open LeanerVM.Parameters LeanerVM.Semantics OracleComp OptimalOTS.HLFour
 open OptimalOTS.HLG3 (fixed_hash)
@@ -295,10 +295,10 @@ theorem honest_completes :
     Completes (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)) f ⟨gpow 0,1⟩ := by
   let M := LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)
   have hd := lengthDomain_load (le_refl 16) pk m bits (imageF P fusionTab f pk m bits)
-  have hci : FreeLastProgram.instruction FreeLastBase.base 16 =
+  have hci : FreeLastProgram.instruction FreeLastBase.base 15 =
       FreeLastProgram.jump 1 (hCell 1) (h1Cell 1) := by
-    simp only [FreeLastProgram.instruction,show 16 < 27 by decide,if_true,
-      FreeLastProgram.initial,show (FreeLastBlocks.prologue FreeLastBase.base).length = 16 from rfl,
+    simp only [FreeLastProgram.instruction,show 15 < 27 by decide,if_true,
+      FreeLastProgram.initial,show (FreeLastBlocks.prologue FreeLastBase.base).length = 15 from rfl,
       Nat.lt_irrefl,if_false]
   have hK : IsInK (Lx M (hCell 1)) ∧ IsInK (Lx M (h1Cell 1)) := by
     change IsInK (hv P fusionTab f pk m bits (hCell 1)) ∧ IsInK (hv P fusionTab f pk m bits (h1Cell 1))
@@ -307,8 +307,8 @@ theorem honest_completes :
   obtain ⟨n,c,hr⟩ := sim_jump (le_refl 16) (by decide) M f (by decide) (by decide) (by decide)
     1 one_ne_zero hci hv_one hK (honest_groups_complete hC hlen hacc)
   have hpro := honest_pro fusionTab_hyp hC hlen hacc hroot
-  refine ⟨n+(prefixCode 16).length,lcost (prefixCode 16)+c,
-    sim_list M f 1 (l:=prefixCode 16) (t:=0) (n:=n) (c:=c) ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨n+(prefixCode 15).length,lcost (prefixCode 15)+c,
+    sim_list M f 1 (l:=prefixCode 15) (t:=0) (n:=n) (c:=c) ?_ ?_ ?_ ?_ ?_⟩
   · intro i hi s hs
     rw [prefixCode_get hi]
     rw [prefixCode_length] at hi
@@ -331,10 +331,10 @@ theorem honest_completes :
   · simpa only [prefixCode_length,Nat.zero_add] using hr
 
 include hC hlen hacc hroot in
-/-- An accepted signature's honest image executes exactly 186 instructions. -/
+/-- An accepted signature's honest image executes exactly 185 instructions. -/
 theorem honest_run : simulateQ (unifFwdAnswerImpl f)
     (LeanIsa.runCost FreeLastBase.program (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits))
-      186 Regs.initial) = pure (some 969) := by
+      185 Regs.initial) = pure (some 968) := by
   obtain ⟨n,c,he⟩ := honest_completes hC hlen hacc hroot
   have hm : some c ∈ (simSem f).S (LeanIsa.runCost FreeLastBase.program
       (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)) n ⟨gpow 0,1⟩) := by
@@ -360,7 +360,7 @@ def machineSubmission (P : FourFusion.Params) : LeanIsa.Submission where
   program := FreeLastBase.program
   memLog := 16
   prover := prover P fusionTab
-  steps := fun _ _ _ => 186
+  steps := fun _ _ _ => 185
 
 variable {P : FourFusion.Params}
 
@@ -389,25 +389,25 @@ theorem faithful (hC : Compat P fusionTab) : (machineSubmission P).Faithful := b
   intro f
   have hrun : simulateQ (unifFwdAnswerImpl f) ((machineSubmission P).honestRun pk m bits) =
       (fun o : Option ℕ => o.isSome) <$> simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (FreeLastBase.program) (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)) 186
+        (LeanIsa.runCost (FreeLastBase.program) (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)) 185
           Regs.initial) := by
     show simulateQ _ (prover P fusionTab pk m bits >>= fun L => (fun o : Option ℕ => o.isSome) <$>
-      LeanIsa.runCost (FreeLastBase.program) (LeanIsa.loadInput pk m bits L) 186 Regs.initial) = _
+      LeanIsa.runCost (FreeLastBase.program) (LeanIsa.loadInput pk m bits L) 185 Regs.initial) = _
     rw [simulateQ_bind, fixed_prover, pure_bind, simulateQ_map]
   have hver : (machineSubmission P).scheme.verify pk m bits = P.verify pk m bits := rfl
-  have hs := fun c => fixed_sound (P:=P) (n:=186) (c:=c) hC (le_refl 16) (by norm_num)
+  have hs := fun c => fixed_sound (P:=P) (n:=185) (c:=c) hC (le_refl 16) (by norm_num)
     f pk m bits (imageF P fusionTab f pk m bits)
   have hh : ∀ (h1 : bits.length = sigBits) (h2 : P.codec.Accepted (idxValue f P m (decodeNonce bits) pk))
       (h3 : rootValue f P (topsOf f P (idxValue f P m (decodeNonce bits) pk) bits) = pk),
       simulateQ (unifFwdAnswerImpl f)
-        (LeanIsa.runCost (FreeLastBase.program) (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)) 186
-          Regs.initial) = pure (some 969) :=
+        (LeanIsa.runCost (FreeLastBase.program) (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)) 185
+          Regs.initial) = pure (some 968) :=
     fun h1 h2 h3 => honest_run hC h1
       (by simpa only [idxValue, Params.idxValue, IF, effective_idxOf, y0F, HLG3.ans] using h2)
       (by simpa only [idxValue, Params.idxValue, IF, effective_idxOf, y0F, HLG3.ans] using h3)
   rw [simulateQ_bind, hrun, hver]
   generalize simulateQ (unifFwdAnswerImpl f) (LeanIsa.runCost (FreeLastBase.program)
-    (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)) 186 Regs.initial) = X at hs hh ⊢
+    (LeanIsa.loadInput pk m bits (imageF P fusionTab f pk m bits)) 185 Regs.initial) = X at hs hh ⊢
   simp only [simulateQ_bind, simulateQ_pure, FourFusion.Params.fixed_verify, pure_bind]
   intro hmem
   rw [mem_support_bind_iff] at hmem
@@ -433,8 +433,8 @@ theorem faithful (hC : Compat P fusionTab) : (machineSubmission P).Faithful := b
 theorem machine_sound (hC : Compat P fusionTab) : (machineSubmission P).Sound :=
   sound hC (machineSubmission P) rfl rfl
 
-/-- **Cycles** for the machine submission: every completing run costs `1089`. -/
-theorem machine_cycles : (machineSubmission P).CyclesAtMost 1089 :=
+/-- **Cycles** for the machine submission: every completing run costs `1088`. -/
+theorem machine_cycles : (machineSubmission P).CyclesAtMost 1088 :=
   cycles (machineSubmission P) rfl
 
 /-- **Valid** bytecode. -/
@@ -447,7 +447,7 @@ theorem machine_seededRows : (machineSubmission P).seededRows < LeanIsa.maxSeede
 
 abbrev freeLastMachine : LeanIsa.Submission := machineSubmission FreeLastCodec.params
 
-theorem freeLast_certificate : freeLastMachine.Certificate 1089 where
+theorem freeLast_certificate : freeLastMachine.Certificate 1088 where
   admissible := FreeLastCodec.admissible
   secure := FreeLastCodec.secure
   valid := machine_valid

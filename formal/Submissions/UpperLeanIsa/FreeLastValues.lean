@@ -34,7 +34,7 @@ structure Compat (P : FourFusion.Params) (T : Tab) : Prop where
   chainMd : P.codec.chainMd = cellBits oneV
   idxMd : P.codec.idxMd = cellBits (cV T 11)
   fusedMd : ∀ k : Fin 42, P.fusedMd k = FreeLastCodec.domainWord (FourFusion.mdIndex k).val
-  fusedTag : ∀ k : Fin 42, P.fusedTag k = FreeLastCodec.word (FourFusion.tagIndex k).val
+  fusedTag : ∀ k : Fin 42, P.fusedTag k = FreeLastCodec.tagWord (FourFusion.tagIndex k).val
   rootMd : ∀ r : Fin 1, P.rootMd r = cellBits (cV T (FourFusion.rootIndex r).val)
 
 
@@ -79,7 +79,7 @@ theorem concrete_compat : Compat FreeLastCodec.params fusionTab where
 
 
 structure ValueFacts (T : Tab) (B : BlakeRel) (v : Nat → E) (xs : Nat → Nat) : Prop where
-  pro : ∀ ci ∈ prefixCode 16, ci.RelB B v
+  pro : ∀ ci ∈ prefixCode 15, ci.RelB B v
   seg_rel : ∀ {u i : Nat}, u < 13 → i < gk u →
     ∀ {ci : CInstr}, ci ∈ seg T u (xs (u+1)) i → ci.RelB B v
   free_chain : ∀ {t : Nat}, t < xs 0 → (chainOp topCell 0 (xs 0) t tfCell).RelB B v
@@ -124,8 +124,8 @@ theorem PathFacts.values {B : BlakeRel} {v : Nat → E} {xs : Nat → Nat} {s : 
           List.mem_cons,true_or,or_true])
       simpa only [if_pos hs] using h
     · simp only [if_neg hs,copy,CInstr.RelB,pro_one hp.pro,mul_oneV]
-  pk_copy := hp.pro _ (prefixCode_mem (i:=13) (by decide : 13 < 16))
-  index := hp.pro _ (prefixCode_mem (i:=14) (by decide : 14 < 16))
+  pk_copy := hp.pro _ (prefixCode_mem (i:=12) (by decide : 12 < 15))
+  index := hp.pro _ (prefixCode_mem (i:=13) (by decide : 13 < 15))
   root_rel hu ci hci := by
     simp only [withFree_succ] at hci
     apply hp.core_rel hu
@@ -144,12 +144,12 @@ include hP in
 theorem v_len : v lenCell = natV 5504 := pro_length hP.pro
 
 include hP in
-theorem v_c {c : ℕ} (hc : c ≤ 12) : v (cCell c) = cV T c := pro_c hP.pro (by omega)
+theorem v_c {c : ℕ} (hc : c ≤ 11) : v (cCell c) = cV T c := pro_c hP.pro (by omega)
 
 include hP in
 theorem cb_cv (hC : Compat P T) : cellBits (v (cCell 1+1)) ++ cellBits (v (cCell 1)) = P.codec.cv := by
-  rw [show cCell 1+1 = cCell 2 from rfl,v_c hP (by decide : 2 ≤ 12),
-    v_c hP (by decide : 1 ≤ 12),hC.cv]
+  rw [show cCell 1+1 = cCell 2 from rfl,v_c hP (by decide : 2 ≤ 11),
+    v_c hP (by decide : 1 ≤ 11),hC.cv]
 
 theorem factor_bits (T : Tab) (i : Fin 47) :
     cellBits (cV T i.val) = FreeLastCodec.word i.val := rfl
@@ -165,10 +165,10 @@ theorem fusedMd_cell (hC : Compat P T) (k : Fin 42) (_hk : binds k.val) :
   by_cases h17 : (FourFusion.mdIndex k).val = 17
   · rw [if_pos h17, if_pos h17, v_len hP]
     rfl
-  · have hi : (FourFusion.mdIndex k).val ≤ 12 := by
-      have hb : ∀ k : Fin 42, (FourFusion.mdIndex k).val ≤ 12 ∨
+  · have hi : (FourFusion.mdIndex k).val ≤ 11 := by
+      have hb : ∀ k : Fin 42, binds k.val → (FourFusion.mdIndex k).val ≤ 11 ∨
           (FourFusion.mdIndex k).val = 17 := by decide
-      exact (hb k).resolve_right h17
+      exact (hb k _hk).resolve_right h17
     rw [if_neg h17, if_neg h17, v_c hP hi, factor_bits T _]
 
 include hP in
@@ -176,9 +176,14 @@ theorem fusedTag_cell (hC : Compat P T) (k : Fin 42) :
     cellBits (v (fusedTagCell k.val)) = P.fusedTag k := by
   rw [hC.fusedTag]
   have hsmall : ∀ k : Fin 42,
-      fusedTagCell k.val = cCell (FourFusion.tagIndex k).val ∧ (FourFusion.tagIndex k).val ≤ 12 := by decide
+      fusedTagCell k.val = (if (FourFusion.tagIndex k).val = 12 then lenCell else
+        cCell (FourFusion.tagIndex k).val) ∧ (FourFusion.tagIndex k).val ≤ 12 := by decide
   obtain ⟨he,hi⟩ := hsmall k
-  rw [he,v_c hP hi,factor_bits T _]
+  rw [he]
+  unfold FreeLastCodec.tagWord
+  by_cases h12 : (FourFusion.tagIndex k).val = 12
+  · rw [if_pos h12,if_pos h12,v_len hP]; rfl
+  · rw [if_neg h12,if_neg h12,v_c hP (by omega),factor_bits T _]
 
 /-- The selector used by a chain reads every child from its abstract top. -/
 def ReadContext (readTop : ℕ → ℕ) (k : Fin 42) : Prop :=
@@ -228,10 +233,10 @@ theorem chainOp_plain_query (hP : ValueFacts T (oracleRel f) v xs) (hC : Compat 
       P.codec.chainInput ⟨k, hk⟩ (LEN k - 1 - d + t) (cellBits x) := by
   have hj : LEN k - 1 - d + t + 1 < LEN k := by omega
   obtain ⟨h0, h1, h2⟩ := hC.tag ⟨k, hk⟩ _ hj
-  have hp : tpos k d t / 81 ≤ 12 := by
+  have hp : tpos k d t / 81 ≤ 11 := by
     have := OFFT_bound k hk; unfold tpos; omega
   rw [blake2sQuery_eq, v_c hP (c := tpos k d t % 9) (by omega),
-    v_c hP (c := tpos k d t / 9 % 9) (by omega), v_c hP (by omega : tpos k d t / 81 ≤ 12), cb_cv hP hC, v_one hP]
+    v_c hP (c := tpos k d t / 9 % 9) (by omega), v_c hP (by omega : tpos k d t / 81 ≤ 11), cb_cv hP hC, v_one hP]
   unfold Params.chainInput
   rw [h0, h1, h2, hC.chainMd]
   rfl

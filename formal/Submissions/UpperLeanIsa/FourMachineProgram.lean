@@ -316,7 +316,9 @@ def fusedMdCell (k : ℕ) : ℕ :=
   let m := [12,3,5,17,17,17,17,6,1,2,12,12,12,12,12,12,12,12,12,17,17,17,12,12,17,17,17,12,12,17,17,17,12,12,7,8,12,12,12,9,10,12].getD k 0
   if m = 17 then lenCell else cCell m
 
-def fusedTagCell (k : ℕ) : ℕ := cCell ([1,1,1,1,2,3,4,1,1,1,1,1,1,1,1,1,1,1,1,5,6,7,1,1,8,9,10,1,1,11,12,0,1,1,1,1,1,1,1,1,1,1].getD k 0)
+def fusedTagCell (k : ℕ) : ℕ :=
+  let i := [1,1,1,1,2,3,4,1,1,1,1,1,1,1,1,1,1,1,1,5,6,7,1,1,8,9,10,1,1,11,12,0,1,1,1,1,1,1,1,1,1,1].getD k 0
+  if i = 12 then lenCell else cCell i
 
 def fiveChildren (k : ℕ) : Prop := unitOf k ∈ [0,6,11,12]
 instance (k : ℕ) : Decidable (fiveChildren k) := by unfold fiveChildren; infer_instance

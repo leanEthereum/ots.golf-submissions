@@ -1,6 +1,6 @@
 import Submissions.UpperLeanIsa.FreeLastFaithful
 
-/-! The 1089-cycle leanISA submission. Three landing hints and a free-last
+/-! The 1088-cycle leanISA submission. Three landing hints and a free-last
 execution order implement a layer-85 scheme with four internal children.
 The certificate covers security, the honest prover, all committed images, and
 the complete execution cost including the public-boundary charge. -/
@@ -15,8 +15,8 @@ noncomputable def submission : LeanIsa.Submission := FreeLastVM.freeLastMachine
 
 /-- Admissibility and strong security of the OTS, well-formed bytecode, agreement of the honest
 prover's run with the verifier, soundness against every prover-chosen memory, and at most
-`1089` cycles on every completing execution. -/
-theorem certificate : submission.Certificate 1089 := FreeLastVM.freeLast_certificate
+`1088` cycles on every completing execution. -/
+theorem certificate : submission.Certificate 1088 := FreeLastVM.freeLast_certificate
 
 /-- The bytecode slots and memory cells the prover must seed and finalize, together fewer than
 `LeanIsa.maxSeededRows`. -/

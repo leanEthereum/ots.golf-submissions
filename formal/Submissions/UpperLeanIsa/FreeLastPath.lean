@@ -35,7 +35,7 @@ def prefixCycles (mem : Nat → E) (k : Nat) : Nat :=
 continuations are used to exclude re-entry from the final free dispatch. -/
 theorem run_groups {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
-    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 16, ci.RelB B (Lx M))
+    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 15, ci.RelB B (Lx M))
     (hK : IsInK (Lx M (hCell 1)))
     {n c : Nat} (h : some c ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M n (groupRegs (Lx M) 0))) :
     ∀ k ≤ 12,
@@ -89,17 +89,17 @@ theorem run_groups {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     · simpa only [nextTarget,Bool.false_eq_true,if_false,if_neg hnu,unit_next hk12] using hK2
 
 /-- Every completed initial execution supplies the prologue equations and a
-completed group-0 continuation, after exactly seventeen instructions. -/
+completed group-0 continuation, after exactly sixteen instructions. -/
 theorem run_start {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
     (hd : LengthDomain (Lx M)) {n c : Nat}
     (h : some c ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M n ⟨gpow 0,1⟩)) :
-    (∀ ci ∈ prefixCode 16, ci.RelB B (Lx M)) ∧ IsInK (Lx M (hCell 1)) ∧
-      ∃ n' c', n = n'+17 ∧ c = 26+c' ∧
+    (∀ ci ∈ prefixCode 15, ci.RelB B (Lx M)) ∧ IsInK (Lx M (hCell 1)) ∧
+      ∃ n' c', n = n'+16 ∧ c = 25+c' ∧
         some c' ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M n' (groupRegs (Lx M) 0)) := by
   obtain ⟨hp,n0,c0,hn0,hc0,hr0⟩ := run_prologue h16 hκ M Sm B hHash hd h
-  have hci : FreeLastProgram.instruction base 16 = FreeLastProgram.jump 1 (hCell 1) (h1Cell 1) := rfl
-  obtain ⟨hK,_,n1,c1,hn1,hc1,hr1⟩ := run_jump h16 hκ M Sm (by decide : 16 < sentinel)
+  have hci : FreeLastProgram.instruction base 15 = FreeLastProgram.jump 1 (hCell 1) (h1Cell 1) := rfl
+  obtain ⟨hK,_,n1,c1,hn1,hc1,hr1⟩ := run_jump h16 hκ M Sm (by decide : 15 < sentinel)
     (by decide : hCell 1 < 2^16) (by decide : h1Cell 1 < 2^16) 1 one_ne_zero hci (pro_one hp) hr0
   exact ⟨hp,hK,n1,c1,by omega,by omega,hr1⟩
 
@@ -109,7 +109,7 @@ theorem exit_done {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
     (hd : LengthDomain (Lx M)) {N C n c : Nat} {target : K}
     (hstart : some C ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M N ⟨gpow 0,1⟩))
-    (hn : n+17 ≤ N)
+    (hn : n+16 ≤ N)
     (h : some c ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M n ⟨target,1⟩)) :
     target = gpow sentinel ∧ n = 0 ∧ c = 0 := by
   obtain ⟨s,hs⟩ := runCost_pc_valid M Sm h
@@ -136,7 +136,7 @@ theorem exit_done {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
 /-- One complete group body and its control, starting at any certified entry. -/
 theorem run_group_at {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
-    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 16, ci.RelB B (Lx M))
+    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 15, ci.RelB B (Lx M))
     {s u v n c : Nat} {z : Bool} (hs : 27 ≤ s) (hs' : s < sentinel)
     (hb : (candidateTree.lookup s).body = .group u v z) (he : (candidateTree.lookup s).entry = s)
     (h : some c ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M n
@@ -211,11 +211,11 @@ theorem core_tie_mem {u v : Nat} {z : Bool} {ci : CInstr} (hi : ci ∈ FreeLastB
 returns repeat a saved continuation; the Z twin contradicts the pinned checksum. -/
 theorem group_return_impossible {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
-    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 16, ci.RelB B (Lx M))
+    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 15, ci.RelB B (Lx M))
     {s u v x n c : Nat} {z : Bool} (q : Fin 209)
     (hs : 27 ≤ s) (hs' : s < sentinel) (hu : u < 12)
     (hb : (candidateTree.lookup s).body = .group u v z) (he : (candidateTree.lookup s).entry = s)
-    (hexp : (q.val : Int)-77 = ((u+1 : Nat) : Int))
+    (hexp : (q.val : Int)-77 = (if u < 11 then ((u+1 : Nat) : Int) else 0))
     (hx : x < VF 1) (hN : ∀ ci ∈ FreeLastBlocks.normal 1 x, ci.RelB B (Lx M))
     (hprod : Lx M (FreeLastBlocks.gp 13) = ofK (base^((q.val : Int)-77)))
     (hseen : earlier M Sm 12 n)
@@ -257,7 +257,7 @@ theorem group_return_impossible {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
       (chargedCost fusionTab 1 x) hn hz
     change Lx M (FreeLastBlocks.gp 13) = Lx M oneCell at hh
     have he2 : base^((q.val : Int)-77) = base^2 := by
-      rw [hexp]
+      rw [hexp,if_pos (by decide : (1 : Nat) < 11)]
       exact zpow_natCast base 2
     rw [hprod,he2,pro_one hp] at hh
     have hf : base^2 = base^0 := ofK_injective hh
@@ -268,10 +268,10 @@ theorem group_return_impossible {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
 /-- A positive-free completion takes one free chain and then the sentinel. -/
 theorem free_done {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
-    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 16, ci.RelB B (Lx M))
+    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 15, ci.RelB B (Lx M))
     {N C n c x : Nat} (q : Fin 209)
     (hstart : some C ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M N ⟨gpow 0,1⟩))
-    (hn : n+17 ≤ N) (hx : x < VF 1)
+    (hn : n+16 ≤ N) (hx : x < VF 1)
     (hN : ∀ ci ∈ FreeLastBlocks.normal 1 x, ci.RelB B (Lx M))
     (hprod : Lx M (FreeLastBlocks.gp 13) = ofK (base^((q.val : Int)-77)))
     (hseen : earlier M Sm 12 n)
@@ -295,7 +295,7 @@ theorem free_done {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
   obtain ⟨j,hj⟩ := run_first hκ M Sm hehi _ hr
   have he27 : 27 ≤ e.val := by
     by_contra he
-    by_cases hi : e.val < 17
+    by_cases hi : e.val < 16
     · have hf := FreeLastGuard.initial_read hi j hj
       cases hf
     · rw [FreeLastGuard.initial_trap (by omega) (by omega)] at hj
@@ -305,8 +305,12 @@ theorem free_done {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     have hframe : FreeLastGuard.incoming (FreeLastGuard.freeFlow q) e.val =
         FreeLastProgram.frame base (candidateTree.lookup e.val) := by
       change base^((q.val : Int)-77)+gpow e.val = _
-      rw [hexp,zpow_natCast]
-      simp only [FreeLastProgram.frame,hb,← he,show u ≠ 12 by omega,if_false,add_comm]
+      rw [hexp]
+      by_cases hpos : u < 11
+      · simp only [if_pos hpos,zpow_natCast,FreeLastProgram.frame,hb,← he,
+          show u ≠ 12 by omega,show u ≠ 11 by omega,if_false,add_comm]
+      · have hu11 : u = 11 := by omega
+        simp [hu11,FreeLastProgram.frame,hb,← he,add_comm]
     rw [hframe] at hr
     exact (group_return_impossible h16 hκ M Sm B hHash hd hp q he27 hehi hu hb he.symm
       hexp hx hN hprod hseen h hr).elim
@@ -384,7 +388,7 @@ theorem cycles_split (mem : Nat → E) (z : Bool) :
   omega
 
 structure PathFacts (B : BlakeRel) (mem : Nat → E) (xs : Nat → Nat) (s : Nat) (z : Bool) : Prop where
-  pro : ∀ ci ∈ prefixCode 16, ci.RelB B mem
+  pro : ∀ ci ∈ prefixCode 15, ci.RelB B mem
   valid : ∀ u < 13, xs u < VF u
   blk : ∀ u < 13, ∀ ci ∈ FreeLastBlocks.chosen z u (xs u), ci.RelB B mem
   landing : ∀ u < 13, GroupLanding mem u (xs u) (if u = 1 then z else false)
@@ -393,14 +397,14 @@ structure PathFacts (B : BlakeRel) (mem : Nat → E) (xs : Nat → Nat) (s : Nat
   zero : z = true → s = 0
   positive : z = false → 1 ≤ s
 
-/-- Universal extraction of the 1089 path from the actual bytecode. -/
+/-- Universal extraction of the 1088 path from the actual bytecode. -/
 theorem run_full {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
     (hd : LengthDomain (Lx M)) {N C : Nat}
     (hstart : some C ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M N ⟨gpow 0,1⟩)) :
     ∃ s z, PathFacts B (Lx M) (rawOf (Lx M)) s z ∧
       s+FreeLastBlocks.sumCosts (rawOf (Lx M)) = 85 ∧
-      N = 186 ∧ C+LeanIsa.boundaryCycles = 1089 := by
+      N = 185 ∧ C+LeanIsa.boundaryCycles = 1088 := by
   obtain ⟨hp,hK0,n0,c0,hn0,hc0,hr0⟩ := run_start h16 hκ M Sm B hHash hd hstart
   obtain ⟨hprev,n1,c1,hn1,hc1,hseen,hhint,hK1,hr1⟩ := run_groups h16 hκ M Sm B hHash hd hp hK0 hr0 12 le_rfl
   change Hint (Lx M) 1 at hhint
@@ -431,17 +435,17 @@ theorem run_full {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     · have hh := (hprev (FreeLastBlocks.position u) (position_lt12 hu h1)).2.2.1
       simpa only [unit_inverse hu,if_neg h1] using hh
   have hbunit := fun j hj => (hunits j hj).2
-  have hnall : N = 17+FreeLastBlocks.groupSteps z (rawOf (Lx M))+n2 := by
+  have hnall : N = 16+FreeLastBlocks.groupSteps z (rawOf (Lx M))+n2 := by
     rw [steps_split]
     omega
-  have hcall : C = 26+FreeLastBlocks.groupCycles z (rawOf (Lx M))+c2 := by
+  have hcall : C = 25+FreeLastBlocks.groupCycles z (rawOf (Lx M))+c2 := by
     rw [cycles_split]
     omega
   have hseen' : earlier M Sm 12 n2 := by
     intro j hj
     obtain ⟨nj,cj,hj,hrj⟩ := hseen j hj
     exact ⟨nj,cj,by omega,hrj⟩
-  have hsmall : n2+17 ≤ N := by omega
+  have hsmall : n2+16 ≤ N := by omega
   cases z with
   | true =>
     change some c2 ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M n2
@@ -484,20 +488,20 @@ theorem run_exact {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
     (hd : LengthDomain (Lx M)) {n c : Nat}
     (h : some c ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M n ⟨gpow 0,1⟩)) :
-    n = 186 ∧ c = 969 := by
+    n = 185 ∧ c = 968 := by
   obtain ⟨_,_,_,_,hn,hc⟩ := run_full h16 hκ M Sm B hHash hd h
-  change c+120=1089 at hc
+  change c+120=1088 at hc
   exact ⟨hn,by omega⟩
 
 /-- The contract's universal cycle clause, for every admitted committed image. -/
 theorem cycles (S : LeanIsa.Submission) (hS : S.program = FreeLastBase.program) :
-    S.CyclesAtMost 1089 := by
+    S.CyclesAtMost 1088 := by
   intro pk m bits κ h16 hκ M n cost h
   unfold LeanIsa.Submission.exec at h
   rw [hS,initial_eq] at h
   have hc := (run_exact h16 hκ (LeanIsa.loadInput pk m bits M) suppSem trueRel
     AffineVM.hashSound_supp (lengthDomain_load h16 pk m bits M) h).2
-  change 120 + cost ≤ 1089
+  change 120 + cost ≤ 1088
   rw [hc]
 
 theorem PathFacts.core_rel {B : BlakeRel} {mem : Nat → E} {xs : Nat → Nat} {s : Nat} {z : Bool}

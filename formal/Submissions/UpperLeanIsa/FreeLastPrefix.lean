@@ -14,13 +14,13 @@ set_option backward.isDefEq.respectTransparency.types false
 
 def initialRaw (a : K) (s : Nat) : CInstr := (FreeLastBlocks.prologue a).getD s .pad
 
-theorem initialRaw_first {a : K} {s : Nat} (hs : s < 12) :
+theorem initialRaw_first {a : K} {s : Nat} (hs : s < 11) :
     initialRaw a s = .setc (cCell (s+1)) (ofK (a^(s+1))) := by
   unfold initialRaw FreeLastBlocks.prologue
   rw [List.getD_append _ _ _ _ (by simpa using hs)]
   simp [List.getD_eq_getElem?_getD,hs]
 
-theorem raw_initial_facts (a : K) {s : ℕ} (hs : s < 16) :
+theorem raw_initial_facts (a : K) {s : ℕ} (hs : s < 15) :
     (initialRaw a s).Bounded ∧ initialRaw a s ≠ .pad ∧
       ∀ j, initialRaw a s ≠ .entry j := by
   interval_cases s <;>
@@ -28,14 +28,14 @@ theorem raw_initial_facts (a : K) {s : ℕ} (hs : s < 16) :
       pkCell,idxCell,hCell,h1Cell,copy,stCell,FreeLastBlocks.bias] <;>
     exact ⟨(by intro h; cases h),(by intro j h; cases h)⟩
 
-theorem raw_initial_straight (a : K) {s : ℕ} (hs : s < 16) :
+theorem raw_initial_straight (a : K) {s : ℕ} (hs : s < 15) :
     (initialRaw a s).straight = true := by
   interval_cases s <;> norm_num [initialRaw,FreeLastBlocks.prologue,CInstr.straight,copy]
 
-theorem instrAt_initial (s : AffineFrames.Slot) (hs : s.val < 16) :
+theorem instrAt_initial (s : AffineFrames.Slot) (hs : s.val < 15) :
     FreeLastProgram.instruction base s.val = FreeLastProgram.compile 1 (initialRaw base s.val) := by
   simp only [FreeLastProgram.instruction,show s.val < 27 by omega,if_true,FreeLastProgram.initial]
-  have hl : (FreeLastBlocks.prologue base).length = 16 := rfl
+  have hl : (FreeLastBlocks.prologue base).length = 15 := rfl
   rw [hl,if_pos hs]
   rfl
 
@@ -54,7 +54,7 @@ theorem prefixCode_mem {n i : ℕ} (hi : i < n) :
   List.mem_map.mpr ⟨i,List.mem_range.mpr hi,rfl⟩
 
 theorem run_prefix {κ : ℕ} (M : MemImage κ) (Sm : Sem) (B : BlakeRel)
-    {k : ℕ} (hk : k ≤ 16)
+    {k : ℕ} (hk : k ≤ 15)
     (hbridge : ∀ i < k, ∀ pc x,
       x ∈ Sm.S (LeanIsa.execute M ⟨pc,1⟩ (compile 1 (initialRaw base i))) →
         x = none ∨ (x = some ⟨g*pc,1⟩ ∧ (initialRaw base i).RelB B (Lx M)))
@@ -81,7 +81,7 @@ theorem initConstants_of_completion {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 3
     (M : MemImage κ) (Sm : Sem) {n c : ℕ}
     (h : some c ∈ Sm.S (LeanIsa.runCost (FreeLastBase.program) M n ⟨gpow 0,1⟩)) :
     InitConstants (Lx M) := by
-  have hh := run_prefix M Sm trueRel (k:=12) (by decide) (fun i hi pc x hx => by
+  have hh := run_prefix M Sm trueRel (k:=11) (by decide) (fun i hi pc x hx => by
     have hb : (CInstr.setc (cCell (i+1)) (ofK (base^(i+1)))).Bounded := by
       simp only [CInstr.Bounded,cCell]
       split_ifs <;> omega
@@ -91,21 +91,21 @@ theorem initConstants_of_completion {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 3
     · exact Or.inr ⟨hx,hr⟩
     · exact Or.inl hx) h
   intro k hk hk4
-  have hr := hh.1 _ (prefixCode_mem (i:=k-1) (by omega : k-1 < 12))
-  simpa only [initialRaw_first (show k-1 < 12 by omega),Nat.sub_add_cancel hk,CInstr.RelB] using hr
+  have hr := hh.1 _ (prefixCode_mem (i:=k-1) (by omega : k-1 < 11))
+  simpa only [initialRaw_first (show k-1 < 11 by omega),Nat.sub_add_cancel hk,CInstr.RelB] using hr
 
-theorem prologue_cost : lcost (prefixCode 16) = 25 := by
+theorem prologue_cost : lcost (prefixCode 15) = 24 := by
   norm_num [prefixCode,lcost,List.range_succ,initialRaw,FreeLastBlocks.prologue,CInstr.cost,copy]
 
 theorem run_prologue {κ : ℕ} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
     (hd : LengthDomain (Lx M)) {n c : ℕ}
     (h : some c ∈ Sm.S (LeanIsa.runCost (FreeLastBase.program) M n ⟨gpow 0,1⟩)) :
-    (∀ ci ∈ prefixCode 16, ci.RelB B (Lx M)) ∧
-      ∃ n' c', n = n'+16 ∧ c = 25+c' ∧
-        some c' ∈ Sm.S (LeanIsa.runCost (FreeLastBase.program) M n' ⟨gpow 16,1⟩) := by
+    (∀ ci ∈ prefixCode 15, ci.RelB B (Lx M)) ∧
+      ∃ n' c', n = n'+15 ∧ c = 24+c' ∧
+        some c' ∈ Sm.S (LeanIsa.runCost (FreeLastBase.program) M n' ⟨gpow 15,1⟩) := by
   have hp := initConstants_of_completion h16 hκ M Sm h
-  have hh := run_prefix M Sm B (k:=16) le_rfl (fun i hi pc x hx =>
+  have hh := run_prefix M Sm B (k:=15) le_rfl (fun i hi pc x hx =>
     straight_of_sem h16 hκ M Sm B hHash hd pc 1 one_ne_zero _
       (raw_initial_facts _ (by omega)).1 (raw_initial_straight _ hi)
       (fun _ => ⟨rfl,hp⟩) x hx) h

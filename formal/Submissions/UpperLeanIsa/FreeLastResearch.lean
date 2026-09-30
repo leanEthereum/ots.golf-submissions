@@ -1,7 +1,7 @@
 import Submissions.UpperLeanIsa.AffineFrames
 import Submissions.UpperLeanIsa.CenteredChecksum
 
-/-! Proof support for the free-last 1089 research design. These results prove
+/-! Proof support for the free-last 1088 research design. These results prove
 the product invariant and the conservative root arithmetic, not control-flow
 soundness or a complete submission certificate. -/
 namespace OptimalOTS.FreeLastResearch
@@ -58,7 +58,7 @@ def rootBound : Nat := (stageDegrees+freeDegrees+exitDegrees)*targetCells+miscel
 
 theorem rootBound_value : rootBound = 11006439705738751537 := by decide +kernel
 theorem rootBound_lt_field : rootBound < 2^64 := by decide +kernel
-theorem candidate_accounting : 16+82+1+87*10+120 = (1089 : Nat) := by decide
-theorem candidate_uniform_steps : 16+82+1+87 = (186 : Nat) := by decide
+theorem candidate_accounting : 15+82+1+87*10+120 = (1088 : Nat) := by decide
+theorem candidate_uniform_steps : 15+82+1+87 = (185 : Nat) := by decide
 
 end OptimalOTS.FreeLastResearch

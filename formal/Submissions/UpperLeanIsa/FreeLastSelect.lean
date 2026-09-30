@@ -39,12 +39,12 @@ def address : TargetSlot → Nat
   | .inr s => 260064+s.val
 
 def exponent : Flow → Int
-  | .inl u => if u.val < 12 then (u.val+1 : Nat) else 0
+  | .inl u => if u.val < 11 then (u.val+1 : Nat) else 0
   | .inr (.inl n) => (n.val : Int)-77
   | .inr (.inr _) => 0
 
 def constant (f : Flow) (s : Nat) : K := match f with
-  | .inl u => if u.val < 12 then gpow s else AffineFrames.lengthK+gpow s-1
+  | .inl u => if u.val = 12 then AffineFrames.lengthK+gpow s-1 else gpow s
   | .inr (.inl _) => gpow s
   | .inr (.inr _) => 0
 
@@ -183,7 +183,7 @@ theorem totalDegrees_lt_field : totalDegrees < Fintype.card K := by
   rw [BF64.card_bf64]
   decide +kernel
 
-theorem totalDegrees_value : totalDegrees = 14637193990199924808 := by decide +kernel
+theorem totalDegrees_value : totalDegrees = 14637086839355824200 := by decide +kernel
 
 theorem exists_base (L : Layout) : ∃ a : K, ∀ i, (constraints L i).eval a ≠ 0 :=
   FreeLastResearch.exists_common_nonroot_weighted (constraints L) degree

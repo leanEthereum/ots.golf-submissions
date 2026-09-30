@@ -41,7 +41,7 @@ theorem after_normal {mem : Nat → E} {u : Nat} (hu : u ≠ 1) :
 
 theorem run_group {κ : Nat} (h16 : 16 ≤ κ) (hκ : κ ≤ 32)
     (M : MemImage κ) (Sm : Sem) (B : BlakeRel) (hHash : HashSound Sm B)
-    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 16, ci.RelB B (Lx M))
+    (hd : LengthDomain (Lx M)) (hp : ∀ ci ∈ prefixCode 15, ci.RelB B (Lx M))
     {u n c : Nat} (hu : u < 13) (hh : Hint (Lx M) u)
     (hK : IsInK (Lx M (hCell (u+1))))
     (h : some c ∈ Sm.S (LeanIsa.runCost FreeLastBase.program M n (groupRegs (Lx M) u))) :

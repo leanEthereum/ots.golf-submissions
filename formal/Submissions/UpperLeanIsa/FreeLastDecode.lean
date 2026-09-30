@@ -104,7 +104,7 @@ theorem normal_bounded {u v : Nat} (hu : u < 13) (hv : v < VF u)
     have hc := cCell_bounded (by omega : nextGroup u+1 ≤ 16)
     have hg := gp_bounded (by decide : 13 ≤ 13)
     unfold bias
-    split_ifs <;> simp only [CInstr.Bounded,hCell,h1Cell,lenCell] <;> omega
+    split_ifs <;> simp only [CInstr.Bounded,hCell,h1Cell,lenCell,oneCell] <;> omega
 
 theorem zero_bounded {v : Nat} (hv : v < VF 1) {ci : CInstr} (h : ci ∈ zero v) :
     ci.Bounded := by

@@ -194,7 +194,9 @@ theorem honest_bias {u : Nat} (hu : u < 13) :
       exact inputWord_len_of pk m bits hlen
     exact hh.trans (HLG3.LengthGate128.natV_ofK (by decide))
   · simp only [FreeLastBlocks.bias,stageBias,if_neg h12]
-    exact hv_cc (by omega)
+    by_cases h11 : u = 11
+    · simp only [if_pos h11]; exact hv_one
+    · simp only [if_neg h11]; exact hv_cc (by omega)
 
 include hlen in
 theorem honest_hxor {u : Nat} (hu : u < 13) :
@@ -217,14 +219,14 @@ theorem honest_pk_copy : (copy (stCell 0) pkCell).Rel f (hv P T f pk m bits) := 
   exact (congrArg cellOfBits hlo).symm
 
 include hT hC hlen hacc hroot in
-theorem honest_pro : ∀ ci ∈ prefixCode 16, ci.Rel f (hv P T f pk m bits) := by
+theorem honest_pro : ∀ ci ∈ prefixCode 15, ci.Rel f (hv P T f pk m bits) := by
   intro ci hci
   obtain ⟨i,hi,rfl⟩ := List.mem_map.mp hci
   have hi16 := List.mem_range.mp hi
-  by_cases hi12 : i < 12
+  by_cases hi12 : i < 11
   · rw [initialRaw_first hi12]
     exact hv_cc (by omega)
-  · have hil : i = 12 ∨ i = 13 ∨ i = 14 ∨ i = 15 := by omega
+  · have hil : i = 11 ∨ i = 12 ∨ i = 13 ∨ i = 14 := by omega
     rcases hil with rfl | rfl | rfl | rfl
     · refine ⟨hv_one,?_⟩
       rw [hv_lt P T f pk m bits (by decide : lenCell < 47)]

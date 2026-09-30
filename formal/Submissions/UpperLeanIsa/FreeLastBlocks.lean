@@ -2,7 +2,7 @@ import Submissions.UpperLeanIsa.PartialHintCodec
 import Submissions.UpperLeanIsa.FourMachineTable
 import Submissions.UpperLeanIsa.FourMachineBlocks
 
-/-! Concrete cell-level straight blocks for the 1089 candidate. Each block is
+/-! Concrete cell-level straight blocks for the 1088 free-last machine. Each block is
 followed by one actual JUMP; the legacy CInstr dispatch weight is deliberately
 absent here. Layout, frame guards and whole-run soundness are separate obligations. -/
 namespace OptimalOTS.FreeLastBlocks
@@ -19,7 +19,7 @@ def order : List Nat := [0,2,3,4,5,6,7,8,9,10,11,12,1]
 def position (u : Nat) : Nat := if u = 0 then 0 else if u = 1 then 12 else u-1
 def nextGroup (u : Nat) : Nat := if u = 0 then 2 else if u = 12 then 1 else u+1
 def gp (f : Nat) : Nat := if f = 0 then cCell 1 else gpCell f
-def bias (u : Nat) : Nat := if u = 12 then lenCell else cCell (u+1)
+def bias (u : Nat) : Nat := if u = 12 then lenCell else if u = 11 then oneCell else cCell (u+1)
 def exitCell : Nat := 220
 
 def hinted (u v : Nat) : Bool :=
@@ -71,16 +71,62 @@ def zero (v : Nat) : List CInstr := core 1 v true ++ [copy (wCell 0) tfCell, NOP
 def free (s : Nat) : List CInstr := chainOps topCell 0 s tfCell
 
 def prologue (a : K) : List CInstr :=
-  ((List.range 12).map (fun c => .setc (cCell (c+1)) (ofK (a^(c+1))))) ++
+  ((List.range 11).map (fun c => .setc (cCell (c+1)) (ofK (a^(c+1))))) ++
     [.init, copy (stCell 0) pkCell,
      .blake msgLo msgHi nonceCell pkCell (cCell 1) idxCell (cCell 11),
      .xor (hCell 1) (bias 0) (h1Cell 1)]
 
+/-- Check each tuple once, then its alias interval. This avoids repeatedly
+searching the entire tuple table for each of the 1024 codes. -/
+def partialTupleCopies (u : Nat) (t : List Nat) : Nat :=
+  ((List.range (gk u)).map (fun i => if copied u i ∧ t.getD i 0 = 0 then 1 else 0)).sum
+
+def partialEntryBudget (u : Nat) (e : SplitTables.Entry) : Bool :=
+  (List.range e.2.2).all fun i =>
+    Nat.ble (3 + tieCount u (e.2.1+i) + partialTupleCopies u e.1) 6
+
+def partialBudgetCheck (u : Nat) : Bool :=
+  (SplitTables.entries (FourChildCodec.ushape u)).all (partialEntryBudget u)
+
+theorem partial_budget8_checked : partialBudgetCheck 8 = true := by rfl
+theorem partial_budget9_checked : partialBudgetCheck 9 = true := by rfl
+
+theorem partial_budget_sound {u v : Nat} (hu : u ≠ 0)
+    (hs : FourChildCodec.ushape u < 13)
+    (hv : v < FourChildCodec.cutS (FourChildCodec.ushape u))
+    (h : partialBudgetCheck u = true) :
+    3 + tieCount u v + copyCount fusionTab u v ≤ 6 := by
+  obtain ⟨hm,hl,hr⟩ := FourChildCodec.selected_spec hs hv
+  have he := List.all_eq_true.mp h _ hm
+  have hi : v - FourChildCodec.lead (FourChildCodec.ushape u) v <
+      (FourChildCodec.selected (FourChildCodec.ushape u) v).2.2 := by
+    change v - FourChildCodec.lead (FourChildCodec.ushape u) v <
+      FourChildCodec.multS (FourChildCodec.ushape u) v
+    omega
+  have hb := List.all_eq_true.mp he _ (List.mem_range.mpr hi)
+  have heq : FourChildCodec.lead (FourChildCodec.ushape u) v +
+      (v - FourChildCodec.lead (FourChildCodec.ushape u) v) = v := by omega
+  have hc : partialTupleCopies u (FourChildCodec.selected (FourChildCodec.ushape u) v).1 =
+      copyCount fusionTab u v := by
+    unfold partialTupleCopies copyCount fusionTab rawCode FourChildCodec.tup
+    rw [if_neg hu]
+    simp only [FourChildCodec.tupS,if_pos hv]
+  change Nat.ble (3 + tieCount u
+      (FourChildCodec.lead (FourChildCodec.ushape u) v +
+        (v - FourChildCodec.lead (FourChildCodec.ushape u) v)) +
+      partialTupleCopies u (FourChildCodec.selected (FourChildCodec.ushape u) v).1) 6 = true at hb
+  rw [heq,hc] at hb
+  exact Nat.ble_eq.mp hb
+
 theorem partial_budget8 : ∀ v < 1024,
-    3 + tieCount 8 v + copyCount fusionTab 8 v ≤ 6 := by decide +kernel
+    3 + tieCount 8 v + copyCount fusionTab 8 v ≤ 6 := by
+  intro v hv
+  exact partial_budget_sound (by decide) (by decide) hv partial_budget8_checked
 
 theorem partial_budget9 : ∀ v < 1024,
-    3 + tieCount 9 v + copyCount fusionTab 9 v ≤ 6 := by decide +kernel
+    3 + tieCount 9 v + copyCount fusionTab 9 v ≤ 6 := by
+  intro v hv
+  exact partial_budget_sound (by decide) (by decide) hv partial_budget9_checked
 
 theorem budget_fit {u v : Nat} (hu : u < 13) (hv : v < VF u) :
     3 + tieCount u v + copyCount fusionTab u v ≤ budget u := by
@@ -149,8 +195,8 @@ theorem zero_cost {v : Nat} (hv : v < VF 1) :
 
 theorem free_length (s : Nat) : (free s).length + 1 = s+1 := by rw [free, chainOps_length]
 theorem free_cost (s : Nat) : lcost (free s) + 1 = 10*s+1 := by rw [free, chainOps_lcost]
-theorem prologue_length (a : K) : (prologue a).length + 1 = 17 := by simp [prologue]
-theorem prologue_cost (a : K) : lcost (prologue a) + 1 = 26 := by rfl
+theorem prologue_length (a : K) : (prologue a).length + 1 = 16 := by simp [prologue]
+theorem prologue_cost (a : K) : lcost (prologue a) + 1 = 25 := by rfl
 theorem budget_sum : (order.map budget).sum = 82 := by decide
 theorem root_sum : (order.map hm).sum = 1 := by decide
 

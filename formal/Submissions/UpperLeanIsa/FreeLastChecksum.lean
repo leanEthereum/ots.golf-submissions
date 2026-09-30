@@ -16,7 +16,7 @@ def productValue (mem : Nat → E) (z : Bool) (j : Nat) : E :=
   if j = 13 ∧ z = true then mem oneCell else mem (FreeLastBlocks.gp j)
 
 theorem checksum_step {B : BlakeRel} {mem : Nat → E} {u v : Nat} {z : Bool}
-    (hp : ∀ ci ∈ prefixCode 16, ci.RelB B mem) (hu : u < 13) (hv : v < VF u)
+    (hp : ∀ ci ∈ prefixCode 15, ci.RelB B mem) (hu : u < 13) (hv : v < VF u)
     (hc : (FreeLastBlocks.checksum u v z).RelB B mem) :
     CenteredChecksum.Step (ofK base) (chargedCost fusionTab u v)
       (mem (FreeLastBlocks.gp (FreeLastBlocks.position u)))
@@ -36,7 +36,7 @@ theorem checksum_step {B : BlakeRel} {mem : Nat → E} {u v : Nat} {z : Bool}
     exact hc
 
 theorem product_step {B : BlakeRel} {mem : Nat → E} {xs : Nat → Nat} {z : Bool}
-    (hp : ∀ ci ∈ prefixCode 16, ci.RelB B mem) (hv : ∀ u < 13, xs u < VF u)
+    (hp : ∀ ci ∈ prefixCode 15, ci.RelB B mem) (hv : ∀ u < 13, xs u < VF u)
     (hb : ∀ j < 13, ∀ ci ∈ groupBody (unit j) (xs (unit j)) (if j = 12 then z else false), ci.RelB B mem)
     {j : Nat} (hj : j < 13) :
     CenteredChecksum.Step (ofK base) (chargedCost fusionTab (unit j) (xs (unit j)))
@@ -59,7 +59,7 @@ theorem product_step {B : BlakeRel} {mem : Nat → E} {xs : Nat → Nat} {z : Bo
   exact h
 
 theorem product_invariant {B : BlakeRel} {mem : Nat → E} {xs : Nat → Nat} {z : Bool}
-    (hp : ∀ ci ∈ prefixCode 16, ci.RelB B mem) (hv : ∀ u < 13, xs u < VF u)
+    (hp : ∀ ci ∈ prefixCode 15, ci.RelB B mem) (hv : ∀ u < 13, xs u < VF u)
     (hb : ∀ j < 13, ∀ ci ∈ groupBody (unit j) (xs (unit j)) (if j = 12 then z else false), ci.RelB B mem) :
     ∀ n ≤ 13, productValue mem z n * ofK (base^(6*n)) = ofK (base^(1+charges xs n)) := by
   have ha := checksum_embed_ne_zero FreeLastBase.base_ne_zero
@@ -99,7 +99,7 @@ theorem centered_power (q : Nat) : base^((q : Int)-77) = base^(1+q)/base^78 := b
   exact congrArg (fun x : K => base^(1+q)/x) (zpow_natCast base 78)
 
 theorem final_product {B : BlakeRel} {mem : Nat → E} {xs : Nat → Nat} {z : Bool}
-    (hp : ∀ ci ∈ prefixCode 16, ci.RelB B mem) (hv : ∀ u < 13, xs u < VF u)
+    (hp : ∀ ci ∈ prefixCode 15, ci.RelB B mem) (hv : ∀ u < 13, xs u < VF u)
     (hb : ∀ j < 13, ∀ ci ∈ groupBody (unit j) (xs (unit j)) (if j = 12 then z else false), ci.RelB B mem) :
     productValue mem z 13 = ofK (base^((charges xs 13 : Int)-77)) := by
   rw [centered_power,checksum_embed_div _ _ (pow_ne_zero _ FreeLastBase.base_ne_zero),
@@ -122,7 +122,7 @@ theorem charges_cost {xs : Nat → Nat} (hv : ∀ u < 13, xs u < VF u) :
   exact List.map_congr_left hs
 
 theorem zero_layer {B : BlakeRel} {mem : Nat → E} {xs : Nat → Nat}
-    (hp : ∀ ci ∈ prefixCode 16, ci.RelB B mem) (hv : ∀ u < 13, xs u < VF u)
+    (hp : ∀ ci ∈ prefixCode 15, ci.RelB B mem) (hv : ∀ u < 13, xs u < VF u)
     (hb : ∀ j < 13, ∀ ci ∈ groupBody (unit j) (xs (unit j)) (if j = 12 then true else false), ci.RelB B mem) :
     FreeLastBlocks.sumCosts xs = 85 := by
   have h := product_invariant hp hv hb 13 le_rfl

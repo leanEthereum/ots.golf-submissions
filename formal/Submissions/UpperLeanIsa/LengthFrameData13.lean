@@ -1,5 +1,5 @@
 import Submissions.UpperLeanIsa.LengthFrameScan
-import Submissions.UpperLeanIsa.LengthFrameData10
+import Submissions.UpperLeanIsa.LengthFrameData8
 
 namespace OptimalOTS.LengthFrameChecks
 set_option maxRecDepth 100000

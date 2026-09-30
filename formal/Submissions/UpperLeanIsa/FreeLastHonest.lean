@@ -530,14 +530,21 @@ theorem honest_fusedMd (k : Fin 42) (_hk : binds k.val) :
       exact (hb k).resolve_right h17
     rw [if_neg h17, if_neg h17, hv_cc hi, factor_bits T _]
 
-include hC in
+include hC hlen in
 theorem honest_fusedTag (k : Fin 42) :
     cellBits (hv P T f pk m bits (fusedTagCell k.val)) = P.fusedTag k := by
   rw [hC.fusedTag]
   have hsmall : ∀ k : Fin 42,
-      fusedTagCell k.val = cCell (FourFusion.tagIndex k).val ∧ (FourFusion.tagIndex k).val≤13 := by decide
+      fusedTagCell k.val = (if (FourFusion.tagIndex k).val = 12 then lenCell else
+        cCell (FourFusion.tagIndex k).val) ∧ (FourFusion.tagIndex k).val ≤ 12 := by decide
   obtain ⟨he,hi⟩ := hsmall k
-  rw [he,hv_cc hi,factor_bits T _]
+  rw [he]
+  unfold FreeLastCodec.tagWord
+  by_cases h12 : (FourFusion.tagIndex k).val = 12
+  · rw [if_pos h12,if_pos h12,hv_lt P T f pk m bits (by decide),
+      show lenCell = 3 from rfl,inputWord_len_of pk m bits hlen]
+    rfl
+  · rw [if_neg h12,if_neg h12,hv_cc (by omega),factor_bits T _]
 
 def HonestReadContext (readTop : ℕ → ℕ) (k : Fin 42) : Prop :=
   ∀ u : Fin 8, FourFusion.owner k = some u →
@@ -587,7 +594,7 @@ theorem honest_fusion_query (readTop : ℕ → ℕ) (k : Fin 42) (hk : binds k.v
       decide
     rw [if_pos hf', if_pos hf, (hd 4 hl5).1, hread u hu 4 hl5]
   · have hf' : ¬ fiveChildren k.val := fun hh => hf ((fiveChildren_owner k u hu).mp hh)
-    rw [if_neg hf', if_neg hf, honest_fusedTag hC k]
+    rw [if_neg hf', if_neg hf, honest_fusedTag hC hlen k]
 
 include hT hC hlen hacc in
 /-- The honest chain step `t` of chain `k` (the last writes `dst`). -/

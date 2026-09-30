@@ -72,7 +72,7 @@ theorem intended_steps (a : K) (z : Bool) (xs : Nat → Nat) (s : Nat)
     (hx : ∀ u < 13, xs u < VF u) (hlayer : s + sumCosts xs = 85)
     (hz : z = true → s = 0) :
     (prologue a).length + 1 + groupSteps z xs +
-      (if z then 0 else (free s).length+1) = 186 := by
+      (if z then 0 else (free s).length+1) = 185 := by
   rw [prologue_length, group_steps_eq z xs hx, free_length]
   cases z <;> simp_all <;> omega
 
@@ -80,10 +80,10 @@ theorem intended_cycles (a : K) (z : Bool) (xs : Nat → Nat) (s : Nat)
     (hx : ∀ u < 13, xs u < VF u) (hlayer : s + sumCosts xs = 85)
     (hz : z = true → s = 0) :
     lcost (prologue a) + 1 + groupCycles z xs +
-      (if z then 0 else lcost (free s)+1) + LeanIsa.boundaryCycles = 1089 := by
+      (if z then 0 else lcost (free s)+1) + LeanIsa.boundaryCycles = 1088 := by
   rw [prologue_cost, group_cycles_eq z xs hx, free_cost]
-  change 26 + (92 + 10 * sumCosts xs + (if z then 1 else 0)) +
-    (if z then 0 else 10*s+1) + 120 = 1089
+  change 25 + (92 + 10 * sumCosts xs + (if z then 1 else 0)) +
+    (if z then 0 else 10*s+1) + 120 = 1088
   cases z <;> simp_all <;> omega
 
 end

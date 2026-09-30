@@ -95,7 +95,7 @@ theorem stage_of_completion {κ : Nat} (hκ : κ ≤ 32) (M : MemImage κ) (Sm :
   obtain ⟨v,z,hb,he⟩ := FreeLastGuard.stage_read hlo u j hj
   have h27 : 27 ≤ s.val := by
     by_contra hn
-    by_cases hi : s.val < 17
+    by_cases hi : s.val < 16
     · have hx := FreeLastGuard.initial_read hi j hj
       cases hx
     · rw [FreeLastGuard.initial_trap (by omega) (by omega)] at hj

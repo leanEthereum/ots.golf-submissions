@@ -49,7 +49,7 @@ def rootMsg (T : Tab) (xs : ℕ → ℕ) (r j : ℕ) : ℕ :=
 include hP in
 theorem rootMd_cell (hC : Compat P T) (r : Fin 1) : cellBits (v (rootMdCell r.val)) = P.rootMd r := by
   have he : rootMdCell r.val = cCell (FourFusion.rootIndex r).val := by fin_cases r <;> rfl
-  have hi : (FourFusion.rootIndex r).val ≤ 12 := by fin_cases r <;> decide
+  have hi : (FourFusion.rootIndex r).val ≤ 11 := by fin_cases r <;> decide
   rw [he,v_c hP hi,hC.rootMd]
 
 theorem root_query_of (hone : v oneCell = oneV)
@@ -155,7 +155,7 @@ theorem accept_of_path (hT : T.Hyp) (hC : Compat P T) (hpin : ∀ c < 47, v c = 
       exact cellBits_cellOfBits pk
     have hq : blake2sQuery ![v msgLo, v msgHi, v nonceCell, v pkCell] (v (cCell 1))
         (v (cCell 1 + 1)) (v (cCell 11)) = P.codec.idxInput m (decodeNonce bits) pk := by
-      rw [blake2sQuery_eq, cb_cv hP hC, v_c hP (by decide : 11 ≤ 12),
+      rw [blake2sQuery_eq, cb_cv hP hC, v_c hP (by decide : 11 ≤ 11),
         show nonceCell = 46 from rfl, show msgHi = 2 from rfl,
         show msgLo = 1 from rfl, hpin 46 (by omega), hpin 2 (by omega),
         hpin 1 (by omega), inputWord_nonce pk m bits hlen, inputWord_two,

@@ -39,13 +39,16 @@ theorem rowCheck_sound (a : K) : ∀ n p (x : K),
       rw [ih _ (x*a) ht j (by omega)]
       exact congrArg BitVec.toNat (by rw [mul_assoc, ← pow_succ'])
 
+/-- An 11-bit window evaluator. The first lookup is already a field value,
+so the base case avoids multiplying it by ONE. -/
 def windowPow (tab : Nat → Nat → Nat) : Nat → Nat → Nat
   | 0, _ => 1
-  | k+1, n => fastMul (windowPow tab k (n % 256^k)) (tab k (n / 256^k))
+  | 1, n => tab 0 n
+  | k+2, n => fastMul (windowPow tab (k+1) (n % 2048^(k+1))) (tab (k+1) (n / 2048^(k+1)))
 
 theorem windowPow_correct (tab : Nat → Nat → Nat) (a : K) :
-    ∀ k, (∀ i < k, ∀ j < 256, tab i j = (a^(j*256^i)).toNat) →
-    ∀ n, n < 256^k → windowPow tab k n = (a^n).toNat := by
+    ∀ k, (∀ i < k, ∀ j < 2048, tab i j = (a^(j*2048^i)).toNat) →
+    ∀ n, n < 2048^k → windowPow tab k n = (a^n).toNat := by
   intro k
   induction k with
   | zero =>
@@ -55,13 +58,20 @@ theorem windowPow_correct (tab : Nat → Nat → Nat) (a : K) :
     rfl
   | succ k ih =>
     intro htab n hn
-    have hk : 0 < 256^k := by positivity
-    have hq : n / 256^k < 256 := by
-      apply (Nat.div_lt_iff_lt_mul hk).mpr
-      simpa only [pow_succ, Nat.mul_comm] using hn
-    rw [windowPow, ih (fun i hi => htab i (by omega)) _ (Nat.mod_lt _ hk),
-      htab k (by omega) _ hq, ← mul_toNat, ← pow_add]
-    congr 2
-    simpa only [Nat.mul_comm] using Nat.mod_add_div n (256^k)
+    cases k with
+    | zero =>
+      simpa only [windowPow, pow_zero, Nat.mul_one] using
+        htab 0 (by omega) n (by simpa using hn)
+    | succ k =>
+      have hk : 0 < 2048^(k+1) := by positivity
+      have hq : n / 2048^(k+1) < 2048 := by
+        apply (Nat.div_lt_iff_lt_mul hk).mpr
+        simpa only [pow_succ, Nat.mul_comm] using hn
+      rw [windowPow, ih (fun i hi => htab i (by omega)) _ (Nat.mod_lt _ hk),
+        htab (k+1) (by omega) _ hq, ← mul_toNat, ← pow_add]
+      congr 2
+      simpa only [Nat.mul_comm] using Nat.mod_add_div n (2048^(k+1))
+
+
 
 end OptimalOTS.ByteWindow
