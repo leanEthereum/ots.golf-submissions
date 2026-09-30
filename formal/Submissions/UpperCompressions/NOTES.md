@@ -1,15 +1,16 @@
 # Candidate 86: one shared graph with the existing signing schedule
 
 The candidate proves a worst-case verification bound of **86 compressions**,
-including rejecting inputs. Local proof checks pass; resource measurement and
-hosted verification remain pending.
+including rejecting inputs. The complete proof passes local build, export,
+and fresh-kernel checks within the measured development resource allowance.
+A hosted verdict is still required.
 It uses a single graph across 42 independent chains, replacing the three
 separate blocks in the checked 87 construction. The 160-tier signing schedule,
 86-bit nonce, 129-bit values and security target are unchanged.
 
 ## Construction and exact count
 
-There are 42 chains of length 24 and 214 hash nodes. Eleven top values feed
+There are 42 chains of length 24 and 213 hash nodes. Eleven top values feed
 the root. The exact ordered inputs appear in `LongChain91Geometry.lean`.
 Unary and binary nodes are padded by repeating an existing input, giving
 403-bit internal queries with their 16-bit tags. Each node's last input is
@@ -18,7 +19,7 @@ that node. Chain queries have 145 bits. Both query types cost one compression.
 
 The root input contains `16 + 11*129 = 1435` bits and costs three compressions.
 All tags are distinct. The public key is the low 128 bits of the root output.
-Key generation costs `42*24 + 214 + 3 = 1225` compressions. There are 3710 named
+Key generation costs `42*24 + 213 + 3 = 1224` compressions. There are 3707 named
 nodes, including concatenations and truncations.
 
 A cut discloses each needed chain once and each needed unexpanded hash once.
@@ -26,13 +27,13 @@ Expanded hashes are evaluated once and shared by all their consumers. The
 supported family fixes chain-plus-internal cost 82, giving reconstruction
 cost 85 after the root. Its exact class count is
 
-`676745322862130083544291330002029`.
+`676752439849646922507063152752853`.
 
 The existing schedule needs
 
 `676013856769711926075368867014708`
 
-classes. The candidate has **0.108203%** more and selects an injectively
+classes. The candidate has **0.109256%** more and selects an injectively
 indexed subfamily of exactly the required size.
 
 The disclosure bound has a structural proof. Unexpanded hashes have distinct
@@ -46,16 +47,16 @@ The exact cost counter uses the same weighted recurrence as the cut-counting
 proof. Private-child paths inject canonical choices into a product of 42
 finite intervals. A path with `a` hashes has at most `a + 25` codes: its
 expanded prefix length plus its walked chain suffix. The proved population
-bound is `95265665839134290490590838458312294400000000000000000000000000`.
+bound is `92378827480372645324209297898969497600000000000000000000000000`.
 Radix `2^206` exceeds this bound, so coefficient extraction has no carries.
 The computation is reduced modulo `radix^83` before extracting digit 82.
 
 The certificate memoizes individual recurrence states, skips hash
 variables whose need bit is absent, and proves each numerical step with Lean's
 ordinary kernel. It does not use a native-evaluation axiom. The graph has
-83063 distinct nontrivial recurrence states. Checked balanced lookup tables
+72680 distinct nontrivial recurrence states. Checked balanced lookup tables
 supply the graph masks and their prefix unions. The complete construction,
-admissibility, security, and cost proofs pass a clean Lean build.
+admissibility, security, and cost proofs pass a clean build and fresh kernel replay.
 
 Proof representation matters for this computation. The pinned toolchain's
 default natural-number hash uses only the low 64 bits. The tactic's state
@@ -69,7 +70,7 @@ goal. These temporary words occur only in the certificate; the signature
 scheme is unchanged. This representation also improves the distribution of
 hashes in the exporter's expression table.
 
-The original list counter reached 5272 frontier states and 340847 state visits
+The original list counter reached 4996 frontier states and 303654 state visits
 on this graph. Earlier graphs and list-counter implementations exceeded the
 memory limit. The memoized certificate addresses that proof-engineering
 obstruction without changing the signing schedule or security assumptions.
@@ -210,18 +211,26 @@ root merges are insufficient; a seven-top graph would need further redesign.
 ## Validation status
 
 The required exports are `scheme`, `admissible`, `secure`, and
-`cost : scheme.VerifyCostAtMost 86`. The complete candidate passes a clean
-Lean build in 379.547 seconds, with 10.319 GiB sampled peak PSS. All four
-exports use only `propext`, `Quot.sound`, and `Classical.choice` in their axiom
-closures. Solution export completed in 444.226 seconds. Exact exported
-statement and primitive comparison pass, and all 112830 solution declarations
-pass fresh Lean kernel replay. The initial interpreted check took 544.421
-seconds, including 346.753 seconds of replay. Its pipeline total exceeds the
-20-minute limit. A compiled local checker, matching the official comparator's
-execution mode, is being measured before drawing a resource conclusion.
+`cost : scheme.VerifyCostAtMost 86`. The complete 213-node candidate passes
+a clean Lean 4.33.1 build, exact exported statement and primitive comparison,
+axiom checks, and fresh replay of all 102447 solution declarations. The only
+axioms in the four export closures are `propext`, `Quot.sound`, and
+`Classical.choice`.
 
-The previously checked 87 submission remains on its own branch. Its clean
-build and fresh kernel replay do not certify this new candidate.
+The clean build takes 241.506 seconds; solution export takes 375.098 seconds.
+The compiled export-check stage takes 411.741 seconds, including 282.813
+seconds of fresh kernel replay. Together with the separate axiom audit and
+challenge export, the five profiled stages total **1035.277 seconds**
+(17 minutes 15.3 seconds), with **10.416 GiB sampled peak process-tree PSS**
+and 56081 diagnostic bytes. Export data files are artifacts, not diagnostic
+output. These measurements are local development evidence; they do not
+certify the hosted verifier's cgroup accounting or isolation.
+
+The 214-node predecessor also passes every local proof check, but its
+compiled pipeline takes 1306.666 seconds, exceeding the 20-minute allowance.
+The selected graph has a slightly higher class count and about 12.5% fewer
+recurrence states, resolving that local runtime failure. The previously
+checked 87 submission remains on its own branch.
 
 Reproduce the official check from the repository root:
 

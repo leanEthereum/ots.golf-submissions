@@ -3,7 +3,7 @@ import Submissions.UpperCompressions.ProofBundle00
 /-!
 # Global shared-DAG research geometry
 
-One block has 42 length-24 chains and 214 hash nodes.
+One block has 42 length-24 chains and 213 hash nodes.
 Binary and unary inputs are padded by repeating an existing input.
 The private value has only one consuming hash node.
 -/
@@ -23,20 +23,20 @@ namespace OptimalOTS.WeightedConstruction.LongChain91
 /-- An input of a block hash node: the top of a chain or another hash value. -/
 inductive Kid where
   | c (k : Fin 42)
-  | h (j : Fin 214)
+  | h (j : Fin 213)
   deriving DecidableEq, Fintype
 
 /-- Forty-two length-24 chains and the searched ternary DAG.
 Slot `2` holds the exclusive kid of each hash node. -/
-def kid : Fin 214 → Fin 3 → Kid := ![
-  ![.c 14, .c 2, .c 15],
+def kid : Fin 213 → Fin 3 → Kid := ![
   ![.c 32, .c 0, .c 22],
-  ![.c 32, .c 31, .h 0],
+  ![.c 14, .c 2, .c 15],
+  ![.c 32, .c 31, .h 1],
   ![.c 28, .c 30, .h 2],
   ![.c 16, .c 3, .h 3],
   ![.c 4, .c 0, .h 4],
   ![.c 30, .h 5, .c 27],
-  ![.c 16, .c 14, .h 1],
+  ![.c 16, .c 14, .h 0],
   ![.c 2, .c 31, .c 38],
   ![.c 28, .c 14, .h 6],
   ![.c 14, .c 4, .h 8],
@@ -52,20 +52,20 @@ def kid : Fin 214 → Fin 3 → Kid := ![
   ![.c 31, .h 15, .h 18],
   ![.c 28, .h 5, .h 19],
   ![.h 5, .c 4, .h 20],
-  ![.h 17, .c 14, .h 21],
   ![.c 3, .c 0, .h 10],
-  ![.c 28, .c 30, .h 24],
+  ![.c 32, .c 14, .h 21],
+  ![.c 28, .c 30, .h 23],
   ![.c 16, .h 15, .h 25],
   ![.h 5, .h 17, .h 26],
   ![.c 2, .h 27, .h 22],
   ![.c 28, .c 30, .h 28],
   ![.c 3, .c 16, .h 29],
   ![.h 17, .c 0, .h 30],
-  ![.c 4, .c 3, .h 23],
+  ![.c 4, .c 3, .h 24],
   ![.c 30, .c 31, .h 32],
   ![.c 2, .h 27, .h 33],
   ![.h 31, .h 15, .h 34],
-  ![.h 17, .c 28, .c 23],
+  ![.h 17, .h 31, .c 23],
   ![.h 5, .c 30, .h 36],
   ![.c 0, .c 2, .h 37],
   ![.c 31, .c 3, .h 38],
@@ -86,7 +86,7 @@ def kid : Fin 214 → Fin 3 → Kid := ![
   ![.c 31, .c 0, .h 53],
   ![.h 31, .c 17, .h 54],
   ![.c 14, .h 5, .h 55],
-  ![.c 4, .h 17, .c 7],
+  ![.c 4, .c 3, .c 7],
   ![.c 30, .c 16, .h 57],
   ![.h 5, .c 0, .h 58],
   ![.h 15, .c 28, .h 59],
@@ -109,143 +109,142 @@ def kid : Fin 214 → Fin 3 → Kid := ![
   ![.c 28, .h 31, .h 76],
   ![.c 17, .c 18, .h 77],
   ![.c 30, .h 17, .c 19],
-  ![.c 0, .c 4, .h 79],
+  ![.c 32, .c 4, .h 79],
   ![.h 15, .c 2, .c 41],
   ![.c 16, .c 18, .h 81],
-  ![.c 30, .h 78, .h 82],
-  ![.c 17, .h 31, .h 83],
-  ![.c 32, .c 0, .c 35],
-  ![.c 16, .c 31, .h 85],
-  ![.h 27, .c 30, .h 86],
+  ![.c 30, .c 0, .c 35],
+  ![.c 30, .c 0, .h 82],
+  ![.c 17, .h 31, .h 84],
+  ![.c 16, .c 31, .h 83],
+  ![.h 27, .h 5, .h 86],
   ![.c 28, .h 31, .h 87],
   ![.h 15, .c 2, .h 88],
   ![.c 3, .c 4, .h 89],
   ![.h 17, .h 70, .h 90],
+  ![.h 5, .h 17, .h 85],
+  ![.h 27, .c 28, .h 92],
+  ![.h 70, .c 31, .h 93],
+  ![.c 14, .h 91, .h 94],
+  ![.c 3, .c 14, .h 80],
+  ![.c 16, .c 2, .h 96],
   ![.h 91, .c 30, .c 25],
-  ![.h 5, .h 17, .h 84],
-  ![.h 27, .c 28, .h 93],
-  ![.h 70, .c 31, .h 94],
-  ![.c 14, .h 91, .h 95],
-  ![.c 3, .c 31, .h 80],
-  ![.c 14, .h 78, .h 92],
-  ![.c 16, .c 2, .h 97],
-  ![.h 15, .h 91, .h 99],
-  ![.c 17, .c 2, .h 98],
-  ![.c 18, .h 31, .h 100],
+  ![.h 15, .c 31, .h 97],
+  ![.c 14, .h 78, .h 98],
+  ![.h 5, .c 31, .h 100],
   ![.c 16, .h 27, .h 101],
-  ![.h 17, .c 18, .h 103],
+  ![.c 18, .h 31, .h 99],
+  ![.h 17, .c 18, .h 102],
   ![.h 70, .c 32, .h 104],
-  ![.c 28, .c 17, .h 102],
+  ![.c 28, .c 17, .h 103],
   ![.h 70, .h 78, .h 106],
-  ![.h 96, .h 107, .h 105],
-  ![.c 32, .c 28, .c 6],
-  ![.c 18, .h 15, .h 109],
+  ![.h 95, .h 107, .h 105],
+  ![.c 32, .h 108, .c 6],
+  ![.c 18, .c 2, .h 109],
   ![.c 31, .h 5, .h 110],
   ![.c 17, .h 5, .c 21],
-  ![.c 28, .h 91, .c 11],
-  ![.c 18, .h 5, .h 113],
+  ![.c 14, .h 91, .c 11],
+  ![.c 18, .c 31, .h 113],
   ![.h 31, .h 70, .h 111],
   ![.c 16, .c 17, .h 115],
   ![.h 27, .c 16, .c 9],
-  ![.c 31, .h 91, .c 37],
-  ![.c 32, .h 17, .c 8],
   ![.c 14, .c 31, .h 117],
-  ![.c 17, .c 28, .h 118],
-  ![.h 70, .c 17, .h 119],
-  ![.c 30, .c 14, .h 121],
-  ![.h 15, .c 2, .h 120],
+  ![.h 15, .c 2, .h 118],
+  ![.c 17, .c 28, .c 37],
+  ![.c 30, .h 91, .h 120],
   ![.h 31, .h 17, .h 114],
+  ![.h 70, .h 78, .h 119],
   ![.c 14, .h 27, .h 116],
-  ![.h 107, .h 96, .h 126],
-  ![.h 70, .c 30, .h 124],
-  ![.c 32, .h 17, .c 10],
-  ![.h 78, .h 91, .h 127],
-  ![.c 17, .c 16, .h 125],
-  ![.c 17, .h 78, .h 128],
-  ![.h 91, .h 96, .h 132],
-  ![.c 32, .h 107, .h 133],
-  ![.h 130, .h 108, .h 134],
+  ![.h 108, .h 108, .c 8],
+  ![.h 107, .h 95, .h 124],
+  ![.h 78, .h 91, .h 126],
+  ![.h 70, .c 17, .h 125],
+  ![.c 17, .c 16, .h 122],
+  ![.c 17, .c 30, .h 123],
+  ![.h 91, .h 95, .h 130],
+  ![.c 32, .h 107, .h 131],
+  ![.h 127, .h 108, .h 132],
   ![.h 70, .c 18, .h 112],
-  ![.c 18, .h 91, .h 122],
-  ![.h 107, .h 27, .h 131],
-  ![.c 30, .c 17, .c 34],
-  ![.c 32, .c 16, .h 139],
-  ![.c 31, .h 17, .h 136],
-  ![.c 18, .h 70, .h 129],
-  ![.h 96, .h 70, .h 138],
-  ![.c 16, .h 70, .h 123],
-  ![.h 27, .c 16, .h 141],
-  ![.h 96, .h 78, .h 145],
-  ![.h 78, .c 28, .h 143],
-  ![.c 30, .c 32, .h 147],
-  ![.h 31, .c 17, .h 142],
-  ![.h 27, .h 78, .h 149],
-  ![.c 30, .c 28, .h 146],
-  ![.c 32, .h 107, .h 151],
-  ![.h 91, .h 148, .h 152],
-  ![.h 91, .h 107, .h 150],
-  ![.h 153, .c 18, .c 40],
-  ![.h 130, .h 96, .h 155],
-  ![.h 17, .h 148, .h 140],
-  ![.h 27, .h 108, .h 156],
-  ![.h 78, .h 70, .h 157],
-  ![.c 18, .h 91, .h 159],
-  ![.h 148, .h 96, .h 154],
-  ![.h 96, .h 107, .h 160],
-  ![.h 130, .h 108, .h 162],
-  ![.c 30, .c 30, .c 29],
+  ![.c 32, .c 30, .c 10],
+  ![.c 31, .h 17, .h 134],
+  ![.h 107, .h 27, .h 129],
+  ![.h 95, .h 70, .h 137],
+  ![.c 18, .h 91, .h 128],
+  ![.c 18, .h 70, .h 135],
+  ![.c 30, .c 16, .c 34],
+  ![.h 27, .c 16, .h 136],
+  ![.c 32, .c 17, .h 141],
+  ![.h 95, .h 78, .h 142],
+  ![.h 78, .c 28, .h 138],
+  ![.c 30, .c 32, .h 145],
+  ![.c 16, .h 70, .h 121],
+  ![.c 28, .c 17, .h 140],
+  ![.h 27, .h 78, .h 148],
+  ![.c 30, .c 28, .h 144],
+  ![.c 32, .h 107, .h 150],
+  ![.h 91, .h 146, .h 151],
+  ![.h 91, .h 107, .h 149],
+  ![.h 152, .c 18, .c 40],
+  ![.h 127, .h 95, .h 154],
+  ![.h 152, .h 146, .h 143],
+  ![.h 27, .h 108, .h 155],
+  ![.h 78, .h 70, .h 156],
+  ![.c 18, .h 91, .h 158],
+  ![.h 146, .h 95, .h 153],
+  ![.h 95, .h 107, .h 159],
+  ![.h 127, .h 108, .h 161],
+  ![.h 95, .h 95, .c 29],
   ![.c 30, .h 91, .c 33],
-  ![.h 148, .c 32, .h 165],
-  ![.h 91, .h 107, .h 164],
-  ![.c 32, .h 108, .h 167],
-  ![.c 28, .h 27, .h 168],
-  ![.h 78, .h 96, .c 20],
-  ![.c 18, .c 17, .h 170],
-  ![.h 130, .h 108, .h 171],
-  ![.h 148, .h 107, .h 172],
+  ![.h 146, .c 32, .h 164],
+  ![.h 91, .h 107, .h 163],
+  ![.c 32, .h 108, .h 166],
+  ![.h 17, .h 27, .h 167],
+  ![.h 91, .h 95, .c 20],
+  ![.c 18, .c 17, .h 169],
+  ![.h 127, .h 108, .h 170],
+  ![.h 146, .h 107, .h 171],
+  ![.h 107, .c 18, .h 147],
+  ![.h 78, .h 127, .h 173],
+  ![.h 95, .h 108, .h 174],
+  ![.h 146, .c 32, .h 175],
+  ![.h 127, .h 108, .h 160],
   ![.c 30, .c 32, .c 24],
-  ![.h 107, .c 18, .h 144],
-  ![.h 78, .h 130, .h 175],
-  ![.h 96, .h 108, .h 176],
-  ![.h 148, .c 32, .h 177],
-  ![.h 130, .h 108, .h 161],
-  ![.h 96, .h 78, .h 137],
-  ![.h 78, .h 107, .h 158],
-  ![.h 91, .h 96, .h 174],
-  ![.c 17, .h 70, .h 169],
-  ![.c 32, .h 91, .c 26],
-  ![.c 32, .c 30, .h 173],
-  ![.c 17, .h 70, .h 184],
-  ![.h 148, .h 78, .h 186],
-  ![.h 108, .h 130, .h 187],
-  ![.h 70, .c 17, .h 166],
-  ![.c 18, .h 78, .h 183],
-  ![.c 18, .h 78, .h 182],
-  ![.h 108, .h 130, .h 191],
-  ![.h 148, .h 130, .h 190],
-  ![.h 178, .h 153, .h 193],
-  ![.h 153, .h 178, .h 185],
-  ![.h 153, .h 107, .h 192],
-  ![.h 148, .h 91, .h 181],
-  ![.h 107, .h 148, .h 180],
-  ![.c 18, .h 96, .h 188],
-  ![.h 195, .h 194, .h 198],
-  ![.h 178, .h 153, .h 200],
-  ![.h 78, .h 130, .h 189],
-  ![.h 178, .h 153, .h 202],
-  ![.h 153, .h 178, .h 199],
-  ![.h 194, .h 195, .h 204],
-  ![.c 18, .h 108, .h 203],
-  ![.h 178, .h 148, .h 196],
-  ![.h 195, .h 194, .h 207],
-  ![.h 201, .h 205, .h 208],
-  ![.h 195, .h 194, .h 197],
-  ![.h 201, .h 205, .h 210],
-  ![.h 194, .h 195, .h 206],
-  ![.h 201, .h 205, .h 212]]
+  ![.h 78, .h 107, .h 157],
+  ![.c 17, .h 70, .h 168],
+  ![.c 32, .h 107, .c 26],
+  ![.c 32, .c 30, .h 172],
+  ![.h 95, .h 78, .h 139],
+  ![.c 17, .h 70, .h 181],
+  ![.h 146, .h 78, .h 184],
+  ![.h 108, .h 127, .h 185],
+  ![.h 70, .c 17, .h 165],
+  ![.h 91, .h 95, .h 178],
+  ![.c 18, .h 78, .h 180],
+  ![.c 18, .h 78, .h 188],
+  ![.h 108, .h 127, .h 190],
+  ![.h 146, .h 127, .h 189],
+  ![.h 176, .h 152, .h 192],
+  ![.h 152, .h 176, .h 182],
+  ![.h 152, .h 107, .h 191],
+  ![.h 146, .h 91, .h 179],
+  ![.h 107, .h 146, .h 183],
+  ![.h 194, .h 193, .h 197],
+  ![.h 176, .h 152, .h 198],
+  ![.c 18, .h 95, .h 186],
+  ![.h 78, .h 127, .h 187],
+  ![.h 176, .h 152, .h 201],
+  ![.h 152, .h 176, .h 200],
+  ![.h 193, .h 194, .h 203],
+  ![.c 18, .h 108, .h 202],
+  ![.h 176, .h 146, .h 195],
+  ![.h 194, .h 193, .h 206],
+  ![.h 199, .h 204, .h 207],
+  ![.h 194, .h 193, .h 196],
+  ![.h 199, .h 204, .h 209],
+  ![.h 193, .h 194, .h 205],
+  ![.h 199, .h 204, .h 211]]
 
 /-- The eleven block tops, in root-slot order. -/
-def top : Fin 11 → Fin 214 := ![48, 35, 63, 41, 179, 135, 163, 209, 211, 213, 56]
+def top : Fin 11 → Fin 213 := ![48, 35, 63, 41, 177, 133, 162, 208, 210, 212, 56]
 
 theorem top_injective : Function.Injective top := by
   decide
@@ -259,15 +258,15 @@ inductive Name where
   | ci (b : Fin 1) (k : Fin 42) (t : Fin 24)
   | ch (b : Fin 1) (k : Fin 42) (t : Fin 24)
   | cv (b : Fin 1) (k : Fin 42) (t : Fin 24)
-  | hc (b : Fin 1) (j : Fin 214)
-  | hh (b : Fin 1) (j : Fin 214)
-  | hv (b : Fin 1) (j : Fin 214)
+  | hc (b : Fin 1) (j : Fin 213)
+  | hh (b : Fin 1) (j : Fin 213)
+  | hv (b : Fin 1) (j : Fin 213)
   | rc
   | rh
   deriving DecidableEq, Fintype
 
 /-- Number of graph nodes. -/
-def nodeCount : ℕ := 3710
+def nodeCount : ℕ := 3707
 
 namespace Name
 
@@ -277,11 +276,11 @@ def idx : Name → ℕ
   | ci b k t => 42 + 126 * t + 42 * b + k
   | ch b k t => 84 + 126 * t + 42 * b + k
   | cv b k t => 126 + 126 * t + 42 * b + k
-  | hc b j => 3066 + 642 * b + 3 * j
-  | hh b j => 3067 + 642 * b + 3 * j
-  | hv b j => 3068 + 642 * b + 3 * j
-  | rc => 3708
-  | rh => 3709
+  | hc b j => 3066 + 639 * b + 3 * j
+  | hh b j => 3067 + 639 * b + 3 * j
+  | hv b j => 3068 + 639 * b + 3 * j
+  | rc => 3705
+  | rh => 3706
 
 theorem idx_lt (n : Name) : n.idx < nodeCount := by
   cases n <;> simp only [idx, nodeCount] <;> omega
@@ -348,7 +347,7 @@ theorem chainNode_pair_injective {b b' : Fin 1} {k k' : Fin 42} {p p' : Fin 25}
     simp only at this
     exact ⟨hb, hk, Fin.ext (by omega)⟩
 
-theorem hc_len_ne (b : Fin 1) (j : Fin 214) : (Name.hc b j).len ≠ 129 := by
+theorem hc_len_ne (b : Fin 1) (j : Fin 213) : (Name.hc b j).len ≠ 129 := by
   simp only [Name.len]
   omega
 
@@ -372,9 +371,9 @@ theorem rootIn_injective : Function.Injective rootIn := by
   exact Fin.ext (by omega)
 
 /-- Static key-generation cost. -/
-def keygenCost : ℕ := 42 * 24 + 214 + 3
+def keygenCost : ℕ := 42 * 24 + 213 + 3
 
-theorem keygenCost_eq : keygenCost = 1225 := by norm_num [keygenCost]
+theorem keygenCost_eq : keygenCost = 1224 := by norm_num [keygenCost]
 
 theorem sum_name_cost : (∑ n : Name, n.cost) = keygenCost := by decide +kernel
 
@@ -385,37 +384,37 @@ def Kid.name (b : Fin 1) : Kid → Name
   | .c k => .cv b k 23
   | .h j => .hv b j
 
-def privateOwner : Kid → Option (Fin 214)
-  | .c k => (![none, some 18, none, none, none, some 64, some 109, some 57, some 119, some 117, some 129, some 113, some 19, some 71, none, some 0, none, none, none, some 79, some 170, some 112, some 1, some 36, some 174, some 92, some 184, some 6, none, some 164, none, none, none, some 165, some 139, some 85, some 42, some 118, some 8, some 49, some 155, some 81] : Fin 42 → Option (Fin 214)) k
-  | .h j => (![some 2, some 7, some 3, some 4, some 5, none, some 9, some 11, some 10, some 12, some 24, some 13, some 14, some 16, some 15, none, some 17, none, some 20, some 21, some 22, some 23, some 28, some 32, some 25, some 26, some 27, none, some 29, some 30, some 31, none, some 33, some 34, some 35, none, some 37, some 38, some 39, some 40, some 41, none, some 43, some 44, some 45, some 46, some 47, some 48, none, some 50, some 51, some 52, some 53, some 54, some 55, some 56, none, some 58, some 59, some 60, some 61, some 62, some 63, none, some 65, some 66, some 67, some 68, some 69, some 70, none, some 72, some 73, some 74, some 75, some 76, some 77, some 78, none, some 80, some 97, some 82, some 83, some 84, some 93, some 86, some 87, some 88, some 89, some 90, some 91, none, some 98, some 94, some 95, some 96, none, some 99, some 101, some 100, some 102, some 103, some 106, some 104, some 105, some 108, some 107, none, none, some 110, some 111, some 115, some 136, some 114, some 125, some 116, some 126, some 120, some 121, some 122, some 124, some 123, some 137, some 144, some 128, some 131, some 127, some 130, some 132, some 142, none, some 138, some 133, some 134, some 135, none, some 141, some 180, some 143, some 140, some 157, some 145, some 149, some 147, some 175, some 146, some 151, some 148, none, some 150, some 154, some 152, some 153, none, some 161, some 156, some 158, some 159, some 181, some 160, some 162, some 179, some 163, none, some 167, some 166, some 189, some 168, some 169, some 183, some 171, some 172, some 173, some 185, some 182, some 176, some 177, some 178, none, none, some 198, some 197, some 191, some 190, some 186, some 195, some 187, some 188, some 199, some 202, some 193, some 192, some 196, some 194, none, none, some 207, some 210, some 200, some 204, some 201, none, some 203, some 206, some 205, none, some 212, some 208, some 209, none, some 211, none, some 213, none] : Fin 214 → Option (Fin 214)) j
+def privateOwner : Kid → Option (Fin 213)
+  | .c k => (![none, some 18, none, none, none, some 64, some 109, some 57, some 125, some 117, some 135, some 113, some 19, some 71, none, some 1, none, none, none, some 79, some 169, some 112, some 0, some 36, some 178, some 98, some 181, some 6, none, some 163, none, none, none, some 164, some 141, some 83, some 42, some 120, some 8, some 49, some 154, some 81] : Fin 42 → Option (Fin 213)) k
+  | .h j => (![some 7, some 2, some 3, some 4, some 5, none, some 9, some 11, some 10, some 12, some 23, some 13, some 14, some 16, some 15, none, some 17, none, some 20, some 21, some 22, some 24, some 28, some 25, some 32, some 26, some 27, none, some 29, some 30, some 31, none, some 33, some 34, some 35, none, some 37, some 38, some 39, some 40, some 41, none, some 43, some 44, some 45, some 46, some 47, some 48, none, some 50, some 51, some 52, some 53, some 54, some 55, some 56, none, some 58, some 59, some 60, some 61, some 62, some 63, none, some 65, some 66, some 67, some 68, some 69, some 70, none, some 72, some 73, some 74, some 75, some 76, some 77, some 78, none, some 80, some 96, some 82, some 84, some 86, some 85, some 92, some 87, some 88, some 89, some 90, some 91, none, some 93, some 94, some 95, none, some 97, some 99, some 100, some 103, some 101, some 102, some 104, some 106, some 105, some 108, some 107, none, none, some 110, some 111, some 115, some 134, some 114, some 122, some 116, some 124, some 118, some 119, some 123, some 121, some 147, some 129, some 130, some 126, some 128, some 127, none, some 139, some 137, some 131, some 132, some 133, none, some 136, some 140, some 142, some 138, some 145, some 183, some 148, some 143, some 144, some 156, some 150, some 146, none, some 173, some 149, some 153, some 151, some 152, none, some 160, some 155, some 157, some 158, some 179, some 159, some 161, some 177, some 162, none, some 166, some 165, some 187, some 167, some 168, some 180, some 170, some 171, some 172, some 182, some 174, some 175, some 176, none, none, some 188, some 196, some 189, some 184, some 194, some 197, some 185, some 186, some 200, some 201, some 190, some 192, some 191, some 195, some 193, none, none, some 206, some 209, some 198, some 199, none, some 203, some 202, some 205, some 204, none, some 211, some 207, some 208, none, some 210, none, some 212, none] : Fin 213 → Option (Fin 213)) j
 
-def kidOrdered (j : Fin 214) (i : Fin 3) : Bool :=
+def kidOrdered (j : Fin 213) (i : Fin 3) : Bool :=
   match kid j i with
   | .c _ => true
   | .h k => decide (k < j)
 
-theorem kid_ordered (j : Fin 214) (i : Fin 3) : kidOrdered j i = true := by
+theorem kid_ordered (j : Fin 213) (i : Fin 3) : kidOrdered j i = true := by
   revert j i
   decide +kernel
 
-theorem kid_h_lt {j j' : Fin 214} {i : Fin 3} (h : kid j i = .h j') : j' < j := by
+theorem kid_h_lt {j j' : Fin 213} {i : Fin 3} (h : kid j i = .h j') : j' < j := by
   have hh := kid_ordered j i
   simpa only [kidOrdered, h, decide_eq_true_eq] using hh
 
-theorem owner_private (j : Fin 214) : privateOwner (kid j 2) = some j := by
+theorem owner_private (j : Fin 213) : privateOwner (kid j 2) = some j := by
   revert j
   decide +kernel
 
-def ownerFits (e : Fin 214) (i : Fin 3) : Bool :=
+def ownerFits (e : Fin 213) (i : Fin 3) : Bool :=
   match privateOwner (kid e i) with
   | none => true
   | some j => decide (e = j)
 
-theorem owner_kid (e : Fin 214) (i : Fin 3) : ownerFits e i = true := by
+theorem owner_kid (e : Fin 213) (i : Fin 3) : ownerFits e i = true := by
   revert e i
   decide +kernel
 
-theorem kid_eq_kid_excl_iff (e j : Fin 214) (i : Fin 3) :
+theorem kid_eq_kid_excl_iff (e j : Fin 213) (i : Fin 3) :
     kid e i = kid j 2 ↔ e = j ∧ kid j i = kid j 2 := by
   constructor
   · intro h
@@ -428,17 +427,17 @@ theorem kid_eq_kid_excl_iff (e j : Fin 214) (i : Fin 3) :
 
 def kidIsTop : Kid → Bool
   | .c _ => false
-  | .h j => (![false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, true, false, true] : Fin 214 → Bool) j
+  | .h j => (![false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, true, false, true] : Fin 213 → Bool) j
 
 theorem top_flag (s : Fin 11) : kidIsTop (.h (top s)) = true := by
   revert s
   decide +kernel
 
-theorem input_not_top (j : Fin 214) (i : Fin 3) : kidIsTop (kid j i) = false := by
+theorem input_not_top (j : Fin 213) (i : Fin 3) : kidIsTop (kid j i) = false := by
   revert j i
   decide +kernel
 
-theorem kid_ne_top (j : Fin 214) (i : Fin 3) (s : Fin 11) : kid j i ≠ .h (top s) := by
+theorem kid_ne_top (j : Fin 213) (i : Fin 3) (s : Fin 11) : kid j i ≠ .h (top s) := by
   intro h
   have hn := input_not_top j i
   rw [h, top_flag] at hn
@@ -446,16 +445,16 @@ theorem kid_ne_top (j : Fin 214) (i : Fin 3) (s : Fin 11) : kid j i ≠ .h (top 
 
 
 /-- A kid is needed when it is a block top or an input of an expanded node. -/
-def Needed (E : Finset (Fin 214)) (x : Kid) : Prop :=
+def Needed (E : Finset (Fin 213)) (x : Kid) : Prop :=
   (∃ s, x = .h (top s)) ∨ ∃ e ∈ E, ∃ i, kid e i = x
 
-theorem needed_kid {E : Finset (Fin 214)} {e : Fin 214} (he : e ∈ E) (i : Fin 3) :
+theorem needed_kid {E : Finset (Fin 213)} {e : Fin 213} (he : e ∈ E) (i : Fin 3) :
     Needed E (kid e i) :=
   Or.inr ⟨e, he, i, rfl⟩
 
 /-- Binding rule: the exclusive kid of `j` is needed exactly when `j` is
 expanded. -/
-theorem needed_kid_excl_iff (E : Finset (Fin 214)) (j : Fin 214) :
+theorem needed_kid_excl_iff (E : Finset (Fin 213)) (j : Fin 213) :
     Needed E (kid j 2) ↔ j ∈ E := by
   constructor
   · rintro (⟨s, h⟩ | ⟨e, he, i, hi⟩)
@@ -465,21 +464,21 @@ theorem needed_kid_excl_iff (E : Finset (Fin 214)) (j : Fin 214) :
   · intro h
     exact needed_kid h _
 
-def topSet : Finset (Fin 214) := {35, 41, 48, 56, 63, 135, 163, 179, 209, 211, 213}
+def topSet : Finset (Fin 213) := {35, 41, 48, 56, 63, 133, 162, 177, 208, 210, 212}
 
-theorem mem_topSet (j : Fin 214) : j ∈ topSet ↔ ∃ s, top s = j := by
+theorem mem_topSet (j : Fin 213) : j ∈ topSet ↔ ∃ s, top s = j := by
   revert j
   decide
 
 /-- Hash kids of each node, as literal finsets for cheap kernel evaluation. -/
-def kidsH : Fin 214 → Finset (Fin 214) := ![
-  ∅, ∅, {0}, {2}, {3}, {4}, {5}, {1}, ∅, {6}, {8}, {7}, {9}, {5, 11}, {12}, {14}, {13, 15}, {16}, ∅, ∅, {15, 18}, {5, 19}, {5, 20}, {17, 21}, {10}, {24}, {15, 25}, {5, 17, 26}, {22, 27}, {28}, {29}, {17, 30}, {23}, {32}, {27, 33}, {15, 31, 34}, {17}, {5, 36}, {37}, {38}, {39}, {15, 40}, {17}, {42}, {43}, {5, 44}, {15, 45}, {46}, {27, 31, 47}, ∅, {49}, {50}, {15, 17, 51}, {27, 52}, {53}, {31, 54}, {5, 55}, {17}, {57}, {5, 58}, {15, 59}, {31, 60}, {61}, {27, 62}, ∅, {64}, {15, 65}, {66}, {17, 67}, {31, 68}, {5, 69}, ∅, {15, 71}, {72}, {5, 73}, {27, 74}, {17, 70, 75}, {31, 76}, {77}, {17}, {79}, {15}, {81}, {78, 82}, {31, 83}, ∅, {85}, {27, 86}, {31, 87}, {15, 88}, {89}, {17, 70, 90}, {91}, {5, 17, 84}, {27, 93}, {70, 94}, {91, 95}, {80}, {78, 92}, {97}, {15, 91, 99}, {98}, {31, 100}, {27, 101}, {17, 103}, {70, 104}, {102}, {70, 78, 106}, {96, 105, 107}, ∅, {15, 109}, {5, 110}, {5}, {91}, {5, 113}, {31, 70, 111}, {115}, {27}, {91}, {17}, {117}, {118}, {70, 119}, {121}, {15, 120}, {17, 31, 114}, {27, 116}, {96, 107, 126}, {70, 124}, {17}, {78, 91, 127}, {125}, {78, 128}, {91, 96, 132}, {107, 133}, {108, 130, 134}, {70, 112}, {91, 122}, {27, 107, 131}, ∅, {139}, {17, 136}, {70, 129}, {70, 96, 138}, {70, 123}, {27, 141}, {78, 96, 145}, {78, 143}, {147}, {31, 142}, {27, 78, 149}, {146}, {107, 151}, {91, 148, 152}, {91, 107, 150}, {153}, {96, 130, 155}, {17, 140, 148}, {27, 108, 156}, {70, 78, 157}, {91, 159}, {96, 148, 154}, {96, 107, 160}, {108, 130, 162}, ∅, {91}, {148, 165}, {91, 107, 164}, {108, 167}, {27, 168}, {78, 96}, {170}, {108, 130, 171}, {107, 148, 172}, ∅, {107, 144}, {78, 130, 175}, {96, 108, 176}, {148, 177}, {108, 130, 161}, {78, 96, 137}, {78, 107, 158}, {91, 96, 174}, {70, 169}, {91}, {173}, {70, 184}, {78, 148, 186}, {108, 130, 187}, {70, 166}, {78, 183}, {78, 182}, {108, 130, 191}, {130, 148, 190}, {153, 178, 193}, {153, 178, 185}, {107, 153, 192}, {91, 148, 181}, {107, 148, 180}, {96, 188}, {194, 195, 198}, {153, 178, 200}, {78, 130, 189}, {153, 178, 202}, {153, 178, 199}, {194, 195, 204}, {108, 203}, {148, 178, 196}, {194, 195, 207}, {201, 205, 208}, {194, 195, 197}, {201, 205, 210}, {194, 195, 206}, {201, 205, 212}]
+def kidsH : Fin 213 → Finset (Fin 213) := ![
+  ∅, ∅, {1}, {2}, {3}, {4}, {5}, {0}, ∅, {6}, {8}, {7}, {9}, {5, 11}, {12}, {14}, {13, 15}, {16}, ∅, ∅, {15, 18}, {5, 19}, {5, 20}, {10}, {21}, {23}, {15, 25}, {5, 17, 26}, {22, 27}, {28}, {29}, {17, 30}, {24}, {32}, {27, 33}, {15, 31, 34}, {17, 31}, {5, 36}, {37}, {38}, {39}, {15, 40}, {17}, {42}, {43}, {5, 44}, {15, 45}, {46}, {27, 31, 47}, ∅, {49}, {50}, {15, 17, 51}, {27, 52}, {53}, {31, 54}, {5, 55}, ∅, {57}, {5, 58}, {15, 59}, {31, 60}, {61}, {27, 62}, ∅, {64}, {15, 65}, {66}, {17, 67}, {31, 68}, {5, 69}, ∅, {15, 71}, {72}, {5, 73}, {27, 74}, {17, 70, 75}, {31, 76}, {77}, {17}, {79}, {15}, {81}, ∅, {82}, {31, 84}, {83}, {5, 27, 86}, {31, 87}, {15, 88}, {89}, {17, 70, 90}, {5, 17, 85}, {27, 92}, {70, 93}, {91, 94}, {80}, {96}, {91}, {15, 97}, {78, 98}, {5, 100}, {27, 101}, {31, 99}, {17, 102}, {70, 104}, {103}, {70, 78, 106}, {95, 105, 107}, {108}, {109}, {5, 110}, {5}, {91}, {113}, {31, 70, 111}, {115}, {27}, {117}, {15, 118}, ∅, {91, 120}, {17, 31, 114}, {70, 78, 119}, {27, 116}, {108}, {95, 107, 124}, {78, 91, 126}, {70, 125}, {122}, {123}, {91, 95, 130}, {107, 131}, {108, 127, 132}, {70, 112}, ∅, {17, 134}, {27, 107, 129}, {70, 95, 137}, {91, 128}, {70, 135}, ∅, {27, 136}, {141}, {78, 95, 142}, {78, 138}, {145}, {70, 121}, {140}, {27, 78, 148}, {144}, {107, 150}, {91, 146, 151}, {91, 107, 149}, {152}, {95, 127, 154}, {143, 146, 152}, {27, 108, 155}, {70, 78, 156}, {91, 158}, {95, 146, 153}, {95, 107, 159}, {108, 127, 161}, {95}, {91}, {146, 164}, {91, 107, 163}, {108, 166}, {17, 27, 167}, {91, 95}, {169}, {108, 127, 170}, {107, 146, 171}, {107, 147}, {78, 127, 173}, {95, 108, 174}, {146, 175}, {108, 127, 160}, ∅, {78, 107, 157}, {70, 168}, {107}, {172}, {78, 95, 139}, {70, 181}, {78, 146, 184}, {108, 127, 185}, {70, 165}, {91, 95, 178}, {78, 180}, {78, 188}, {108, 127, 190}, {127, 146, 189}, {152, 176, 192}, {152, 176, 182}, {107, 152, 191}, {91, 146, 179}, {107, 146, 183}, {193, 194, 197}, {152, 176, 198}, {95, 186}, {78, 127, 187}, {152, 176, 201}, {152, 176, 200}, {193, 194, 203}, {108, 202}, {146, 176, 195}, {193, 194, 206}, {199, 204, 207}, {193, 194, 196}, {199, 204, 209}, {193, 194, 205}, {199, 204, 211}]
 
 /-- Chain kids of each node. -/
-def kidsC : Fin 214 → Finset (Fin 42) := ![
-  {2, 14, 15}, {0, 22, 32}, {31, 32}, {28, 30}, {3, 16}, {0, 4}, {27, 30}, {14, 16}, {2, 31, 38}, {14, 28}, {4, 14}, {28, 30}, {2, 16}, {31}, {4, 31}, {0, 3}, {4}, {2, 3}, {1, 14, 32}, {0, 12, 16}, {31}, {28}, {4}, {14}, {0, 3}, {28, 30}, {16}, ∅, {2}, {28, 30}, {3, 16}, {0}, {3, 4}, {30, 31}, {2}, ∅, {23, 28}, {30}, {0, 2}, {3, 31}, {4, 16}, {14}, {30, 36}, {0, 31}, {3, 28}, {14}, {16}, {2, 4}, ∅, {30, 32, 39}, {4, 16}, {2, 3}, ∅, {28}, {0, 31}, {17}, {14}, {4, 7}, {16, 30}, {0}, {28}, {2}, {14, 31}, {17}, {5, 16, 30}, {3, 28}, {4}, {2, 17}, {0}, {31}, {18}, {0, 13, 31}, {30}, {3, 4}, {2}, {16}, ∅, {28}, {17, 18}, {19, 30}, {0, 4}, {2, 41}, {16, 18}, {30}, {17}, {0, 32, 35}, {16, 31}, {30}, {28}, {2}, {3, 4}, ∅, {25, 30}, ∅, {28}, {31}, {14}, {3, 31}, {14}, {2, 16}, ∅, {2, 17}, {18}, {16}, {18}, {32}, {17, 28}, ∅, ∅, {6, 28, 32}, {18}, {31}, {17, 21}, {11, 28}, {18}, ∅, {16, 17}, {9, 16}, {31, 37}, {8, 32}, {14, 31}, {17, 28}, {17}, {14, 30}, {2}, ∅, {14}, ∅, {30}, {10, 32}, ∅, {16, 17}, {17}, ∅, {32}, ∅, {18}, {18}, ∅, {17, 30, 34}, {16, 32}, {31}, {18}, ∅, {16}, {16}, ∅, {28}, {30, 32}, {17}, ∅, {28, 30}, {32}, ∅, ∅, {18, 40}, ∅, ∅, ∅, ∅, {18}, ∅, ∅, ∅, {29, 30}, {30, 33}, {32}, ∅, {32}, {28}, {20}, {17, 18}, ∅, ∅, {24, 30, 32}, {18}, ∅, ∅, {32}, ∅, ∅, ∅, ∅, {17}, {26, 32}, {30, 32}, {17}, ∅, ∅, {17}, {18}, {18}, ∅, ∅, ∅, ∅, ∅, ∅, ∅, {18}, ∅, ∅, ∅, ∅, ∅, ∅, {18}, ∅, ∅, ∅, ∅, ∅, ∅, ∅]
+def kidsC : Fin 213 → Finset (Fin 42) := ![
+  {0, 22, 32}, {2, 14, 15}, {31, 32}, {28, 30}, {3, 16}, {0, 4}, {27, 30}, {14, 16}, {2, 31, 38}, {14, 28}, {4, 14}, {28, 30}, {2, 16}, {31}, {4, 31}, {0, 3}, {4}, {2, 3}, {1, 14, 32}, {0, 12, 16}, {31}, {28}, {4}, {0, 3}, {14, 32}, {28, 30}, {16}, ∅, {2}, {28, 30}, {3, 16}, {0}, {3, 4}, {30, 31}, {2}, ∅, {23}, {30}, {0, 2}, {3, 31}, {4, 16}, {14}, {30, 36}, {0, 31}, {3, 28}, {14}, {16}, {2, 4}, ∅, {30, 32, 39}, {4, 16}, {2, 3}, ∅, {28}, {0, 31}, {17}, {14}, {3, 4, 7}, {16, 30}, {0}, {28}, {2}, {14, 31}, {17}, {5, 16, 30}, {3, 28}, {4}, {2, 17}, {0}, {31}, {18}, {0, 13, 31}, {30}, {3, 4}, {2}, {16}, ∅, {28}, {17, 18}, {19, 30}, {4, 32}, {2, 41}, {16, 18}, {0, 30, 35}, {0, 30}, {17}, {16, 31}, ∅, {28}, {2}, {3, 4}, ∅, ∅, {28}, {31}, {14}, {3, 14}, {2, 16}, {25, 30}, {31}, {14}, {31}, {16}, {18}, {18}, {32}, {17, 28}, ∅, ∅, {6, 32}, {2, 18}, {31}, {17, 21}, {11, 14}, {18, 31}, ∅, {16, 17}, {9, 16}, {14, 31}, {2}, {17, 28, 37}, {30}, ∅, ∅, {14}, {8}, ∅, ∅, {17}, {16, 17}, {17, 30}, ∅, {32}, ∅, {18}, {10, 30, 32}, {31}, ∅, ∅, {18}, {18}, {16, 30, 34}, {16}, {17, 32}, ∅, {28}, {30, 32}, {16}, {17, 28}, ∅, {28, 30}, {32}, ∅, ∅, {18, 40}, ∅, ∅, ∅, ∅, {18}, ∅, ∅, ∅, {29}, {30, 33}, {32}, ∅, {32}, ∅, {20}, {17, 18}, ∅, ∅, {18}, ∅, ∅, {32}, ∅, {24, 30, 32}, ∅, {17}, {26, 32}, {30, 32}, ∅, {17}, ∅, ∅, {17}, ∅, {18}, {18}, ∅, ∅, ∅, ∅, ∅, ∅, ∅, ∅, ∅, {18}, ∅, ∅, ∅, ∅, {18}, ∅, ∅, ∅, ∅, ∅, ∅, ∅]
 
-def hashKidSet : Kid → Finset (Fin 214)
+def hashKidSet : Kid → Finset (Fin 213)
   | .c _ => ∅
   | .h j => {j}
 
@@ -487,40 +486,40 @@ def chainKidSet : Kid → Finset (Fin 42)
   | .c k => {k}
   | .h _ => ∅
 
-theorem hashKidSet_mem (x : Kid) (j : Fin 214) : j ∈ hashKidSet x ↔ x = .h j := by
+theorem hashKidSet_mem (x : Kid) (j : Fin 213) : j ∈ hashKidSet x ↔ x = .h j := by
   cases x <;> simp [hashKidSet, eq_comm]
 
 theorem chainKidSet_mem (x : Kid) (k : Fin 42) : k ∈ chainKidSet x ↔ x = .c k := by
   cases x <;> simp [chainKidSet, eq_comm]
 
-theorem kidsH_eq (e : Fin 214) :
+theorem kidsH_eq (e : Fin 213) :
     kidsH e = Finset.univ.biUnion fun i : Fin 3 => hashKidSet (kid e i) := by
   revert e
   decide +kernel
 
-theorem kidsC_eq (e : Fin 214) :
+theorem kidsC_eq (e : Fin 213) :
     kidsC e = Finset.univ.biUnion fun i : Fin 3 => chainKidSet (kid e i) := by
   revert e
   decide +kernel
 
-theorem mem_kidsH (e j : Fin 214) : j ∈ kidsH e ↔ ∃ i, kid e i = .h j := by
+theorem mem_kidsH (e j : Fin 213) : j ∈ kidsH e ↔ ∃ i, kid e i = .h j := by
   rw [kidsH_eq]
   simp only [Finset.mem_biUnion, Finset.mem_univ, true_and, hashKidSet_mem]
 
-theorem mem_kidsC (e : Fin 214) (k : Fin 42) : k ∈ kidsC e ↔ ∃ i, kid e i = .c k := by
+theorem mem_kidsC (e : Fin 213) (k : Fin 42) : k ∈ kidsC e ↔ ∃ i, kid e i = .c k := by
   rw [kidsC_eq]
   simp only [Finset.mem_biUnion, Finset.mem_univ, true_and, chainKidSet_mem]
 
 
-theorem kidsH_lt (e j : Fin 214) (h : j ∈ kidsH e) : j < e := by
+theorem kidsH_lt (e j : Fin 213) (h : j ∈ kidsH e) : j < e := by
   obtain ⟨i, hi⟩ := (mem_kidsH e j).1 h
   exact kid_h_lt hi
 
-def neededH (E : Finset (Fin 214)) : Finset (Fin 214) := topSet ∪ E.biUnion kidsH
+def neededH (E : Finset (Fin 213)) : Finset (Fin 213) := topSet ∪ E.biUnion kidsH
 
-def neededC (E : Finset (Fin 214)) : Finset (Fin 42) := E.biUnion kidsC
+def neededC (E : Finset (Fin 213)) : Finset (Fin 42) := E.biUnion kidsC
 
-@[simp] theorem mem_neededH (E : Finset (Fin 214)) (j : Fin 214) :
+@[simp] theorem mem_neededH (E : Finset (Fin 213)) (j : Fin 213) :
     j ∈ neededH E ↔ Needed E (.h j) := by
   simp only [neededH, Finset.mem_union, mem_topSet, Finset.mem_biUnion, mem_kidsH, Needed,
     Kid.h.injEq]
@@ -532,33 +531,33 @@ def neededC (E : Finset (Fin 214)) : Finset (Fin 42) := E.biUnion kidsC
     · exact Or.inl ⟨s, rfl⟩
     · exact Or.inr h
 
-@[simp] theorem mem_neededC (E : Finset (Fin 214)) (k : Fin 42) :
+@[simp] theorem mem_neededC (E : Finset (Fin 213)) (k : Fin 42) :
     k ∈ neededC E ↔ Needed E (.c k) := by
   simp only [neededC, Finset.mem_biUnion, mem_kidsC, Needed, reduceCtorEq, exists_false,
     false_or]
 
-theorem top_mem_neededH (E : Finset (Fin 214)) (s : Fin 11) : top s ∈ neededH E :=
+theorem top_mem_neededH (E : Finset (Fin 213)) (s : Fin 11) : top s ∈ neededH E :=
   (mem_neededH E _).2 (Or.inl ⟨s, rfl⟩)
 
 /-- Every expanded node is needed. -/
-def ShapeValid (E : Finset (Fin 214)) : Prop := E ⊆ neededH E
+def ShapeValid (E : Finset (Fin 213)) : Prop := E ⊆ neededH E
 
 instance : DecidablePred ShapeValid := by
   intro E
   unfold ShapeValid
   infer_instance
 
-def validShapes : Finset (Finset (Fin 214)) := Finset.univ.filter ShapeValid
+def validShapes : Finset (Finset (Fin 213)) := Finset.univ.filter ShapeValid
 
 attribute [irreducible] validShapes
 
-theorem mem_validShapes (E : Finset (Fin 214)) : E ∈ validShapes ↔ ShapeValid E := by
+theorem mem_validShapes (E : Finset (Fin 213)) : E ∈ validShapes ↔ ShapeValid E := by
   rw [validShapes, Finset.mem_filter]
   exact and_iff_right (Finset.mem_univ _)
 
 /-- Disclosed words of a block shape: needed unexpanded hash values plus one
 value per needed chain. -/
-def shapeWords (E : Finset (Fin 214)) : ℕ := (neededH E \ E).card + (neededC E).card
+def shapeWords (E : Finset (Fin 213)) : ℕ := (neededH E \ E).card + (neededC E).card
 
 /-! ## Top-down shape recursion
 
@@ -569,13 +568,13 @@ the bottom each needed chain gets weight `g`.  Kids have smaller indices, so a
 node's neededness is fixed once the nodes above it are decided. -/
 
 def khMask (i : ℕ) : ℕ :=
-  if i < 214 then (if i < 107 then (if i < 53 then (if i < 26 then (if i < 13 then (if i < 6 then (if i < 3 then (if i < 1 then 0 else (if i < 2 then 0 else 1)) else (if i < 4 then 4 else (if i < 5 then 8 else 16))) else (if i < 9 then (if i < 7 then 32 else (if i < 8 then 2 else 0)) else (if i < 11 then (if i < 10 then 64 else 256) else (if i < 12 then 128 else 512)))) else (if i < 19 then (if i < 16 then (if i < 14 then 2080 else (if i < 15 then 4096 else 16384)) else (if i < 17 then 40960 else (if i < 18 then 65536 else 0))) else (if i < 22 then (if i < 20 then 0 else (if i < 21 then 294912 else 524320)) else (if i < 24 then (if i < 23 then 1048608 else 2228224) else (if i < 25 then 1024 else 16777216))))) else (if i < 39 then (if i < 32 then (if i < 29 then (if i < 27 then 33587200 else (if i < 28 then 67239968 else 138412032)) else (if i < 30 then 268435456 else (if i < 31 then 536870912 else 1073872896))) else (if i < 35 then (if i < 33 then 8388608 else (if i < 34 then 4294967296 else 8724152320)) else (if i < 37 then (if i < 36 then 19327385600 else 131072) else (if i < 38 then 68719476768 else 137438953472)))) else (if i < 46 then (if i < 42 then (if i < 40 then 274877906944 else (if i < 41 then 549755813888 else 1099511660544)) else (if i < 44 then (if i < 43 then 131072 else 4398046511104) else (if i < 45 then 8796093022208 else 17592186044448))) else (if i < 49 then (if i < 47 then 35184372121600 else (if i < 48 then 70368744177664 else 140739770056704)) else (if i < 51 then (if i < 50 then 0 else 562949953421312) else (if i < 52 then 1125899906842624 else 2251799813849088)))))) else (if i < 80 then (if i < 66 then (if i < 59 then (if i < 56 then (if i < 54 then 4503599761588224 else (if i < 55 then 9007199254740992 else 18014400656965632)) else (if i < 57 then 36028797018964000 else (if i < 58 then 131072 else 144115188075855872))) else (if i < 62 then (if i < 60 then 288230376151711776 else (if i < 61 then 576460752303456256 else 1152921506754330624)) else (if i < 64 then (if i < 63 then 2305843009213693952 else 4611686018561605632) else (if i < 65 then 0 else 18446744073709551616)))) else (if i < 73 then (if i < 69 then (if i < 67 then 36893488147419136000 else (if i < 68 then 73786976294838206464 else 147573952589676544000)) else (if i < 71 then (if i < 70 then 295147905181500309504 else 590295810358705651744) else (if i < 72 then 0 else 2361183241434822639616))) else (if i < 76 then (if i < 74 then 4722366482869645213696 else (if i < 75 then 9444732965739290427424 else 18889465931478715072512)) else (if i < 78 then (if i < 77 then 38959523483674573144064 else 75557863725916470902784) else (if i < 79 then 151115727451828646838272 else 131072))))) else (if i < 93 then (if i < 86 then (if i < 83 then (if i < 81 then 604462909807314587353088 else (if i < 82 then 32768 else 2417851639229258349412352)) else (if i < 84 then 5137934733362173992501248 else (if i < 85 then 9671406556917035545133056 else 0))) else (if i < 89 then (if i < 87 then 38685626227668133590597632 else (if i < 88 then 77371252455336267315412992 else 154742504910672536509874176)) else (if i < 91 then (if i < 90 then 309485009821345068724813824 else 618970019642690137449562112) else (if i < 92 then 1237941219877000992310558720 else 2475880078570760549798248448)))) else (if i < 100 then (if i < 96 then (if i < 94 then 19342813113834066795429920 else (if i < 95 then 9903520314283042199327211520 else 19807041809157705115797291008)) else (if i < 98 then (if i < 97 then 42089961335702929346570223616 else 1208925819614629174706176) else (if i < 99 then 4952062388596424756890173440 else 158456325028528675187087900672))) else (if i < 103 then (if i < 101 then 636301180192685461298149883904 else (if i < 102 then 316912650057057350374175801344 else 1267650600228229401498850689024)) else (if i < 105 then (if i < 104 then 2535301200456458802993540628480 else 10141204801825835211973625774080) else (if i < 106 then 20282409604832262044664662589440 else 5070602400912917605986812821504))))))) else (if i < 160 then (if i < 133 then (if i < 120 then (if i < 113 then (if i < 110 then (if i < 108 then 81129638718018728220163710124032 else (if i < 109 then 202903324199030968577066056810496 else 0)) else (if i < 111 then 649037107316853453566312041185280 else (if i < 112 then 1298074214633706907132624082305056 else 32))) else (if i < 116 then (if i < 114 then 2475880078570760549798248448 else (if i < 115 then 10384593717069655257060992658440224 else 2596148429268594405885967723397120)) else (if i < 118 then (if i < 117 then 41538374868278621028243970633760768 else 134217728) else (if i < 119 then 2475880078570760549798248448 else 131072)))) else (if i < 126 then (if i < 123 then (if i < 121 then 166153499473114484112975882535043072 else (if i < 122 then 332306998946228968225951765070086144 else 664613997892459117043524247551475712)) else (if i < 124 then 2658455991569831745807614120560689152 else (if i < 125 then 1329227995784915872903807060280377344 else 20769187434139310514121987464495104))) else (if i < 129 then (if i < 127 then 83076749736557242056487941401739264 else (if i < 128 then 85070754068739607593471381029496291328 else 21267647932558655147052533681896816640)) else (if i < 131 then (if i < 130 then 131072 else 170141183462945414041712967922976030720) else (if i < 132 then 42535295865117307932921825928971026432 else 340282366920938765694829511089061888000))))) else (if i < 146 then (if i < 139 then (if i < 136 then (if i < 134 then 5444517870816719458006828817051633582080 else (if i < 135 then 10889035903729307660041350829394593054720 else 23139201275142369173936200088516258955264)) else (if i < 137 then 5192296858536008220151213740523520 else (if i < 138 then 5316911985615543570185988790919626752 else 2722259097626784536920360251032290197504))) else (if i < 142 then (if i < 140 then 0 else (if i < 141 then 696898287454081973172991196020261297061888 else 87112285931760246646623899502532662263808)) else (if i < 144 then (if i < 143 then 680564733841876928107340835580947726336 else 348449143727120214750190453968441603784704) else (if i < 145 then 10633823966279328163822077199654060032 else 2787593149816327892691964784081045322465280)))) else (if i < 153 then (if i < 149 then (if i < 147 then 44601490397061325511536182264537973849587712 else (if i < 148 then 11150372599265311571070090591227838046666752 else 178405961588244985132285746181186892047843328)) else (if i < 151 then (if i < 150 then 5575186299632655785383929568162092523978752 else 713623846352979940529445216179651225619267584) else (if i < 152 then 89202980794122492566142873090593446023921664 else 2854495385412082021393401152262381850775781376))) else (if i < 156 then (if i < 154 then 6065802694000329496973595448731114879424921600 else (if i < 155 then 1427247692706122142810995261383647264191283200 else 11417981541647679048466287755595961091061972992)) else (if i < 158 then (if i < 157 then 45671927527720183956847167390146611684864688128 else 358205719751398134210917474754414306689941504) else (if i < 159 then 91343852333181756906283960471494471884650577920 else 182687704666362864775460907501581901831696547840)))))) else (if i < 187 then (if i < 173 then (if i < 166 then (if i < 163 then (if i < 161 then 730750818665451459104318296436712270377764519936 else (if i < 162 then 23192775006471848146425309517818633559763582976 else 1461501637330903080542189824443910748827486781440)) else (if i < 164 then 5846006550684741465017046843145357291506823593984 else (if i < 165 then 0 else 2475880078570760549798248448))) else (if i < 169 then (if i < 167 then 46768409206512069872488179218413419002773937061888 else (if i < 168 then 23384026197294446853520710032752462466622729224192 else 187072209578355573854590212246110953299115386077184)) else (if i < 171 then (if i < 170 then 374144419156711147060143317175368453031918865219584 else 79228464745719241250837626880) else (if i < 172 then 1496577676626844588240573268701473812127674924007424 else 2993155353255050306273348844915227849468232941436928)))) else (if i < 180 then (if i < 176 then (if i < 174 then 5986311063319301529614522616206600974276061802004480 else (if i < 175 then 0 else 22300745198692882418364931636039939516268544)) else (if i < 178 then (if i < 177 then 47890485652060387953166028352603246941418981934759936 else 95780971304118053647721286978715264967291944701001728) else (if i < 179 then 191561942965048030471283348658360140314716174368636928 else 2923003276022935628609677177712791252194958508032))) else (if i < 183 then (if i < 181 then 174224571863599721757993518246316161892352 else (if i < 182 then 365375409332725891810198339623889050149287100416 else 23945242826029513411849254003266173829140942126317568)) else (if i < 185 then (if i < 184 then 748288838313422294120286634351917497684554873307136 else 2475880078570760549798248448) else (if i < 186 then 11972621413014756705924586149611790497021399392059392 else 24519928653854221733733552434404948118491446672348938240))))) else (if i < 200 then (if i < 193 then (if i < 190 then (if i < 188 then 98079714615773698858110699707884661475416581261139902464 else (if i < 189 then 196159429230833775230998211677547087783423820522594500608 else 93536104789177786765035829295022704878697094053888)) else (if i < 191 then 12259964326927110866866776217202775700404816634762493952 else (if i < 192 then 6129982163463555433433388108601538965929860146028085248 else 3138550867693340383279024503806140720331402935115110678528))) else (if i < 196 then (if i < 194 then 1569275433847027004243253313455935029371449664627177160704 else (if i < 195 then 12554586594669995981427816112220586697256211534799676899328 else 49422981204342897223704370674063758927300297781483143168)) else (if i < 198 then (if i < 197 then 6277101735398098745377437264515409533071314797133106774016 else 3064991082088589639893184027041069938170612578261139456) else (if i < 199 then 1532495541222700781534999256691709889344504484289576960 else 392318858461667547739736839029707313520661552872546107392)))) else (if i < 207 then (if i < 203 then (if i < 201 then 477059731889387738051519996163782647623779013779266622980096 else (if i < 202 then 1606938427382886909995718329606967856387254494428664443174912 else 784637716923335096840603145584712458097747763942370836480)) else (if i < 205 then (if i < 204 then 6427752560159857736621604606630455663953863475777042949079040 else 803469405253391772224737283436386555126152997537268025524224) else (if i < 206 then 25786333928968484577837422950537093637348476165858253778976768 else 12855504354071922204335696739053819373836050677045498702987264))) else (if i < 210 then (if i < 208 then 100434010890072465505510396848049714806425954169989193793536 else (if i < 209 then 205763394885975395438537177292747305119835211469531051332730880 else 466012032835107179907169006778937154731438868197009922237399040)) else (if i < 212 then (if i < 211 then 276192476357013953608774734621137322308503639556417518567424 else 1700140450826011711523395893696950033468490767422194819748855808) else (if i < 213 then 102919360053400017803851603382912898558414219867432309873442816 else 6636654122789629837988303441369001548416698364322934409794682880)))))))) else 0
+  if i < 213 then (if i < 106 then (if i < 53 then (if i < 26 then (if i < 13 then (if i < 6 then (if i < 3 then (if i < 1 then 0 else (if i < 2 then 0 else 2)) else (if i < 4 then 4 else (if i < 5 then 8 else 16))) else (if i < 9 then (if i < 7 then 32 else (if i < 8 then 1 else 0)) else (if i < 11 then (if i < 10 then 64 else 256) else (if i < 12 then 128 else 512)))) else (if i < 19 then (if i < 16 then (if i < 14 then 2080 else (if i < 15 then 4096 else 16384)) else (if i < 17 then 40960 else (if i < 18 then 65536 else 0))) else (if i < 22 then (if i < 20 then 0 else (if i < 21 then 294912 else 524320)) else (if i < 24 then (if i < 23 then 1048608 else 1024) else (if i < 25 then 2097152 else 8388608))))) else (if i < 39 then (if i < 32 then (if i < 29 then (if i < 27 then 33587200 else (if i < 28 then 67239968 else 138412032)) else (if i < 30 then 268435456 else (if i < 31 then 536870912 else 1073872896))) else (if i < 35 then (if i < 33 then 16777216 else (if i < 34 then 4294967296 else 8724152320)) else (if i < 37 then (if i < 36 then 19327385600 else 2147614720) else (if i < 38 then 68719476768 else 137438953472)))) else (if i < 46 then (if i < 42 then (if i < 40 then 274877906944 else (if i < 41 then 549755813888 else 1099511660544)) else (if i < 44 then (if i < 43 then 131072 else 4398046511104) else (if i < 45 then 8796093022208 else 17592186044448))) else (if i < 49 then (if i < 47 then 35184372121600 else (if i < 48 then 70368744177664 else 140739770056704)) else (if i < 51 then (if i < 50 then 0 else 562949953421312) else (if i < 52 then 1125899906842624 else 2251799813849088)))))) else (if i < 79 then (if i < 66 then (if i < 59 then (if i < 56 then (if i < 54 then 4503599761588224 else (if i < 55 then 9007199254740992 else 18014400656965632)) else (if i < 57 then 36028797018964000 else (if i < 58 then 0 else 144115188075855872))) else (if i < 62 then (if i < 60 then 288230376151711776 else (if i < 61 then 576460752303456256 else 1152921506754330624)) else (if i < 64 then (if i < 63 then 2305843009213693952 else 4611686018561605632) else (if i < 65 then 0 else 18446744073709551616)))) else (if i < 72 then (if i < 69 then (if i < 67 then 36893488147419136000 else (if i < 68 then 73786976294838206464 else 147573952589676544000)) else (if i < 70 then 295147905181500309504 else (if i < 71 then 590295810358705651744 else 0))) else (if i < 75 then (if i < 73 then 2361183241434822639616 else (if i < 74 then 4722366482869645213696 else 9444732965739290427424)) else (if i < 77 then (if i < 76 then 18889465931478715072512 else 38959523483674573144064) else (if i < 78 then 75557863725916470902784 else 151115727451828646838272))))) else (if i < 92 then (if i < 85 then (if i < 82 then (if i < 80 then 131072 else (if i < 81 then 604462909807314587353088 else 32768)) else (if i < 83 then 2417851639229258349412352 else (if i < 84 then 0 else 4835703278458516698824704))) else (if i < 88 then (if i < 86 then 19342813113834068942782464 else (if i < 87 then 9671406556917033397649408 else 77371252455336267315413024)) else (if i < 90 then (if i < 89 then 154742504910672536509874176 else 309485009821345068724813824) else (if i < 91 then 618970019642690137449562112 else 1237941219877000992310558720)))) else (if i < 99 then (if i < 95 then (if i < 93 then 38685626227668133590728736 else (if i < 94 then 4951760157141521099730714624 else 9903521494874662916604297216)) else (if i < 97 then (if i < 96 then 22282920707136844948184236032 else 1208925819614629174706176) else (if i < 98 then 79228162514264337593543950336 else 2475880078570760549798248448))) else (if i < 102 then (if i < 100 then 158456325028528675187087933440 else (if i < 101 then 316912952288512254031469477888 else 1267650600228229401496703205408)) else (if i < 104 then (if i < 103 then 2535301200456458802993540628480 else 633825300114114700750499086336) else (if i < 105 then 5070602400912917605986812952576 else 20282409604832262044664662589440))))))) else (if i < 159 then (if i < 132 then (if i < 119 then (if i < 112 then (if i < 109 then (if i < 107 then 10141204801825835211973625643008 else (if i < 108 then 81129638718018728220163710124032 else 202863710117773836408269284835328)) else (if i < 110 then 324518553658426726783156020576256 else (if i < 111 then 649037107316853453566312041152512 else 1298074214633706907132624082305056))) else (if i < 115 then (if i < 113 then 32 else (if i < 114 then 2475880078570760549798248448 else 10384593717069655257060992658440192)) else (if i < 117 then (if i < 116 then 2596148429268594405885967723397120 else 41538374868278621028243970633760768) else (if i < 118 then 134217728 else 166153499473114484112975882535043072)))) else (if i < 125 then (if i < 122 then (if i < 120 then 332306998946228968225951765070118912 else (if i < 121 then 0 else 1329227998260795951474567610078593024)) else (if i < 123 then 20769187434139310514121987464495104 else (if i < 124 then 664613997892761348498427904845152256 else 83076749736557242056487941401739264))) else (if i < 128 then (if i < 126 then 324518553658426726783156020576256 else (if i < 127 then 21267810231449564436956473339267776512 else 85070591732710798175869316065033977856)) else (if i < 130 then (if i < 129 then 42535295865117309113513446646382329856 else 5316911983139663491615228241121378304) else (if i < 131 then 10633823966279326983230456482242756608 else 1361129467725843815189201359073643069440))))) else (if i < 145 then (if i < 138 then (if i < 135 then (if i < 133 then 2722259097626784536920360251032155979776 else (if i < 134 then 5614659378714038305572407805780196065280 else 5192296858536008220151213740523520)) else (if i < 136 then 0 else (if i < 137 then 21778071482940061661655974875633165664256 else 680564896101153756140112606441680928768))) else (if i < 141 then (if i < 139 then 174224571863560107375685522794579507544064 else (if i < 140 then 340282366923414343541945367981566459904 else 43556142965880123324492541371983742369792)) else (if i < 143 then (if i < 142 then 0 else 87112285931760246646623899502532796350464) else (if i < 144 then 2787593149816327892691964784081045188247552 else 5575186299632695399767418155234544442146816)))) else (if i < 152 then (if i < 148 then (if i < 146 then 348449143727040986888727052913787942207488 else (if i < 147 then 44601490397061246283071436545296723011960832 else 2658455991569832926399234837971992576)) else (if i < 150 then (if i < 149 then 1393796574908163946345982392040522594123776 else 356811923176489970264873723817277441523580928) else (if i < 151 then 22300745198530623141535718272648361505980416 else 1427247692706122140335115182812886714393034752))) else (if i < 155 then (if i < 153 then 2943698366206042257158594890560344268587663360 else (if i < 154 then 713623846353142202281852276658899695999909888 else 5708990770823839524233143877797980545530986496)) else (if i < 157 then (if i < 156 then 22835963253436541597015888500011394694780026880 else 5809344124217227328370054610024898172307898368) else (if i < 158 then 45671926166591040712418809449110627520402685952 else 91343852333181432387730605456814213103200763904)))))) else (if i < 186 then (if i < 172 then (if i < 165 then (if i < 162 then (if i < 160 then 365375409332725729553397088257641515463781384192 else (if i < 161 then 11507184522441801580646511885818723333857869824 else 730750818665451621400733326828637070202748534784)) else (if i < 163 then 2923003274831947344386392555590980126183769767936 else (if i < 164 then 39614081257132168796771975168 else 2475880078570760549798248448))) else (if i < 168 then (if i < 166 then 23384115400275240813751523466333618907940944609280 else (if i < 167 then 11692013098647223507891231371022198309375268880384 else 93536104789177787089554382952268840041135703326720)) else (if i < 170 then (if i < 169 then 187072209578355573530071658587684226515959499849728 else 42089961335702929346570223616) else (if i < 171 then 748288838313422294120286634350736906063837462003712 else 1496577676627014729748552291591632226214546828689408)))) else (if i < 179 then (if i < 175 then (if i < 173 then 2993155442456669970765898380375034078240373882224640 else (if i < 174 then 178405961588407244409114959544578470058131456 else 11972621413014926847108046619145753639228772569841664)) else (if i < 177 then (if i < 176 then 23945242826029513412173730466963264852994751576670208 else 47890485741262007617820837164590035078679043592159232) else (if i < 178 then 1461501637501044426182707722874697106527837224960 else 0))) else (if i < 182 then (if i < 180 then 182687704666363027034737735534353672692295532544 else (if i < 181 then 374144419156711147060143317176549044652636142305280 else 162259276829213363391578010288128)) else (if i < 184 then (if i < 183 then 5986310706507378352962293074805895248510699696029696 else 696898287454121587556479783092715362713600) else (if i < 185 then 3064991081731777716716694054300619547829098961778507776 else 24519928653943424714527674926971392042445323058255233024))))) else (if i < 199 then (if i < 192 then (if i < 189 then (if i < 187 then 49039857307708443637608612847832784034213738781779951616 else (if i < 188 then 46768052394588893382517914648101648249707252678656 else 383123885216472214589586798877538631607614127116124160)) else (if i < 190 then 1532495540865888858358347027150611415073642779477278720 else (if i < 191 then 392318858461667547739736838950479453237852118936295833600 else 1569275433846670191129088863780939494184002947987913310208))) else (if i < 195 then (if i < 193 then 784637716923424298630408983853993676617572327719912341504 else (if i < 194 then 6277197516363693872660260659421096454304129596204701974528 else 6225763140476664257904624322031274936249108229401870336)) else (if i < 197 then (if i < 196 then 3138550867699049372688718713387343181142339094355558531072 else 766247770522147409973296008617177543470723556913971200) else (if i < 198 then 12259964327016313847661060969045445555403898001503027200 else 238529865944693869025759998081891323811889506889633311490048)))) else (if i < 206 then (if i < 202 then (if i < 200 then 401734606845724581994314994321504080668752522597438876286976 else (if i < 201 then 98079714615416886934934209777233869008731472616522514432 else 196159429230833774040009602935709109466340815012678860800)) else (if i < 204 then (if i < 203 then 3213876184298957564192748655918538635082607761717326338064384 else 1606938140039967288650786563577376032560404767934533502763008) else (if i < 205 then 12893166964484242288918711475268546818674238082929126889488384 else 6427752177035961102167848369689168963747238701914327361781760))) else (if i < 209 then (if i < 207 then 50216909664064839431720756904843094366015910320353436499968 else (if i < 208 then 102881697442987697719268588646373652559917605734765525666365440 else 232202547395424094815813522343297996064458332601613564701048832)) else (if i < 211 then (if i < 210 then 138096238178506976804387367310568661154251819778208759283712 else 849266756390876360623926965802304435432984282214206013456777216) else (if i < 212 then 51459680026700008901925801691456449279207109933716154936721408 else 3317523592372685423856380739638330192907088080664575808479690752)))))))) else 0
 
 def kcMask (i : ℕ) : ℕ :=
-  if i < 214 then (if i < 107 then (if i < 53 then (if i < 26 then (if i < 13 then (if i < 6 then (if i < 3 then (if i < 1 then 49156 else (if i < 2 then 4299161601 else 6442450944)) else (if i < 4 then 1342177280 else (if i < 5 then 65544 else 17))) else (if i < 9 then (if i < 7 then 1207959552 else (if i < 8 then 81920 else 277025390596)) else (if i < 11 then (if i < 10 then 268451840 else 16400) else (if i < 12 then 1342177280 else 65540)))) else (if i < 19 then (if i < 16 then (if i < 14 then 2147483648 else (if i < 15 then 2147483664 else 9)) else (if i < 17 then 16 else (if i < 18 then 12 else 4294983682))) else (if i < 22 then (if i < 20 then 69633 else (if i < 21 then 2147483648 else 268435456)) else (if i < 24 then (if i < 23 then 16 else 16384) else (if i < 25 then 9 else 1342177280))))) else (if i < 39 then (if i < 32 then (if i < 29 then (if i < 27 then 65536 else (if i < 28 then 0 else 4)) else (if i < 30 then 1342177280 else (if i < 31 then 65544 else 1))) else (if i < 35 then (if i < 33 then 24 else (if i < 34 then 3221225472 else 4)) else (if i < 37 then (if i < 36 then 0 else 276824064) else (if i < 38 then 1073741824 else 5)))) else (if i < 46 then (if i < 42 then (if i < 40 then 2147483656 else (if i < 41 then 65552 else 16384)) else (if i < 44 then (if i < 43 then 69793218560 else 2147483649) else (if i < 45 then 268435464 else 16384))) else (if i < 49 then (if i < 47 then 65536 else (if i < 48 then 20 else 0)) else (if i < 51 then (if i < 50 then 555124523008 else 65552) else (if i < 52 then 12 else 0)))))) else (if i < 80 then (if i < 66 then (if i < 59 then (if i < 56 then (if i < 54 then 268435456 else (if i < 55 then 2147483649 else 131072)) else (if i < 57 then 16384 else (if i < 58 then 144 else 1073807360))) else (if i < 62 then (if i < 60 then 1 else (if i < 61 then 268435456 else 4)) else (if i < 64 then (if i < 63 then 2147500032 else 131072) else (if i < 65 then 1073807392 else 268435464)))) else (if i < 73 then (if i < 69 then (if i < 67 then 16 else (if i < 68 then 131076 else 1)) else (if i < 71 then (if i < 70 then 2147483648 else 262144) else (if i < 72 then 2147491841 else 1073741824))) else (if i < 76 then (if i < 74 then 24 else (if i < 75 then 4 else 65536)) else (if i < 78 then (if i < 77 then 0 else 268435456) else (if i < 79 then 393216 else 1074266112))))) else (if i < 93 then (if i < 86 then (if i < 83 then (if i < 81 then 17 else (if i < 82 then 2199023255556 else 327680)) else (if i < 84 then 1073741824 else (if i < 85 then 131072 else 38654705665))) else (if i < 89 then (if i < 87 then 2147549184 else (if i < 88 then 1073741824 else 268435456)) else (if i < 91 then (if i < 90 then 4 else 24) else (if i < 92 then 0 else 1107296256)))) else (if i < 100 then (if i < 96 then (if i < 94 then 0 else (if i < 95 then 268435456 else 2147483648)) else (if i < 98 then (if i < 97 then 16384 else 2147483656) else (if i < 99 then 16384 else 65540))) else (if i < 103 then (if i < 101 then 0 else (if i < 102 then 131076 else 262144)) else (if i < 105 then (if i < 104 then 65536 else 262144) else (if i < 106 then 4294967296 else 268566528))))))) else (if i < 160 then (if i < 133 then (if i < 120 then (if i < 113 then (if i < 110 then (if i < 108 then 0 else (if i < 109 then 0 else 4563402816)) else (if i < 111 then 262144 else (if i < 112 then 2147483648 else 2228224))) else (if i < 116 then (if i < 114 then 268437504 else (if i < 115 then 262144 else 0)) else (if i < 118 then (if i < 117 then 196608 else 66048) else (if i < 119 then 139586437120 else 4294967552)))) else (if i < 126 then (if i < 123 then (if i < 121 then 2147500032 else (if i < 122 then 268566528 else 131072)) else (if i < 124 then 1073758208 else (if i < 125 then 4 else 0))) else (if i < 129 then (if i < 127 then 16384 else (if i < 128 then 0 else 1073741824)) else (if i < 131 then (if i < 130 then 4294968320 else 0) else (if i < 132 then 196608 else 131072))))) else (if i < 146 then (if i < 139 then (if i < 136 then (if i < 134 then 0 else (if i < 135 then 4294967296 else 0)) else (if i < 137 then 262144 else (if i < 138 then 262144 else 0))) else (if i < 142 then (if i < 140 then 18253742080 else (if i < 141 then 4295032832 else 2147483648)) else (if i < 144 then (if i < 143 then 262144 else 0) else (if i < 145 then 65536 else 65536)))) else (if i < 153 then (if i < 149 then (if i < 147 then 0 else (if i < 148 then 268435456 else 5368709120)) else (if i < 151 then (if i < 150 then 131072 else 0) else (if i < 152 then 1342177280 else 4294967296))) else (if i < 156 then (if i < 154 then 0 else (if i < 155 then 0 else 1099511889920)) else (if i < 158 then (if i < 157 then 0 else 0) else (if i < 159 then 0 else 0)))))) else (if i < 187 then (if i < 173 then (if i < 166 then (if i < 163 then (if i < 161 then 262144 else (if i < 162 then 0 else 0)) else (if i < 164 then 0 else (if i < 165 then 1610612736 else 9663676416))) else (if i < 169 then (if i < 167 then 4294967296 else (if i < 168 then 0 else 4294967296)) else (if i < 171 then (if i < 170 then 268435456 else 1048576) else (if i < 172 then 393216 else 0)))) else (if i < 180 then (if i < 176 then (if i < 174 then 0 else (if i < 175 then 5385486336 else 262144)) else (if i < 178 then (if i < 177 then 0 else 0) else (if i < 179 then 4294967296 else 0))) else (if i < 183 then (if i < 181 then 0 else (if i < 182 then 0 else 0)) else (if i < 185 then (if i < 184 then 131072 else 4362076160) else (if i < 186 then 5368709120 else 131072))))) else (if i < 200 then (if i < 193 then (if i < 190 then (if i < 188 then 0 else (if i < 189 then 0 else 131072)) else (if i < 191 then 262144 else (if i < 192 then 262144 else 0))) else (if i < 196 then (if i < 194 then 0 else (if i < 195 then 0 else 0)) else (if i < 198 then (if i < 197 then 0 else 0) else (if i < 199 then 0 else 262144)))) else (if i < 207 then (if i < 203 then (if i < 201 then 0 else (if i < 202 then 0 else 0)) else (if i < 205 then (if i < 204 then 0 else 0) else (if i < 206 then 0 else 262144))) else (if i < 210 then (if i < 208 then 0 else (if i < 209 then 0 else 0)) else (if i < 212 then (if i < 211 then 0 else 0) else (if i < 213 then 0 else 0)))))))) else 0
+  if i < 213 then (if i < 106 then (if i < 53 then (if i < 26 then (if i < 13 then (if i < 6 then (if i < 3 then (if i < 1 then 4299161601 else (if i < 2 then 49156 else 6442450944)) else (if i < 4 then 1342177280 else (if i < 5 then 65544 else 17))) else (if i < 9 then (if i < 7 then 1207959552 else (if i < 8 then 81920 else 277025390596)) else (if i < 11 then (if i < 10 then 268451840 else 16400) else (if i < 12 then 1342177280 else 65540)))) else (if i < 19 then (if i < 16 then (if i < 14 then 2147483648 else (if i < 15 then 2147483664 else 9)) else (if i < 17 then 16 else (if i < 18 then 12 else 4294983682))) else (if i < 22 then (if i < 20 then 69633 else (if i < 21 then 2147483648 else 268435456)) else (if i < 24 then (if i < 23 then 16 else 9) else (if i < 25 then 4294983680 else 1342177280))))) else (if i < 39 then (if i < 32 then (if i < 29 then (if i < 27 then 65536 else (if i < 28 then 0 else 4)) else (if i < 30 then 1342177280 else (if i < 31 then 65544 else 1))) else (if i < 35 then (if i < 33 then 24 else (if i < 34 then 3221225472 else 4)) else (if i < 37 then (if i < 36 then 0 else 8388608) else (if i < 38 then 1073741824 else 5)))) else (if i < 46 then (if i < 42 then (if i < 40 then 2147483656 else (if i < 41 then 65552 else 16384)) else (if i < 44 then (if i < 43 then 69793218560 else 2147483649) else (if i < 45 then 268435464 else 16384))) else (if i < 49 then (if i < 47 then 65536 else (if i < 48 then 20 else 0)) else (if i < 51 then (if i < 50 then 555124523008 else 65552) else (if i < 52 then 12 else 0)))))) else (if i < 79 then (if i < 66 then (if i < 59 then (if i < 56 then (if i < 54 then 268435456 else (if i < 55 then 2147483649 else 131072)) else (if i < 57 then 16384 else (if i < 58 then 152 else 1073807360))) else (if i < 62 then (if i < 60 then 1 else (if i < 61 then 268435456 else 4)) else (if i < 64 then (if i < 63 then 2147500032 else 131072) else (if i < 65 then 1073807392 else 268435464)))) else (if i < 72 then (if i < 69 then (if i < 67 then 16 else (if i < 68 then 131076 else 1)) else (if i < 70 then 2147483648 else (if i < 71 then 262144 else 2147491841))) else (if i < 75 then (if i < 73 then 1073741824 else (if i < 74 then 24 else 4)) else (if i < 77 then (if i < 76 then 65536 else 0) else (if i < 78 then 268435456 else 393216))))) else (if i < 92 then (if i < 85 then (if i < 82 then (if i < 80 then 1074266112 else (if i < 81 then 4294967312 else 2199023255556)) else (if i < 83 then 327680 else (if i < 84 then 35433480193 else 1073741825))) else (if i < 88 then (if i < 86 then 131072 else (if i < 87 then 2147549184 else 0)) else (if i < 90 then (if i < 89 then 268435456 else 4) else (if i < 91 then 24 else 0)))) else (if i < 99 then (if i < 95 then (if i < 93 then 0 else (if i < 94 then 268435456 else 2147483648)) else (if i < 97 then (if i < 96 then 16384 else 16392) else (if i < 98 then 65540 else 1107296256))) else (if i < 102 then (if i < 100 then 2147483648 else (if i < 101 then 16384 else 2147483648)) else (if i < 104 then (if i < 103 then 65536 else 262144) else (if i < 105 then 262144 else 4294967296))))))) else (if i < 159 then (if i < 132 then (if i < 119 then (if i < 112 then (if i < 109 then (if i < 107 then 268566528 else (if i < 108 then 0 else 0)) else (if i < 110 then 4294967360 else (if i < 111 then 262148 else 2147483648))) else (if i < 115 then (if i < 113 then 2228224 else (if i < 114 then 18432 else 2147745792)) else (if i < 117 then (if i < 116 then 0 else 196608) else (if i < 118 then 66048 else 2147500032)))) else (if i < 125 then (if i < 122 then (if i < 120 then 4 else (if i < 121 then 137707520000 else 1073741824)) else (if i < 123 then 0 else (if i < 124 then 0 else 16384))) else (if i < 128 then (if i < 126 then 256 else (if i < 127 then 0 else 0)) else (if i < 130 then (if i < 129 then 131072 else 196608) else (if i < 131 then 1073872896 else 0))))) else (if i < 145 then (if i < 138 then (if i < 135 then (if i < 133 then 4294967296 else (if i < 134 then 0 else 262144)) else (if i < 136 then 5368710144 else (if i < 137 then 2147483648 else 0))) else (if i < 141 then (if i < 139 then 0 else (if i < 140 then 262144 else 262144)) else (if i < 143 then (if i < 142 then 18253676544 else 65536) else (if i < 144 then 4295098368 else 0)))) else (if i < 152 then (if i < 148 then (if i < 146 then 268435456 else (if i < 147 then 5368709120 else 65536)) else (if i < 150 then (if i < 149 then 268566528 else 0) else (if i < 151 then 1342177280 else 4294967296))) else (if i < 155 then (if i < 153 then 0 else (if i < 154 then 0 else 1099511889920)) else (if i < 157 then (if i < 156 then 0 else 0) else (if i < 158 then 0 else 0)))))) else (if i < 186 then (if i < 172 then (if i < 165 then (if i < 162 then (if i < 160 then 262144 else (if i < 161 then 0 else 0)) else (if i < 163 then 0 else (if i < 164 then 536870912 else 9663676416))) else (if i < 168 then (if i < 166 then 4294967296 else (if i < 167 then 0 else 4294967296)) else (if i < 170 then (if i < 169 then 0 else 1048576) else (if i < 171 then 393216 else 0)))) else (if i < 179 then (if i < 175 then (if i < 173 then 0 else (if i < 174 then 262144 else 0)) else (if i < 177 then (if i < 176 then 0 else 4294967296) else (if i < 178 then 0 else 5385486336))) else (if i < 182 then (if i < 180 then 0 else (if i < 181 then 131072 else 4362076160)) else (if i < 184 then (if i < 183 then 5368709120 else 0) else (if i < 185 then 131072 else 0))))) else (if i < 199 then (if i < 192 then (if i < 189 then (if i < 187 then 0 else (if i < 188 then 131072 else 0)) else (if i < 190 then 262144 else (if i < 191 then 262144 else 0))) else (if i < 195 then (if i < 193 then 0 else (if i < 194 then 0 else 0)) else (if i < 197 then (if i < 196 then 0 else 0) else (if i < 198 then 0 else 0)))) else (if i < 206 then (if i < 202 then (if i < 200 then 0 else (if i < 201 then 262144 else 0)) else (if i < 204 then (if i < 203 then 0 else 0) else (if i < 205 then 0 else 262144))) else (if i < 209 then (if i < 207 then 0 else (if i < 208 then 0 else 0)) else (if i < 211 then (if i < 210 then 0 else 0) else (if i < 212 then 0 else 0)))))))) else 0
 
 /-- Bit mask of the eleven block tops. -/
-def topMask : ℕ := 17277797852638922905073263049397665325495866232471579979296014336
+def topMask : ℕ := 8638898926127899509928384528368297814323313644943866452418494464
 
 def hashKidBit : Kid → ℕ
   | .c _ => 0
@@ -585,7 +584,7 @@ def chainKidBit : Kid → ℕ
   | .c k => 2^k.val
   | .h _ => 0
 
-theorem hashKidBit_test (x : Kid) (j : Fin 214) :
+theorem hashKidBit_test (x : Kid) (j : Fin 213) :
     (hashKidBit x).testBit j = true ↔ x = .h j := by
   cases x <;> simp [hashKidBit, Nat.testBit_two_pow, Fin.ext_iff]
 
@@ -593,12 +592,12 @@ theorem chainKidBit_test (x : Kid) (k : Fin 42) :
     (chainKidBit x).testBit k = true ↔ x = .c k := by
   cases x <;> simp [chainKidBit, Nat.testBit_two_pow, Fin.ext_iff]
 
-theorem khMask_eq_bits (e : Fin 214) : khMask e =
+theorem khMask_eq_bits (e : Fin 213) : khMask e =
     hashKidBit (kid e 0) ||| hashKidBit (kid e 1) ||| hashKidBit (kid e 2) := by
   revert e
   decide +kernel
 
-theorem kcMask_eq_bits (e : Fin 214) : kcMask e =
+theorem kcMask_eq_bits (e : Fin 213) : kcMask e =
     chainKidBit (kid e 0) ||| chainKidBit (kid e 1) ||| chainKidBit (kid e 2) := by
   revert e
   decide +kernel
@@ -606,26 +605,26 @@ theorem kcMask_eq_bits (e : Fin 214) : kcMask e =
 theorem exists_three (P : Fin 3 → Prop) : (∃ i, P i) ↔ P 0 ∨ P 1 ∨ P 2 := by
   simp [Fin.exists_fin_succ]
 
-theorem testBit_khMask (e j : Fin 214) :
+theorem testBit_khMask (e j : Fin 213) :
     (khMask e).testBit j = true ↔ j ∈ kidsH e := by
   rw [khMask_eq_bits, mem_kidsH, exists_three]
   simp [Nat.testBit_or, hashKidBit_test, or_assoc]
 
-theorem testBit_kcMask (e : Fin 214) (k : Fin 42) :
+theorem testBit_kcMask (e : Fin 213) (k : Fin 42) :
     (kcMask e).testBit k = true ↔ k ∈ kidsC e := by
   rw [kcMask_eq_bits, mem_kidsC, exists_three]
   simp [Nat.testBit_or, chainKidBit_test, or_assoc]
 
 
-theorem testBit_topMask (j : Fin 214) : topMask.testBit j = true ↔ j ∈ topSet := by
+theorem testBit_topMask (j : Fin 213) : topMask.testBit j = true ↔ j ∈ topSet := by
   revert j
   decide +kernel
 
 /-- Chain kids of each node as bit lists, in increasing order. -/
 def kcList (i : ℕ) : List (Fin 42) :=
-  if i < 214 then (if i < 107 then (if i < 53 then (if i < 26 then (if i < 13 then (if i < 6 then (if i < 3 then (if i < 1 then [2, 14, 15] else (if i < 2 then [0, 22, 32] else [31, 32])) else (if i < 4 then [28, 30] else (if i < 5 then [3, 16] else [0, 4]))) else (if i < 9 then (if i < 7 then [27, 30] else (if i < 8 then [14, 16] else [2, 31, 38])) else (if i < 11 then (if i < 10 then [14, 28] else [4, 14]) else (if i < 12 then [28, 30] else [2, 16])))) else (if i < 19 then (if i < 16 then (if i < 14 then [31] else (if i < 15 then [4, 31] else [0, 3])) else (if i < 17 then [4] else (if i < 18 then [2, 3] else [1, 14, 32]))) else (if i < 22 then (if i < 20 then [0, 12, 16] else (if i < 21 then [31] else [28])) else (if i < 24 then (if i < 23 then [4] else [14]) else (if i < 25 then [0, 3] else [28, 30]))))) else (if i < 39 then (if i < 32 then (if i < 29 then (if i < 27 then [16] else (if i < 28 then [] else [2])) else (if i < 30 then [28, 30] else (if i < 31 then [3, 16] else [0]))) else (if i < 35 then (if i < 33 then [3, 4] else (if i < 34 then [30, 31] else [2])) else (if i < 37 then (if i < 36 then [] else [23, 28]) else (if i < 38 then [30] else [0, 2])))) else (if i < 46 then (if i < 42 then (if i < 40 then [3, 31] else (if i < 41 then [4, 16] else [14])) else (if i < 44 then (if i < 43 then [30, 36] else [0, 31]) else (if i < 45 then [3, 28] else [14]))) else (if i < 49 then (if i < 47 then [16] else (if i < 48 then [2, 4] else [])) else (if i < 51 then (if i < 50 then [30, 32, 39] else [4, 16]) else (if i < 52 then [2, 3] else [])))))) else (if i < 80 then (if i < 66 then (if i < 59 then (if i < 56 then (if i < 54 then [28] else (if i < 55 then [0, 31] else [17])) else (if i < 57 then [14] else (if i < 58 then [4, 7] else [16, 30]))) else (if i < 62 then (if i < 60 then [0] else (if i < 61 then [28] else [2])) else (if i < 64 then (if i < 63 then [14, 31] else [17]) else (if i < 65 then [5, 16, 30] else [3, 28])))) else (if i < 73 then (if i < 69 then (if i < 67 then [4] else (if i < 68 then [2, 17] else [0])) else (if i < 71 then (if i < 70 then [31] else [18]) else (if i < 72 then [0, 13, 31] else [30]))) else (if i < 76 then (if i < 74 then [3, 4] else (if i < 75 then [2] else [16])) else (if i < 78 then (if i < 77 then [] else [28]) else (if i < 79 then [17, 18] else [19, 30]))))) else (if i < 93 then (if i < 86 then (if i < 83 then (if i < 81 then [0, 4] else (if i < 82 then [2, 41] else [16, 18])) else (if i < 84 then [30] else (if i < 85 then [17] else [0, 32, 35]))) else (if i < 89 then (if i < 87 then [16, 31] else (if i < 88 then [30] else [28])) else (if i < 91 then (if i < 90 then [2] else [3, 4]) else (if i < 92 then [] else [25, 30])))) else (if i < 100 then (if i < 96 then (if i < 94 then [] else (if i < 95 then [28] else [31])) else (if i < 98 then (if i < 97 then [14] else [3, 31]) else (if i < 99 then [14] else [2, 16]))) else (if i < 103 then (if i < 101 then [] else (if i < 102 then [2, 17] else [18])) else (if i < 105 then (if i < 104 then [16] else [18]) else (if i < 106 then [32] else [17, 28]))))))) else (if i < 160 then (if i < 133 then (if i < 120 then (if i < 113 then (if i < 110 then (if i < 108 then [] else (if i < 109 then [] else [6, 28, 32])) else (if i < 111 then [18] else (if i < 112 then [31] else [17, 21]))) else (if i < 116 then (if i < 114 then [11, 28] else (if i < 115 then [18] else [])) else (if i < 118 then (if i < 117 then [16, 17] else [9, 16]) else (if i < 119 then [31, 37] else [8, 32])))) else (if i < 126 then (if i < 123 then (if i < 121 then [14, 31] else (if i < 122 then [17, 28] else [17])) else (if i < 124 then [14, 30] else (if i < 125 then [2] else []))) else (if i < 129 then (if i < 127 then [14] else (if i < 128 then [] else [30])) else (if i < 131 then (if i < 130 then [10, 32] else []) else (if i < 132 then [16, 17] else [17]))))) else (if i < 146 then (if i < 139 then (if i < 136 then (if i < 134 then [] else (if i < 135 then [32] else [])) else (if i < 137 then [18] else (if i < 138 then [18] else []))) else (if i < 142 then (if i < 140 then [17, 30, 34] else (if i < 141 then [16, 32] else [31])) else (if i < 144 then (if i < 143 then [18] else []) else (if i < 145 then [16] else [16])))) else (if i < 153 then (if i < 149 then (if i < 147 then [] else (if i < 148 then [28] else [30, 32])) else (if i < 151 then (if i < 150 then [17] else []) else (if i < 152 then [28, 30] else [32]))) else (if i < 156 then (if i < 154 then [] else (if i < 155 then [] else [18, 40])) else (if i < 158 then (if i < 157 then [] else []) else (if i < 159 then [] else [])))))) else (if i < 187 then (if i < 173 then (if i < 166 then (if i < 163 then (if i < 161 then [18] else (if i < 162 then [] else [])) else (if i < 164 then [] else (if i < 165 then [29, 30] else [30, 33]))) else (if i < 169 then (if i < 167 then [32] else (if i < 168 then [] else [32])) else (if i < 171 then (if i < 170 then [28] else [20]) else (if i < 172 then [17, 18] else [])))) else (if i < 180 then (if i < 176 then (if i < 174 then [] else (if i < 175 then [24, 30, 32] else [18])) else (if i < 178 then (if i < 177 then [] else []) else (if i < 179 then [32] else []))) else (if i < 183 then (if i < 181 then [] else (if i < 182 then [] else [])) else (if i < 185 then (if i < 184 then [17] else [26, 32]) else (if i < 186 then [30, 32] else [17]))))) else (if i < 200 then (if i < 193 then (if i < 190 then (if i < 188 then [] else (if i < 189 then [] else [17])) else (if i < 191 then [18] else (if i < 192 then [18] else []))) else (if i < 196 then (if i < 194 then [] else (if i < 195 then [] else [])) else (if i < 198 then (if i < 197 then [] else []) else (if i < 199 then [] else [18])))) else (if i < 207 then (if i < 203 then (if i < 201 then [] else (if i < 202 then [] else [])) else (if i < 205 then (if i < 204 then [] else []) else (if i < 206 then [] else [18]))) else (if i < 210 then (if i < 208 then [] else (if i < 209 then [] else [])) else (if i < 212 then (if i < 211 then [] else []) else (if i < 213 then [] else [])))))))) else []
+  if i < 213 then (if i < 106 then (if i < 53 then (if i < 26 then (if i < 13 then (if i < 6 then (if i < 3 then (if i < 1 then [0, 22, 32] else (if i < 2 then [2, 14, 15] else [31, 32])) else (if i < 4 then [28, 30] else (if i < 5 then [3, 16] else [0, 4]))) else (if i < 9 then (if i < 7 then [27, 30] else (if i < 8 then [14, 16] else [2, 31, 38])) else (if i < 11 then (if i < 10 then [14, 28] else [4, 14]) else (if i < 12 then [28, 30] else [2, 16])))) else (if i < 19 then (if i < 16 then (if i < 14 then [31] else (if i < 15 then [4, 31] else [0, 3])) else (if i < 17 then [4] else (if i < 18 then [2, 3] else [1, 14, 32]))) else (if i < 22 then (if i < 20 then [0, 12, 16] else (if i < 21 then [31] else [28])) else (if i < 24 then (if i < 23 then [4] else [0, 3]) else (if i < 25 then [14, 32] else [28, 30]))))) else (if i < 39 then (if i < 32 then (if i < 29 then (if i < 27 then [16] else (if i < 28 then [] else [2])) else (if i < 30 then [28, 30] else (if i < 31 then [3, 16] else [0]))) else (if i < 35 then (if i < 33 then [3, 4] else (if i < 34 then [30, 31] else [2])) else (if i < 37 then (if i < 36 then [] else [23]) else (if i < 38 then [30] else [0, 2])))) else (if i < 46 then (if i < 42 then (if i < 40 then [3, 31] else (if i < 41 then [4, 16] else [14])) else (if i < 44 then (if i < 43 then [30, 36] else [0, 31]) else (if i < 45 then [3, 28] else [14]))) else (if i < 49 then (if i < 47 then [16] else (if i < 48 then [2, 4] else [])) else (if i < 51 then (if i < 50 then [30, 32, 39] else [4, 16]) else (if i < 52 then [2, 3] else [])))))) else (if i < 79 then (if i < 66 then (if i < 59 then (if i < 56 then (if i < 54 then [28] else (if i < 55 then [0, 31] else [17])) else (if i < 57 then [14] else (if i < 58 then [3, 4, 7] else [16, 30]))) else (if i < 62 then (if i < 60 then [0] else (if i < 61 then [28] else [2])) else (if i < 64 then (if i < 63 then [14, 31] else [17]) else (if i < 65 then [5, 16, 30] else [3, 28])))) else (if i < 72 then (if i < 69 then (if i < 67 then [4] else (if i < 68 then [2, 17] else [0])) else (if i < 70 then [31] else (if i < 71 then [18] else [0, 13, 31]))) else (if i < 75 then (if i < 73 then [30] else (if i < 74 then [3, 4] else [2])) else (if i < 77 then (if i < 76 then [16] else []) else (if i < 78 then [28] else [17, 18]))))) else (if i < 92 then (if i < 85 then (if i < 82 then (if i < 80 then [19, 30] else (if i < 81 then [4, 32] else [2, 41])) else (if i < 83 then [16, 18] else (if i < 84 then [0, 30, 35] else [0, 30]))) else (if i < 88 then (if i < 86 then [17] else (if i < 87 then [16, 31] else [])) else (if i < 90 then (if i < 89 then [28] else [2]) else (if i < 91 then [3, 4] else [])))) else (if i < 99 then (if i < 95 then (if i < 93 then [] else (if i < 94 then [28] else [31])) else (if i < 97 then (if i < 96 then [14] else [3, 14]) else (if i < 98 then [2, 16] else [25, 30]))) else (if i < 102 then (if i < 100 then [31] else (if i < 101 then [14] else [31])) else (if i < 104 then (if i < 103 then [16] else [18]) else (if i < 105 then [18] else [32]))))))) else (if i < 159 then (if i < 132 then (if i < 119 then (if i < 112 then (if i < 109 then (if i < 107 then [17, 28] else (if i < 108 then [] else [])) else (if i < 110 then [6, 32] else (if i < 111 then [2, 18] else [31]))) else (if i < 115 then (if i < 113 then [17, 21] else (if i < 114 then [11, 14] else [18, 31])) else (if i < 117 then (if i < 116 then [] else [16, 17]) else (if i < 118 then [9, 16] else [14, 31])))) else (if i < 125 then (if i < 122 then (if i < 120 then [2] else (if i < 121 then [17, 28, 37] else [30])) else (if i < 123 then [] else (if i < 124 then [] else [14]))) else (if i < 128 then (if i < 126 then [8] else (if i < 127 then [] else [])) else (if i < 130 then (if i < 129 then [17] else [16, 17]) else (if i < 131 then [17, 30] else []))))) else (if i < 145 then (if i < 138 then (if i < 135 then (if i < 133 then [32] else (if i < 134 then [] else [18])) else (if i < 136 then [10, 30, 32] else (if i < 137 then [31] else []))) else (if i < 141 then (if i < 139 then [] else (if i < 140 then [18] else [18])) else (if i < 143 then (if i < 142 then [16, 30, 34] else [16]) else (if i < 144 then [17, 32] else [])))) else (if i < 152 then (if i < 148 then (if i < 146 then [28] else (if i < 147 then [30, 32] else [16])) else (if i < 150 then (if i < 149 then [17, 28] else []) else (if i < 151 then [28, 30] else [32]))) else (if i < 155 then (if i < 153 then [] else (if i < 154 then [] else [18, 40])) else (if i < 157 then (if i < 156 then [] else []) else (if i < 158 then [] else [])))))) else (if i < 186 then (if i < 172 then (if i < 165 then (if i < 162 then (if i < 160 then [18] else (if i < 161 then [] else [])) else (if i < 163 then [] else (if i < 164 then [29] else [30, 33]))) else (if i < 168 then (if i < 166 then [32] else (if i < 167 then [] else [32])) else (if i < 170 then (if i < 169 then [] else [20]) else (if i < 171 then [17, 18] else [])))) else (if i < 179 then (if i < 175 then (if i < 173 then [] else (if i < 174 then [18] else [])) else (if i < 177 then (if i < 176 then [] else [32]) else (if i < 178 then [] else [24, 30, 32]))) else (if i < 182 then (if i < 180 then [] else (if i < 181 then [17] else [26, 32])) else (if i < 184 then (if i < 183 then [30, 32] else []) else (if i < 185 then [17] else []))))) else (if i < 199 then (if i < 192 then (if i < 189 then (if i < 187 then [] else (if i < 188 then [17] else [])) else (if i < 190 then [18] else (if i < 191 then [18] else []))) else (if i < 195 then (if i < 193 then [] else (if i < 194 then [] else [])) else (if i < 197 then (if i < 196 then [] else []) else (if i < 198 then [] else [])))) else (if i < 206 then (if i < 202 then (if i < 200 then [] else (if i < 201 then [18] else [])) else (if i < 204 then (if i < 203 then [] else []) else (if i < 205 then [] else [18]))) else (if i < 209 then (if i < 207 then [] else (if i < 208 then [] else [])) else (if i < 211 then (if i < 210 then [] else []) else (if i < 212 then [] else [])))))))) else []
 
-theorem kcList_eq (j : Fin 214) :
+theorem kcList_eq (j : Fin 213) :
     kcList j = (List.finRange 42).filter fun k : Fin 42 => (kcMask j).testBit k.val := by
   revert j
   decide +kernel
@@ -641,7 +640,7 @@ theorem list_prod_map_filter {α : Type*} (l : List α) (p : α → Bool) (f : �
   | cons x l ih =>
       by_cases h : p x = true <;> simp [h, ih]
 
-theorem newW_eq (g needC : ℕ) (j : Fin 214) :
+theorem newW_eq (g needC : ℕ) (j : Fin 213) :
     newW g needC j =
       ∏ k : Fin 42, if k ∈ kidsC j ∧ needC.testBit k = false then g else 1 := by
   rw [newW, kcList_eq, list_prod_map_filter, Fin.prod_univ_def]
@@ -664,28 +663,28 @@ def dfs (a u g : ℕ) : ℕ → ℕ → ℕ → ℕ
 attribute [irreducible] dfs
 
 /-- Neededness of a hash node under an initial mask and an expanded set. -/
-def NdH (need : ℕ) (E : Finset (Fin 214)) (j : Fin 214) : Prop :=
+def NdH (need : ℕ) (E : Finset (Fin 213)) (j : Fin 213) : Prop :=
   need.testBit j = true ∨ ∃ e ∈ E, j ∈ kidsH e
 
-def NdC (needC : ℕ) (E : Finset (Fin 214)) (k : Fin 42) : Prop :=
+def NdC (needC : ℕ) (E : Finset (Fin 213)) (k : Fin 42) : Prop :=
   needC.testBit k = true ∨ ∃ e ∈ E, k ∈ kidsC e
 
-instance (need : ℕ) (E : Finset (Fin 214)) (j : Fin 214) : Decidable (NdH need E j) :=
+instance (need : ℕ) (E : Finset (Fin 213)) (j : Fin 213) : Decidable (NdH need E j) :=
   inferInstanceAs (Decidable (_ ∨ _))
 
-instance (needC : ℕ) (E : Finset (Fin 214)) (k : Fin 42) : Decidable (NdC needC E k) :=
+instance (needC : ℕ) (E : Finset (Fin 213)) (k : Fin 42) : Decidable (NdC needC E k) :=
   inferInstanceAs (Decidable (_ ∨ _))
 
-def low (n : ℕ) : Finset (Fin 214) := Finset.univ.filter fun j => j.val < n
+def low (n : ℕ) : Finset (Fin 213) := Finset.univ.filter fun j => j.val < n
 
 /-- Product weight of an expanded set among the nodes below `n`; zero when an
 expanded node is not needed. -/
-def wt (a u g need needC n : ℕ) (E : Finset (Fin 214)) : ℕ :=
+def wt (a u g need needC n : ℕ) (E : Finset (Fin 213)) : ℕ :=
   (∏ j ∈ low n, if j ∈ E then (if NdH need E j then a else 0)
     else (if NdH need E j then u else 1)) *
   ∏ k : Fin 42, if NdC needC E k ∧ needC.testBit k = false then g else 1
 
-theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 214 → ∀ need needC,
+theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 213 → ∀ need needC,
     dfs a u g n need needC = ∑ E ∈ (low n).powerset, wt a u g need needC n E
   | 0, _, need, needC => by
       have hlow : low 0 = ∅ := by
@@ -701,7 +700,7 @@ theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 214 → ∀ need needC,
       · exact absurd he (Finset.notMem_empty e)
   | n + 1, hn, need, needC => by
       have ih := dfs_eq a u g n (by omega)
-      let jn : Fin 214 := ⟨n, by omega⟩
+      let jn : Fin 213 := ⟨n, by omega⟩
       have hlow : low (n + 1) = insert jn (low n) := by
         ext j
         simp only [low, Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_insert,
@@ -742,7 +741,7 @@ theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 214 → ∀ need needC,
               · exact absurd hk hself
               · exact absurd hk (hbelow E hE e he)
           · exact Or.inl
-        have hndj : ∀ j : Fin 214,
+        have hndj : ∀ j : Fin 213,
             NdH need (insert jn E) j ↔ NdH (need ||| khMask n) E j := by
           intro j
           have hk := testBit_khMask jn j
@@ -783,12 +782,12 @@ theorem dfs_eq (a u g : ℕ) : ∀ n, n ≤ 214 → ∀ need needC,
         ← ih (need ||| khMask n) (needC ||| kcMask n), dfs]
       by_cases h : need.testBit n = true <;> simp [h]
 
-theorem low_214 : low 214 = Finset.univ := by
+theorem low_213 : low 213 = Finset.univ := by
   ext j
   simp [low]
 
-theorem wt_top (a u g : ℕ) (E : Finset (Fin 214)) :
-    wt a u g topMask 0 214 E = if ShapeValid E then
+theorem wt_top (a u g : ℕ) (E : Finset (Fin 213)) :
+    wt a u g topMask 0 213 E = if ShapeValid E then
       a ^ E.card * u ^ (neededH E \ E).card * g ^ (neededC E).card else 0 := by
   have hH : ∀ j, NdH topMask E j ↔ j ∈ neededH E := by
     intro j
@@ -797,7 +796,7 @@ theorem wt_top (a u g : ℕ) (E : Finset (Fin 214)) :
     intro k
     simp [NdC, neededC]
   unfold wt
-  simp only [hH, hC, low_214]
+  simp only [hH, hC, low_213]
   rw [Finset.prod_ite, Finset.prod_ite_mem, Finset.prod_ite_mem, Finset.univ_inter,
     Finset.prod_const, Finset.prod_const]
   have hsd : (Finset.univ.filter fun j => j ∉ E) ∩ neededH E = neededH E \ E := by
@@ -816,8 +815,8 @@ theorem wt_top (a u g : ℕ) (E : Finset (Fin 214)) :
 
 theorem sum_validShapes_eq_dfs (a u g : ℕ) :
     ∑ E ∈ validShapes, a ^ E.card * u ^ (neededH E \ E).card * g ^ (neededC E).card =
-      dfs a u g 214 topMask 0 := by
-  rw [dfs_eq a u g 214 le_rfl, low_214, Finset.powerset_univ, validShapes, Finset.sum_filter]
+      dfs a u g 213 topMask 0 := by
+  rw [dfs_eq a u g 213 le_rfl, low_213, Finset.powerset_univ, validShapes, Finset.sum_filter]
   exact Finset.sum_congr rfl fun E _ => (wt_top a u g E).symm
 
 /-! ## Merged-state evaluation of `dfs`
@@ -830,14 +829,14 @@ level. -/
 
 /-- Chain bits read by the nodes below level `n`. -/
 def chainMask (i : ℕ) : ℕ :=
-  if i < 215 then (if i < 107 then (if i < 53 then (if i < 26 then (if i < 13 then (if i < 6 then (if i < 3 then (if i < 1 then 0 else (if i < 2 then 49156 else 4299210757)) else (if i < 4 then 6446694405 else (if i < 5 then 7788871685 else 7788937229))) else (if i < 9 then (if i < 7 then 7788937245 else (if i < 8 then 7923154973 else 7923154973)) else (if i < 11 then (if i < 10 then 282801061917 else 282801061917) else (if i < 12 then 282801061917 else 282801061917)))) else (if i < 19 then (if i < 16 then (if i < 14 then 282801061917 else (if i < 15 then 282801061917 else 282801061917)) else (if i < 17 then 282801061917 else (if i < 18 then 282801061917 else 282801061917))) else (if i < 22 then (if i < 20 then 282801061919 else (if i < 21 then 282801066015 else 282801066015)) else (if i < 24 then (if i < 23 then 282801066015 else 282801066015) else (if i < 25 then 282801066015 else 282801066015))))) else (if i < 39 then (if i < 32 then (if i < 29 then (if i < 27 then 282801066015 else (if i < 28 then 282801066015 else 282801066015)) else (if i < 30 then 282801066015 else (if i < 31 then 282801066015 else 282801066015))) else (if i < 35 then (if i < 33 then 282801066015 else (if i < 34 then 282801066015 else 282801066015)) else (if i < 37 then (if i < 36 then 282801066015 else 282801066015) else (if i < 38 then 282809454623 else 282809454623)))) else (if i < 46 then (if i < 42 then (if i < 40 then 282809454623 else (if i < 41 then 282809454623 else 282809454623)) else (if i < 44 then (if i < 43 then 282809454623 else 351528931359) else (if i < 45 then 351528931359 else 351528931359))) else (if i < 49 then (if i < 47 then 351528931359 else (if i < 48 then 351528931359 else 351528931359)) else (if i < 51 then (if i < 50 then 351528931359 else 901284745247) else (if i < 52 then 901284745247 else 901284745247)))))) else (if i < 80 then (if i < 66 then (if i < 59 then (if i < 56 then (if i < 54 then 901284745247 else (if i < 55 then 901284745247 else 901284745247)) else (if i < 57 then 901284876319 else (if i < 58 then 901284876319 else 901284876447))) else (if i < 62 then (if i < 60 then 901284876447 else (if i < 61 then 901284876447 else 901284876447)) else (if i < 64 then (if i < 63 then 901284876447 else 901284876447) else (if i < 65 then 901284876447 else 901284876479)))) else (if i < 73 then (if i < 69 then (if i < 67 then 901284876479 else (if i < 68 then 901284876479 else 901284876479)) else (if i < 71 then (if i < 70 then 901284876479 else 901284876479) else (if i < 72 then 901285138623 else 901285146815))) else (if i < 76 then (if i < 74 then 901285146815 else (if i < 75 then 901285146815 else 901285146815)) else (if i < 78 then (if i < 77 then 901285146815 else 901285146815) else (if i < 79 then 901285146815 else 901285146815))))) else (if i < 93 then (if i < 86 then (if i < 83 then (if i < 81 then 901285671103 else (if i < 82 then 901285671103 else 3100308926655)) else (if i < 84 then 3100308926655 else (if i < 85 then 3100308926655 else 3100308926655))) else (if i < 89 then (if i < 87 then 3134668665023 else (if i < 88 then 3134668665023 else 3134668665023)) else (if i < 91 then (if i < 90 then 3134668665023 else 3134668665023) else (if i < 92 then 3134668665023 else 3134668665023)))) else (if i < 100 then (if i < 96 then (if i < 94 then 3134702219455 else (if i < 95 then 3134702219455 else 3134702219455)) else (if i < 98 then (if i < 97 then 3134702219455 else 3134702219455) else (if i < 99 then 3134702219455 else 3134702219455))) else (if i < 103 then (if i < 101 then 3134702219455 else (if i < 102 then 3134702219455 else 3134702219455)) else (if i < 105 then (if i < 104 then 3134702219455 else 3134702219455) else (if i < 106 then 3134702219455 else 3134702219455))))))) else (if i < 161 then (if i < 134 then (if i < 120 then (if i < 113 then (if i < 110 then (if i < 108 then 3134702219455 else (if i < 109 then 3134702219455 else 3134702219455)) else (if i < 111 then 3134702219519 else (if i < 112 then 3134702219519 else 3134702219519))) else (if i < 116 then (if i < 114 then 3134704316671 else (if i < 115 then 3134704318719 else 3134704318719)) else (if i < 118 then (if i < 117 then 3134704318719 else 3134704318719) else (if i < 119 then 3134704319231 else 3272143272703)))) else (if i < 127 then (if i < 123 then (if i < 121 then 3272143272959 else (if i < 122 then 3272143272959 else 3272143272959)) else (if i < 125 then (if i < 124 then 3272143272959 else 3272143272959) else (if i < 126 then 3272143272959 else 3272143272959))) else (if i < 130 then (if i < 128 then 3272143272959 else (if i < 129 then 3272143272959 else 3272143272959)) else (if i < 132 then (if i < 131 then 3272143273983 else 3272143273983) else (if i < 133 then 3272143273983 else 3272143273983))))) else (if i < 147 then (if i < 140 then (if i < 137 then (if i < 135 then 3272143273983 else (if i < 136 then 3272143273983 else 3272143273983)) else (if i < 138 then 3272143273983 else (if i < 139 then 3272143273983 else 3272143273983))) else (if i < 143 then (if i < 141 then 3289323143167 else (if i < 142 then 3289323143167 else 3289323143167)) else (if i < 145 then (if i < 144 then 3289323143167 else 3289323143167) else (if i < 146 then 3289323143167 else 3289323143167)))) else (if i < 154 then (if i < 150 then (if i < 148 then 3289323143167 else (if i < 149 then 3289323143167 else 3289323143167)) else (if i < 152 then (if i < 151 then 3289323143167 else 3289323143167) else (if i < 153 then 3289323143167 else 3289323143167))) else (if i < 157 then (if i < 155 then 3289323143167 else (if i < 156 then 3289323143167 else 4388834770943)) else (if i < 159 then (if i < 158 then 4388834770943 else 4388834770943) else (if i < 160 then 4388834770943 else 4388834770943)))))) else (if i < 188 then (if i < 174 then (if i < 167 then (if i < 164 then (if i < 162 then 4388834770943 else (if i < 163 then 4388834770943 else 4388834770943)) else (if i < 165 then 4388834770943 else (if i < 166 then 4389371641855 else 4397961576447))) else (if i < 170 then (if i < 168 then 4397961576447 else (if i < 169 then 4397961576447 else 4397961576447)) else (if i < 172 then (if i < 171 then 4397961576447 else 4397962625023) else (if i < 173 then 4397962625023 else 4397962625023)))) else (if i < 181 then (if i < 177 then (if i < 175 then 4397962625023 else (if i < 176 then 4397979402239 else 4397979402239)) else (if i < 179 then (if i < 178 then 4397979402239 else 4397979402239) else (if i < 180 then 4397979402239 else 4397979402239))) else (if i < 184 then (if i < 182 then 4397979402239 else (if i < 183 then 4397979402239 else 4397979402239)) else (if i < 186 then (if i < 185 then 4397979402239 else 4398046511103) else (if i < 187 then 4398046511103 else 4398046511103))))) else (if i < 201 then (if i < 194 then (if i < 191 then (if i < 189 then 4398046511103 else (if i < 190 then 4398046511103 else 4398046511103)) else (if i < 192 then 4398046511103 else (if i < 193 then 4398046511103 else 4398046511103))) else (if i < 197 then (if i < 195 then 4398046511103 else (if i < 196 then 4398046511103 else 4398046511103)) else (if i < 199 then (if i < 198 then 4398046511103 else 4398046511103) else (if i < 200 then 4398046511103 else 4398046511103)))) else (if i < 208 then (if i < 204 then (if i < 202 then 4398046511103 else (if i < 203 then 4398046511103 else 4398046511103)) else (if i < 206 then (if i < 205 then 4398046511103 else 4398046511103) else (if i < 207 then 4398046511103 else 4398046511103))) else (if i < 211 then (if i < 209 then 4398046511103 else (if i < 210 then 4398046511103 else 4398046511103)) else (if i < 213 then (if i < 212 then 4398046511103 else 4398046511103) else (if i < 214 then 4398046511103 else 4398046511103)))))))) else 4398046511103
+  if i < 214 then (if i < 107 then (if i < 53 then (if i < 26 then (if i < 13 then (if i < 6 then (if i < 3 then (if i < 1 then 0 else (if i < 2 then 4299161601 else 4299210757)) else (if i < 4 then 6446694405 else (if i < 5 then 7788871685 else 7788937229))) else (if i < 9 then (if i < 7 then 7788937245 else (if i < 8 then 7923154973 else 7923154973)) else (if i < 11 then (if i < 10 then 282801061917 else 282801061917) else (if i < 12 then 282801061917 else 282801061917)))) else (if i < 19 then (if i < 16 then (if i < 14 then 282801061917 else (if i < 15 then 282801061917 else 282801061917)) else (if i < 17 then 282801061917 else (if i < 18 then 282801061917 else 282801061917))) else (if i < 22 then (if i < 20 then 282801061919 else (if i < 21 then 282801066015 else 282801066015)) else (if i < 24 then (if i < 23 then 282801066015 else 282801066015) else (if i < 25 then 282801066015 else 282801066015))))) else (if i < 39 then (if i < 32 then (if i < 29 then (if i < 27 then 282801066015 else (if i < 28 then 282801066015 else 282801066015)) else (if i < 30 then 282801066015 else (if i < 31 then 282801066015 else 282801066015))) else (if i < 35 then (if i < 33 then 282801066015 else (if i < 34 then 282801066015 else 282801066015)) else (if i < 37 then (if i < 36 then 282801066015 else 282801066015) else (if i < 38 then 282809454623 else 282809454623)))) else (if i < 46 then (if i < 42 then (if i < 40 then 282809454623 else (if i < 41 then 282809454623 else 282809454623)) else (if i < 44 then (if i < 43 then 282809454623 else 351528931359) else (if i < 45 then 351528931359 else 351528931359))) else (if i < 49 then (if i < 47 then 351528931359 else (if i < 48 then 351528931359 else 351528931359)) else (if i < 51 then (if i < 50 then 351528931359 else 901284745247) else (if i < 52 then 901284745247 else 901284745247)))))) else (if i < 80 then (if i < 66 then (if i < 59 then (if i < 56 then (if i < 54 then 901284745247 else (if i < 55 then 901284745247 else 901284745247)) else (if i < 57 then 901284876319 else (if i < 58 then 901284876319 else 901284876447))) else (if i < 62 then (if i < 60 then 901284876447 else (if i < 61 then 901284876447 else 901284876447)) else (if i < 64 then (if i < 63 then 901284876447 else 901284876447) else (if i < 65 then 901284876447 else 901284876479)))) else (if i < 73 then (if i < 69 then (if i < 67 then 901284876479 else (if i < 68 then 901284876479 else 901284876479)) else (if i < 71 then (if i < 70 then 901284876479 else 901284876479) else (if i < 72 then 901285138623 else 901285146815))) else (if i < 76 then (if i < 74 then 901285146815 else (if i < 75 then 901285146815 else 901285146815)) else (if i < 78 then (if i < 77 then 901285146815 else 901285146815) else (if i < 79 then 901285146815 else 901285146815))))) else (if i < 93 then (if i < 86 then (if i < 83 then (if i < 81 then 901285671103 else (if i < 82 then 901285671103 else 3100308926655)) else (if i < 84 then 3100308926655 else (if i < 85 then 3134668665023 else 3134668665023))) else (if i < 89 then (if i < 87 then 3134668665023 else (if i < 88 then 3134668665023 else 3134668665023)) else (if i < 91 then (if i < 90 then 3134668665023 else 3134668665023) else (if i < 92 then 3134668665023 else 3134668665023)))) else (if i < 100 then (if i < 96 then (if i < 94 then 3134668665023 else (if i < 95 then 3134668665023 else 3134668665023)) else (if i < 98 then (if i < 97 then 3134668665023 else 3134668665023) else (if i < 99 then 3134668665023 else 3134702219455))) else (if i < 103 then (if i < 101 then 3134702219455 else (if i < 102 then 3134702219455 else 3134702219455)) else (if i < 105 then (if i < 104 then 3134702219455 else 3134702219455) else (if i < 106 then 3134702219455 else 3134702219455))))))) else (if i < 160 then (if i < 133 then (if i < 120 then (if i < 113 then (if i < 110 then (if i < 108 then 3134702219455 else (if i < 109 then 3134702219455 else 3134702219455)) else (if i < 111 then 3134702219519 else (if i < 112 then 3134702219519 else 3134702219519))) else (if i < 116 then (if i < 114 then 3134704316671 else (if i < 115 then 3134704318719 else 3134704318719)) else (if i < 118 then (if i < 117 then 3134704318719 else 3134704318719) else (if i < 119 then 3134704319231 else 3134704319231)))) else (if i < 126 then (if i < 123 then (if i < 121 then 3134704319231 else (if i < 122 then 3272143272703 else 3272143272703)) else (if i < 124 then 3272143272703 else (if i < 125 then 3272143272703 else 3272143272703))) else (if i < 129 then (if i < 127 then 3272143272959 else (if i < 128 then 3272143272959 else 3272143272959)) else (if i < 131 then (if i < 130 then 3272143272959 else 3272143272959) else (if i < 132 then 3272143272959 else 3272143272959))))) else (if i < 146 then (if i < 139 then (if i < 136 then (if i < 134 then 3272143272959 else (if i < 135 then 3272143272959 else 3272143272959)) else (if i < 137 then 3272143273983 else (if i < 138 then 3272143273983 else 3272143273983))) else (if i < 142 then (if i < 140 then 3272143273983 else (if i < 141 then 3272143273983 else 3272143273983)) else (if i < 144 then (if i < 143 then 3289323143167 else 3289323143167) else (if i < 145 then 3289323143167 else 3289323143167)))) else (if i < 153 then (if i < 149 then (if i < 147 then 3289323143167 else (if i < 148 then 3289323143167 else 3289323143167)) else (if i < 151 then (if i < 150 then 3289323143167 else 3289323143167) else (if i < 152 then 3289323143167 else 3289323143167))) else (if i < 156 then (if i < 154 then 3289323143167 else (if i < 155 then 3289323143167 else 4388834770943)) else (if i < 158 then (if i < 157 then 4388834770943 else 4388834770943) else (if i < 159 then 4388834770943 else 4388834770943)))))) else (if i < 187 then (if i < 173 then (if i < 166 then (if i < 163 then (if i < 161 then 4388834770943 else (if i < 162 then 4388834770943 else 4388834770943)) else (if i < 164 then 4388834770943 else (if i < 165 then 4389371641855 else 4397961576447))) else (if i < 169 then (if i < 167 then 4397961576447 else (if i < 168 then 4397961576447 else 4397961576447)) else (if i < 171 then (if i < 170 then 4397961576447 else 4397962625023) else (if i < 172 then 4397962625023 else 4397962625023)))) else (if i < 180 then (if i < 176 then (if i < 174 then 4397962625023 else (if i < 175 then 4397962625023 else 4397962625023)) else (if i < 178 then (if i < 177 then 4397962625023 else 4397962625023) else (if i < 179 then 4397962625023 else 4397979402239))) else (if i < 183 then (if i < 181 then 4397979402239 else (if i < 182 then 4397979402239 else 4398046511103)) else (if i < 185 then (if i < 184 then 4398046511103 else 4398046511103) else (if i < 186 then 4398046511103 else 4398046511103))))) else (if i < 200 then (if i < 193 then (if i < 190 then (if i < 188 then 4398046511103 else (if i < 189 then 4398046511103 else 4398046511103)) else (if i < 191 then 4398046511103 else (if i < 192 then 4398046511103 else 4398046511103))) else (if i < 196 then (if i < 194 then 4398046511103 else (if i < 195 then 4398046511103 else 4398046511103)) else (if i < 198 then (if i < 197 then 4398046511103 else 4398046511103) else (if i < 199 then 4398046511103 else 4398046511103)))) else (if i < 207 then (if i < 203 then (if i < 201 then 4398046511103 else (if i < 202 then 4398046511103 else 4398046511103)) else (if i < 205 then (if i < 204 then 4398046511103 else 4398046511103) else (if i < 206 then 4398046511103 else 4398046511103))) else (if i < 210 then (if i < 208 then 4398046511103 else (if i < 209 then 4398046511103 else 4398046511103)) else (if i < 212 then (if i < 211 then 4398046511103 else 4398046511103) else (if i < 213 then 4398046511103 else 4398046511103)))))))) else 4398046511103
 
-theorem chainMask_succ (j : Fin 214) :
+theorem chainMask_succ (j : Fin 213) :
     chainMask (j.val + 1) = chainMask j.val ||| kcMask j.val := by
   revert j
   decide +kernel
 
-theorem newW_congr (g y y' n : ℕ) (hn : n < 214)
+theorem newW_congr (g y y' n : ℕ) (hn : n < 213)
     (h : ∀ k, (kcMask n).testBit k = true → y.testBit k = y'.testBit k) :
     newW g y n = newW g y' n := by
   have e1 : newW g y n = _ := newW_eq g y ⟨n, hn⟩
@@ -848,7 +847,7 @@ theorem newW_congr (g y y' n : ℕ) (hn : n < 214)
   · rw [h k ((testBit_kcMask ⟨n, hn⟩ k).2 hk)]
   · simp [hk]
 
-theorem dfs_congr (a u g : ℕ) : ∀ n, n ≤ 214 → ∀ x x' y y' : ℕ,
+theorem dfs_congr (a u g : ℕ) : ∀ n, n ≤ 213 → ∀ x x' y y' : ℕ,
     (∀ k < n, x.testBit k = x'.testBit k) →
     (∀ k, (chainMask n).testBit k = true → y.testBit k = y'.testBit k) →
     dfs a u g n x y = dfs a u g n x' y'
@@ -1100,7 +1099,7 @@ example : stMerge [(4, 2, 7), (1, 3, 4), (4, 2, 9)] =
 def stPrune (n : ℕ) (L : List DfsState) : List DfsState :=
   L.map fun s => (s.1 % 2 ^ n, s.2.1 &&& chainMask n, s.2.2)
 
-theorem stVal_prune (a u g n : ℕ) (hn : n ≤ 214) (L : List DfsState) :
+theorem stVal_prune (a u g n : ℕ) (hn : n ≤ 213) (L : List DfsState) :
     stVal a u g n (stPrune n L) = stVal a u g n L := by
   simp only [stVal, stPrune, List.map_map]
   congr 1
@@ -1116,7 +1115,7 @@ def stRun (a u g : ℕ) : ℕ → List DfsState → List DfsState
 
 attribute [irreducible] stRun
 
-theorem stVal_run (a u g : ℕ) : ∀ n, n ≤ 214 → ∀ L : List DfsState,
+theorem stVal_run (a u g : ℕ) : ∀ n, n ≤ 213 → ∀ L : List DfsState,
     stVal a u g n L = stVal a u g 0 (stRun a u g n L)
   | 0, _, _ => by rw [stRun]
   | n + 1, hn, L => by
@@ -1130,8 +1129,8 @@ theorem stVal_zero (a u g : ℕ) (L : List DfsState) :
   | cons s L ih => rw [stVal_cons, ih, dfs, mul_one, List.map_cons, List.sum_cons]
 
 theorem dfs_top_eq_run (a u g : ℕ) :
-    dfs a u g 214 topMask 0 = ((stRun a u g 214 [(topMask, 0, 1)]).map fun s => s.2.2).sum := by
-  rw [← stVal_zero, ← stVal_run a u g 214 le_rfl, stVal_cons]
+    dfs a u g 213 topMask 0 = ((stRun a u g 213 [(topMask, 0, 1)]).map fun s => s.2.2).sum := by
+  rw [← stVal_zero, ← stVal_run a u g 213 le_rfl, stVal_cons]
   simp [stVal]
 
 def stClip (m : ℕ) : List DfsState → List DfsState
@@ -1158,7 +1157,7 @@ def stRunMod (m a u g : ℕ) : ℕ → List DfsState → List DfsState
 
 attribute [irreducible] stRunMod
 
-theorem stVal_runMod (m a u g : ℕ) : ∀ n, n ≤ 214 → ∀ L : List DfsState,
+theorem stVal_runMod (m a u g : ℕ) : ∀ n, n ≤ 213 → ∀ L : List DfsState,
     stVal a u g n L % m = stVal a u g 0 (stRunMod m a u g n L) % m
   | 0, _, _ => by rw [stRunMod]
   | n + 1, hn, L => by
@@ -1166,14 +1165,14 @@ theorem stVal_runMod (m a u g : ℕ) : ∀ n, n ≤ 214 → ∀ L : List DfsStat
         stVal_clip, stVal_prune a u g n (by omega)]
 
 theorem dfs_top_mod (m a u g : ℕ) :
-    dfs a u g 214 topMask 0 % m =
-      ((stRunMod m a u g 214 [(topMask, 0, 1)]).map fun s => s.2.2).sum % m := by
-  rw [← stVal_zero, ← stVal_runMod m a u g 214 le_rfl, stVal_cons]
+    dfs a u g 213 topMask 0 % m =
+      ((stRunMod m a u g 213 [(topMask, 0, 1)]).map fun s => s.2.2).sum % m := by
+  rw [← stVal_zero, ← stVal_runMod m a u g 213 le_rfl, stVal_cons]
   simp [stVal]
 
 theorem dfs_top_digit_mod (a u g b d : ℕ) :
-    dfs a u g 214 topMask 0 / b ^ d % b =
-      (((stRunMod (b^(d+1)) a u g 214 [(topMask, 0, 1)]).map fun s => s.2.2).sum %
+    dfs a u g 213 topMask 0 / b ^ d % b =
+      (((stRunMod (b^(d+1)) a u g 213 [(topMask, 0, 1)]).map fun s => s.2.2).sum %
         b^(d+1)) / b^d := by
   rw [← Nat.mod_mul_right_div_self, ← pow_succ, dfs_top_mod]
 
@@ -1195,7 +1194,7 @@ theorem dfs_drop (a u g n k x y : ℕ) (hk : k ≤ n) (hx : x < 2^k) :
         subst k
         rfl
 
-theorem dfs_jump (a u g n k x y : ℕ) (hn : n ≤ 214) (hk : k ≤ n)
+theorem dfs_jump (a u g n k x y : ℕ) (hn : n ≤ 213) (hk : k ≤ n)
     (hx : x % 2^n < 2^k) :
     dfs a u g n x y = dfs a u g k (x % 2^n) (y &&& chainMask k) := by
   calc
@@ -1208,14 +1207,14 @@ theorem dfs_jump (a u g n k x y : ℕ) (hn : n ≤ 214) (hk : k ≤ n)
         (fun i hi => by simp [Nat.testBit_and, hi])
 
 def memoBounds (p n x y kl kr xl yl xr yr : ℕ) : Bool :=
-  p == n+1 && n < 214 && kl ≤ n && kr ≤ n && x.testBit n &&
+  p == n+1 && n < 213 && kl ≤ n && kr ≤ n && x.testBit n &&
     xl == x % 2^n && yl == (y &&& chainMask kl) &&
     xr == (x ||| khMask n) % 2^n && yr == ((y ||| kcMask n) &&& chainMask kr) &&
     xl < 2^kl && xr < 2^kr
 
 theorem memoBounds_sound (p n x y kl kr xl yl xr yr : ℕ)
     (h : memoBounds p n x y kl kr xl yl xr yr = true) :
-    p = n+1 ∧ n < 214 ∧ kl ≤ n ∧ kr ≤ n ∧ x.testBit n = true ∧
+    p = n+1 ∧ n < 213 ∧ kl ≤ n ∧ kr ≤ n ∧ x.testBit n = true ∧
       xl = x % 2^n ∧ yl = (y &&& chainMask kl) ∧
       xr = (x ||| khMask n) % 2^n ∧ yr = ((y ||| kcMask n) &&& chainMask kr) ∧
       xl < 2^kl ∧ xr < 2^kr := by
@@ -1336,7 +1335,7 @@ theorem shapeWords_le : ∀ E ∈ validShapes, shapeWords E ≤ 42 := by
     rw [heq, Finset.card_union_of_disjoint hd,
       Finset.card_image_of_injective _ (fun _ _ h => Kid.h.inj h),
       Finset.card_image_of_injective _ (fun _ _ h => Kid.c.inj h)]
-  have hinj : Function.Injective (fun j : Fin 214 => kid j 2) := by
+  have hinj : Function.Injective (fun j : Fin 213 => kid j 2) := by
     intro j k h
     exact ((kid_eq_kid_excl_iff j k 2).1 h).1
   have hsub : ((Finset.univ \ E).image fun j => kid j 2) ⊆
@@ -1349,11 +1348,11 @@ theorem shapeWords_le : ∀ E ∈ validShapes, shapeWords E ≤ 42 := by
   rw [Finset.card_image_of_injective _ hinj,
     Finset.card_sdiff_of_subset (Finset.subset_univ E),
     Finset.card_sdiff_of_subset (Finset.subset_univ needed)] at bound
-  have cardK : Fintype.card Kid = 256 := by decide
+  have cardK : Fintype.card Kid = 255 := by decide
   simp only [Finset.card_univ, Fintype.card_fin, cardK, hcard] at bound
   have hv : E ⊆ neededH E := (mem_validShapes E).1 hE
   have hEc := Finset.card_le_card hv
-  have hNc : needed.card ≤ 256 := by
+  have hNc : needed.card ≤ 255 := by
     simpa only [Finset.card_univ, cardK] using
       Finset.card_le_card (Finset.subset_univ needed)
   rw [hcard] at hNc
@@ -1424,7 +1423,7 @@ theorem shapeWords_pos : ∀ E ∈ validShapes, 1 ≤ shapeWords E := by
   intro E _
   unfold shapeWords
   rcases E.eq_empty_or_nonempty with rfl | hne
-  · have h : (48 : Fin 214) ∈ neededH ∅ \ ∅ := by simp [neededH, topSet]
+  · have h : (48 : Fin 213) ∈ neededH ∅ \ ∅ := by simp [neededH, topSet]
     have := Finset.card_pos.2 ⟨_, h⟩
     omega
   · have he : E.min' hne ∈ E := E.min'_mem hne
@@ -1443,7 +1442,7 @@ theorem shapeWords_pos : ∀ E ∈ validShapes, 1 ≤ shapeWords E := by
 /-! ## Per-block and full choices -/
 
 /-- A block choice: expanded hash nodes and one position per local chain. -/
-abbrev Local := Finset (Fin 214) × (Fin 42 → Fin 25)
+abbrev Local := Finset (Fin 213) × (Fin 42 → Fin 25)
 
 def localWords (v : Local) : ℕ := shapeWords v.1
 
@@ -1454,7 +1453,7 @@ the walked chain suffixes. -/
 def localCost (v : Local) : ℕ := v.1.card + localChainCost v
 
 /-- Allowed positions: free on needed chains, fixed to `24` elsewhere. -/
-def posSet (E : Finset (Fin 214)) (k : Fin 42) : Finset (Fin 25) :=
+def posSet (E : Finset (Fin 213)) (k : Fin 42) : Finset (Fin 25) :=
   if k ∈ neededC E then Finset.univ else {24}
 
 def localSet : Finset Local :=
@@ -1539,7 +1538,7 @@ attribute [irreducible] blockGen
 /-- Generating number of one needed chain: positions `24 - t` steps deep. -/
 def chainGen : ℕ := ∑ t : Fin 25, digitBase ^ (24 - t.val)
 
-theorem blockGen_eq : blockGen = dfs digitBase 1 chainGen 214 topMask 0 := by
+theorem blockGen_eq : blockGen = dfs digitBase 1 chainGen 213 topMask 0 := by
   rw [← sum_validShapes_eq_dfs]
   unfold blockGen localSet
   rw [Finset.sum_map, Finset.sum_sigma]
@@ -1564,7 +1563,7 @@ theorem blockGen_eq : blockGen = dfs digitBase 1 chainGen 214 topMask 0 := by
   · simp [posSet, hk, chainGen]
   · simp [posSet, hk]
 
-theorem card_localSet_eq_dfs : localSet.card = dfs 1 1 25 214 topMask 0 := by
+theorem card_localSet_eq_dfs : localSet.card = dfs 1 1 25 213 topMask 0 := by
   rw [← sum_validShapes_eq_dfs]
   unfold localSet
   rw [Finset.card_map, Finset.card_sigma]
@@ -1595,54 +1594,54 @@ theorem pathCode8_decode : ∀ n b p, pathValid8 n b p →
   decide +kernel
 
 
-def privatePathLen : Fin 42 → Fin 9 := ![0, 7, 0, 0, 0, 7, 8, 7, 7, 8, 7, 8, 7, 8, 0, 5, 0, 0, 0, 8, 6, 8, 6, 6, 8, 7, 7, 5, 0, 8, 0, 0, 0, 8, 7, 7, 7, 8, 6, 8, 7, 8]
-def privatePathAt : Fin 42 → Fin 8 → Fin 214 := ![
+def privatePathLen : Fin 42 → Fin 9 := ![0, 7, 0, 0, 0, 7, 8, 7, 7, 8, 7, 8, 7, 8, 0, 5, 0, 0, 0, 8, 6, 8, 6, 6, 8, 7, 7, 5, 0, 8, 0, 0, 0, 8, 7, 7, 7, 7, 6, 8, 7, 8]
+def privatePathAt : Fin 42 → Fin 8 → Fin 213 := ![
   ![0, 0, 0, 0, 0, 0, 0, 0],
   ![18, 20, 22, 28, 29, 30, 31, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
   ![64, 65, 66, 67, 68, 69, 70, 0],
-  ![109, 110, 111, 115, 116, 126, 127, 130],
+  ![109, 110, 111, 115, 116, 124, 126, 127],
   ![57, 58, 59, 60, 61, 62, 63, 0],
-  ![119, 122, 137, 180, 198, 200, 201, 0],
-  ![117, 120, 124, 128, 132, 133, 134, 135],
-  ![129, 142, 149, 150, 154, 161, 179, 0],
-  ![113, 114, 125, 131, 138, 143, 147, 148],
-  ![19, 21, 23, 32, 33, 34, 35, 0],
+  ![125, 128, 139, 183, 197, 198, 199, 0],
+  ![117, 118, 119, 123, 130, 131, 132, 133],
+  ![135, 140, 148, 149, 153, 160, 177, 0],
+  ![113, 114, 122, 129, 137, 138, 145, 146],
+  ![19, 21, 24, 32, 33, 34, 35, 0],
   ![71, 72, 73, 74, 75, 76, 77, 78],
   ![0, 0, 0, 0, 0, 0, 0, 0],
-  ![0, 2, 3, 4, 5, 0, 0, 0],
+  ![1, 2, 3, 4, 5, 0, 0, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
-  ![79, 80, 97, 99, 100, 102, 106, 107],
-  ![170, 171, 172, 173, 185, 195, 0, 0],
-  ![112, 136, 141, 145, 146, 151, 152, 153],
-  ![1, 7, 11, 13, 16, 17, 0, 0],
+  ![79, 80, 96, 97, 99, 103, 106, 107],
+  ![169, 170, 171, 172, 182, 194, 0, 0],
+  ![112, 134, 136, 142, 144, 150, 151, 152],
+  ![0, 7, 11, 13, 16, 17, 0, 0],
   ![36, 37, 38, 39, 40, 41, 0, 0],
-  ![174, 182, 191, 192, 196, 207, 208, 209],
-  ![92, 98, 101, 103, 104, 105, 108, 0],
-  ![184, 186, 187, 188, 199, 204, 205, 0],
+  ![178, 188, 190, 191, 195, 206, 207, 208],
+  ![98, 100, 101, 102, 104, 105, 108, 0],
+  ![181, 184, 185, 186, 200, 203, 204, 0],
   ![6, 9, 12, 14, 15, 0, 0, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
-  ![164, 167, 168, 169, 183, 190, 193, 194],
+  ![163, 166, 167, 168, 180, 189, 192, 193],
   ![0, 0, 0, 0, 0, 0, 0, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
   ![0, 0, 0, 0, 0, 0, 0, 0],
-  ![165, 166, 189, 202, 203, 206, 212, 213],
-  ![139, 140, 157, 159, 160, 162, 163, 0],
-  ![85, 86, 87, 88, 89, 90, 91, 0],
+  ![164, 165, 187, 201, 202, 205, 211, 212],
+  ![141, 143, 156, 158, 159, 161, 162, 0],
+  ![83, 86, 87, 88, 89, 90, 91, 0],
   ![42, 43, 44, 45, 46, 47, 48, 0],
-  ![118, 121, 123, 144, 175, 176, 177, 178],
-  ![8, 10, 24, 25, 26, 27, 0, 0],
+  ![120, 121, 147, 173, 174, 175, 176, 0],
+  ![8, 10, 23, 25, 26, 27, 0, 0],
   ![49, 50, 51, 52, 53, 54, 55, 56],
-  ![155, 156, 158, 181, 197, 210, 211, 0],
-  ![81, 82, 83, 84, 93, 94, 95, 96]]
-def privatePathIndex : Fin 214 → Fin 42 := ![15, 22, 15, 15, 15, 15, 27, 22, 38, 27, 38, 22, 27, 22, 27, 27, 22, 22, 1, 12, 1, 12, 1, 12, 38, 38, 38, 38, 1, 1, 1, 1, 12, 12, 12, 12, 23, 23, 23, 23, 23, 23, 36, 36, 36, 36, 36, 36, 36, 39, 39, 39, 39, 39, 39, 39, 39, 7, 7, 7, 7, 7, 7, 7, 5, 5, 5, 5, 5, 5, 5, 13, 13, 13, 13, 13, 13, 13, 13, 19, 19, 41, 41, 41, 41, 35, 35, 35, 35, 35, 35, 35, 25, 41, 41, 41, 41, 19, 25, 19, 19, 25, 19, 25, 25, 25, 19, 19, 25, 6, 6, 6, 21, 11, 11, 6, 6, 9, 37, 8, 9, 37, 8, 37, 9, 11, 6, 6, 9, 10, 6, 11, 9, 9, 9, 9, 21, 8, 11, 34, 34, 21, 10, 11, 37, 21, 21, 11, 11, 10, 10, 21, 21, 21, 10, 40, 40, 34, 40, 34, 34, 10, 34, 34, 29, 33, 33, 29, 29, 29, 20, 20, 20, 20, 24, 37, 37, 37, 37, 10, 8, 40, 24, 29, 26, 20, 26, 26, 26, 33, 29, 24, 24, 29, 29, 20, 24, 40, 8, 26, 8, 8, 33, 33, 26, 26, 33, 24, 24, 24, 40, 40, 33, 33]
-def privatePathDepth : Fin 214 → Fin 8 := ![0, 0, 1, 2, 3, 4, 0, 1, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 0, 0, 1, 1, 2, 2, 2, 3, 4, 5, 3, 4, 5, 6, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 0, 4, 5, 6, 7, 2, 1, 3, 4, 2, 5, 3, 4, 5, 6, 7, 6, 0, 1, 2, 0, 0, 1, 3, 4, 0, 0, 0, 1, 1, 1, 2, 2, 2, 5, 6, 3, 0, 7, 3, 4, 5, 6, 7, 1, 2, 4, 0, 1, 2, 1, 5, 3, 3, 4, 6, 7, 2, 3, 5, 6, 7, 4, 0, 1, 2, 2, 3, 4, 5, 5, 6, 0, 0, 1, 1, 2, 3, 0, 1, 2, 3, 0, 4, 5, 6, 7, 6, 3, 3, 1, 4, 0, 4, 1, 2, 3, 2, 5, 2, 3, 6, 7, 5, 4, 4, 4, 4, 5, 6, 3, 4, 5, 6, 5, 5, 6, 7, 5, 6, 6, 7]
+  ![154, 155, 157, 179, 196, 209, 210, 0],
+  ![81, 82, 84, 85, 92, 93, 94, 95]]
+def privatePathIndex : Fin 213 → Fin 42 := ![22, 15, 15, 15, 15, 15, 27, 22, 38, 27, 38, 22, 27, 22, 27, 27, 22, 22, 1, 12, 1, 12, 1, 38, 12, 38, 38, 38, 1, 1, 1, 1, 12, 12, 12, 12, 23, 23, 23, 23, 23, 23, 36, 36, 36, 36, 36, 36, 36, 39, 39, 39, 39, 39, 39, 39, 39, 7, 7, 7, 7, 7, 7, 7, 5, 5, 5, 5, 5, 5, 5, 13, 13, 13, 13, 13, 13, 13, 13, 19, 19, 41, 41, 35, 41, 41, 35, 35, 35, 35, 35, 35, 41, 41, 41, 41, 19, 19, 25, 19, 25, 25, 25, 19, 25, 25, 19, 19, 25, 6, 6, 6, 21, 11, 11, 6, 6, 9, 9, 9, 37, 37, 11, 9, 6, 8, 6, 6, 8, 11, 9, 9, 9, 9, 21, 10, 21, 11, 11, 8, 10, 34, 21, 34, 21, 11, 11, 37, 10, 10, 21, 21, 21, 10, 40, 40, 34, 40, 34, 34, 10, 34, 34, 29, 33, 33, 29, 29, 29, 20, 20, 20, 20, 37, 37, 37, 37, 10, 24, 40, 29, 26, 20, 8, 26, 26, 26, 33, 24, 29, 24, 24, 29, 29, 20, 24, 40, 8, 8, 8, 26, 33, 33, 26, 26, 33, 24, 24, 24, 40, 40, 33, 33]
+def privatePathDepth : Fin 213 → Fin 8 := ![0, 0, 1, 2, 3, 4, 0, 1, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 0, 0, 1, 1, 2, 2, 2, 3, 4, 5, 3, 4, 5, 6, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 0, 1, 0, 2, 3, 1, 2, 3, 4, 5, 6, 4, 5, 6, 7, 2, 3, 0, 4, 1, 2, 3, 5, 4, 5, 6, 7, 6, 0, 1, 2, 0, 0, 1, 3, 4, 0, 1, 2, 0, 1, 2, 3, 5, 0, 6, 7, 1, 3, 4, 5, 6, 7, 1, 0, 2, 4, 5, 2, 1, 0, 3, 1, 4, 6, 7, 2, 2, 3, 5, 6, 7, 4, 0, 1, 2, 2, 3, 4, 5, 5, 6, 0, 0, 1, 1, 2, 3, 0, 1, 2, 3, 3, 4, 5, 6, 6, 0, 3, 4, 0, 4, 3, 1, 2, 3, 2, 1, 5, 2, 3, 6, 7, 5, 4, 4, 4, 5, 6, 4, 3, 4, 5, 6, 5, 5, 6, 7, 5, 6, 6, 7]
 
-theorem privatePath_cover (j : Fin 214) :
+theorem privatePath_cover (j : Fin 213) :
     (privatePathDepth j).val < (privatePathLen (privatePathIndex j)).val ∧
     privatePathAt (privatePathIndex j) (privatePathDepth j) = j := by
   revert j
@@ -1725,11 +1724,11 @@ theorem card_localSet_path_le : localSet.card ≤ pathPopulationBound := by
     _ = pathPopulationBound := by simp [pathPopulationBound, Fintype.card_pi]
 
 theorem pathPopulationBound_eq : pathPopulationBound =
-    95265665839134290490590838458312294400000000000000000000000000 := by
+    92378827480372645324209297898969497600000000000000000000000000 := by
   decide +kernel
 
 
-theorem card_localSet_le : localSet.card ≤ 2 ^ 214 * 25 ^ 42 := by
+theorem card_localSet_le : localSet.card ≤ 2 ^ 213 * 25 ^ 42 := by
   have h := Finset.card_le_univ localSet
   simpa [Fintype.card_prod, Fintype.card_finset, Fintype.card_fun] using h
 
@@ -1769,23 +1768,23 @@ theorem chainGen_exact : chainGen = 19601917757564397093928000123887846662797065
   rw [chainGen, digitBase]
   decide +kernel
 
-theorem blockGen_mod_exact : dfs digitBase 1 chainGen 214 topMask 0 %
-    digitBase ^ 83 = 674702033235622838542327080352107165705012412985213956005715605073560875828483233897717566384978981677094671341467104678529246656832794802013588500313763240046510589488182934601106923048403997863887184338304810753671727281048106925012364847849495126144308242894125688050380342873863346249967994494882556345942337345846492968524003289393011480345168316224625169484795473411717141331013090482919040298394697579458047128986056525700982807449283856434766636485266732168205948865845847155434601747951275089970448362801562802011434848621863145372634376077893452186855790954806270465078013236471313099261697495236304304359454091267074030558904069788111408420523267922934146791915250005137979034603064100903015695272695217776911486347450655470313968280429314170543641662603459328713650648928523123694286133048830859925964481663078299336810882619634216509558076690330090273367645093174845339190257229878633092479023233982666199589398750645802616320366171788414082509756463000285069513406704730451506317466321666622446108882292360684965493228657101298255365338997932573427209821081875467394449336568228994888330526212066283007412449445047654737474785858534647702807297483451707256061473316046709098355925118538216498287097953603535989216990517203926961414636896544080011807655176213176385067508081207633618229510749837316609084339346046207617219217232391903005268309501271529135885364513617083738867669212048775891651687167652833999033106029222162618270153706665051998460498097989104173976131208473227035565099469298358903659317554883165680680206489980789615514728913399027153056035721974854542100365589316740945666537535658950661027220268570480097445826703023434321274669509292756323624136629472317567122740401050896760711709570465767635124981595396151668023871446179046971489878072262362164118828248834598446940617153431652509512849577924660514267350371396682752341579612122215834287498548027623561315226278980849835060589617555736067728176457522385345642884178871720643837961496003857601793660253414645048518811912875086210097003981960305180335445382934069968322045640432766256793731322166137335715938053011224378413163400761353745145753959866943994044308769670545106711985153463041982209748827953967311285584017038155649768422542365944342700540904298887948033079518473764500181752429908754960912662368491661754406746116856143203091342664373680725310758584471753404393880559075608040841521479178496588605939626083917406648727084094160629109030787158051774672781042511685526525414814610435292610591153485613258725239629697154164857662257852988610030978312808113981478016620501494101011659425906290611850877069848297999746661075968672338207043175350290605307833770216715716864139491745179775281314433799012598138224551237551598828479679297572642091163174605657591274077353836191985217057618426510707973098906414297161141718764631715793359039921665934313878475910280065740439909994506518179960895440099664594590910136851457029154054726861318163874493731128680673917631696318958126069239929084770125592222977342965418660603544983147483191390325500107653776985486132921486772748490593770483073393202730192791095472064013152856773716833726100046992082195630071708626916476711081509080133928689713702469582542571097412336347802059390974620909317049748715284515247379116983060901073901419229819200968072489807308923698718796692789366787717139691360414750937309193361672697669335829433795403652641379703035873529646823152215895553235012774393495212389806631500323085055425726093882443523913935106834256517800137904755569851398232710984429712533038418915977822483130921822754374279937948034616527512627474550139133908518898319936975359124159384398682933982489616276756947026992507887644524885349060351671121514764381243530087369479975489405076738137958778436918047431744611231610927299586859472875521846347910152888779880263917065303156566205317555259656026560924946976301190161663161084959733934107543683236686340809529413396595303470148695368120225066795897814329648222868198795482077240902363280256974942862474286827351582449550174283663292272537123014171717574661014094456078292609130567603379342475391419032834018182283358607143369232881738739107100419193775311166525907738621480767239823037959849775555068462726820832186328964362883921480790446955293312251005953033794787599676692793464968127204829210274695632130891307112227012058459770487805319403554804427515463172707454651152183066139695719627612405238604290490585108655835348643754229436241588380848714150214417306013694309414193023739499104769878667120095748525104804357449909789351346955041427823190478882414223451377195701235190090721900991906308775300707016942321795241950884221860796651685492578861761398019065220208656752039375221181131632968854680116649181578020859361774398559914388332171165330327254833503976210394902880355742228529077633724432255766186673167889469133147470595985148638023376918770954116055262189388765720828661094039857943496813699164741889783903303961551988673783605702837835491147579749160319987206134963667681793800639311755272341289111034291960444795456936774621787672295909684083707615726936411149191880682036584835104373561364236748873269249 := by
+theorem blockGen_mod_exact : dfs digitBase 1 chainGen 213 topMask 0 %
+    digitBase ^ 83 = 674709128734898423562674069107726144933486007320326490086370059845618646117891466567869306849327428008547559161684070441490796675761309664877145354597314104812745707148030386607380079269299494765552365263409514730472343163808349126281470147959513373666855490468124507075494315042625062209917256509339420072627683177589480659324576186057714936570811576537587384045989142670172950844500835919667343124098253684866827990308671157653205275629948975440151180133207596801053754544124575765238219515495456587224679325019126931909958536086891379360740327026112679733503161112799989479768963771990982034010006646087114624497465265482513917861819281326455687594162347176113632736330922041175052242882898350098692377337766577722647230762265988492367212348486020754186479005947691940232043076123624572198540729930146426170524796239998807301034486739901992369309626485239158831690671209823194829232516143615681356456593122793881529641029042803865816957525581199589682963039110742081124073503513001593017408009408801425294741481721911434174552151231525716006084192811492849336119955104527413210790799472811620736673152579601969608321597720512834391978376165711751704196380074629241539891961875350792420266575844593521838066732836745197153467777897008587015462903431795980179620671777346603216350039287433015682805216529776682647891078852457707690571244888327206968401517702829911543834941786111548068444075123722092966301296125835424889927228926042089340154155771850524189601864597001254595725382379690919343219123313361691630690212148427336011253901758708239077054690897184498401442301840297513409429393860812626090846010993968811407321273871180596340906089498929983816141919815628380906558557310068526400298884920568435074518048166877792913868223895605140803632663122510094203823391448602115412984108656012399619781157815702997472481388091035545391036963597906815314772889313833975584224511925581898873083331063005714636044574543122367648666951593974375509890901142780561425329362300365338022676441957609503425658035518642114332322732527303334646393798449270003921794639276419022333863512945794225806749558555087560237200061977732663304116862865561448249927681622833967342131856203249353197761698992487645062604150211194932681985333186065987269423594132899345062458999537298442592626832416137262265669709474921504144338264746600689773458449655590612458140142992108422558351558354023503741001551928721086511359403909318050383476063324334542008438028862187359113522328946886468283439894731020202014007057314247412717716174332374184025699815404294172273816799522750034262463815977345053717077469068108582336939626738839656216622767948630333923249271304392456230520103755039123925868393509052672217907065033909874163569641125527027389043179802796562152719358573694684317090128128904746947070528013010335845820276062153446639755082966645838050512044078095291698402721803154469095632837919555366038977404056802528747073417736465711110038814225417703756646716231979192848789130422565467835326328254679885029028295712405202460479970538309279840691249450512185145277748203283675803729826042186418138957968453804538794708254935079729967090916357156792453456628771430685470995972715360487322002292987176696827517059189452840969414625090307986552928335915577972081852261390450485534872889305203436090189184334925484266691658542325562292747489027410346885194670052508462006930791181602790389120041913622737231012474368785766322486248163723013096970951419945436812792492892243205023271135743476119565604754724052808870289870142398802228862433232734236377473870560859014810128884241601396198088688517383801088949810426792424339716405017000207562243041176158710315161123134009275549990024453328414872673775107754328038665383572403169375729077514391706327063579025764093050227582921259924935182215993204799120913789951763312809785202708405327700241591672120454823123977433439112447769965900681015649483439272579850193143527594297865664169144836645431882364358499952113961390955939289819979186963707787391890275669802228551535318765774673219482082971753663042898003886850963495544214505779196318409731421604556474219506212163971606203470683730586530483229803321856606684418644411695024128953046058983629297528232874740495947681236029933906010538914069995652231355417412689368169515867829295905324573593535551345587113092788251031450292026734326078760665977213658887036820748660498963800168647941845774854654010364865516699283320894223571959842755121279811202463360709682058824360313215847897069800366095590383342768728233987669316386026976411774949061537139894087323742867484409337145789983575601848885165065664900528983794971905369979852528855230392483517631262505623099490701523370025360237911223105097136962490125939997819766617001674337469604214656716682735027931630150022023280733346085409715214354093930759972304273118835253201102029425498635145753606929314857755425591609512974224812532873870368336669370388171604793355599371736656235327776641184689097127771430928404047384183068762471665473475410247061072288814249011089012202892570353664311365935533553485153572247177522648661397121296899606736758319564786614375177376826867865320870117377 := by
   rw [digitMod_exact, chainGen_exact, digitBase_exact, topMask]
-  memo_count 102533518982044169998980114553215110391404875609116627453005203260922362346048001872815548256200680988264899465217017316086016368864326063454230947961924300245416263860189617183220749555408994147619514361880653011486501878854728811466767360046244535134718530572668230331170983012330751501631418109843177864878937506114082458971166530841894979622862434627670293881750043049400578470142865398808845296029887513241269932422004422888435142400557335672877570404837593782580751704972240323102045106489348140109934747245188630519333955324998569919138851714834427638736603744242347527656719825589255700549656688850415256149837901235729035990198655591634564836223128960203057791722501035644575712652281811312331096885251672810536108056051417378336304889024036058796217265342278872706415508820006195475860636187868469934775446639281851246174725836326591754355224633770182702252868846725900951089536102054643538996757384793759672118284720553664067558899783140428242261306722990830776781790306679918262194200190021648240544421418268762283537508618140611848578762961430402629505854761607382358193733094377917510414272387571712454619130804660208391099142273575419341057548797320083406559727798024521407109598132557850489227825122842505656793606356479705302166331398547321537125735458897100426387656172186194321942248373663443376200962772500939505951046990986123464499145338842996500837041138178380346448824968681770780773407450991087966017246740269812827482750000210907601647648729567339197861958002815803591090210451769057428372047444239574931725748749066578581548692633769082014182833871169385275899365876815525452177289136438085468871518768427758844256660726062881055292054536669755502994576086803903118119657922334776885716280033283784972797662061352084785107618988648640587071013400919576134871039407237252787998213657517700388164894685153871464658457350656351280390877275384604788309382014667719931762989063771053841631670511861628689165508269958580825298904722925592808210239199307920229611901630107150782195238432163361220520264235442192265363139025985819838540794835388734929224716876705152654243081373352797835491264836388892585399156039871259169012344632907614482282150804377330546182173770221854562084181397911772754091024804393354502505482168792714630604994701275428957683235177628411786293512997307534304032281313130622590796418852646400601778358735543189922189059392911489233769365642035595114448586048602955397508292719125607071079360929372524730639619564471515214137266619073758682531400499524474277173300788798932608968006997154999452747353327453607134472304745029918955804545171729748796201184470456088197720309318016168796206527980549699696482403730588557099973178109080857440092228150442094338382095597762438191321304602668252982070280595245556588699556891773853877861728218154513950969116744608473502861385761636513706918252717091095475599864518372175557565851927581869939375685246287771296776049378009303515312183178655702595208444836636587773476431076969075636320369173455669689035255478325619028461335147092166656182518909963608073980516299752147554838038806269403679190580717713776293805422041661533702462900198942858726579883241107502190666876236047074297174514289397610373848409050211974237172483630676856920172571432907963488300861766887756058503955914529377187808020260163931039735162878900779935567976908235413977903953424022281355680339798044883864695886446304810134143567027154711038429299574816757032446455395683991769064717792381770820978601886324603586491182185567585507075876762619584042996662136348430239247251461774762135035192432567546222111395329848361023776445419994579411152378410656213577054774967302238259276049510085456393455452217413199028822595532853713657320940330782366508329330046550335191107356030778094248437623541294737287667967878958259291364840967369005373335617526693458376204921590441520352777913104559742833827718001867303030611110791664636225163172738106231739885530076837648870130860503682014069269755561880896721987879608350617094569112443368037468095184588271626918288016887822635571863207165327655647102620223464977083018944163438320149009263409653177403672952365933826766873977419050218334092880873817538059542037690417066822114792902257805939684285698995099006504486732385598326676827076267758253193716888633605553792870948553213060942758076826130752639222257023893477683972954468237988903920970213151775104330675188290814029903460263606431583293635806666156640254076764426831025436233377338235609580794084458076441353915553795201414980670088552991589996602835806453879551119011388149302714054743018136161788029129210440127647434712965074844001174676833212833119728529897799789273757365423220684769722458657873862923154018394777930646891993721825059100561047150240423692222774530257238176497689829896495945799122415611636057693431187463737793224239138010886515940277521297810563824927878815580241149603811333885976558581402672729238078911676500255495671343427209678589858196097221855284624555361095536853337704093307338076227196932151410739154606196467590538990578174532205759183523213165087103934823370744819634716236467003239784713224865843642051422556300274363075305371244822229293996749881344 102844034832575377634685573909834406561420991602098741459288064 1960191775756439709392800012388784666279706557757341207645207652997524910275077950366396980409511203974427996552949090724728529988920704959307932189651064232727090574374447144938701837275266594693384427384350511181597471269240044244734147286306699585303167712618829535062858985193572441879703336832993037202329979047924224410022302290265463128793424176087029022165212396390597733640195282450777374300320146589948146555439152101381522540854261393491420699782789704208382847701459316581145723872736579459017932477844875190903876617522040473217340822470996668835757567701239298195010056925618544207980884899554826207944332106071578780048514141391684824489313420977540613697796217578686829848606452073995446468791886472338872103991887507827789940987231071412165706505388502017423555370276918632818638778243459948131388560340223482422318336933594651978232096826671550187201803549522660257830574613526355806331499401718098559330609208841818871558014538509262176198619015419647755569362579512836600722266163163278884539049175791357938338874798912137150230455252033100548275521643548505056869457145863928589357501392886600888086508304765599798994974596869093707052080885686882055162365635568675143184961422288746215874168092065444059936627649943144082555016563342673547115719291661660738321113998203538224315990534224109118678721790555619005286356712145709866877375937037783881400219870110341334822495839012111438258262454717310364968615121447234910900685834890591261135363895083836523154631557121 17277797852638922905073263049397665325495866232471579979296014336
+  memo_count 102533518982044169998980114553215110391404875609116627453005203260922362346048001872815548256200680988264899465217017316086016368864326063454230947961924300245416263860189617183220749555408994147619514361880653011486501878854728811466767360046244535134718530572668230331170983012330751501631418109843177864878937506114082458971166530841894979622862434627670293881750043049400578470142865398808845296029887513241269932422004422888435142400557335672877570404837593782580751704972240323102045106489348140109934747245188630519333955324998569919138851714834427638736603744242347527656719825589255700549656688850415256149837901235729035990198655591634564836223128960203057791722501035644575712652281811312331096885251672810536108056051417378336304889024036058796217265342278872706415508820006195475860636187868469934775446639281851246174725836326591754355224633770182702252868846725900951089536102054643538996757384793759672118284720553664067558899783140428242261306722990830776781790306679918262194200190021648240544421418268762283537508618140611848578762961430402629505854761607382358193733094377917510414272387571712454619130804660208391099142273575419341057548797320083406559727798024521407109598132557850489227825122842505656793606356479705302166331398547321537125735458897100426387656172186194321942248373663443376200962772500939505951046990986123464499145338842996500837041138178380346448824968681770780773407450991087966017246740269812827482750000210907601647648729567339197861958002815803591090210451769057428372047444239574931725748749066578581548692633769082014182833871169385275899365876815525452177289136438085468871518768427758844256660726062881055292054536669755502994576086803903118119657922334776885716280033283784972797662061352084785107618988648640587071013400919576134871039407237252787998213657517700388164894685153871464658457350656351280390877275384604788309382014667719931762989063771053841631670511861628689165508269958580825298904722925592808210239199307920229611901630107150782195238432163361220520264235442192265363139025985819838540794835388734929224716876705152654243081373352797835491264836388892585399156039871259169012344632907614482282150804377330546182173770221854562084181397911772754091024804393354502505482168792714630604994701275428957683235177628411786293512997307534304032281313130622590796418852646400601778358735543189922189059392911489233769365642035595114448586048602955397508292719125607071079360929372524730639619564471515214137266619073758682531400499524474277173300788798932608968006997154999452747353327453607134472304745029918955804545171729748796201184470456088197720309318016168796206527980549699696482403730588557099973178109080857440092228150442094338382095597762438191321304602668252982070280595245556588699556891773853877861728218154513950969116744608473502861385761636513706918252717091095475599864518372175557565851927581869939375685246287771296776049378009303515312183178655702595208444836636587773476431076969075636320369173455669689035255478325619028461335147092166656182518909963608073980516299752147554838038806269403679190580717713776293805422041661533702462900198942858726579883241107502190666876236047074297174514289397610373848409050211974237172483630676856920172571432907963488300861766887756058503955914529377187808020260163931039735162878900779935567976908235413977903953424022281355680339798044883864695886446304810134143567027154711038429299574816757032446455395683991769064717792381770820978601886324603586491182185567585507075876762619584042996662136348430239247251461774762135035192432567546222111395329848361023776445419994579411152378410656213577054774967302238259276049510085456393455452217413199028822595532853713657320940330782366508329330046550335191107356030778094248437623541294737287667967878958259291364840967369005373335617526693458376204921590441520352777913104559742833827718001867303030611110791664636225163172738106231739885530076837648870130860503682014069269755561880896721987879608350617094569112443368037468095184588271626918288016887822635571863207165327655647102620223464977083018944163438320149009263409653177403672952365933826766873977419050218334092880873817538059542037690417066822114792902257805939684285698995099006504486732385598326676827076267758253193716888633605553792870948553213060942758076826130752639222257023893477683972954468237988903920970213151775104330675188290814029903460263606431583293635806666156640254076764426831025436233377338235609580794084458076441353915553795201414980670088552991589996602835806453879551119011388149302714054743018136161788029129210440127647434712965074844001174676833212833119728529897799789273757365423220684769722458657873862923154018394777930646891993721825059100561047150240423692222774530257238176497689829896495945799122415611636057693431187463737793224239138010886515940277521297810563824927878815580241149603811333885976558581402672729238078911676500255495671343427209678589858196097221855284624555361095536853337704093307338076227196932151410739154606196467590538990578174532205759183523213165087103934823370744819634716236467003239784713224865843642051422556300274363075305371244822229293996749881344 102844034832575377634685573909834406561420991602098741459288064 1960191775756439709392800012388784666279706557757341207645207652997524910275077950366396980409511203974427996552949090724728529988920704959307932189651064232727090574374447144938701837275266594693384427384350511181597471269240044244734147286306699585303167712618829535062858985193572441879703336832993037202329979047924224410022302290265463128793424176087029022165212396390597733640195282450777374300320146589948146555439152101381522540854261393491420699782789704208382847701459316581145723872736579459017932477844875190903876617522040473217340822470996668835757567701239298195010056925618544207980884899554826207944332106071578780048514141391684824489313420977540613697796217578686829848606452073995446468791886472338872103991887507827789940987231071412165706505388502017423555370276918632818638778243459948131388560340223482422318336933594651978232096826671550187201803549522660257830574613526355806331499401718098559330609208841818871558014538509262176198619015419647755569362579512836600722266163163278884539049175791357938338874798912137150230455252033100548275521643548505056869457145863928589357501392886600888086508304765599798994974596869093707052080885686882055162365635568675143184961422288746215874168092065444059936627649943144082555016563342673547115719291661660738321113998203538224315990534224109118678721790555619005286356712145709866877375937037783881400219870110341334822495839012111438258262454717310364968615121447234910900685834890591261135363895083836523154631557121 8638898926127899509928384528368297814323313644943866452418494464
 
 set_option maxRecDepth 100000 in
 theorem blockGen_digit_exact :
-    (dfs digitBase 1 chainGen 214 topMask 0) ^ 1 / digitBase ^ 82 % digitBase =
-      676745322862130083544291330002029 := by
-  refine digit_from_mod (dfs digitBase 1 chainGen 214 topMask 0) digitBase 82 83
-    674702033235622838542327080352107165705012412985213956005715605073560875828483233897717566384978981677094671341467104678529246656832794802013588500313763240046510589488182934601106923048403997863887184338304810753671727281048106925012364847849495126144308242894125688050380342873863346249967994494882556345942337345846492968524003289393011480345168316224625169484795473411717141331013090482919040298394697579458047128986056525700982807449283856434766636485266732168205948865845847155434601747951275089970448362801562802011434848621863145372634376077893452186855790954806270465078013236471313099261697495236304304359454091267074030558904069788111408420523267922934146791915250005137979034603064100903015695272695217776911486347450655470313968280429314170543641662603459328713650648928523123694286133048830859925964481663078299336810882619634216509558076690330090273367645093174845339190257229878633092479023233982666199589398750645802616320366171788414082509756463000285069513406704730451506317466321666622446108882292360684965493228657101298255365338997932573427209821081875467394449336568228994888330526212066283007412449445047654737474785858534647702807297483451707256061473316046709098355925118538216498287097953603535989216990517203926961414636896544080011807655176213176385067508081207633618229510749837316609084339346046207617219217232391903005268309501271529135885364513617083738867669212048775891651687167652833999033106029222162618270153706665051998460498097989104173976131208473227035565099469298358903659317554883165680680206489980789615514728913399027153056035721974854542100365589316740945666537535658950661027220268570480097445826703023434321274669509292756323624136629472317567122740401050896760711709570465767635124981595396151668023871446179046971489878072262362164118828248834598446940617153431652509512849577924660514267350371396682752341579612122215834287498548027623561315226278980849835060589617555736067728176457522385345642884178871720643837961496003857601793660253414645048518811912875086210097003981960305180335445382934069968322045640432766256793731322166137335715938053011224378413163400761353745145753959866943994044308769670545106711985153463041982209748827953967311285584017038155649768422542365944342700540904298887948033079518473764500181752429908754960912662368491661754406746116856143203091342664373680725310758584471753404393880559075608040841521479178496588605939626083917406648727084094160629109030787158051774672781042511685526525414814610435292610591153485613258725239629697154164857662257852988610030978312808113981478016620501494101011659425906290611850877069848297999746661075968672338207043175350290605307833770216715716864139491745179775281314433799012598138224551237551598828479679297572642091163174605657591274077353836191985217057618426510707973098906414297161141718764631715793359039921665934313878475910280065740439909994506518179960895440099664594590910136851457029154054726861318163874493731128680673917631696318958126069239929084770125592222977342965418660603544983147483191390325500107653776985486132921486772748490593770483073393202730192791095472064013152856773716833726100046992082195630071708626916476711081509080133928689713702469582542571097412336347802059390974620909317049748715284515247379116983060901073901419229819200968072489807308923698718796692789366787717139691360414750937309193361672697669335829433795403652641379703035873529646823152215895553235012774393495212389806631500323085055425726093882443523913935106834256517800137904755569851398232710984429712533038418915977822483130921822754374279937948034616527512627474550139133908518898319936975359124159384398682933982489616276756947026992507887644524885349060351671121514764381243530087369479975489405076738137958778436918047431744611231610927299586859472875521846347910152888779880263917065303156566205317555259656026560924946976301190161663161084959733934107543683236686340809529413396595303470148695368120225066795897814329648222868198795482077240902363280256974942862474286827351582449550174283663292272537123014171717574661014094456078292609130567603379342475391419032834018182283358607143369232881738739107100419193775311166525907738621480767239823037959849775555068462726820832186328964362883921480790446955293312251005953033794787599676692793464968127204829210274695632130891307112227012058459770487805319403554804427515463172707454651152183066139695719627612405238604290490585108655835348643754229436241588380848714150214417306013694309414193023739499104769878667120095748525104804357449909789351346955041427823190478882414223451377195701235190090721900991906308775300707016942321795241950884221860796651685492578861761398019065220208656752039375221181131632968854680116649181578020859361774398559914388332171165330327254833503976210394902880355742228529077633724432255766186673167889469133147470595985148638023376918770954116055262189388765720828661094039857943496813699164741889783903303961551988673783605702837835491147579749160319987206134963667681793800639311755272341289111034291960444795456936774621787672295909684083707615726936411149191880682036584835104373561364236748873269249 676745322862130083544291330002029 ?_ blockGen_mod_exact ?_
+    (dfs digitBase 1 chainGen 213 topMask 0) ^ 1 / digitBase ^ 82 % digitBase =
+      676752439849646922507063152752853 := by
+  refine digit_from_mod (dfs digitBase 1 chainGen 213 topMask 0) digitBase 82 83
+    674709128734898423562674069107726144933486007320326490086370059845618646117891466567869306849327428008547559161684070441490796675761309664877145354597314104812745707148030386607380079269299494765552365263409514730472343163808349126281470147959513373666855490468124507075494315042625062209917256509339420072627683177589480659324576186057714936570811576537587384045989142670172950844500835919667343124098253684866827990308671157653205275629948975440151180133207596801053754544124575765238219515495456587224679325019126931909958536086891379360740327026112679733503161112799989479768963771990982034010006646087114624497465265482513917861819281326455687594162347176113632736330922041175052242882898350098692377337766577722647230762265988492367212348486020754186479005947691940232043076123624572198540729930146426170524796239998807301034486739901992369309626485239158831690671209823194829232516143615681356456593122793881529641029042803865816957525581199589682963039110742081124073503513001593017408009408801425294741481721911434174552151231525716006084192811492849336119955104527413210790799472811620736673152579601969608321597720512834391978376165711751704196380074629241539891961875350792420266575844593521838066732836745197153467777897008587015462903431795980179620671777346603216350039287433015682805216529776682647891078852457707690571244888327206968401517702829911543834941786111548068444075123722092966301296125835424889927228926042089340154155771850524189601864597001254595725382379690919343219123313361691630690212148427336011253901758708239077054690897184498401442301840297513409429393860812626090846010993968811407321273871180596340906089498929983816141919815628380906558557310068526400298884920568435074518048166877792913868223895605140803632663122510094203823391448602115412984108656012399619781157815702997472481388091035545391036963597906815314772889313833975584224511925581898873083331063005714636044574543122367648666951593974375509890901142780561425329362300365338022676441957609503425658035518642114332322732527303334646393798449270003921794639276419022333863512945794225806749558555087560237200061977732663304116862865561448249927681622833967342131856203249353197761698992487645062604150211194932681985333186065987269423594132899345062458999537298442592626832416137262265669709474921504144338264746600689773458449655590612458140142992108422558351558354023503741001551928721086511359403909318050383476063324334542008438028862187359113522328946886468283439894731020202014007057314247412717716174332374184025699815404294172273816799522750034262463815977345053717077469068108582336939626738839656216622767948630333923249271304392456230520103755039123925868393509052672217907065033909874163569641125527027389043179802796562152719358573694684317090128128904746947070528013010335845820276062153446639755082966645838050512044078095291698402721803154469095632837919555366038977404056802528747073417736465711110038814225417703756646716231979192848789130422565467835326328254679885029028295712405202460479970538309279840691249450512185145277748203283675803729826042186418138957968453804538794708254935079729967090916357156792453456628771430685470995972715360487322002292987176696827517059189452840969414625090307986552928335915577972081852261390450485534872889305203436090189184334925484266691658542325562292747489027410346885194670052508462006930791181602790389120041913622737231012474368785766322486248163723013096970951419945436812792492892243205023271135743476119565604754724052808870289870142398802228862433232734236377473870560859014810128884241601396198088688517383801088949810426792424339716405017000207562243041176158710315161123134009275549990024453328414872673775107754328038665383572403169375729077514391706327063579025764093050227582921259924935182215993204799120913789951763312809785202708405327700241591672120454823123977433439112447769965900681015649483439272579850193143527594297865664169144836645431882364358499952113961390955939289819979186963707787391890275669802228551535318765774673219482082971753663042898003886850963495544214505779196318409731421604556474219506212163971606203470683730586530483229803321856606684418644411695024128953046058983629297528232874740495947681236029933906010538914069995652231355417412689368169515867829295905324573593535551345587113092788251031450292026734326078760665977213658887036820748660498963800168647941845774854654010364865516699283320894223571959842755121279811202463360709682058824360313215847897069800366095590383342768728233987669316386026976411774949061537139894087323742867484409337145789983575601848885165065664900528983794971905369979852528855230392483517631262505623099490701523370025360237911223105097136962490125939997819766617001674337469604214656716682735027931630150022023280733346085409715214354093930759972304273118835253201102029425498635145753606929314857755425591609512974224812532873870368336669370388171604793355599371736656235327776641184689097127771430928404047384183068762471665473475410247061072288814249011089012202892570353664311365935533553485153572247177522648661397121296899606736758319564786614375177376826867865320870117377 676752439849646922507063152752853 ?_ blockGen_mod_exact ?_
   · decide +kernel
   · rw [digitBase]
     decide +kernel
 
 theorem card_supportedChoices :
-    supportedChoices.card = 676745322862130083544291330002029 := by
+    supportedChoices.card = 676752439849646922507063152752853 := by
   rw [card_supportedChoices_eq_digit, blockGen_eq, blockGen_digit_exact]
 
 /-- The record's schedule class count. -/
@@ -1819,12 +1818,12 @@ theorem mem_cutOf (c : Choice) (n : Name) : n ∈ cutOf c ↔
     · exact ⟨b, Or.inl ⟨j, ⟨hj, hjE⟩, rfl⟩⟩
     · exact ⟨b, Or.inr ⟨k, hk, rfl⟩⟩
 
-theorem hv_ne_chainNode (b b' : Fin 1) (j : Fin 214) (k : Fin 42) (p : Fin 25) :
+theorem hv_ne_chainNode (b b' : Fin 1) (j : Fin 213) (k : Fin 42) (p : Fin 25) :
     Name.hv b j ≠ chainNode b' k p := by
   unfold chainNode
   split_ifs <;> simp
 
-@[simp] theorem hv_mem_cutOf (c : Choice) (b : Fin 1) (j : Fin 214) :
+@[simp] theorem hv_mem_cutOf (c : Choice) (b : Fin 1) (j : Fin 213) :
     Name.hv b j ∈ cutOf c ↔ j ∈ neededH (c b).1 ∧ j ∉ (c b).1 := by
   rw [mem_cutOf]
   constructor

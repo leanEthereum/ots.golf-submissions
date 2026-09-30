@@ -6,7 +6,7 @@ import Submissions.UpperCompressions.LongChain91Geometry
 
 This module turns the names of `LongChain91Geometry` into the `Dag.Graph`
 consumed by the generic weighted scheme: one block of forty-two length-24
-chains and 214 ternary hashes with shared inputs, under an eleven-word root
+chains and 213 ternary hashes with shared inputs, under an eleven-word root
 hash.
 -/
 
@@ -35,18 +35,18 @@ def ofFin (v : Fin N) : Name :=
     if h₂ : r < 42 then .ci ⟨r / 42, by omega⟩ ⟨r % 42, by omega⟩ t
     else if h₃ : r < 84 then .ch ⟨(r - 42) / 42, by omega⟩ ⟨(r - 42) % 42, by omega⟩ t
     else .cv ⟨(r - 84) / 42, by omega⟩ ⟨(r - 84) % 42, by omega⟩ t
-  else if h₄ : v.val < 3708 then
+  else if h₄ : v.val < 3705 then
     let m := v.val - 3066
-    let b : Fin 1 := ⟨m / 642, by omega⟩
-    let j : Fin 214 := ⟨m % 642 / 3, by omega⟩
+    let b : Fin 1 := ⟨m / 639, by omega⟩
+    let j : Fin 213 := ⟨m % 639 / 3, by omega⟩
     if m % 3 = 0 then .hc b j
     else if m % 3 = 1 then .hh b j
     else .hv b j
-  else if h₅ : v.val < 3709 then .rc
+  else if h₅ : v.val < 3706 then .rc
   else .rh
 
 theorem fin_ofFin_aux (v : Fin N) : (ofFin v).fin = v := by
-  have hv : v.val < 3710 := v.isLt
+  have hv : v.val < 3707 := v.isLt
   rw [Fin.ext_iff]
   simp only [ofFin]
   split_ifs <;> simp only [fin, idx] <;> omega
@@ -74,7 +74,7 @@ def parents : Name → Finset Name
   | .rc => Finset.univ.image rootIn
   | .rh => {.rc}
 
-@[simp] theorem mem_parents_hc (m : Name) (b : Fin 1) (j : Fin 214) :
+@[simp] theorem mem_parents_hc (m : Name) (b : Fin 1) (j : Fin 213) :
     m ∈ parents (.hc b j) ↔ ∃ i, (kid j i).name b = m := by
   simp [parents]
 
@@ -82,7 +82,7 @@ def parents : Name → Finset Name
     m ∈ parents .rc ↔ ∃ r, rootIn r = m := by
   simp [parents]
 
-theorem kid_name_idx_lt (b : Fin 1) (j : Fin 214) (i : Fin 3) :
+theorem kid_name_idx_lt (b : Fin 1) (j : Fin 213) (i : Fin 3) :
     ((kid j i).name b).idx < (Name.hc b j).idx := by
   cases hk : kid j i with
   | c k => simp only [Kid.name, idx]; omega
@@ -282,8 +282,8 @@ theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
   cases n <;> simp only [kindOf, graph_len_fin] <;>
     simp [Name.cost.eq_def, Name.len, blockCost, blockBits]
 
-theorem graph_keygenCost : graph.keygenCost = 1225 := by
-  show ∑ v : Fin N, graph.nodeCost v = 1225
+theorem graph_keygenCost : graph.keygenCost = 1224 := by
+  show ∑ v : Fin N, graph.nodeCost v = 1224
   rw [← Fintype.sum_equiv Name.nameEquiv
     (fun n => graph.nodeCost n.fin) (fun v => graph.nodeCost v) (fun _ => rfl)]
   simp only [graph_nodeCost_fin]
@@ -583,7 +583,7 @@ theorem evaluated_cutOf_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (n
   rw [Evaluated, nameEmbedding_apply, visited_cutOf_iff c hvalid]
 
 theorem evaluated_hh_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
-    (b : Fin 1) (j : Fin 214) : Evaluated (cutOf c) (.hh b j) ↔ j ∈ (c b).1 := by
+    (b : Fin 1) (j : Fin 213) : Evaluated (cutOf c) (.hh b j) ↔ j ∈ (c b).1 := by
   rw [evaluated_cutOf_iff c hvalid]
   exact ⟨fun h => h.1, fun h => ⟨h, not_mem_cutOf_of_len (by simp [Name.len])⟩⟩
 
@@ -616,8 +616,8 @@ theorem evaluated_cost_eq_charge (c : Choice) (hvalid : ∀ b, ShapeValid (c b).
 
 abbrev NameSum :=
   (Fin 1 × Fin 42) ⊕ (Fin 1 × Fin 42 × Fin 24) ⊕ (Fin 1 × Fin 42 × Fin 24) ⊕
-    (Fin 1 × Fin 42 × Fin 24) ⊕ (Fin 1 × Fin 214) ⊕ (Fin 1 × Fin 214) ⊕
-      (Fin 1 × Fin 214) ⊕ Unit ⊕ Unit
+    (Fin 1 × Fin 42 × Fin 24) ⊕ (Fin 1 × Fin 213) ⊕ (Fin 1 × Fin 213) ⊕
+      (Fin 1 × Fin 213) ⊕ Unit ⊕ Unit
 
 def Name.ofSum : NameSum → Name
   | .inl (b, k) => .src b k
@@ -688,7 +688,7 @@ theorem sum_charge (c : Choice) : ∑ n, charge c n = reconstructionCost c := by
       · simp [hk]
     simp only [hinner, localChainCost]
     rw [Finset.sum_ite_mem, Finset.univ_inter]
-  have hhash : ∀ b, (∑ j : Fin 214, (if j ∈ (c b).1 then 1 else 0)) = (c b).1.card := by
+  have hhash : ∀ b, (∑ j : Fin 213, (if j ∈ (c b).1 then 1 else 0)) = (c b).1.card := by
     intro b
     rw [Finset.sum_boole]
     simp
@@ -860,7 +860,7 @@ theorem family_revealBits_pos {A : Finset Name} (hA : A ∈ family) :
 /-- Binding rule: the exclusive (last-slot) kid of every unexpanded hash node
 is outside the needed set, hence neither visited nor disclosed. -/
 theorem binding_rule (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (b : Fin 1)
-    (j : Fin 214) (hj : j ∉ (c b).1) :
+    (j : Fin 213) (hj : j ∉ (c b).1) :
     ¬ graph.Visited (fins (cutOf c)) ((kid j 2).name b).fin ∧
       (kid j 2).name b ∉ cutOf c := by
   have hnv : ¬ graph.Visited (fins (cutOf c)) ((kid j 2).name b).fin := by

@@ -56,7 +56,7 @@ theorem scheme_reconstructCost (i : Fin M) :
     scheme.graph.reconstructCost (scheme.sets i) ≤ 85 :=
   family_reconstructCost (setsName_mem i)
 
-theorem scheme_keygenCost : scheme.graph.keygenCost = 1225 := graph_keygenCost
+theorem scheme_keygenCost : scheme.graph.keygenCost = 1224 := graph_keygenCost
 
 abbrev typed : TypedScheme := scheme.toAlgorithm
 
