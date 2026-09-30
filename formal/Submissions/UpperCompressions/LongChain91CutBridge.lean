@@ -2,11 +2,11 @@ import Submissions.UpperCompressions.ProofBundle03
 import Submissions.UpperCompressions.LongChain91Geometry
 
 /-!
-# Concrete DAG for the cost-87 fused shared-DAG construction
+# Concrete DAG for the cost-86 fused shared-DAG construction
 
 This module turns the names of `LongChain91Geometry` into the `Dag.Graph`
-consumed by the generic weighted scheme: three blocks of fourteen length-18
-chains and twenty ternary hashes with shared inputs, under a fifteen-word root
+consumed by the generic weighted scheme: one block of forty-two length-24
+chains and 213 ternary hashes with shared inputs, under an eleven-word root
 hash.
 -/
 
@@ -27,26 +27,26 @@ namespace Name
 
 /-- Inverse of the compact topological numbering. -/
 def ofFin (v : Fin N) : Name :=
-  if h₀ : v.val < 42 then .src ⟨v.val / 14, by omega⟩ ⟨v.val % 14, by omega⟩
-  else if h₁ : v.val < 2310 then
+  if h₀ : v.val < 42 then .src ⟨v.val / 42, by omega⟩ ⟨v.val % 42, by omega⟩
+  else if h₁ : v.val < 3066 then
     let m := v.val - 42
-    let t : Fin 18 := ⟨m / 126, by omega⟩
+    let t : Fin 24 := ⟨m / 126, by omega⟩
     let r := m % 126
-    if h₂ : r < 42 then .ci ⟨r / 14, by omega⟩ ⟨r % 14, by omega⟩ t
-    else if h₃ : r < 84 then .ch ⟨(r - 42) / 14, by omega⟩ ⟨(r - 42) % 14, by omega⟩ t
-    else .cv ⟨(r - 84) / 14, by omega⟩ ⟨(r - 84) % 14, by omega⟩ t
-  else if h₄ : v.val < 2490 then
-    let m := v.val - 2310
-    let b : Fin 3 := ⟨m / 60, by omega⟩
-    let j : Fin 20 := ⟨m % 60 / 3, by omega⟩
+    if h₂ : r < 42 then .ci ⟨r / 42, by omega⟩ ⟨r % 42, by omega⟩ t
+    else if h₃ : r < 84 then .ch ⟨(r - 42) / 42, by omega⟩ ⟨(r - 42) % 42, by omega⟩ t
+    else .cv ⟨(r - 84) / 42, by omega⟩ ⟨(r - 84) % 42, by omega⟩ t
+  else if h₄ : v.val < 3705 then
+    let m := v.val - 3066
+    let b : Fin 1 := ⟨m / 639, by omega⟩
+    let j : Fin 213 := ⟨m % 639 / 3, by omega⟩
     if m % 3 = 0 then .hc b j
     else if m % 3 = 1 then .hh b j
     else .hv b j
-  else if h₅ : v.val < 2491 then .rc
+  else if h₅ : v.val < 3706 then .rc
   else .rh
 
 theorem fin_ofFin_aux (v : Fin N) : (ofFin v).fin = v := by
-  have hv : v.val < 2492 := v.isLt
+  have hv : v.val < 3707 := v.isLt
   rw [Fin.ext_iff]
   simp only [ofFin]
   split_ifs <;> simp only [fin, idx] <;> omega
@@ -74,7 +74,7 @@ def parents : Name → Finset Name
   | .rc => Finset.univ.image rootIn
   | .rh => {.rc}
 
-@[simp] theorem mem_parents_hc (m : Name) (b : Fin 3) (j : Fin 20) :
+@[simp] theorem mem_parents_hc (m : Name) (b : Fin 1) (j : Fin 213) :
     m ∈ parents (.hc b j) ↔ ∃ i, (kid j i).name b = m := by
   simp [parents]
 
@@ -82,7 +82,7 @@ def parents : Name → Finset Name
     m ∈ parents .rc ↔ ∃ r, rootIn r = m := by
   simp [parents]
 
-theorem kid_name_idx_lt (b : Fin 3) (j : Fin 20) (i : Fin 3) :
+theorem kid_name_idx_lt (b : Fin 1) (j : Fin 213) (i : Fin 3) :
     ((kid j i).name b).idx < (Name.hc b j).idx := by
   cases hk : kid j i with
   | c k => simp only [Kid.name, idx]; omega
@@ -241,7 +241,7 @@ def kindOf (v : Fin N) : (n : Name) → Name.ofFin v = n → NodeKind N lenF v
 
 theorem kindOf_isHash (v : Fin N) (n : Name) (h : Name.ofFin v = n) :
     (kindOf v n h).IsHash ↔ n.cost ≠ 0 := by
-  cases n <;> simp [kindOf, NodeKind.IsHash, Name.cost]
+  cases n <;> simp [kindOf, NodeKind.IsHash, Name.cost.eq_def]
 
 theorem kindOf_isSource (v : Fin N) (n : Name) (h : Name.ofFin v = n) :
     (kindOf v n h).IsSource ↔ ∃ b k, n = .src b k := by
@@ -280,10 +280,10 @@ theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
   unfold Graph.nodeCost
   rw [graph_kind_fin]
   cases n <;> simp only [kindOf, graph_len_fin] <;>
-    simp [Name.cost, Name.len, blockCost, blockBits]
+    simp [Name.cost.eq_def, Name.len, blockCost, blockBits]
 
-theorem graph_keygenCost : graph.keygenCost = 820 := by
-  show ∑ v : Fin N, graph.nodeCost v = 820
+theorem graph_keygenCost : graph.keygenCost = 1224 := by
+  show ∑ v : Fin N, graph.nodeCost v = 1224
   rw [← Fintype.sum_equiv Name.nameEquiv
     (fun n => graph.nodeCost n.fin) (fun v => graph.nodeCost v) (fun _ => rfl)]
   simp only [graph_nodeCost_fin]
@@ -292,13 +292,13 @@ theorem graph_keygenCost : graph.keygenCost = 820 := by
 end OptimalOTS.WeightedConstruction.LongChain91
 
 /-!
-# Concrete cut bridge for the cost-87 fused shared-DAG graph
+# Concrete cut bridge for the cost-86 fused shared-DAG graph
 
 This module connects the combinatorial cuts of `LongChain91Geometry` to the
 protected `Dag.Graph` interface.  The visited set of a supported cut is
 characterized by name (`VisN`): a block's needed hash values, its expanded
 triples, and each needed chain from its disclosure position upward.  From it we
-read off the exact reconstruction cost 87, the disclosure size, injectivity of
+read off the exact reconstruction cost 85, the disclosure size, injectivity of
 the codec, the binding rule, and the equal-cost cross-cut witness.
 -/
 
@@ -397,15 +397,15 @@ def VisN (c : Choice) : Name → Prop
   | .rc => True
   | .rh => True
 
-theorem cv_eq_chainNode (b : Fin 3) (k : Fin 14) (t : Fin 18) :
+theorem cv_eq_chainNode (b : Fin 1) (k : Fin 42) (t : Fin 24) :
     Name.cv b k t = chainNode b k t.succ := by
   simp [chainNode]
 
-theorem src_eq_chainNode (b : Fin 3) (k : Fin 14) :
+theorem src_eq_chainNode (b : Fin 1) (k : Fin 42) :
     Name.src b k = chainNode b k 0 := by
   simp [chainNode]
 
-theorem visN_chainNode (c : Choice) (b : Fin 3) (k : Fin 14) (p : Fin 19) :
+theorem visN_chainNode (c : Choice) (b : Fin 1) (k : Fin 42) (p : Fin 25) :
     VisN c (chainNode b k p) ↔ k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ p.val := by
   unfold chainNode
   split_ifs with hp
@@ -414,7 +414,7 @@ theorem visN_chainNode (c : Choice) (b : Fin 3) (k : Fin 14) (p : Fin 19) :
   · simp only [VisN]
     constructor <;> rintro ⟨h1, h2⟩ <;> exact ⟨h1, by omega⟩
 
-theorem visN_kid_name (c : Choice) (b : Fin 3) (x : Kid) :
+theorem visN_kid_name (c : Choice) (b : Fin 1) (x : Kid) :
     VisN c (x.name b) ↔ Needed (c b).1 x := by
   cases x with
   | c k =>
@@ -424,18 +424,18 @@ theorem visN_kid_name (c : Choice) (b : Fin 3) (x : Kid) :
       · exact fun h => h.1
       · intro h
         refine ⟨h, ?_⟩
-        have h17 : ((17 : Fin 18) : ℕ) = 17 := rfl
+        have h17 : ((23 : Fin 24) : ℕ) = 23 := rfl
         omega
   | h j => simp [Kid.name, VisN]
 
 theorem not_mem_cutOf_of_len {c : Choice} {n : Name} (h : n.len ≠ 129) : n ∉ cutOf c :=
   fun hn => h (cutOf_values c n hn)
 
-theorem cv_mem_cutOf (c : Choice) (b : Fin 3) (k : Fin 14) (t : Fin 18) :
+theorem cv_mem_cutOf (c : Choice) (b : Fin 1) (k : Fin 42) (t : Fin 24) :
     Name.cv b k t ∈ cutOf c ↔ k ∈ neededC (c b).1 ∧ ((c b).2 k).val = t.val + 1 := by
   rw [cv_eq_chainNode, chainNode_mem_cutOf, Fin.ext_iff, Fin.val_succ]
 
-theorem prev_succ (b : Fin 3) (k : Fin 14) (t : Fin 18) (ht : t.val < 17) :
+theorem prev_succ (b : Fin 1) (k : Fin 42) (t : Fin 24) (ht : t.val < 23) :
     prev b k ⟨t.val + 1, by omega⟩ = Name.cv b k t := by
   simp [prev]
 
@@ -498,7 +498,7 @@ theorem visN_supported (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (v : Na
       have := hv.2
       omega
   | cv b k t =>
-      by_cases ht : t.val = 17
+      by_cases ht : t.val = 23
       · have hn := (mem_neededC _ _).1 hv.1
         rcases hn with ⟨s, h⟩ | ⟨e, he, i, hi⟩
         · cases h
@@ -523,7 +523,7 @@ theorem visN_supported (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (v : Na
       rcases (mem_neededH _ _).1 hv with ⟨s, h⟩ | ⟨e, he, i, hi⟩
       · cases h
         exact ⟨.rc, trivial, not_mem_cutOf_of_len (by simp [Name.len]),
-          (mem_parents_rc _).2 ⟨⟨5 * b.val + s.val, by omega⟩, rootIn_mk b s⟩⟩
+          (mem_parents_rc _).2 ⟨⟨11 * b.val + s.val, by omega⟩, rootIn_mk b s⟩⟩
       · refine ⟨.hc b e, he, not_mem_cutOf_of_len (hc_len_ne b e), ?_⟩
         rw [mem_parents_hc]
         exact ⟨i, by rw [hi]; rfl⟩
@@ -583,12 +583,12 @@ theorem evaluated_cutOf_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (n
   rw [Evaluated, nameEmbedding_apply, visited_cutOf_iff c hvalid]
 
 theorem evaluated_hh_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
-    (b : Fin 3) (j : Fin 20) : Evaluated (cutOf c) (.hh b j) ↔ j ∈ (c b).1 := by
+    (b : Fin 1) (j : Fin 213) : Evaluated (cutOf c) (.hh b j) ↔ j ∈ (c b).1 := by
   rw [evaluated_cutOf_iff c hvalid]
   exact ⟨fun h => h.1, fun h => ⟨h, not_mem_cutOf_of_len (by simp [Name.len])⟩⟩
 
 theorem evaluated_ch_iff (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
-    (b : Fin 3) (k : Fin 14) (t : Fin 18) : Evaluated (cutOf c) (.ch b k t) ↔
+    (b : Fin 1) (k : Fin 42) (t : Fin 24) : Evaluated (cutOf c) (.ch b k t) ↔
       k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val := by
   rw [evaluated_cutOf_iff c hvalid]
   exact ⟨fun h => h.1, fun h => ⟨h, not_mem_cutOf_of_len (by simp [Name.len])⟩⟩
@@ -601,23 +601,23 @@ theorem evaluated_rh (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) :
 def charge (c : Choice) : Name → ℕ
   | .ch b k t => if k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val then 1 else 0
   | .hh b j => if j ∈ (c b).1 then 1 else 0
-  | .rh => 4
+  | .rh => 3
   | _ => 0
 
 theorem evaluated_cost_eq_charge (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
     (n : Name) : (if Evaluated (cutOf c) n then n.cost else 0) = charge c n := by
   cases n with
-  | ch b k t => simp only [evaluated_ch_iff c hvalid, charge, Name.cost]
-  | hh b j => simp only [evaluated_hh_iff c hvalid, charge, Name.cost]
-  | rh => simp [evaluated_rh c hvalid, charge, Name.cost]
-  | src _ _ | ci _ _ _ | cv _ _ _ | hc _ _ | hv _ _ | rc => simp [charge, Name.cost]
+  | ch b k t => simp only [evaluated_ch_iff c hvalid, charge, Name.cost.eq_def]
+  | hh b j => simp only [evaluated_hh_iff c hvalid, charge, Name.cost.eq_def]
+  | rh => simp [evaluated_rh c hvalid, charge, Name.cost.eq_def]
+  | src _ _ | ci _ _ _ | cv _ _ _ | hc _ _ | hv _ _ | rc => simp [charge, Name.cost.eq_def]
 
 /-! Splitting sums over `Name` by constructor. -/
 
 abbrev NameSum :=
-  (Fin 3 × Fin 14) ⊕ (Fin 3 × Fin 14 × Fin 18) ⊕ (Fin 3 × Fin 14 × Fin 18) ⊕
-    (Fin 3 × Fin 14 × Fin 18) ⊕ (Fin 3 × Fin 20) ⊕ (Fin 3 × Fin 20) ⊕
-      (Fin 3 × Fin 20) ⊕ Unit ⊕ Unit
+  (Fin 1 × Fin 42) ⊕ (Fin 1 × Fin 42 × Fin 24) ⊕ (Fin 1 × Fin 42 × Fin 24) ⊕
+    (Fin 1 × Fin 42 × Fin 24) ⊕ (Fin 1 × Fin 213) ⊕ (Fin 1 × Fin 213) ⊕
+      (Fin 1 × Fin 213) ⊕ Unit ⊕ Unit
 
 def Name.ofSum : NameSum → Name
   | .inl (b, k) => .src b k
@@ -661,10 +661,10 @@ theorem sum_names {M : Type} [AddCommMonoid M] (f : Name → M) :
     Name.ofSum, add_assoc]
 
 theorem sum_fin18_ge (v : ℕ) :
-    ∑ t : Fin 18, (if v ≤ t.val then 1 else 0) = 18 - v := by
-  rw [Fin.sum_univ_eq_sum_range (fun t => if v ≤ t then 1 else 0) 18,
+    ∑ t : Fin 24, (if v ≤ t.val then 1 else 0) = 24 - v := by
+  rw [Fin.sum_univ_eq_sum_range (fun t => if v ≤ t then 1 else 0) 24,
     ← Finset.card_filter]
-  have h : (Finset.range 18).filter (fun t => v ≤ t) = Finset.Ico v 18 := by
+  have h : (Finset.range 24).filter (fun t => v ≤ t) = Finset.Ico v 24 := by
     ext t
     simp only [Finset.mem_filter, Finset.mem_range, Finset.mem_Ico]
     omega
@@ -673,14 +673,14 @@ theorem sum_fin18_ge (v : ℕ) :
 theorem sum_charge (c : Choice) : ∑ n, charge c n = reconstructionCost c := by
   rw [sum_names]
   simp only [charge, Finset.sum_const_zero, zero_add, add_zero]
-  have hchain : ∀ b, (∑ k : Fin 14, ∑ t : Fin 18,
+  have hchain : ∀ b, (∑ k : Fin 42, ∑ t : Fin 24,
       (if k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val then 1 else 0)) =
         localChainCost (c b) := by
     intro b
-    have hinner : ∀ k : Fin 14,
-        (∑ t : Fin 18,
+    have hinner : ∀ k : Fin 42,
+        (∑ t : Fin 24,
           (if k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val then 1 else 0)) =
-          if k ∈ neededC (c b).1 then 18 - ((c b).2 k).val else 0 := by
+          if k ∈ neededC (c b).1 then 24 - ((c b).2 k).val else 0 := by
       intro k
       by_cases hk : k ∈ neededC (c b).1
       · simp only [hk, true_and, if_true]
@@ -688,7 +688,7 @@ theorem sum_charge (c : Choice) : ∑ n, charge c n = reconstructionCost c := by
       · simp [hk]
     simp only [hinner, localChainCost]
     rw [Finset.sum_ite_mem, Finset.univ_inter]
-  have hhash : ∀ b, (∑ j : Fin 20, (if j ∈ (c b).1 then 1 else 0)) = (c b).1.card := by
+  have hhash : ∀ b, (∑ j : Fin 213, (if j ∈ (c b).1 then 1 else 0)) = (c b).1.card := by
     intro b
     rw [Finset.sum_boole]
     simp
@@ -714,7 +714,7 @@ theorem reconstructCost_cutOf_eq (c : Choice) (hvalid : ∀ b, ShapeValid (c b).
   exact Finset.sum_congr rfl fun n _ => evaluated_cost_eq_charge c hvalid n
 
 theorem reconstructCost_supported {c : Choice} (hc : c ∈ supportedChoices) :
-    graph.reconstructCost (fins (cutOf c)) = 87 :=
+    graph.reconstructCost (fins (cutOf c)) = 85 :=
   (reconstructCost_cutOf_eq c (shapeValid_of_supported hc)).trans (reconstructionCost_eq hc)
 
 /-! ## Disclosure size -/
@@ -804,7 +804,7 @@ theorem IsCut.visited_of_mem {A : Finset Name} (hA : IsCut A) {n : Name} (hn : n
   exact visited_of_mem_cutOf c (shapeValid_of_supported hc) hn
 
 /-- A visited source is disclosed. -/
-theorem IsCut.src_mem_of_visited {A : Finset Name} (hA : IsCut A) {b : Fin 3} {k : Fin 14}
+theorem IsCut.src_mem_of_visited {A : Finset Name} (hA : IsCut A) {b : Fin 1} {k : Fin 42}
     (hv : graph.Visited (fins A) (Name.src b k).fin) : Name.src b k ∈ A := by
   obtain ⟨c, hc, rfl⟩ := hA
   have h := (visited_cutOf_iff c (shapeValid_of_supported hc) _).1 hv
@@ -829,12 +829,12 @@ theorem family_no_hidden_source {A : Finset Name} (hA : A ∈ family) :
   exact hvA ((mem_fins_fin _ _).2 ((isCut_of_mem_family hA).src_mem_of_visited hv))
 
 theorem family_reconstructCost_eq {A : Finset Name} (hA : A ∈ family) :
-    graph.reconstructCost (fins A) = 87 := by
+    graph.reconstructCost (fins A) = 85 := by
   obtain ⟨c, hc, rfl⟩ := exists_choice_of_mem_family hA
   exact reconstructCost_supported hc
 
 theorem family_reconstructCost {A : Finset Name} (hA : A ∈ family) :
-    graph.reconstructCost (fins A) ≤ 87 :=
+    graph.reconstructCost (fins A) ≤ 85 :=
   (family_reconstructCost_eq hA).le
 
 theorem family_disclosure_and_nonce {A : Finset Name} (hA : A ∈ family) :
@@ -859,8 +859,8 @@ theorem family_revealBits_pos {A : Finset Name} (hA : A ∈ family) :
 
 /-- Binding rule: the exclusive (last-slot) kid of every unexpanded hash node
 is outside the needed set, hence neither visited nor disclosed. -/
-theorem binding_rule (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (b : Fin 3)
-    (j : Fin 20) (hj : j ∉ (c b).1) :
+theorem binding_rule (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (b : Fin 1)
+    (j : Fin 213) (hj : j ∉ (c b).1) :
     ¬ graph.Visited (fins (cutOf c)) ((kid j 2).name b).fin ∧
       (kid j 2).name b ∉ cutOf c := by
   have hnv : ¬ graph.Visited (fins (cutOf c)) ((kid j 2).name b).fin := by
@@ -914,14 +914,14 @@ theorem exists_hidden_of_ne {c d : Choice} (hc : c ∈ supportedChoices)
       intro b
       ext j
       rw [← evaluated_hh_iff d hvd, ← evaluated_hh_iff c hvc]
-      exact hiff _ (by simp [Name.cost])
+      exact hiff _ (by simp [Name.cost.eq_def])
     have hpos : ∀ b k, (d b).2 k = (c b).2 k := by
       intro b k
       by_cases hk : k ∈ neededC (c b).1
       · have hkd : k ∈ neededC (d b).1 := by rwa [hE b]
-        have ht : ∀ t : Fin 18, ((d b).2 k).val ≤ t.val ↔ ((c b).2 k).val ≤ t.val := by
+        have ht : ∀ t : Fin 24, ((d b).2 k).val ≤ t.val ↔ ((c b).2 k).val ≤ t.val := by
           intro t
-          have h := hiff (.ch b k t) (by simp [Name.cost])
+          have h := hiff (.ch b k t) (by simp [Name.cost.eq_def])
           rw [evaluated_ch_iff d hvd, evaluated_ch_iff c hvc] at h
           constructor
           · intro hle
@@ -961,6 +961,6 @@ theorem exists_hidden_of_ne {c d : Choice} (hc : c ∈ supportedChoices)
       · rw [visited_cutOf_iff c hvc, prev_eq_chainNode, visN_chainNode]
         simpa using hcn
   | rh => exact absurd (evaluated_rh c hvc) huc
-  | src _ _ | ci _ _ _ | cv _ _ _ | hc _ _ | hv _ _ | rc => simp [Name.cost] at hu
+  | src _ _ | ci _ _ _ | cv _ _ _ | hc _ _ | hv _ _ | rc => simp [Name.cost.eq_def] at hu
 
 end OptimalOTS.WeightedConstruction.LongChain91

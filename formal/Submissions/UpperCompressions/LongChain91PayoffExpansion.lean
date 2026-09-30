@@ -3,7 +3,7 @@ import Submissions.UpperCompressions.LongChain91Continuation
 import Submissions.UpperCompressions.ProofBundle11
 
 /-!
-# Actual payoff expansion for the cost-88 long-chain construction
+# Actual payoff expansion for the cost-87 long-chain construction
 
 This module keeps the public choose clock, post-sign reserve, gated replay
 hazard, and completion error on the same adaptive execution.
@@ -11,7 +11,7 @@ hazard, and completion error on the same adaptive execution.
 
 section
 
-/-! The actual adaptive choose program cannot spend the 820 keygen cost or any
+/-! The actual adaptive choose program cannot spend the 1224 keygen cost or any
 of the all-L signing reserve, even on a raw oracle-answer path. -/
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
 noncomputable section
@@ -31,14 +31,14 @@ theorem afterChoose_reserve (pk : PublicKey) (ξ : Rec) (x : Message × A.State)
 
 theorem choose_reserved_budget {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey) :
-    signBudget ≤ B-820 ∧ CostAtMost (A.choose pk) (B-820-signBudget) := by
+    signBudget ≤ B-1224 ∧ CostAtMost (A.choose pk) (B-1224-signBudget) := by
   obtain ⟨ξ,hξ⟩ := fiber_nonempty pk
   have hpk := pkOf_of_subset_fiberA (Finset.Subset.refl _) ξ hξ
   have h := (keygen_remaining A hB).2 ξ
-  have hh : CostAtMost (A.choose pk >>= afterChoose A pk (graph.evalRec ξ)) (B-820) := by
+  have hh : CostAtMost (A.choose pk >>= afterChoose A pk (graph.evalRec ξ)) (B-1224) := by
     simpa only [afterKeygen,hpk] using h
   exact costAtMost_prefix_reserved (A.choose pk) (afterChoose A pk (graph.evalRec ξ)) signBudget
-    (fun x b hb => afterChoose_reserve A pk ξ x b hb) (B-820) hh
+    (fun x b hb => afterChoose_reserve A pk ξ x b hb) (B-1224) hh
 
 end OptimalOTS.WeightedConstruction.LongChain91InitialGame
 end
@@ -47,7 +47,7 @@ end
 section
 
 /-! The actual first-stage spent budget and actual supported post-sign reserve
-share the public experiment budget after 820 keygen and all-L signing. -/
+share the public experiment budget after 1224 keygen and all-L signing. -/
 open OracleSpec OracleComp OracleComp.EvalDist ENNReal
 noncomputable section
 open scoped Classical BigOperators
@@ -61,15 +61,15 @@ variable (A : scheme.toAlgorithm.Adversary)
 theorem choose_spent_post_remaining_le {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey) :
     expectedCharge (fun t => queryCost t) (A.choose pk) ∅ +
-      E (runRemaining (A.choose pk) ∅ (B-820))
-        (fun r => ((r.2.2-signBudget:ℕ):ℝ≥0∞)) ≤ (B-820-signBudget:ℕ) := by
+      E (runRemaining (A.choose pk) ∅ (B-1224))
+        (fun r => ((r.2.2-signBudget:ℕ):ℝ≥0∞)) ≤ (B-1224-signBudget:ℕ) := by
   obtain ⟨ξ,hξ⟩ := fiber_nonempty pk
   have hpk := pkOf_of_subset_fiberA (Finset.Subset.refl _) ξ hξ
   have h := (keygen_remaining A hB).2 ξ
-  have hh : CostAtMost (A.choose pk >>= afterChoose A pk (graph.evalRec ξ)) (B-820) := by
+  have hh : CostAtMost (A.choose pk >>= afterChoose A pk (graph.evalRec ξ)) (B-1224) := by
     simpa only [afterKeygen,hpk] using h
   exact expected_spent_reserved_remaining_le (A.choose pk) (afterChoose A pk (graph.evalRec ξ)) signBudget
-    (fun x b hb => afterChoose_reserve A pk ξ x b hb) ∅ (B-820) hh
+    (fun x b hb => afterChoose_reserve A pk ξ x b hb) ∅ (B-1224) hh
 
 theorem sum_fiber_weights : (∑ pk : PublicKey, sumW (fiberA pk)) = 1 := by
   unfold sumW fiberA
@@ -154,7 +154,7 @@ def preAuth (A : scheme.toAlgorithm.Adversary) : ℝ≥0∞ :=
 
 def weightedClock (A : scheme.toAlgorithm.Adversary) (B : ℕ)
     (F : PublicKey → ((Message × A.State) × Cache × ℕ) → ℝ≥0∞) : ℝ≥0∞ :=
-  ∑ pk : PublicKey, sumW (fiberA pk)*E (runRemaining (A.choose pk) ∅ (B-820)) (F pk)
+  ∑ pk : PublicKey, sumW (fiberA pk)*E (runRemaining (A.choose pk) ∅ (B-1224)) (F pk)
 
 def gatedHazard (A : scheme.toAlgorithm.Adversary)
     (good : PublicKey → ((Message × A.State) × Cache × ℕ) → Prop)
@@ -207,10 +207,10 @@ theorem weightedClock_const_mul (A : scheme.toAlgorithm.Adversary) (B : ℕ) (a 
 
 theorem weightedClock_tableError_le (A : scheme.toAlgorithm.Adversary) (B : ℕ) :
     weightedClock A B (tableError A) ≤ (2:ℝ≥0∞)⁻¹^760 := by
-  have htail (pk : PublicKey) : E (runRemaining (A.choose pk) ∅ (B-820)) (tableError A pk) ≤
+  have htail (pk : PublicKey) : E (runRemaining (A.choose pk) ∅ (B-1224)) (tableError A pk) ≤
       (2:ℝ≥0∞)⁻¹^760 := by
     have h := LongChain91CachedRow.tableFailure_average (A.choose pk) (fun x => x.1) ∅ (fun _ _ => rfl)
-    rw [← runRemaining_project (A.choose pk) ∅ (B-820),E_map] at h
+    rw [← runRemaining_project (A.choose pk) ∅ (B-1224),E_map] at h
     exact h
   calc
     _ ≤ ∑ pk : PublicKey, sumW (fiberA pk)*((2:ℝ≥0∞)⁻¹^760) :=
@@ -230,7 +230,7 @@ theorem global_actual_payoff_expanded (A : scheme.toAlgorithm.Adversary) {B : �
       ENNReal.ofReal postRate*weightedClock A B (postRemaining A)+
       weightedClock A B (badGate A good)+(1+B)*((2:ℝ≥0∞)⁻¹^760) := by
   have h := global_actual_game_payoff_gated A hB good
-  have hp : (∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-820))
+  have hp : (∑ pk : PublicKey, E (runRemaining (A.choose pk) ∅ (B-1224))
       (gatedContinuationPayoff A good pk)) ≤
       weightedClock A B (fun pk r => gatedHazard A good pk r+
         ENNReal.ofReal postRate*postRemaining A pk r+badGate A good pk r+(1+B)*tableError A pk r) := by

@@ -2,7 +2,7 @@ import Submissions.UpperCompressions.LongChain91Scheme
 import Submissions.UpperCompressions.ProofBundle13
 
 /-!
-# Security endpoints for the cost-88 long-chain construction
+# Security endpoints for the cost-87 long-chain construction
 
 This module isolates the final, exact security closure from the two
 construction-specific actual-game estimates.  In particular, it proves the
@@ -24,7 +24,7 @@ open LongChain91 WeightedReference
 /-- Every typed adversarial experiment pays the concrete graph key-generation
 cost before running the adversary. -/
 theorem experiment_budget (A : typed.Adversary) (B : ℕ)
-    (hB : CostAtMost (typed.experiment A) B) : 820 ≤ B := by
+    (hB : CostAtMost (typed.experiment A) B) : 1224 ≤ B := by
   have h := GraphKeygenBridge.costAtMost_keygen_bind
     scheme.graph scheme.publicKey _ hB
   rw [scheme_keygenCost] at h
@@ -110,7 +110,7 @@ theorem typed_secure_of_bounds
     (small : SmallActualGameBound)
     (large : LargeActualGameBound) : typed.Secure := by
   intro A B hB
-  have hbudget : 820 ≤ B := experiment_budget A B hB
+  have hbudget : 1224 ≤ B := experiment_budget A B hB
   have hpos : 0 < (B : ℝ) := by
     exact_mod_cast (show 0 < B by omega)
   have hrate : 0 < kappa * (B : ℝ) :=
