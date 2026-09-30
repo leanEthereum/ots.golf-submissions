@@ -64,6 +64,22 @@ Reproduction scripts and audit results are in the workspace evidence directory
 contract `8b140a99afa5b3e0bc785ab202c7b0a9c1f7fe7c` and Lean 4.33.1. The host's lack
 of Landlock prevents official sandbox verification; no hosted verdict is claimed.
 
+### Hosted build repair
+
+The first submitted head, `d5e34ac`, was rejected on PR #69 because
+`MixedHelpers.landing_refines` used an undeclared assignment `x`. The local
+helper had invoked Lean directly with its default `autoImplicit` setting;
+the pinned Lake project sets both `autoImplicit` and `relaxedAutoImplicit`
+to `false`. The checksum goal in the bot's short report was a secondary
+error after elaboration failed at the missing binder.
+
+Declare `{x : graph.Assignment}` explicitly. This changes the proof's
+elaboration, with no change to the image, scheme or 310-cycle claim. For
+reproduction, build `Submissions.UpperRiscvHint.Solution` through the pinned
+Lake project after removing this submission's prior build artifacts, then
+export and replay that fresh build. Source fingerprints and kernel replay
+alone do not check that a source elaborates under the project's options.
+
 ## Next steps
 
 The two one-cycle savings compose because the skipped pairs stop at chain 12.

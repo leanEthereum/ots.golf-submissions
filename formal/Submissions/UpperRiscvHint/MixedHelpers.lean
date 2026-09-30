@@ -79,7 +79,8 @@ theorem afterLeft_redirected (index : ChainIndex) (q : Fin 16)
   · rw [remaining_right]
 
 /-- Both entry forms reach the same recoded hash block. Redirects execute exactly JAL + ADDI. -/
-theorem landing_refines (index : ChainIndex) (view : List Bool) (pk : PublicKey) (q : Fin 16)
+theorem landing_refines {x : graph.Assignment}
+    (index : ChainIndex) (view : List Bool) (pk : PublicKey) (q : Fin 16)
     (K : OracleComp Spec (Option Bool)) (c rest : ℕ)
     (continuation : ∀ (u : MachineState),
       Prepared (credit := credit + W (landCorrection index q)) index view pk u x (leftChain q) →
@@ -117,7 +118,7 @@ theorem landing_refines (index : ChainIndex) (view : List Bool) (pk : PublicKey)
       simp only [copyCode, List.append_assoc, List.getElem?_append, hlen, ↓reduceIte]
       simp only [hashRow, List.getElem?_map, List.getElem?_range,
         show 15-a.val+lead q < 2^fineWidth q by simpa [hashRow] using hlen,
-        ↓reduceIte, Option.map_some]
+        Option.map_some]
     have addr : copyStart q d+4*(15-a.val+lead q) = landing0 q+4*lead q-dispatch index q := by
       simpa [fineWidth, rawA, rawD] using (pair_landing index q q.isLt).symm
     have ipc : 4096+4*helperEntry q a d = landing0 q+4*lead q-dispatch index q := by
