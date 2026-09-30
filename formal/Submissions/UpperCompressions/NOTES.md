@@ -1,114 +1,83 @@
-# Candidate 87: larger shared DAGs with the record's signing schedule
+# Candidate 86: one shared graph with the existing signing schedule
 
-This submission proves a worst-case bound of **87 compressions** for the
-generic upper-bound track, including every rejecting input and every oracle-answer
-path. It extends the verified 88-compression construction by replacing each of its
-three 20-node hash blocks with a searched 35-node block. The 160-tier signing
-schedule, 86-bit nonce, 129-bit disclosed values, and security target are unchanged.
+The candidate proves a worst-case verification bound of **86 compressions**,
+including rejecting inputs. Local proof checks pass; resource measurement and
+hosted verification remain pending.
+It uses a single graph across 42 independent chains, replacing the three
+separate blocks in the checked 87 construction. The 160-tier signing schedule,
+86-bit nonce, 129-bit values and security target are unchanged.
 
-## Construction
+## Construction and exact count
 
-Each of three identical blocks contains fourteen independent length-18 chains
-`c0` through `c13` and the following thirty-five ternary hash nodes. An `h` input
-refers to the low 129 bits of that hash's output; a `c` input is a chain endpoint.
-Each node's exclusive child is in its last (low) input slot.
+There are 42 chains of length 24 and 214 hash nodes. Eleven top values feed
+the root. The exact ordered inputs appear in `LongChain91Geometry.lean`.
+Unary and binary nodes are padded by repeating an existing input, giving
+403-bit internal queries with their 16-bit tags. Each node's last input is
+private to that consuming node; the same value may occur in another slot of
+that node. Chain queries have 145 bits. Both query types cost one compression.
 
-| Node | Children, in input order | Exclusive child |
-|---|---|---|
-| h0 | c2, c3, c8 | c8 |
-| h1 | c4, c0, h0 | h0 |
-| h2 | c0, c2, c1 | c1 |
-| h3 | c3, h1, h2 | h2 |
-| h4 | c3, c0, c7 | c7 |
-| h5 | c0, h1, c6 | c6 |
-| h6 | c4, c3, h5 | h5 |
-| h7 | c2, h1, c13 | c13 |
-| h8 | c2, c0, h7 | h7 |
-| h9 | c0, c3, c9 | c9 |
-| h10 | c3, c0, c10 | c10 |
-| h11 | h1, c3, h10 | h10 |
-| h12 | c4, c2, h11 | h11 |
-| h13 | h6, c2, c12 | c12 |
-| h14 | c4, h1, h13 | h13 |
-| h15 | c0, c3, h14 | h14 |
-| h16 | h6, h15, h12 | h12 |
-| h17 | h15, c3, h8 | h8 |
-| h18 | c4, h6, h17 | h17 |
-| h19 | h16, h18, h9 | h9 |
-| h20 | h6, h1, h19 | h19 |
-| h21 | h15, c2, h20 | h20 |
-| h22 | c0, c3, c11 | c11 |
-| h23 | h1, c2, h22 | h22 |
-| h24 | h6, h15, h4 | h4 |
-| h25 | h18, h16, h24 | h24 |
-| h26 | c2, h1, h25 | h25 |
-| h27 | h6, c4, c5 | c5 |
-| h28 | h15, c2, h27 | h27 |
-| h29 | h1, c0, h28 | h28 |
-| h30 | h16, h18, h29 | h29 |
-| h31 | h15, h6, h3 | h3 |
-| h32 | h18, h16, h31 | h31 |
-| h33 | h6, h15, h23 | h23 |
-| h34 | h18, h16, h33 | h33 |
+The root input contains `16 + 11*129 = 1435` bits and costs three compressions.
+All tags are distinct. The public key is the low 128 bits of the root output.
+Key generation costs `42*24 + 214 + 3 = 1225` compressions. There are 3710 named
+nodes, including concatenations and truncations.
 
-The five block tops, in root-slot order, are `h32, h21, h30, h34, h26`.
-They have no user within the block. The root hashes a 16-bit tag and the fifteen
-block tops: `16 + 15 * 129 = 1951` bits, costing four compressions. Chain queries
-are 145 bits and ternary queries are 403 bits, each costing one compression.
-All node tags are distinct 16-bit values. The public key is the root's low 128 bits.
+A cut discloses each needed chain once and each needed unexpanded hash once.
+Expanded hashes are evaluated once and shared by all their consumers. The
+supported family fixes chain-plus-internal cost 82, giving reconstruction
+cost 85 after the root. Its exact class count is
 
-Key generation costs `3 * (14 * 18 + 35) + 4 = 865` compressions. The graph has
-2627 named nodes including sources, concatenations, hashes, and truncations.
+`676745322862130083544291330002029`.
 
-## Exact cut count and verification cost
-
-There are exactly **2,800,958** valid expansion sets per block. Each discloses at
-most fourteen 129-bit values. A needed chain is disclosed once at a position in
-`0..18`, even when several parents use it. A needed unexpanded hash is disclosed;
-an expanded hash is evaluated once and shared by every parent that needs it.
-
-The supported family has graph reconstruction cost exactly **86**:
-four root compressions plus a total of 82 chain and internal-node compressions
-across the three blocks. Its exact cardinality is
-
-`678547358015097091041046109088624`.
-
-This exceeds the existing schedule's required
+The existing schedule needs
 
 `676013856769711926075368867014708`
 
-classes by about **0.3748%**. The scheme selects an injectively indexed subfamily
-of exactly the required size; the security schedule's probabilities are unchanged.
+classes. The candidate has **0.108203%** more and selects an injectively
+indexed subfamily of exactly the required size.
 
-`LongChain91Geometry.lean` proves the graph conditions, bounds disclosures, and
-counts this family. The weighted frontier recurrence merges equivalent states
-and reaches at most 255 states at a level. The kernel evaluates a base-`2^320`
-generating number and extracts digit 82 of its cube. The larger digit base bounds
-the entire tuple population and prevents carries from invalidating coefficient
-extraction. A separate base-`2^36` generating number proves the fourteen-word bound.
+The disclosure bound has a structural proof. Unexpanded hashes have distinct
+private children, and those children are unneeded. Their injection into the
+unneeded values bounds the number of needed values minus expanded hashes by
+42. Thus every cut discloses at most 42 words. A signature uses at most
+`86 + 42*129 = 5504` bits. The 342-bit message-and-nonce index query costs one
+compression, giving a total of `1 + 82 + 3 = 86`.
 
-A signature occupies at most `86 + 42 * 129 = 5504` bits. The message/nonce query
-is 342 bits, distinct from every graph query length, and costs one compression.
-Thus the total verification bound is **1 + 86 = 87**. The raw wire adapter also
-rejects oversized inputs and preserves strong unforgeability.
+The exact cost counter uses the same weighted recurrence as the cut-counting
+proof. Private-child paths inject canonical choices into a product of 42
+finite intervals. A path with `a` hashes has at most `a + 25` codes: its
+expanded prefix length plus its walked chain suffix. The proved population
+bound is `95265665839134290490590838458312294400000000000000000000000000`.
+Radix `2^206` exceeds this bound, so coefficient extraction has no carries.
+The computation is reduced modulo `radix^83` before extracting digit 82.
 
-## Search and independent arithmetic checks
+The certificate memoizes individual recurrence states, skips hash
+variables whose need bit is absent, and proves each numerical step with Lean's
+ordinary kernel. It does not use a native-evaluation axiom. The graph has
+83063 distinct nontrivial recurrence states. Checked balanced lookup tables
+supply the graph masks and their prefix unions. The complete construction,
+admissibility, security, and cost proofs pass a clean Lean build.
 
-The search first reproduced the published 88-compression count exactly. At a
-total cost of 87, the record's original graph supplies only about 67.26% of the
-required classes. Extending its chains even to saturation raises this only to
-67.49%. Rewiring the original twenty-node blocks improved this to about 82.5%
-in the tested runs, still short of the target.
+Proof representation matters for this computation. The pinned toolchain's
+default natural-number hash uses only the low 64 bits. The tactic's state
+cache therefore mixes all four words of its hash mask. Its large polynomial
+values all have constant coefficient one, so their low bits coincide too.
+Each coefficient is represented by a literal with a distinct temporary low
+word, followed by a right shift that removes that word. State masks use their
+four-word hash in the same way. Lean's kernel checks the resulting arithmetic
+equalities, and a proved congruence lemma aligns the initial mask with the
+goal. These temporary words occur only in the certificate; the signature
+scheme is unchanged. This representation also improves the distribution of
+hashes in the exporter's expression table.
 
-Allowing additional ternary nodes found a forty-four-node block with about
-101.50% of the required capacity. Greedy removal of exclusive nodes reduced it
-to the present thirty-five-node block while preserving the needed count.
+The original list counter reached 5272 frontier states and 340847 state visits
+on this graph. Earlier graphs and list-counter implementations exceeded the
+memory limit. The memoized certificate addresses that proof-engineering
+obstruction without changing the signing schedule or security assumptions.
 
-The numerical search used a saddle-point estimate to rank large graphs. Its
-estimates were never used as proof certificates. Exact integer frontier evaluation
-checked the candidate, and a separate exhaustive enumeration of all 2,800,958
-expansion sets, followed by integer polynomial convolution, reproduced its
-cardinality and word bound. Lean then checks its own exact finite certificates.
+Independent research checks reproduce coefficients for scores 84 through 88
+using GMP coefficient arrays and sliding-window chain convolutions. The search
+used floating-point estimates only for ranking; those estimates overstate the
+final capacity slightly and are not proof certificates.
 
 ## Exact 160-tier schedule
 
@@ -174,7 +143,7 @@ cross-cut authentication event.
 
 The 16-bit tag names at most one node, whose hidden kid is a free uniform
 129-bit coordinate, so a hidden hit has probability at most `2^-129`. The root
-binding rate `2 * 2^-129` is below `2^-129` times the root's block cost 4, so
+binding rate `2 * 2^-129` is below `2^-129` times the root's block cost 3, so
 every query is still covered at `2^-128` per compression.
 
 The replay proof keeps the actual shared memoized cache. It separately tracks
@@ -222,17 +191,37 @@ The final proof controls the excess score directly at `1/1000`, producing the
 The completion-table good event cannot be assumed pointwise after an adaptive
 transcript. Its failure is averaged through the actual preceding computation.
 
-## Validation
+## Further search
 
-The development build and a clean build pass on the pinned Lean 4.33.1 contract.
-The clean build completes 8,851 jobs in 104.298 seconds. The required endpoints
-are `scheme`, `admissible`, `secure`, and `cost : scheme.VerifyCostAtMost 87`.
+A private-child path decomposition gives the proved injective encoding used
+above. Adding a cost-sum identity would bound a cost-r layer by
+`binomial(r + 41, 41)`. At r = 81 this is
+`509210537125015289581387223531062`, below the unchanged schedule's target.
+The layer bound is not formalized here and is specific to this graph family.
+It suggests exploring a smaller root, a different family, or a different
+signing schedule when pursuing 85.
 
-The exact exported challenge statements and primitive definitions match. Exported
-axiom checking passes with only `propext`, `Quot.sound`, and `Classical.choice`.
-All 29,705 exported solution declarations replay successfully in a fresh Lean
-kernel environment: 109.522 seconds for replay, about 132.2 seconds for the entire
-parse/compare/axiom/replay stage. Source policy and protected-file checks also pass.
+A first experiment sampled 100 ways to turn six of the eleven tops into two
+new ternary nodes, leaving seven root inputs and a two-compression root.
+The best tested merge has exactly `328174229109783911312517805967435`
+classes at total score 85, only 48.5455% of the required count. These simple
+root merges are insufficient; a seven-top graph would need further redesign.
+
+## Validation status
+
+The required exports are `scheme`, `admissible`, `secure`, and
+`cost : scheme.VerifyCostAtMost 86`. The complete candidate passes a clean
+Lean build in 379.547 seconds, with 10.319 GiB sampled peak PSS. All four
+exports use only `propext`, `Quot.sound`, and `Classical.choice` in their axiom
+closures. Solution export completed in 444.226 seconds. Exact exported
+statement and primitive comparison pass, and all 112830 solution declarations
+pass fresh Lean kernel replay. The initial interpreted check took 544.421
+seconds, including 346.753 seconds of replay. Its pipeline total exceeds the
+20-minute limit. A compiled local checker, matching the official comparator's
+execution mode, is being measured before drawing a resource conclusion.
+
+The previously checked 87 submission remains on its own branch. Its clean
+build and fresh kernel replay do not certify this new candidate.
 
 Reproduce the official check from the repository root:
 
@@ -240,28 +229,18 @@ Reproduce the official check from the repository root:
 python3 .contract/verifier/verify.py upper-compressions --source .
 ```
 
-Local numerical evidence, build logs, and standalone comparator/kernel replay
-are kept outside the admitted proof root. The local official sandbox refuses
-to start because this host's kernel does not enable Landlock; no sandbox check
-or protected definition was weakened. Public verified status requires the hosted
-verifier's durable verdict.
-
-## What to try next
-
-An 86-compression construction under the unchanged schedule needs at least
-`676013856769711926075368867014708` cuts at graph reconstruction cost 85.
-This submitted graph has only `450123217072147955044066685848890` such cuts,
-about 66.58% of the requirement. The searches here do not prove optimality.
-Different numbers of block tops, differently sized blocks, and sharing between
-blocks remain candidates for further work. Any change must retain the exclusive
-hidden-child argument, or replace it with a new authentication proof.
+Research artifacts and numerical cross-checks are kept outside the admitted
+root. This environment's official verifier fails closed because Landlock is
+unavailable; no sandbox requirement was changed. A public record requires the
+hosted verifier's durable verdict.
 
 ## Credits
 
-- The 88-compression record by `lucemans`, assisted by Claude Opus 5.5, supplies
-  the shared-DAG proof architecture: PR #58, checked commit
+- The 88-compression record by `lucemans`, assisted by Claude Opus 5.5,
+  supplies the shared-DAG proof architecture: PR #58, checked commit
   `ee2e551ad841bc25a2daa2be643061162cffe809`.
-- The 91-compression record, PR #19, supplies the chain-18 compact schedule,
-  collision-aware replay, actual-cache security, and equal-cost cross-cut argument.
-- This 87-compression graph search, exact checking, proof adaptation, and validation
-  were developed with Codex.
+- The 91-compression record, PR #19, supplies the compact schedule,
+  collision-aware replay, actual-cache security and equal-cost cut argument.
+- The 87 and subsequent 86 graph research and proof adaptations were developed
+  with Codex. The global sharing search and the counter reductions are recorded
+  in the accompanying research directory.

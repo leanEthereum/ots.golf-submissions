@@ -121,21 +121,21 @@ theorem choose_budget {B : ℕ}
 
 theorem choose_count_other_post_le {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) (pk : PublicKey) :
-    E (runRemaining (A.choose pk) ∅ (B - 865)) (countClock A pk) +
+    E (runRemaining (A.choose pk) ∅ (B - 1225)) (countClock A pk) +
       expectedCharge (otherPaid (isIndexLength (msgBits + 86)))
         (A.choose pk) ∅ +
-      E (runRemaining (A.choose pk) ∅ (B - 865))
+      E (runRemaining (A.choose pk) ∅ (B - 1225))
         (postRemaining A pk) ≤ B := by
   have hd := distinct_other_le_expected_paid (A.choose pk) ∅
     (fun _ _ => rfl)
-  rw [← runRemaining_project (A.choose pk) ∅ (B - 865), E_map] at hd
+  rw [← runRemaining_project (A.choose pk) ∅ (B - 1225), E_map] at hd
   have hh := (add_le_add hd (le_refl
-    (E (runRemaining (A.choose pk) ∅ (B - 865))
+    (E (runRemaining (A.choose pk) ∅ (B - 1225))
       (postRemaining A pk)))).trans
       (choose_spent_post_remaining_le A hB pk)
   exact hh.trans (by
     exact_mod_cast
-      ((Nat.sub_le (B - 865) signBudget).trans (Nat.sub_le B 865)))
+      ((Nat.sub_le (B - 1225) signBudget).trans (Nat.sub_le B 1225)))
 
 theorem global_count_other_post_le {B : ℕ}
     (hB : CostAtMost (scheme.toAlgorithm.experiment A) B) :
@@ -160,7 +160,7 @@ theorem large_bad_clock_le {B : ℕ}
       4 * LongChain91LargeTerminal.eps244 +
         (2 : ℝ≥0∞)⁻¹ ^ 334 := by
   have htail (pk : PublicKey) :
-      E (runRemaining (A.choose pk) ∅ (B - 865))
+      E (runRemaining (A.choose pk) ∅ (B - 1225))
           (badGate A (largeGood A B) pk) ≤
         4 * LongChain91LargeTerminal.eps244 +
           (2 : ℝ≥0∞)⁻¹ ^ 334 := by
@@ -172,7 +172,7 @@ theorem large_bad_clock_le {B : ℕ}
           then 1 else 0) =
         Pr[fun p => ¬ LongChain91LargeTerminal.LargeGood B p.2 |
           run (A.choose pk) ∅] := expectedValue_ite_one _ _
-    rw [← he, ← runRemaining_project (A.choose pk) ∅ (B - 865), E_map] at h
+    rw [← he, ← runRemaining_project (A.choose pk) ∅ (B - 1225), E_map] at h
     convert h using 1
     congr 1
     funext r

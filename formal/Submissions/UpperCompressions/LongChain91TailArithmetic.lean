@@ -17,7 +17,7 @@ open ENNReal
 
 abbrev kappa : ℝ := LongChain91BudgetArithmetic.kappa
 
-theorem completion_exception_margin (B : ℝ) (hB : 865 ≤ B)
+theorem completion_exception_margin (B : ℝ) (hB : 1225 ≤ B)
     (hcap : B ≤ (2 : ℝ)^127) :
     ((2 : ℝ)^334)⁻¹ + (1 + B) * ((2 : ℝ)^760)⁻¹ ≤
       kappa * B / 1000 := by
@@ -37,22 +37,22 @@ theorem completion_exception_margin (B : ℝ) (hB : 865 ≤ B)
     field_simp
   rw [he, mul_comm _ (1 + B)] at hterm
   have hsmall : 2 * ((2 : ℝ)^256)⁻¹ ≤
-      kappa * 865 / 1000 := by
+      kappa * 1225 / 1000 := by
     norm_num [kappa, LongChain91BudgetArithmetic.kappa,
       Chain18Compact.kappa]
   have hfinal := mul_le_mul_of_nonneg_left hB
     (show 0 ≤ kappa / 1000 by
       exact div_nonneg LongChain91BudgetArithmetic.kappa_pos.le (by norm_num))
-  have hbudget : kappa * 865 / 1000 ≤ kappa * B / 1000 := by
+  have hbudget : kappa * 1225 / 1000 ≤ kappa * B / 1000 := by
     nlinarith
   calc
     _ ≤ ((2 : ℝ)^256)⁻¹ + ((2 : ℝ)^256)⁻¹ :=
       add_le_add hocc hterm
     _ = 2 * ((2 : ℝ)^256)⁻¹ := by ring
-    _ ≤ kappa * 865 / 1000 := hsmall
+    _ ≤ kappa * 1225 / 1000 := hsmall
     _ ≤ kappa * B / 1000 := hbudget
 
-theorem completion_exception_margin_ennreal (B : ℕ) (hB : 865 ≤ B)
+theorem completion_exception_margin_ennreal (B : ℕ) (hB : 1225 ≤ B)
     (hcap : (B : ℝ) ≤ (2 : ℝ)^127) :
     (2 : ℝ≥0∞)⁻¹^334 +
         (1 + (B : ℝ≥0∞)) * (2 : ℝ≥0∞)⁻¹^760 ≤

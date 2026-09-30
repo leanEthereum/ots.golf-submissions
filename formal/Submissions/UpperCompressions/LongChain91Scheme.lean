@@ -3,10 +3,10 @@ import Submissions.UpperCompressions.LongChain91Codec
 import Submissions.UpperCompressions.ProofBundle04
 
 /-!
-# The concrete cost-87 long-chain scheme
+# The concrete cost-86 long-chain scheme
 
 This module selects the schedule's classes injectively from the certified
-cost-86 cut family, instantiates the generic 86-bit weighted signer, and
+cost-85 cut family, instantiates the generic 86-bit weighted signer, and
 discharges the honest-party resource and availability obligations.
 -/
 
@@ -53,14 +53,14 @@ def scheme : WeightedScheme.Scheme M where
     norm_num [keygenBudget]
 
 theorem scheme_reconstructCost (i : Fin M) :
-    scheme.graph.reconstructCost (scheme.sets i) ≤ 86 :=
+    scheme.graph.reconstructCost (scheme.sets i) ≤ 85 :=
   family_reconstructCost (setsName_mem i)
 
-theorem scheme_keygenCost : scheme.graph.keygenCost = 865 := graph_keygenCost
+theorem scheme_keygenCost : scheme.graph.keygenCost = 1225 := graph_keygenCost
 
 abbrev typed : TypedScheme := scheme.toAlgorithm
 
-theorem typed_cost : typed.VerifyCostAtMost 87 :=
+theorem typed_cost : typed.VerifyCostAtMost 86 :=
   scheme.verifyCost scheme_reconstructCost
 
 theorem typed_correct : typed.Correct := scheme.correct
@@ -110,8 +110,8 @@ theorem wire_canonical (pk : PublicKey) (m : Message) (bits : List Bool)
 
 def wireScheme : OracleAlgorithm.Scheme := WireAdapter.scheme typed decodeWire
 
-theorem wire_cost : wireScheme.VerifyCostAtMost 87 :=
-  WireAdapter.verifyCost typed decodeWire 87 typed_cost
+theorem wire_cost : wireScheme.VerifyCostAtMost 86 :=
+  WireAdapter.verifyCost typed decodeWire 86 typed_cost
 
 /-! ## Honest signing availability
 

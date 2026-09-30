@@ -130,7 +130,7 @@ theorem graph_kind_det {n : Name} (hc : n.cost = 0)
   all_goals first
     | exact (hs _ _ rfl).elim
     | exact ⟨_, _, rfl⟩
-    | (exfalso; simp [Name.cost] at hc)
+    | (exfalso; simp [Name.cost.eq_def] at hc)
 
 section Recon
 
@@ -518,7 +518,7 @@ theorem authPotential_charge_of (hbase : SignedHitsCharge)
 
 /-! ## Coordinate resampling -/
 
-def updSrc (xi : Rec) (b : Fin 3) (k : Fin 14) (z : BitVec 129) : Rec :=
+def updSrc (xi : Rec) (b : Fin 1) (k : Fin 42) (z : BitVec 129) : Rec :=
   (Function.update xi.1 (Name.src b k).fin
     (z.cast (graph_len_fin (Name.src b k)).symm), xi.2)
 
@@ -534,29 +534,29 @@ theorem updHash_snd_ne (xi : Rec) (s : Name) (z : BitVec 256)
   simp only [updHash]
   exact Function.update_of_ne (fun e => h (Name.fin_injective e)) _ _
 
-theorem updSrc_snd (xi : Rec) (b : Fin 3) (k : Fin 14) (z : BitVec 129) :
+theorem updSrc_snd (xi : Rec) (b : Fin 1) (k : Fin 42) (z : BitVec 129) :
     (updSrc xi b k z).2 = xi.2 := rfl
 
-theorem updSrc_fst_self (xi : Rec) (b : Fin 3) (k : Fin 14) (z : BitVec 129) :
+theorem updSrc_fst_self (xi : Rec) (b : Fin 1) (k : Fin 42) (z : BitVec 129) :
     (updSrc xi b k z).1 (Name.src b k).fin =
       z.cast (graph_len_fin (Name.src b k)).symm :=
   Function.update_self _ _ _
 
-theorem val_updSrc_self (xi : Rec) (b : Fin 3) (k : Fin 14) (z : BitVec 129) :
+theorem val_updSrc_self (xi : Rec) (b : Fin 1) (k : Fin 42) (z : BitVec 129) :
     val (updSrc xi b k z) (Name.src b k) = z := by
   rw [val_src, updSrc_fst_self]
   exact cast_cast_eq _ _ _
 
 theorem coordOf_ne_rh (h : Name) (hh : h.cost ≠ 0) : coordOf h ≠ Name.rh := by
-  cases h <;> simp [Name.cost] at hh
-  · simp only [coordOf]
+  cases h <;> simp [Name.cost.eq_def] at hh
+  · simp only [coordOf.eq_def]
     split_ifs <;> simp
   · rename_i b j
-    simp only [coordOf]
+    simp only [coordOf.eq_def]
     cases kid j 2 <;> simp [Kid.coord]
-  · simp [coordOf]
+  · simp [coordOf.eq_def]
 
-theorem hashOf_ne_src {v h : Name} (hh : hashOf v = some h) (b : Fin 3) (k : Fin 14) :
+theorem hashOf_ne_src {v h : Name} (hh : hashOf v = some h) (b : Fin 1) (k : Fin 42) :
     h ≠ Name.src b k := by
   cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
     subst hh <;> intro e <;> nomatch e
@@ -569,9 +569,9 @@ theorem exclOf_cases {h p : Name} (hp : hashParent h = some p) :
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp
   · rename_i b k t
     by_cases ht : t.val = 0
-    · exact Or.inl ⟨b, k, by simp [exclOf, prev, ht], by simp [coordOf, ht]⟩
+    · exact Or.inl ⟨b, k, by simp [exclOf, prev, ht], by simp [coordOf.eq_def, ht]⟩
     · refine Or.inr ?_
-      simp only [exclOf, coordOf, dif_neg ht]
+      simp only [exclOf, coordOf.eq_def, dif_neg ht]
       exact hashOf_prev b k t ht
   · exact Or.inr (hashOf_kidName _ _)
   · exact Or.inr rfl
@@ -605,7 +605,7 @@ theorem card_updHash_input_le {h p : Name}
   rfl
 
 theorem card_updSrc_input_le {h p : Name}
-    (hp : hashParent h = some p) (xi : Rec) {b : Fin 3} {k : Fin 14}
+    (hp : hashParent h = some p) (xi : Rec) {b : Fin 1} {k : Fin 42}
     (hs : coordOf h = Name.src b k) (u : BitVec p.len) :
     (Finset.univ.filter fun z : BitVec 129 =>
       val (updSrc xi b k z) p = u).card ≤ 1 := by
@@ -629,7 +629,7 @@ def ClosedAt (S : Finset Rec) (s : Name) : Prop :=
   | .src b k => ∀ xi ∈ S, ∀ z : BitVec 129, updSrc xi b k z ∈ S
   | _ => ∀ xi ∈ S, ∀ z : BitVec 256, updHash xi s z ∈ S
 
-theorem closedAt_src (S : Finset Rec) (b : Fin 3) (k : Fin 14) :
+theorem closedAt_src (S : Finset Rec) (b : Fin 1) (k : Fin 42) :
     ClosedAt S (Name.src b k) ↔
       ∀ xi ∈ S, ∀ z : BitVec 129, updSrc xi b k z ∈ S := by
   rfl
@@ -656,7 +656,7 @@ theorem updHash_updHash (xi : Rec) (s : Name) (z : BitVec 256) :
     · exact (Function.update_of_ne hv _ _).trans
         (Function.update_of_ne hv _ _))
 
-theorem updSrc_updSrc (xi : Rec) (b : Fin 3) (k : Fin 14) (z : BitVec 129) :
+theorem updSrc_updSrc (xi : Rec) (b : Fin 1) (k : Fin 42) (z : BitVec 129) :
     updSrc (updSrc xi b k z) b k
       ((xi.1 (Name.src b k).fin).cast (graph_len_fin _)) = xi :=
   Prod.ext (funext fun v => by
@@ -671,7 +671,7 @@ theorem updSrc_updSrc (xi : Rec) (b : Fin 3) (k : Fin 14) (z : BitVec 129) :
     · exact (Function.update_of_ne hv _ _).trans
         (Function.update_of_ne hv _ _)) rfl
 
-theorem fst_updSrc_self (xi : Rec) (b : Fin 3) (k : Fin 14) (z : BitVec 129) :
+theorem fst_updSrc_self (xi : Rec) (b : Fin 1) (k : Fin 42) (z : BitVec 129) :
     ((updSrc xi b k z).1 (Name.src b k).fin).cast (graph_len_fin _) = z := by
   rw [updSrc_fst_self]
   exact bv_cast_cast_game _ _ _
@@ -717,7 +717,7 @@ theorem sum_updHash (S : Finset Rec) (s : Name)
   rw [← Finset.mul_sum, ← mul_assoc,
     ENNReal.inv_mul_cancel hc0 hct, one_mul]
 
-theorem sum_updSrc (S : Finset Rec) (b : Fin 3) (k : Fin 14)
+theorem sum_updSrc (S : Finset Rec) (b : Fin 1) (k : Fin 42)
     (hS : ∀ xi ∈ S, ∀ z : BitVec 129, updSrc xi b k z ∈ S)
     (f : Rec → ℝ≥0∞) :
     ∑ xi ∈ S, f xi = ∑ xi ∈ S,
@@ -814,7 +814,7 @@ theorem pkOf_updHash (xi : Rec) {s : Name} (hs : s ≠ Name.rh)
     (z : BitVec 256) : pkOf (updHash xi s z) = pkOf xi := by
   exact congrArg lowPk (updHash_snd_ne xi s z (Ne.symm hs))
 
-theorem pkOf_updSrc (xi : Rec) (b : Fin 3) (k : Fin 14) (z : BitVec 129) :
+theorem pkOf_updSrc (xi : Rec) (b : Fin 1) (k : Fin 42) (z : BitVec 129) :
     pkOf (updSrc xi b k z) = pkOf xi := by
   unfold pkOf
   rw [updSrc_snd]
@@ -904,7 +904,7 @@ theorem val_hash_congr {xi xi' : Rec} {h p : Name} (hp : hashParent h = some p)
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
     simp only [kindOf, NodeKind.value, e]
 
-theorem val_src_congr {xi xi' : Rec} {b : Fin 3} {k : Fin 14}
+theorem val_src_congr {xi xi' : Rec} {b : Fin 1} {k : Fin 42}
     (e : xi.1 (Name.src b k).fin = xi'.1 (Name.src b k).fin) :
     val xi (Name.src b k) = val xi' (Name.src b k) := by
   rw [val_src, val_src, e]
@@ -966,7 +966,7 @@ theorem val_updHash_of_not_mem_deps (xi : Rec) (s : Name)
       exact absurd hh (by simp)
     exact hin n (len_value_of_hashOf hh) (not_mem_deps_other hc h)
 
-theorem val_updSrc_of_not_mem_deps (xi : Rec) (b : Fin 3) (k : Fin 14)
+theorem val_updSrc_of_not_mem_deps (xi : Rec) (b : Fin 1) (k : Fin 42)
     (z : BitVec 129) (n : Name) (h : Name.src b k ∉ deps n) :
     val (updSrc xi b k z) n = val xi n := by
   have hin : ∀ e : Name, e.len = 129 → Name.src b k ≠ valueCoord e →
@@ -1055,7 +1055,7 @@ theorem revealed_updHash {A : Finset Name} (hA : IsCut A)
       (not_mem_deps_of_hiddenCoord hA hs (Or.inr haA)))
 
 theorem revealed_updSrc {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {b : Fin 3} {k : Fin 14} (hs : HiddenCoord A (Name.src b k))
+    (xi : Rec) {b : Fin 1} {k : Fin 42} (hs : HiddenCoord A (Name.src b k))
     (z : BitVec 129) : revealed A (updSrc xi b k z) = revealed A xi := by
   unfold revealed
   apply encode_congr_game
@@ -1077,7 +1077,7 @@ theorem pointOf_updHash {A : Finset Name} (hA : IsCut A)
       (evaluated_or_mem_of_mem_parents he (mem_parents_hashParent hp)))]
 
 theorem pointOf_updSrc {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {b : Fin 3} {k : Fin 14} (hs : HiddenCoord A (Name.src b k))
+    (xi : Rec) {b : Fin 1} {k : Fin 42} (hs : HiddenCoord A (Name.src b k))
     (z : BitVec 129) {h p : Name} (hp : hashParent h = some p)
     (he : Evaluated A h) :
     pointOf (updSrc xi b k z) h p = pointOf xi h p := by
@@ -1120,7 +1120,7 @@ theorem fExp_updHash {A : Finset Name} (hA : IsCut A)
   · rw [if_neg (fun h' => hq (hcond.1 h')), if_neg hq]
 
 theorem fExp_updSrc {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {b : Fin 3} {k : Fin 14} (hs : HiddenCoord A (Name.src b k))
+    (xi : Rec) {b : Fin 1} {k : Fin 42} (hs : HiddenCoord A (Name.src b k))
     (z : BitVec 129) :
     fExp (some A) (updSrc xi b k z) = fExp (some A) xi := by
   funext q
@@ -1152,7 +1152,7 @@ theorem dataOf_updHash {A : Finset Name} (hA : IsCut A)
     revealed_updHash hA _ hs, fExp_updHash hA _ hs]
 
 theorem dataOf_updSrc {A : Finset Name} (hA : IsCut A)
-    (xi : Rec) {b : Fin 3} {k : Fin 14} (hs : HiddenCoord A (Name.src b k))
+    (xi : Rec) {b : Fin 1} {k : Fin 42} (hs : HiddenCoord A (Name.src b k))
     (z : BitVec 129) : dataOf A (updSrc xi b k z) = dataOf A xi := by
   simp only [dataOf, pkOf_updSrc, revealed_updSrc hA _ hs,
     fExp_updSrc hA _ hs]
