@@ -1,9 +1,8 @@
 # Candidate 86: one shared graph with the existing signing schedule
 
 The candidate proves a worst-case verification bound of **86 compressions**,
-including rejecting inputs. The complete proof passes local build, export,
-and fresh-kernel checks within the measured development resource allowance.
-A hosted verdict is still required.
+including rejecting inputs. This revision reduces the numerical certificate
+after the preceding 206-bit certificate timed out in hosted verification.
 It uses a single graph across 42 independent chains, replacing the three
 separate blocks in the checked 87 construction. The 160-tier signing schedule,
 86-bit nonce, 129-bit values and security target are unchanged.
@@ -46,10 +45,17 @@ compression, giving a total of `1 + 82 + 3 = 86`.
 The exact cost counter uses the same weighted recurrence as the cut-counting
 proof. Private-child paths inject canonical choices into a product of 42
 finite intervals. A path with `a` hashes has at most `a + 25` codes: its
-expanded prefix length plus its walked chain suffix. The proved population
-bound is `92378827480372645324209297898969497600000000000000000000000000`.
-Radix `2^206` exceeds this bound, so coefficient extraction has no carries.
-The computation is reduced modulo `radix^83` before extracting digit 82.
+expanded prefix length plus its walked chain suffix. The sum of the codes
+is proved equal to the reconstruction cost within the graph. Adding one slack
+coordinate embeds all choices of cost at most 82 into 43-coordinate natural
+vectors summing to 82. The stars-and-bars theorem bounds their number by
+`binomial(124, 82) = 2255075235839353425289000561351846 < 2^111`.
+
+Radix `2^111` therefore suffices for digit 82. A separate proved truncation
+lemma discards higher-cost terms modulo `radix^83`; those terms cannot carry
+into a lower digit. The previous radix `2^206` bounded the entire population,
+including choices far above the cost of interest. The new bound leaves the
+graph, supported choices, exact class count, and signature scheme unchanged.
 
 The certificate memoizes individual recurrence states, skips hash
 variables whose need bit is absent, and proves each numerical step with Lean's
@@ -194,11 +200,12 @@ transcript. Its failure is averaged through the actual preceding computation.
 
 ## Further search
 
-A private-child path decomposition gives the proved injective encoding used
-above. Adding a cost-sum identity would bound a cost-r layer by
+A private-child path decomposition gives the proved injective encoding and
+cost-sum identity used above. The cumulative cost bound is formalized. The
+corresponding exact-cost counting argument would bound a cost-r layer by
 `binomial(r + 41, 41)`. At r = 81 this is
 `509210537125015289581387223531062`, below the unchanged schedule's target.
-The layer bound is not formalized here and is specific to this graph family.
+That sharper exact-layer bound is not formalized here and is specific to this graph family.
 It suggests exploring a smaller root, a different family, or a different
 signing schedule when pursuing 85.
 
@@ -211,26 +218,33 @@ root merges are insufficient; a seven-top graph would need further redesign.
 ## Validation status
 
 The required exports are `scheme`, `admissible`, `secure`, and
-`cost : scheme.VerifyCostAtMost 86`. The complete 213-node candidate passes
+`cost : scheme.VerifyCostAtMost 86`. The revised 111-bit certificate passes
 a clean Lean 4.33.1 build, exact exported statement and primitive comparison,
-axiom checks, and fresh replay of all 102447 solution declarations. The only
-axioms in the four export closures are `propext`, `Quot.sound`, and
+axiom checks, and fresh replay of all 103046 solution declarations.
+The only axioms in the four export closures are `propext`, `Quot.sound`, and
 `Classical.choice`.
 
-The clean build takes 241.506 seconds; solution export takes 375.098 seconds.
-The compiled export-check stage takes 411.741 seconds, including 282.813
+The clean build takes 253.885 seconds; solution export takes 137.577 seconds.
+The compiled export-check stage takes 373.174 seconds, including 319.889
 seconds of fresh kernel replay. Together with the separate axiom audit and
-challenge export, the five profiled stages total **1035.277 seconds**
-(17 minutes 15.3 seconds), with **10.416 GiB sampled peak process-tree PSS**
-and 56081 diagnostic bytes. Export data files are artifacts, not diagnostic
-output. These measurements are local development evidence; they do not
-certify the hosted verifier's cgroup accounting or isolation.
+challenge export, the five profiled stages total **771.836 seconds**
+(12 minutes 51.8 seconds), with **10.190 GiB sampled peak process-tree PSS**
+and 56078 diagnostic bytes. The solution export is
+463,323,926 bytes. Export data files are artifacts,
+not diagnostic output. These measurements are local development evidence;
+they do not certify the hosted verifier's resource accounting or isolation.
 
-The 214-node predecessor also passes every local proof check, but its
-compiled pipeline takes 1306.666 seconds, exceeding the 20-minute allowance.
-The selected graph has a slightly higher class count and about 12.5% fewer
-recurrence states, resolving that local runtime failure. The previously
-checked 87 submission remains on its own branch.
+The preceding 206-bit certificate at commit
+`677eefda473dce32fe9b177dc5d248a77c447fe7` passed the local proof checks in
+1035.277 seconds, but [hosted verification](https://ots.golf/submissions/9e912d333a0e90fc99818c29df9c10b7)
+timed out after 1230.6 seconds. Its build had completed successfully. The
+revised certificate reduces export time from 375.098 to 137.577 seconds
+and total measured local time by 25.4%.
+The graph and score remain unchanged. A new durable hosted verdict is required.
+
+The 214-node predecessor took 1306.666 seconds locally. The selected 213-node
+graph has a slightly higher class count and about 12.5% fewer recurrence
+states. The previously checked 87 submission remains on its own branch.
 
 Reproduce the official check from the repository root:
 
