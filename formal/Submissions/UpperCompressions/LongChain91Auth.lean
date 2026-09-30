@@ -2,7 +2,7 @@ import Submissions.UpperCompressions.LongChain91Scheme
 import Submissions.UpperCompressions.ProofBundle05
 
 /-!
-# Authentication bridge for the cost-88 shared-DAG construction
+# Authentication bridge for the cost-87 shared-DAG construction
 
 This module identifies the concrete key-generation oracle points of the
 shared-DAG graph, splits them into exposed and hidden points after signing,
@@ -133,8 +133,8 @@ def hashOf : Name → Option Name
   | _ => none
 
 /-- The hash node behind a kid's 129-bit value in block `b`. -/
-def Kid.coord (b : Fin 3) : Kid → Name
-  | .c k => .ch b k 17
+def Kid.coord (b : Fin 1) : Kid → Name
+  | .c k => .ch b k 23
   | .h j => .hh b j
 
 /-- The exclusive kid of a hash node: the 129-bit value in the low slot of
@@ -142,19 +142,19 @@ its input, read by no other node. -/
 def exclOf : Name → Name
   | .ch b k t => prev b k t
   | .hh b j => (kid j 2).name b
-  | .rh => .hv 2 (top 4)
+  | .rh => .hv 0 (top 10)
   | n => n
 
 /-- The independent record coordinate behind the exclusive kid. -/
 def coordOf : Name → Name
   | .ch b k t => if h : t.val = 0 then .src b k else .ch b k ⟨t.val - 1, by omega⟩
   | .hh b j => (kid j 2).coord b
-  | .rh => .hh 2 (top 4)
+  | .rh => .hh 0 (top 10)
   | n => n
 
 theorem hashParent_isSome_iff (h : Name) :
     (hashParent h).isSome ↔ h.cost ≠ 0 := by
-  cases h <;> simp [hashParent, Name.cost]
+  cases h <;> simp [hashParent, Name.cost.eq_def]
 
 theorem cost_ne_zero_of_hashParent {h p : Name} (hp : hashParent h = some p) :
     h.cost ≠ 0 :=
@@ -196,10 +196,10 @@ theorem len_of_hashParent {h p : Name} (hp : hashParent h = some p) :
     h.len = 256 := by
   cases h <;> simp_all [hashParent, Name.len]
 
-/-- Chain steps, ternary nodes and the fifteen-input root read 145, 403 and
-1951 bits. -/
+/-- Chain steps, ternary nodes and the eleven-input root read 145, 403 and
+1435 bits. -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 145 ∨ p.len = 403 ∨ p.len = 1951 := by
+    p.len = 145 ∨ p.len = 403 ∨ p.len = 1435 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
     subst hp <;> simp [Name.len]
 
@@ -220,7 +220,7 @@ theorem cost_hashParent {h p : Name} (hp : hashParent h = some p) :
     subst hp <;> rfl
 
 theorem hashParent_ne_src {h p : Name} (hp : hashParent h = some p)
-    (b : Fin 3) (k : Fin 14) : p ≠ .src b k := by
+    (b : Fin 1) (k : Fin 42) : p ≠ .src b k := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
     subst hp <;> intro e <;> nomatch e
 
@@ -286,11 +286,11 @@ theorem len_eq_129_cases {n : Name} (hn : n.len = 129) :
   · exact absurd hn (len_hashParent_ne_129 hp)
   · exact Or.inr hv
 
-theorem hashOf_kidName (κ : Kid) (b : Fin 3) :
+theorem hashOf_kidName (κ : Kid) (b : Fin 1) :
     hashOf (κ.name b) = some (κ.coord b) := by
   cases κ <;> rfl
 
-theorem hashOf_prev (b : Fin 3) (k : Fin 14) (t : Fin 18) (ht : t.val ≠ 0) :
+theorem hashOf_prev (b : Fin 1) (k : Fin 42) (t : Fin 24) (ht : t.val ≠ 0) :
     hashOf (prev b k t) = some (.ch b k ⟨t.val - 1, by omega⟩) := by
   simp [prev, ht, hashOf]
 
@@ -306,12 +306,12 @@ theorem mem_parents_value {v h n : Name} (hh : hashOf v = some h) :
   cases v <;> simp only [hashOf, Option.some.injEq, reduceCtorEq] at hh <;>
     subst hh <;> simp [parents]
 
-theorem not_mem_parents_src (b : Fin 3) (k : Fin 14) (n : Name) :
+theorem not_mem_parents_src (b : Fin 1) (k : Fin 42) (n : Name) :
     n ∉ parents (.src b k) := by
   simp [parents]
 
 /-- A root input is the value of a block top. -/
-theorem rootIn_eq_kidName (r : Fin 15) : ∃ b s, rootIn r = (Kid.h (top s)).name b :=
+theorem rootIn_eq_kidName (r : Fin 11) : ∃ b s, rootIn r = (Kid.h (top s)).name b :=
   ⟨_, _, rfl⟩
 
 /-- The inputs of a compression node are sources or value nodes. -/
@@ -383,10 +383,10 @@ theorem exclOf_mem {h p : Name} (hp : hashParent h = some p) :
     exclOf h ∈ parents p := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
     subst hp <;> simp [exclOf, parents]
-  exact ⟨14, rfl⟩
+  exact ⟨10, rfl⟩
 
-theorem prev_ne_chainEnd (b b' : Fin 3) (k k' : Fin 14) (t : Fin 18) :
-    prev b k t ≠ .cv b' k' 17 := by
+theorem prev_ne_chainEnd (b b' : Fin 1) (k k' : Fin 42) (t : Fin 24) :
+    prev b k t ≠ .cv b' k' 23 := by
   unfold prev
   split_ifs with ht
   · intro e
@@ -397,7 +397,7 @@ theorem prev_ne_chainEnd (b b' : Fin 3) (k k' : Fin 14) (t : Fin 18) :
     simp at this
     omega
 
-theorem prev_injective {b b' : Fin 3} {k k' : Fin 14} {t t' : Fin 18}
+theorem prev_injective {b b' : Fin 1} {k k' : Fin 42} {t t' : Fin 24}
     (e : prev b k t = prev b' k' t') : b = b' ∧ k = k' ∧ t = t' := by
   unfold prev at e
   split_ifs at e with ht ht' <;>
@@ -405,14 +405,14 @@ theorem prev_injective {b b' : Fin 3} {k k' : Fin 14} {t t' : Fin 18}
   · exact ⟨e.1, e.2, Fin.ext (by omega)⟩
   · exact ⟨e.1, e.2.1, Fin.ext (by omega)⟩
 
-theorem kidName_injective {κ κ' : Kid} {b b' : Fin 3}
+theorem kidName_injective {κ κ' : Kid} {b b' : Fin 1}
     (e : κ.name b = κ'.name b') : b = b' ∧ κ = κ' := by
   cases κ <;> cases κ' <;>
     simp only [Kid.name, Name.cv.injEq, Name.hv.injEq, reduceCtorEq] at e
   · exact ⟨e.1, by rw [e.2.1]⟩
   · exact ⟨e.1, by rw [e.2]⟩
 
-theorem prev_ne_kidName (b b' : Fin 3) (k : Fin 14) (t : Fin 18) (κ : Kid) :
+theorem prev_ne_kidName (b b' : Fin 1) (k : Fin 42) (t : Fin 24) (κ : Kid) :
     prev b k t ≠ κ.name b' := by
   cases κ with
   | c k' => exact prev_ne_chainEnd b b' k k' t
@@ -446,9 +446,9 @@ theorem compress_reader_of_exclOf {h p h' m : Name} (hp : hashParent h = some p)
     rw [e] at hr
     exact absurd (kidName_injective hr).2.symm (kid_ne_top _ _ s)
   · simp only [parents, Finset.mem_singleton] at hm
-    exact absurd hm.symm (prev_ne_kidName _ _ _ _ (Kid.h (top 4)))
+    exact absurd hm.symm (prev_ne_kidName _ _ _ _ (Kid.h (top 10)))
   · obtain ⟨a, ha⟩ := (mem_parents_hc _ _ _).1 hm
-    exact absurd (kidName_injective (κ' := Kid.h (top 4)) ha).2 (kid_ne_top _ a 4)
+    exact absurd (kidName_injective (κ' := Kid.h (top 10)) ha).2 (kid_ne_top _ a 10)
   · rfl
 
 /-- The exclusive kid is read only by the input of its hash node. -/
@@ -510,7 +510,7 @@ theorem lowWord_evalRec (ξ : Rec) (n : Name) :
   unfold val
   exact (lowWord_cast _ _).symm
 
-theorem val_src (ξ : Rec) (b : Fin 3) (k : Fin 14) :
+theorem val_src (ξ : Rec) (b : Fin 1) (k : Fin 42) :
     val ξ (.src b k) = (ξ.1 (Name.src b k).fin).cast (graph_len_fin _) := by
   unfold val
   rw [evalRec_apply_fin]
@@ -525,7 +525,7 @@ theorem val_det {n : Name} (hc : n.cost = 0) (hs : ∀ b k, n ≠ .src b k)
   all_goals first
     | exact (hs _ _ rfl).elim
     | (simp only [kindOf, NodeKind.value]; exact cast_cast_eq _ _ _)
-    | (exfalso; simp [Name.cost] at hc)
+    | (exfalso; simp [Name.cost.eq_def] at hc)
 
 theorem lowWord_val_hash {h p : Name} (hp : hashParent h = some p) (ξ : Rec) :
     lowWord (val ξ h) = lowWord (ξ.2 h.fin) := by
@@ -923,8 +923,8 @@ theorem sprRate_le_query_cost {h p : Name} (hp : hashParent h = some p)
     simp only [hashParent, Option.some.injEq] at hp
     subst p
     rw [sprRate, if_pos rfl, hlen]
-    change ε + ε ≤ ε * (blockCost 1951 : ℝ≥0∞)
-    have hc : blockCost 1951 = 4 := by norm_num [blockCost, blockBits]
+    change ε + ε ≤ ε * (blockCost 1435 : ℝ≥0∞)
+    have hc : blockCost 1435 = 3 := by norm_num [blockCost, blockBits]
     rw [hc, Nat.cast_ofNat, ← mul_two]
     exact mul_le_mul_of_nonneg_left (by norm_num) zero_le
   · rw [sprRate, if_neg hh]

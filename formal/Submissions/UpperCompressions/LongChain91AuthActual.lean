@@ -1,9 +1,9 @@
 import Submissions.UpperCompressions.LongChain91AuthGame
 
 /-!
-# Cross-cut authentication for the cost-88 shared-DAG construction
+# Cross-cut authentication for the cost-87 shared-DAG construction
 
-Every scheduled cut has reconstruction cost 87, so two distinct scheduled cuts
+Every scheduled cut has reconstruction cost 86, so two distinct scheduled cuts
 differ at a hash node `u` that the forged cut reconstructs and the signed cut
 does not (`exists_hidden_of_ne`).  The descent of
 `LongChain91AuthClosure` gives either a spurious binding or the honest input
