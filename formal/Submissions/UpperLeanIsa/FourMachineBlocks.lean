@@ -153,8 +153,10 @@ theorem prodOps_straight (T : Tab) (u v : ℕ) :
   intro x hx
   unfold prodOps at hx
   split_ifs at hx <;> simp only [List.mem_append, List.mem_singleton, List.not_mem_nil, or_false] at hx
-  · rcases hx with rfl | rfl <;> rfl
-  · subst x; rfl
+  · rcases hx with rfl | rfl
+    · exact prodOp_straight T u v
+    · rfl
+  · subst x; exact prodOp_straight T u v
 
 theorem body_straight (T : Tab) (u v : ℕ) (z : Bool) :
     ∀ x ∈ body T u v z, x.straight = true := by
@@ -169,7 +171,7 @@ theorem body_straight (T : Tab) (u v : ℕ) (z : Bool) :
   · rw [h.2]; rfl
   · subst h; exact nextOp_straight u
 
-/-- Padding budgets include the extra multiplier on charged costs 15 and 16. -/
+/-- Padding budgets retain the former extra slot on charged costs 15 and 16. -/
 theorem pad_fit {T : Tab} (hT : T.Hyp) {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
     (tie u v).length + zexp T u v + 4 + extraMul T u v ≤ gcu u := by
   have h := hT.ordinary_le u hu v hv

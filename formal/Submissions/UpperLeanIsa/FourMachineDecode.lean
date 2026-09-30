@@ -170,17 +170,10 @@ theorem body_bounded {T : Tab} (hT : T.Hyp) {u v : ℕ} {z : Bool} (hu : u < 13)
     unfold prodOps at h
     split_ifs at h <;> simp only [List.mem_append, List.mem_singleton, List.not_mem_nil, or_false] at h
     · rcases h with rfl | rfl
-      · unfold prodOp
-        have hcc := cCell_bound (c := min 14 (chargedCost T u v)) (by omega)
-        simp only [CInstr.Bounded, gpCell, gpTmp]
-        split_ifs <;> omega
-      · have hcc := cCell_bound (c := chargedCost T u v - 14) (by omega)
-        simp only [CInstr.Bounded, gpCell, gpTmp]; omega
+      · exact prodOp_bounded hu hc
+      · simp only [NOP, CInstr.Bounded, oneCell]; omega
     · subst x
-      unfold prodOp
-      have hcc := cCell_bound (c := min 14 (chargedCost T u v)) (by omega)
-      simp only [CInstr.Bounded, gpCell, gpTmp]
-      split_ifs <;> omega
+      exact prodOp_bounded hu hc
   · obtain ⟨i, hi, hx⟩ := mem_segs.mp h
     have hk := chainOf_lt u hu i hi
     have hd := hT.coord_lt u hu v (lt_of_lt_of_le hv (VF_le u hu)) i hi

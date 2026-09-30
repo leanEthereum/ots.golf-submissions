@@ -52,7 +52,7 @@ theorem band_lower {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
   by_contra hn
   have hb : band u v = 0 := by omega
   rw [hb, A_succ, zero_band u hu hd1] at h
-  simp [A, psum] at h
+  simp [A_eq, psum] at h
 
 theorem band_shift_le {u v : ℕ} (hu : u < 13) (hv : v < VF u) :
     band u v - deduction u ≤ 16 := by

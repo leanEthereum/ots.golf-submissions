@@ -1,27 +1,21 @@
-# 1095-cycle leanISA construction
+# 1088-cycle leanISA construction
 
-`Solution.lean` exports the complete `Submission.Certificate 1095` and its
-seeded-row bound. The score is `105 + 87 × 10 + 120 = 1095`, with 192 executed
-instructions and 327680 seeded rows. The full 128-bit nonce remains within the
-5504-bit signature budget.
+`Solution.lean` exports `Submission.Certificate 1088` and the seeded-row bound.
+The construction removes one initialization instruction from the complete
+1089-cycle free-last machine. Stage 11 uses ONE as its frame bias, and chain
+30 uses the validated length constant as its packet tag. Powers 1 through 11
+suffice for the remaining instructions.
 
-Split alias multiplicities, mixed four- and five-child binding packets, four
-internal child chains, and a linear security potential support layer 85.
-All 440 security tiers are connected to exact counts of the actual codec.
-Unit 11 ties its index field through its landing hint `g ^ e`: its blocks are
-placed at slots whose power of `g` carries the field value, and the index is
-decoded through the bijection `unmask`. This removes one ordinary instruction
-from every path of the 1096 construction.
-
-The certificate covers admissibility, 127-bit strong security, bytecode validity,
-honest-prover equivalence, soundness against arbitrary committed images and all
-completing executions. See [NOTES.md](NOTES.md) for the proof map and credits.
-
-The proof builds locally and uses only the permitted axioms. Hosted timing and
-acceptance remain unverified. No optimality claim is made.
+The exact bound is `98 + 87 × 10 + 120 = 1088` cycles: 185 executed instructions
+and 327680 seeded rows. The certificate covers admissibility, strong security,
+honest execution, soundness for every admitted committed memory image, and
+all completing executions. The signature has 5504 bits and a full 128-bit nonce.
 
 Build with the pinned dependencies:
 
 ```sh
 lake build Submissions.UpperLeanIsa.Solution
 ```
+
+See [NOTES.md](NOTES.md) for the construction and proof map. Submission and
+hosted verification are manual; local validation receipts accompany the PR description.

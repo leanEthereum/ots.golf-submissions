@@ -106,6 +106,25 @@ theorem collision_ne_zero {u v s e c j : ℕ}
     exact (pow_ne_zero _ g_ne_zero) hz
 
 /-- The main family is small enough even with all admitted memory sizes. -/
+theorem positive_fixed_collision_ne_zero {u s e c j : ℕ} (hu : 0 < u) :
+    collisionPoly u 0 s e c j ≠ 0 := by
+  intro h
+  have hh := congrArg (fun p : K[X] => p.coeff u) h
+  have hz : gpow c = 0 := by
+    simpa only [collisionPoly, framePoly, Polynomial.coeff_sub, Polynomial.coeff_C_mul,
+      Polynomial.coeff_add, Polynomial.coeff_X_pow, Polynomial.coeff_C,
+      Polynomial.coeff_zero, if_pos rfl, if_neg (Nat.ne_of_gt hu),
+      add_zero, mul_one, mul_zero, sub_zero, ite_true] using hh
+  exact (pow_ne_zero _ g_ne_zero) hz
+
+theorem fixed_positive_collision_ne_zero {v s e c j : ℕ} (hv : 0 < v) :
+    collisionPoly 0 v s e c j ≠ 0 := by
+  intro h
+  apply positive_fixed_collision_ne_zero (u := v) (s := e) (e := s) (c := j) (j := c) hv
+  unfold collisionPoly at h ⊢
+  exact sub_eq_zero.mpr (sub_eq_zero.mp h).symm
+
+/-- The main family is small enough even with all admitted memory sizes. -/
 theorem main_root_count : 14 * 2 ^ 18 * 2 ^ 32 * 14 < (2 : ℕ) ^ 64 := by norm_num
 
 /-- The pinned signature length, as a field bit pattern (not a natural-number cast). -/
