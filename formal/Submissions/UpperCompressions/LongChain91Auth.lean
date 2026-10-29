@@ -142,14 +142,14 @@ its input, read by no other node. -/
 def exclOf : Name → Name
   | .ch b k t => prev b k t
   | .hh b j => (kid j 2).name b
-  | .rh => .hv 0 (top 10)
+  | .rh => .hv 0 (top 6)
   | n => n
 
 /-- The independent record coordinate behind the exclusive kid. -/
 def coordOf : Name → Name
   | .ch b k t => if h : t.val = 0 then .src b k else .ch b k ⟨t.val - 1, by omega⟩
   | .hh b j => (kid j 2).coord b
-  | .rh => .hh 0 (top 10)
+  | .rh => .hh 0 (top 6)
   | n => n
 
 theorem hashParent_isSome_iff (h : Name) :
@@ -196,10 +196,10 @@ theorem len_of_hashParent {h p : Name} (hp : hashParent h = some p) :
     h.len = 256 := by
   cases h <;> simp_all [hashParent, Name.len]
 
-/-- Chain steps, ternary nodes and the eleven-input root read 145, 403 and
-1435 bits. -/
+/-- Chain steps, ternary nodes and the seven-input root read 145, 403 and
+919 bits. -/
 theorem len_hashParent_cases {h p : Name} (hp : hashParent h = some p) :
-    p.len = 145 ∨ p.len = 403 ∨ p.len = 1435 := by
+    p.len = 145 ∨ p.len = 403 ∨ p.len = 919 := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
     subst hp <;> simp [Name.len]
 
@@ -311,7 +311,7 @@ theorem not_mem_parents_src (b : Fin 1) (k : Fin 42) (n : Name) :
   simp [parents]
 
 /-- A root input is the value of a block top. -/
-theorem rootIn_eq_kidName (r : Fin 11) : ∃ b s, rootIn r = (Kid.h (top s)).name b :=
+theorem rootIn_eq_kidName (r : Fin 7) : ∃ b s, rootIn r = (Kid.h (top s)).name b :=
   ⟨_, _, rfl⟩
 
 /-- The inputs of a compression node are sources or value nodes. -/
@@ -383,7 +383,7 @@ theorem exclOf_mem {h p : Name} (hp : hashParent h = some p) :
     exclOf h ∈ parents p := by
   cases h <;> simp only [hashParent, Option.some.injEq, reduceCtorEq] at hp <;>
     subst hp <;> simp [exclOf, parents]
-  exact ⟨10, rfl⟩
+  exact ⟨6, rfl⟩
 
 theorem prev_ne_chainEnd (b b' : Fin 1) (k k' : Fin 42) (t : Fin 24) :
     prev b k t ≠ .cv b' k' 23 := by
@@ -446,9 +446,9 @@ theorem compress_reader_of_exclOf {h p h' m : Name} (hp : hashParent h = some p)
     rw [e] at hr
     exact absurd (kidName_injective hr).2.symm (kid_ne_top _ _ s)
   · simp only [parents, Finset.mem_singleton] at hm
-    exact absurd hm.symm (prev_ne_kidName _ _ _ _ (Kid.h (top 10)))
+    exact absurd hm.symm (prev_ne_kidName _ _ _ _ (Kid.h (top 6)))
   · obtain ⟨a, ha⟩ := (mem_parents_hc _ _ _).1 hm
-    exact absurd (kidName_injective (κ' := Kid.h (top 10)) ha).2 (kid_ne_top _ a 10)
+    exact absurd (kidName_injective (κ' := Kid.h (top 6)) ha).2 (kid_ne_top _ a 6)
   · rfl
 
 /-- The exclusive kid is read only by the input of its hash node. -/
@@ -923,10 +923,10 @@ theorem sprRate_le_query_cost {h p : Name} (hp : hashParent h = some p)
     simp only [hashParent, Option.some.injEq] at hp
     subst p
     rw [sprRate, if_pos rfl, hlen]
-    change ε + ε ≤ ε * (blockCost 1435 : ℝ≥0∞)
-    have hc : blockCost 1435 = 3 := by norm_num [blockCost, blockBits]
-    rw [hc, Nat.cast_ofNat, ← mul_two]
-    exact mul_le_mul_of_nonneg_left (by norm_num) zero_le
+    change ε + ε ≤ ε * (blockCost 919 : ℝ≥0∞)
+    have hc : blockCost 919 = 2 := by norm_num [blockCost, blockBits]
+    rw [hc, Nat.cast_ofNat]
+    exact (mul_two ε).ge
   · rw [sprRate, if_neg hh]
     exact epsilon_le_query_cost q
 

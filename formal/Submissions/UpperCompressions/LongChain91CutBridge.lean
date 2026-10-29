@@ -2,11 +2,11 @@ import Submissions.UpperCompressions.ProofBundle03
 import Submissions.UpperCompressions.LongChain91Geometry
 
 /-!
-# Concrete DAG for the cost-86 fused shared-DAG construction
+# Concrete DAG for the cost-85 shared-DAG construction
 
 This module turns the names of `LongChain91Geometry` into the `Dag.Graph`
 consumed by the generic weighted scheme: one block of forty-two length-24
-chains and 213 ternary hashes with shared inputs, under an eleven-word root
+chains and 213 ternary hashes with shared inputs, under a seven-word root
 hash.
 -/
 
@@ -282,8 +282,8 @@ theorem graph_nodeCost_fin (n : Name) : graph.nodeCost n.fin = n.cost := by
   cases n <;> simp only [kindOf, graph_len_fin] <;>
     simp [Name.cost.eq_def, Name.len, blockCost, blockBits]
 
-theorem graph_keygenCost : graph.keygenCost = 1224 := by
-  show ∑ v : Fin N, graph.nodeCost v = 1224
+theorem graph_keygenCost : graph.keygenCost = 1223 := by
+  show ∑ v : Fin N, graph.nodeCost v = 1223
   rw [← Fintype.sum_equiv Name.nameEquiv
     (fun n => graph.nodeCost n.fin) (fun v => graph.nodeCost v) (fun _ => rfl)]
   simp only [graph_nodeCost_fin]
@@ -292,13 +292,13 @@ theorem graph_keygenCost : graph.keygenCost = 1224 := by
 end OptimalOTS.WeightedConstruction.LongChain91
 
 /-!
-# Concrete cut bridge for the cost-86 fused shared-DAG graph
+# Concrete cut bridge for the cost-85 shared-DAG graph
 
 This module connects the combinatorial cuts of `LongChain91Geometry` to the
 protected `Dag.Graph` interface.  The visited set of a supported cut is
 characterized by name (`VisN`): a block's needed hash values, its expanded
 triples, and each needed chain from its disclosure position upward.  From it we
-read off the exact reconstruction cost 85, the disclosure size, injectivity of
+read off the exact reconstruction cost 84, the disclosure size, injectivity of
 the codec, the binding rule, and the equal-cost cross-cut witness.
 -/
 
@@ -523,7 +523,7 @@ theorem visN_supported (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) (v : Na
       rcases (mem_neededH _ _).1 hv with ⟨s, h⟩ | ⟨e, he, i, hi⟩
       · cases h
         exact ⟨.rc, trivial, not_mem_cutOf_of_len (by simp [Name.len]),
-          (mem_parents_rc _).2 ⟨⟨11 * b.val + s.val, by omega⟩, rootIn_mk b s⟩⟩
+          (mem_parents_rc _).2 ⟨⟨7 * b.val + s.val, by omega⟩, rootIn_mk b s⟩⟩
       · refine ⟨.hc b e, he, not_mem_cutOf_of_len (hc_len_ne b e), ?_⟩
         rw [mem_parents_hc]
         exact ⟨i, by rw [hi]; rfl⟩
@@ -601,7 +601,7 @@ theorem evaluated_rh (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1) :
 def charge (c : Choice) : Name → ℕ
   | .ch b k t => if k ∈ neededC (c b).1 ∧ ((c b).2 k).val ≤ t.val then 1 else 0
   | .hh b j => if j ∈ (c b).1 then 1 else 0
-  | .rh => 3
+  | .rh => 2
   | _ => 0
 
 theorem evaluated_cost_eq_charge (c : Choice) (hvalid : ∀ b, ShapeValid (c b).1)
@@ -714,7 +714,7 @@ theorem reconstructCost_cutOf_eq (c : Choice) (hvalid : ∀ b, ShapeValid (c b).
   exact Finset.sum_congr rfl fun n _ => evaluated_cost_eq_charge c hvalid n
 
 theorem reconstructCost_supported {c : Choice} (hc : c ∈ supportedChoices) :
-    graph.reconstructCost (fins (cutOf c)) = 85 :=
+    graph.reconstructCost (fins (cutOf c)) = 84 :=
   (reconstructCost_cutOf_eq c (shapeValid_of_supported hc)).trans (reconstructionCost_eq hc)
 
 /-! ## Disclosure size -/
@@ -829,12 +829,12 @@ theorem family_no_hidden_source {A : Finset Name} (hA : A ∈ family) :
   exact hvA ((mem_fins_fin _ _).2 ((isCut_of_mem_family hA).src_mem_of_visited hv))
 
 theorem family_reconstructCost_eq {A : Finset Name} (hA : A ∈ family) :
-    graph.reconstructCost (fins A) = 85 := by
+    graph.reconstructCost (fins A) = 84 := by
   obtain ⟨c, hc, rfl⟩ := exists_choice_of_mem_family hA
   exact reconstructCost_supported hc
 
 theorem family_reconstructCost {A : Finset Name} (hA : A ∈ family) :
-    graph.reconstructCost (fins A) ≤ 85 :=
+    graph.reconstructCost (fins A) ≤ 84 :=
   (family_reconstructCost_eq hA).le
 
 theorem family_disclosure_and_nonce {A : Finset Name} (hA : A ∈ family) :
